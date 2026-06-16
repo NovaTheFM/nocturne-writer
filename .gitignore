@@ -1,0 +1,57 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+release/
+
+# Android build artifacts
+android/app/build/
+android/.gradle/
+android/build/
+android/local.properties
+*.apk
+*.aab
+
+# Electron build output
+.electron_build/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Temp / log files
+.tmp_nocturne_server.out
+.tmp_nocturne_server.err
+.codex-dev-server.out.log
+.codex-dev-server.err.log
+electron-test-out.log
+electron-test-err.log
+*.log
+
+# Large backup archives
+backup.zip
+
+# Android SDK downloads (managed separately)
+.android-sdk-download/
+
+# Temp research / scratchpad folders
+temp_research/
+backup/
+
+# Large generated summary files (not source)
+project_code_summary.txt
+editor_code.txt
+methods.txt
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor artifacts
+.vscode/settings.json
+.idea/
+*.suo
+*.user

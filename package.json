@@ -1,0 +1,40 @@
+{
+  "name": "nocturne-writer-es6",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node server.mjs",
+    "build": "node scripts/build-web.mjs",
+    "check": "node --check server.mjs && node --check src/main.js && node --check src/core/db.js && node --check src/core/utils.js && node --check src/core/crypto.js && node --check src/features/command-palette.js && node --check src/features/local-sync.js && node --check src/ui/icons.js && node --check scripts/sync-server.mjs && node --check scripts/desktop-smoke.mjs",
+    "smoke:desktop": "node scripts/desktop-smoke.mjs",
+    "electron:dev": "cross-env ELECTRON_DEV_URL=http://localhost:5173 electron electron/main.cjs",
+    "electron:start": "electron electron/main.cjs",
+    "android:sync": "npm run build && npx cap sync android",
+    "android:build:debug": "npm run build && npx cap sync android && cd android && gradlew.bat assembleDebug",
+    "android:apk": "node scripts/build-android-apk.mjs",
+    "android:open": "npx cap open android",
+    "sync:server": "node scripts/sync-server.mjs"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.3.4",
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/cli": "^8.3.4",
+    "@capacitor/core": "^8.3.4",
+    "@capacitor/filesystem": "^8.1.2",
+    "@capacitor/share": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.2",
+    "@capgo/capacitor-navigation-bar": "^8.1.8",
+    "bonjour-service": "^1.4.0",
+    "boxicons": "^2.1.4",
+    "cross-env": "^7.0.3",
+    "electron": "^42.2.0",
+    "playwright": "^1.60.0",
+    "sortablejs": "^1.15.2",
+    "ws": "^8.21.0"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1"
+  }
+}

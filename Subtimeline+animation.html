@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Хронология Событий - Nocturne Writer</title>
+    
+    <!-- Подключение шрифтов и иконок -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+    
+    <!-- Библиотека для премиальных, плавных анимаций Drag & Drop -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+    
+    <style>
+        /* ПРЕМИАЛЬНАЯ ПАЛИТРА */
+        :root {
+            --bg-deep: #08080A; 
+            --bg-panel: #121216; 
+            --text-main: #EAEAEA;
+            --text-muted: #73738C;
+            --accent: #8B5CF6; 
+            --accent-glow: rgba(139, 92, 246, 0.25);
+            --border: #22222A;
+            --border-light: rgba(255, 255, 255, 0.03);
+            --shadow-float: 0 20px 50px rgba(0, 0, 0, 0.7);
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 20px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Manrope', sans-serif;
+            background-color: var(--bg-deep);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            padding: 40px 20px;
+        }
+
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2A2A35; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #404050; }
+
+        /* ОСНОВНОЙ КОНТЕЙНЕР */
+        .workspace {
+            width: 100%;
+            max-width: 900px;
+            background: var(--bg-deep);
+        }
+
+        .header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            margin-bottom: 50px; 
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border-light);
+        }
+        .header h1 { font-size: 32px; font-family: 'Lora', serif; font-weight: 500; color: #fff; }
+
+        .pill-btn {
+            display: flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 20px; font-size: 14px; font-weight: 600;
+            background: rgba(139, 92, 246, 0.05); border: 1px solid rgba(139, 92, 246, 0.3); color: var(--text-main); 
+            cursor: pointer; transition: 0.2s;
+        }
+        .pill-btn i { font-size: 18px; color: var(--accent); transition: 0.2s; }
+        .pill-btn:hover { background: rgba(139, 92, 246, 0.15); box-shadow: 0 0 20px var(--accent-glow); color: white; }
+
+        /* --- НОВАЯ АРХИТЕКТУРА ТАЙМЛАЙНА (Идеальное центрирование) --- */
+        .timeline-container { padding-top: 10px; }
+        
+        .timeline-item {
+            display: flex;
+            align-items: stretch; /* Растягивает трек по высоте контента */
+            position: relative;
+        }
+
+        .timeline-track {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 24px;
+            flex-shrink: 0;
+            margin-right: 24px;
+        }
+
+        .timeline-dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: var(--bg-deep);
+            border: 2px solid var(--accent);
+            box-shadow: 0 0 10px var(--accent-glow);
+            margin-top: 4px; /* Визуальное выравнивание с датой */
+            flex-shrink: 0;
+            z-index: 2;
+            transition: all 0.2s ease; /* Плавность для эффекта разблокировки */
+        }
+
+        .timeline-line {
+            width: 2px;
+            background: var(--border);
+            flex-grow: 1; /* Линия занимает всё оставшееся пространство вниз */
+            margin-top: -2px;
+            margin-bottom: -15px; /* Заходит в отступ следующего элемента, чтобы не было разрывов */
+            z-index: 1;
+            transition: opacity 0.2s ease; /* Плавное исчезновение и появление */
+        }
+        
+        /* УЛЬТРА-ФИКС: Премиальное состояние "Редактирования" (Drag) */
+        .timeline-container.is-dragging .timeline-line {
+            opacity: 0 !important; /* Линии плавно гаснут при перетаскивании, убирая любые баги анимации */
+        }
+        .timeline-container.is-dragging .timeline-dot {
+            transform: scale(0.6); /* Точки элегантно уменьшаются */
+            border-color: #3E3E4D; /* Цвет приглушается */
+            box-shadow: none;
+        }
+        
+        /* Ультра-фикс "фантомных линий": прячем линию у последнего видимого элемента. 
+           Sortable скрывает оригинал через display: none, поэтому мы проверяем это через :has() */
+        .timeline-item:last-child .timeline-line,
+        .timeline-item:has(+ .timeline-item:last-child[style*="display: none"]) .timeline-line {
+            display: none !important; 
+        }
+
+        .timeline-content-wrapper {
+            flex: 1;
+            padding-bottom: 40px; /* Отступ между карточками */
+        }
+
+        .timeline-date { 
+            font-size: 13px; 
+            font-weight: 700; 
+            color: var(--accent); 
+            margin-bottom: 12px; 
+            letter-spacing: 1px; 
+            text-transform: uppercase;
+        }
+        
+        .timeline-content { 
+            position: relative;
+            background: var(--bg-panel); 
+            border: 1px solid var(--border); 
+            border-radius: var(--radius-md); 
+            padding: 24px; 
+            transition: border-color 0.3s; 
+            cursor: grab; /* Курсор-рука для карточки */
+            user-select: none; /* Запрещаем выделение текста при перетаскивании */
+            -webkit-user-select: none;
+        }
+        .timeline-content:active { cursor: grabbing; }
+        .timeline-content:hover { border-color: var(--accent); background: rgba(139, 92, 246, 0.03); }
+        .timeline-content h3 { font-size: 18px; color: white; margin-bottom: 10px; }
+        .timeline-content p { font-size: 14px; color: var(--text-muted); line-height: 1.6; }
+
+        /* Кнопки действий */
+        .timeline-actions {
+            position: absolute;
+            top: -18px;
+            right: 20px;
+            display: flex;
+            gap: 6px;
+            opacity: 0;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            transform: translateY(5px);
+        }
+        .timeline-content:hover .timeline-actions {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .action-btn {
+            width: 34px;
+            height: 34px;
+            border-radius: var(--radius-sm);
+            background-color: var(--bg-deep); /* Плотный фон, скрывающий рамку карточки */
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 16px;
+            cursor: pointer;
+            transition: 0.2s ease;
+        }
+        .action-btn:hover { border-color: var(--accent); color: var(--accent); background-color: #151022; }
+
+        /* --- СТИЛИ ДЛЯ АНИМАЦИИ ПЕРЕТАСКИВАНИЯ (SortableJS) --- */
+        
+        /* Ультра-фикс прозрачности: делаем прозрачным только контент, 
+           чтобы сама точка (dot) оставалась плотной и перекрывала линию сверху. */
+        .sortable-ghost { 
+            opacity: 1 !important; 
+        } 
+        .sortable-ghost .timeline-content-wrapper {
+            opacity: 0.2;
+        }
+        .sortable-ghost .timeline-dot {
+            background: var(--bg-deep) !important; /* Строго непрозрачный фон */
+            border-color: var(--text-muted); /* Приглушенный цвет точки-плейсхолдера */
+            box-shadow: none;
+        }
+        
+        /* Визуальный стиль элемента, который "висит" на курсоре */
+        .sortable-drag {
+            background: transparent !important; 
+        }
+        /* Убираем линию, точку и дату у элемента на курсоре, оставляя ТОЛЬКО блок! */
+        .sortable-drag .timeline-track,
+        .sortable-drag .timeline-date {
+            display: none !important; 
+        }
+        .sortable-drag .timeline-content-wrapper { padding-bottom: 0 !important; }
+        .sortable-drag .timeline-content {
+            box-shadow: 0 20px 40px rgba(0,0,0,0.8), 0 0 20px rgba(139, 92, 246, 0.3);
+            transform: scale(1.02);
+            background: var(--bg-panel);
+            cursor: grabbing !important;
+        }
+        .sortable-drag .timeline-actions { display: none !important; } /* Прячем кнопки при переносе */
+
+        /* --- МОДАЛЬНЫЕ ОКНА --- */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(10px); z-index: 9999;
+            display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: 0.3s;
+        }
+        .modal-overlay.active { opacity: 1; pointer-events: all; }
+        
+        .modal-box {
+            width: 100%; max-width: 500px; background: var(--bg-panel); border: 1px solid var(--border); 
+            border-radius: var(--radius-md); box-shadow: var(--shadow-float); padding: 30px;
+            transform: scale(0.95) translateY(20px); transition: 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .modal-overlay.active .modal-box { transform: scale(1) translateY(0); }
+        
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+        .modal-header h2 { font-size: 20px; color: white; font-weight: 600; }
+        .btn-close { background: transparent; border: none; color: var(--text-muted); font-size: 24px; cursor: pointer; transition: 0.2s; }
+        .btn-close:hover { color: white; transform: rotate(90deg); }
+
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; font-weight: 700; letter-spacing: 1px; }
+        .form-input, .form-textarea {
+            width: 100%; background: var(--bg-deep); border: 1px solid var(--border); color: white; 
+            padding: 12px 16px; border-radius: var(--radius-sm); font-family: inherit; font-size: 14px; outline: none; transition: 0.2s;
+        }
+        .form-input:focus, .form-textarea:focus { border-color: var(--accent); box-shadow: 0 0 10px rgba(139, 92, 246, 0.1); }
+        .form-textarea { resize: vertical; min-height: 100px; line-height: 1.5; }
+
+        .modal-footer { display: flex; justify-content: flex-end; gap: 12px; margin-top: 30px; }
+        .btn-secondary { background: transparent; border: 1px solid var(--border); color: white; padding: 10px 20px; border-radius: 20px; font-weight: 500; font-size: 14px; cursor: pointer; transition: 0.2s; }
+        .btn-secondary:hover { background: rgba(255,255,255,0.05); }
+
+        /* СПЕЦИАЛЬНО ДЛЯ САБТАЙМЛАЙНА */
+        #subtimeline-modal .modal-box {
+            max-width: 800px;
+            height: 85vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .subtimeline-scroll-area {
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="workspace">
+        <div class="header">
+            <h1>Хронология Событий</h1>
+            <button class="pill-btn" onclick="openEventModal(null, false)">
+                <i class='bx bx-plus'></i> Добавить событие
+            </button>
+        </div>
+
+        <div class="timeline-container" id="timeline-container">
+            <!-- Элементы генерируются JS -->
+        </div>
+    </div>
+
+    <!-- МОДАЛЬНОЕ ОКНО САБТАЙМЛАЙНА -->
+    <div class="modal-overlay" id="subtimeline-modal">
+        <div class="modal-box">
+            <div class="modal-header" style="margin-bottom: 20px;">
+                <div>
+                    <h2 id="subtimeline-title">Сабтаймлайн</h2>
+                    <p style="color: var(--accent); font-size: 13px; margin-top: 6px; font-weight: 600; text-transform: uppercase;" id="subtimeline-parent-title">Название ветки</p>
+                </div>
+                <button class="btn-close" onclick="closeSubTimeline()"><i class='bx bx-x'></i></button>
+            </div>
+            
+            <div style="margin-bottom: 24px;">
+                <button class="pill-btn" onclick="openEventModal(null, true)">
+                    <i class='bx bx-plus'></i> Добавить саб-событие
+                </button>
+            </div>
+
+            <div class="subtimeline-scroll-area">
+                <div class="timeline-container" id="subtimeline-container">
+                    <!-- Элементы сабтаймлайна -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- МОДАЛЬНОЕ ОКНО ДОБАВЛЕНИЯ/РЕДАКТИРОВАНИЯ СОБЫТИЯ -->
+    <div class="modal-overlay" id="event-modal">
+        <div class="modal-box" style="max-width: 500px; height: auto;">
+            <div class="modal-header">
+                <h2 id="modal-title">Новое событие</h2>
+                <button class="btn-close" onclick="closeEventModal()"><i class='bx bx-x'></i></button>
+            </div>
+            
+            <form id="event-form">
+                <input type="hidden" id="event-id">
+                <div class="form-group">
+                    <label>Дата / Эпоха</label>
+                    <input type="text" id="event-date" class="form-input" placeholder="Например: ЭПОХА ПЕПЛА, ГОД 3" required>
+                </div>
+                <div class="form-group">
+                    <label>Название события</label>
+                    <input type="text" id="event-title" class="form-input" placeholder="Название..." required>
+                </div>
+                <div class="form-group">
+                    <label>Описание</label>
+                    <textarea id="event-desc" class="form-textarea" placeholder="Подробности события..." required></textarea>
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn-secondary" onclick="closeEventModal()">Отмена</button>
+                    <button type="submit" class="pill-btn">Сохранить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // --- БАЗОВЫЕ ДАННЫЕ (State) ---
+        let timelineEvents = [
+            {
+                id: 2,
+                date: "ЭПОХА ПЕПЛА, ГОД 3",
+                title: "Встреча в Топях",
+                desc: "Эрион встречает Лирию, которая спасает его от болотных тварей. Формирование союза.",
+                subEvents: [
+                    {
+                        id: 201,
+                        date: "ЭПОХА ПЕПЛА, ГОД 3 - НОЧЬ",
+                        title: "Засада Трясинников",
+                        desc: "Группа подвергается атаке тварей из трясины. Первое применение магии Лирии."
+                    },
+                    {
+                        id: 202,
+                        date: "ЭПОХА ПЕПЛА, ГОД 3 - УТРО",
+                        title: "Договор",
+                        desc: "Лирия предлагает Эриону сделку взамен на защиту."
+                    }
+                ]
+            },
+            {
+                id: 1,
+                date: "ЭПОХА ПЕПЛА, ГОД 1",
+                title: "Падение Столицы",
+                desc: "Начало катаклизма. Небеса окрасились в красный, а магия вышла из-под контроля. Начало пути главного героя.",
+                subEvents: []
+            }
+        ];
+
+        let activeParentId = null; // ID родительского события при открытом сабтаймлайне
+        let isEditingSubEvent = false; // Флаг: редактируем основное событие или саб-событие
+
+        // --- ГЕНЕРАТОР HTML ТАЙМЛАЙНА ---
+        function generateTimelineHTML(events, isSub) {
+            if (events.length === 0) {
+                return `<p style="color: var(--text-muted); margin-top: 20px;">${isSub ? 'Вложенных событий нет. Добавьте первое.' : 'Хронология пуста. Добавьте первое событие.'}</p>`;
+            }
+
+            return events.map(event => `
+                <div class="timeline-item" data-id="${event.id}">
+                    <div class="timeline-track">
+                        <div class="timeline-dot"></div>
+                        <div class="timeline-line"></div>
+                    </div>
+                    <div class="timeline-content-wrapper">
+                        <div class="timeline-date">${event.date}</div>
+                        <div class="timeline-content">
+                            <div class="timeline-actions">
+                                <!-- Кнопка Сабтаймлайна (Показываем только на главном экране) -->
+                                ${!isSub ? `
+                                <button class="action-btn" title="Сабтаймлайн (Ветвление)" onclick="openSubTimeline(${event.id}, event)">
+                                    <i class='bx bx-git-branch'></i>
+                                </button>
+                                ` : ''}
+                                <button class="action-btn" title="Изменить" onclick="editEvent(${event.id}, ${isSub}, event)">
+                                    <i class='bx bx-edit-alt'></i>
+                                </button>
+                                <button class="action-btn" title="Удалить" onclick="deleteEvent(${event.id}, ${isSub}, event)">
+                                    <i class='bx bx-trash'></i>
+                                </button>
+                            </div>
+                            <h3>${event.title}</h3>
+                            <p>${event.desc}</p>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // --- ФУНКЦИИ ОТРИСОВКИ ---
+        function renderTimeline() {
+            document.getElementById('timeline-container').innerHTML = generateTimelineHTML(timelineEvents, false);
+        }
+
+        function renderSubTimeline() {
+            if (!activeParentId) return;
+            const parent = timelineEvents.find(ev => ev.id === activeParentId);
+            document.getElementById('subtimeline-container').innerHTML = generateTimelineHTML(parent.subEvents, true);
+        }
+
+        // --- ЛОГИКА DRAG & DROP (SortableJS) ---
+        // Инициализируем Sortable.js для красивой анимации и изоляции перетаскивания
+        document.addEventListener('DOMContentLoaded', () => {
+            const sortableOptions = {
+                animation: 250, // Плавность раздвигания других элементов
+                easing: "cubic-bezier(0.16, 1, 0.3, 1)",
+                forceFallback: true, // Позволяет нам полностью кастомизировать переносимый элемент
+                fallbackOnBody: true, // Решает баг с фантомной линией (переносит визуальный клон за пределы контейнера)
+                fallbackClass: "sortable-drag", 
+                ghostClass: "sortable-ghost",
+                handle: ".timeline-content", // Перетаскивать можно хватаясь только за саму карточку
+                filter: ".action-btn", // Кнопки не вызывают перетаскивание
+                onStart: function(evt) {
+                    // Включаем режим "перетаскивания" для контейнера: гасим линии
+                    evt.from.classList.add('is-dragging');
+                },
+                onEnd: function(evt) {
+                    // Выключаем режим: зажигаем линии обратно уже в новом порядке
+                    evt.from.classList.remove('is-dragging');
+                    const isSub = evt.from.id === 'subtimeline-container';
+                    updateOrderState(isSub);
+                }
+            };
+
+            // Для главного таймлайна
+            new Sortable(document.getElementById('timeline-container'), sortableOptions);
+
+            // Для сабтаймлайна
+            new Sortable(document.getElementById('subtimeline-container'), sortableOptions);
+
+            renderTimeline();
+        });
+
+        // Синхронизация DOM-порядка с массивом State
+        function updateOrderState(isSub) {
+            if (isSub) {
+                const container = document.getElementById('subtimeline-container');
+                const newIds = [...container.querySelectorAll('.timeline-item')].map(i => parseInt(i.dataset.id));
+                const parent = timelineEvents.find(ev => ev.id === activeParentId);
+                parent.subEvents.sort((a, b) => newIds.indexOf(a.id) - newIds.indexOf(b.id));
+            } else {
+                const container = document.getElementById('timeline-container');
+                const newIds = [...container.querySelectorAll('.timeline-item')].map(i => parseInt(i.dataset.id));
+                timelineEvents.sort((a, b) => newIds.indexOf(a.id) - newIds.indexOf(b.id));
+            }
+        }
+
+
+        // --- УПРАВЛЕНИЕ САБТАЙМЛАЙНОМ ---
+        function openSubTimeline(id, e) {
+            e.stopPropagation();
+            activeParentId = id;
+            const parentEvent = timelineEvents.find(ev => ev.id === id);
+            
+            document.getElementById('subtimeline-parent-title').innerText = parentEvent.title;
+            renderSubTimeline();
+            
+            document.getElementById('subtimeline-modal').classList.add('active');
+        }
+
+        function closeSubTimeline() {
+            document.getElementById('subtimeline-modal').classList.remove('active');
+            activeParentId = null;
+        }
+
+        // --- УПРАВЛЕНИЕ ФОРМОЙ (РЕДАКТОР) ---
+        function openEventModal(id = null, isSub = false) {
+            isEditingSubEvent = isSub;
+            const form = document.getElementById('event-form');
+            const modalTitle = document.getElementById('modal-title');
+
+            if (id !== null) {
+                // Ищем элемент
+                let event;
+                if (isSub) {
+                    const parent = timelineEvents.find(ev => ev.id === activeParentId);
+                    event = parent.subEvents.find(ev => ev.id === id);
+                } else {
+                    event = timelineEvents.find(ev => ev.id === id);
+                }
+
+                document.getElementById('event-id').value = event.id;
+                document.getElementById('event-date').value = event.date;
+                document.getElementById('event-title').value = event.title;
+                document.getElementById('event-desc').value = event.desc;
+                modalTitle.innerText = isSub ? "Редактировать саб-событие" : "Редактировать событие";
+            } else {
+                form.reset();
+                document.getElementById('event-id').value = '';
+                modalTitle.innerText = isSub ? "Новое саб-событие" : "Новое событие";
+            }
+            
+            document.getElementById('event-modal').classList.add('active');
+        }
+
+        function closeEventModal() {
+            document.getElementById('event-modal').classList.remove('active');
+        }
+
+        // --- ДЕЙСТВИЯ: СОХРАНИТЬ / УДАЛИТЬ ---
+        document.getElementById('event-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            const idValue = document.getElementById('event-id').value;
+            const newEvent = {
+                id: idValue ? parseInt(idValue) : Date.now(),
+                date: document.getElementById('event-date').value,
+                title: document.getElementById('event-title').value,
+                desc: document.getElementById('event-desc').value,
+                subEvents: [] // На всякий случай, если это главное событие
+            };
+
+            const targetArray = isEditingSubEvent 
+                ? timelineEvents.find(ev => ev.id === activeParentId).subEvents 
+                : timelineEvents;
+
+            if (idValue) {
+                const index = targetArray.findIndex(ev => ev.id === parseInt(idValue));
+                if(isEditingSubEvent) newEvent.subEvents = targetArray[index].subEvents; // Сохраняем вложенность
+                targetArray[index] = newEvent;
+            } else {
+                targetArray.unshift(newEvent);
+            }
+
+            isEditingSubEvent ? renderSubTimeline() : renderTimeline();
+            closeEventModal();
+        });
+
+        function editEvent(id, isSub, e) {
+            e.stopPropagation();
+            openEventModal(id, isSub);
+        }
+
+        function deleteEvent(id, isSub, e) {
+            e.stopPropagation();
+            if (confirm(`Вы уверены, что хотите удалить это ${isSub ? 'саб-событие' : 'событие'}?`)) {
+                if (isSub) {
+                    const parent = timelineEvents.find(ev => ev.id === activeParentId);
+                    parent.subEvents = parent.subEvents.filter(ev => ev.id !== id);
+                    renderSubTimeline();
+                } else {
+                    timelineEvents = timelineEvents.filter(ev => ev.id !== id);
+                    renderTimeline();
+                }
+            }
+        }
+
+        // Закрытие модалок при клике на темный фон
+        document.getElementById('event-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'event-modal') closeEventModal();
+        });
+        document.getElementById('subtimeline-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'subtimeline-modal') closeSubTimeline();
+        });
+
+    </script>
+</body>
+</html>

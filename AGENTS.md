@@ -1,0 +1,160 @@
+# Nocturne Writer — AI Agent Guide
+
+> This file is the primary reference for AI coding agents (Gemini, Codex, Claude, Copilot, etc.).  
+> Read it fully before making any changes to the codebase.
+
+---
+
+## Project Overview
+
+**Nocturne Writer** is a local-first, offline-capable writing application.  
+Stack: vanilla HTML + CSS + ES6 JavaScript (no bundler required for dev).  
+Targets: Browser (served via Node), Electron desktop, Android (Capacitor).
+
+---
+
+## Architecture at a Glance
+
+```
+index.html          ← entry point (loads src/styles.css + src/main.js)
+src/
+  main.js           ← monolithic app entry (~750 KB, all UI logic lives here)
+  styles.css        ← monolithic stylesheet (~200 KB)
+  core/
+    db.js           ← IndexedDB wrapper (all persistence)
+    crypto.js       ← E2E encryption helpers (AES-GCM via WebCrypto)
+    utils.js        ← shared utility functions
+    defaults.js     ← default data shapes / constants
+    typos.js        ← typo/spell-check dictionary
+  features/
+    command-palette.js  ← Ctrl+K command palette logic
+    ai-context.js       ← AI knowledge context serialisation
+  ui/
+    icons.js            ← SVG icon library
+  platform/
+    runtime.js          ← platform detection (browser / electron / android)
+    file-adapter.js     ← file I/O abstraction over platform differences
+  vendor/             ← vendored third-party libs (no npm import at runtime)
+  css/                ← split CSS partials (merged into styles.css)
+  assets/             ← static assets
+
+electron/
+  main.cjs            ← Electron main process
+  preload.cjs         ← contextBridge / IPC preload
+
+scripts/
+  build-web.mjs       ← production bundler (copies files to dist/)
+  build-android-apk.mjs
+  sync-server.mjs     ← LAN sync server
+  desktop-smoke.mjs   ← Playwright smoke test
+
+server.mjs            ← dev HTTP server (serves project root, no bundler)
+capacitor.config.json ← Capacitor / Android config
+```
+
+---
+
+## Key Conventions
+
+| Rule | Detail |
+|------|--------|
+| **No bundler in dev** | `npm run dev` serves files directly via `server.mjs`. No Vite/Webpack. |
+| **ES Modules** | All source files use `import`/`export` (package.json `"type":"module"`). Electron files use `.cjs` (CommonJS). |
+| **Single monolith files** | `src/main.js` and `src/styles.css` are intentionally large. Do not split them without explicit instruction. |
+| **Platform abstraction** | Never call `fs`, `electron`, or Capacitor APIs directly from `src/`. Go through `src/platform/file-adapter.js` and `src/platform/runtime.js`. |
+| **Persistence** | All data goes through `src/core/db.js` (IndexedDB). Do not use localStorage for app data. |
+| **Encryption** | Projects can be E2E encrypted. Always route sensitive data through `src/core/crypto.js`. |
+
+---
+
+## How to Run
+
+```bash
+npm install
+npm run dev          # starts dev server on http://localhost:5173
+```
+
+Open `http://localhost:5173` in a browser.
+
+Syntax check (no execution):
+```bash
+npm run check
+```
+
+---
+
+## How to Build
+
+```bash
+npm run build        # outputs to dist/
+```
+
+For Electron:
+```bash
+npm run dev          # in one terminal
+npm run electron:dev # in another
+```
+
+For Android APK:
+```bash
+npm run android:build:debug
+# APK → android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+---
+
+## Data Model (brief)
+
+All entities stored in IndexedDB (`db.js`). Key object stores:
+
+- `projects` — manuscript projects (title, body, settings, snapshots)
+- `characters` — character cards
+- `locations` — location cards
+- `events` — timeline events
+- `subtimelines` — sub-timeline groups
+- `notes` — free-form notes
+
+Export format: `.nocturnedump` (JSON, optionally AES-GCM encrypted).
+
+---
+
+## Testing
+
+No automated unit test suite yet. Use the Playwright smoke test:
+
+```bash
+npm run dev &
+npm run smoke:desktop
+```
+
+---
+
+## Common Pitfalls for AI Agents
+
+1. **Do not rewrite `src/main.js` wholesale** — it is large and interleaved. Make targeted edits.
+2. **Do not introduce npm dependencies** without explicit instruction — the app is intentionally dependency-light.
+3. **Do not use `localStorage`** for persistent data — only IndexedDB via `db.js`.
+4. **Electron IPC** — any new native feature needs both a handler in `electron/main.cjs` and a bridge in `electron/preload.cjs`.
+5. **CSS partials** in `src/css/` are source fragments. The canonical stylesheet is `src/styles.css`. Edits go to `src/styles.css` unless told otherwise.
+6. **`backup.zip`** is gitignored and is never part of the codebase.
+
+---
+
+## File Size Reference (approximate)
+
+| File | Size |
+|------|------|
+| `src/main.js` | ~750 KB |
+| `src/styles.css` | ~200 KB |
+| `src/core/typos.js` | ~16 KB |
+| `src/features/command-palette.js` | ~16 KB |
+| `src/features/ai-context.js` | ~7 KB |
+| `src/core/db.js` | ~3.5 KB |
+| `src/core/crypto.js` | ~2 KB |
+
+---
+
+## Contact / Ownership
+
+Repository maintained by **BebraNova**.  
+Issues and PRs welcome.

@@ -1,0 +1,23 @@
+{
+  "appId": "com.nocturne.writer",
+  "appName": "Nocturne Writer",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": true,
+      "backgroundColor": "#08080a"
+    },
+    "StatusBar": {
+      "style": "LIGHT",
+      "backgroundColor": "#00000000",
+      "overlaysWebView": true
+    },
+    "NavigationBar": {
+      "backgroundColor": "#07070a",
+      "darkButtons": false
+    }
+  }
+}

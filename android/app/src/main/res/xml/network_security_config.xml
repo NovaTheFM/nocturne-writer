@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Android network security config cannot express "only RFC1918/LAN IP ranges".
+         HTTP LAN sync is still protected by pairing tokens and the broker exposes no project data on discovery. -->
+    <base-config cleartextTrafficPermitted="true" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+    </domain-config>
+</network-security-config>
