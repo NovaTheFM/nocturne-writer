@@ -23,6 +23,7 @@ import { platformFiles } from './platform/file-adapter.js';
 import { detectRuntime } from './platform/runtime.js';
 import { CommandPalette } from './features/command-palette.js';
 import { buildAiContext, serializeAiContextSafe } from './features/ai-context.js';
+import { NocturneEditorBridge } from './editor/nocturne-editor.js';
 import { aiIcon, iconSvg } from './ui/icons.js';
 import Sortable from './vendor/sortablejs/sortable.complete.esm.js';
 
@@ -225,6 +226,19 @@ class NocturneWriter {
     this.repaginateSettingsDebounced = debounce(() => this.renderWorkspace(), 260);
     this.typoMatchIndex = [];
     this.commandPalette = new CommandPalette(this);
+    this.nocturneEditor = new NocturneEditorBridge({
+      getSettings: () => this.state.settings,
+      onFocus: (paneId) => {
+        if (this.state.workspace?.focusedPaneId !== paneId) this.setFocusedPane(paneId);
+        this.handleMobileViewportChange();
+      },
+      onSelectionUpdate: () => {
+        this.captureSelectionSnapshot();
+        this.updateEditorSelectionState();
+        this.updateToolbarState();
+      },
+      onChange: ({ paneId, doc, transaction }) => this.handleRichEditorChange(paneId, doc, transaction),
+    });
                     this.lastAiContext = null;
     this.mobileResizeDebounced = debounce(() => this.handleMobileViewportChange(), 120);
       }
@@ -1063,6 +1077,7 @@ class NocturneWriter {
     ['primary', 'secondary'].forEach((paneId) => {
       const paneEl = stage.querySelector(`[data-pane-id="${paneId}"]`);
       if (!paneEl) return;
+      this.nocturneEditor?.destroy(paneId);
       paneEl.innerHTML = this.renderPane(paneId);
     });
     ['primary', 'secondary'].forEach((paneId) => {
@@ -1079,6 +1094,7 @@ class NocturneWriter {
     const stage = document.getElementById('workspace-stage');
     const paneEl = stage?.querySelector(`[data-pane-id="${paneId}"]`);
     if (!paneEl) return;
+    this.nocturneEditor?.destroy(paneId);
     paneEl.innerHTML = this.renderPane(paneId);
     if (this.getPane(paneId)?.type === 'document') this.renderEditor(paneId);
     this.updateWorkspaceFocusClasses();
@@ -2820,6 +2836,7 @@ class NocturneWriter {
     document.addEventListener('compositionend', (event) => {
       this.isComposing = false;
       const editable = document.activeElement?.closest('.page-content');
+      if (this.nocturneEditor?.getByElement(editable)) return;
       if (editable) {
         this.editorInput(editable, event);
       }
@@ -3869,6 +3886,12 @@ class NocturneWriter {
 
   runEditorCommand(command) {
     if (this.state.reviewMode === 'editor') return;
+    const paneId = this.selectionSnapshot?.paneId || this.state.workspace?.focusedPaneId || 'primary';
+    if (this.nocturneEditor?.runCommand(paneId, command)) {
+      this.nocturneEditor.scheduleVisualPages(paneId);
+      this.updateToolbarState();
+      return;
+    }
     const inlineCommand = ['bold', 'italic', 'underline', 'strikeThrough'].includes(command);
     if (!this.selectionController?.active && inlineCommand && this.selectionSnapshot?.text && this.selectionSnapshot.docId) {
       const snapshotEditable = document.querySelector(`.workspace-pane[data-pane-id="${CSS.escape(this.selectionSnapshot.paneId || 'primary')}"] .page-content[data-doc-id="${CSS.escape(this.selectionSnapshot.docId)}"]`);
@@ -4373,6 +4396,12 @@ class NocturneWriter {
 
   setCurrentBlockAlign(align) {
     if (this.state.reviewMode === 'editor') return;
+    const paneId = this.selectionSnapshot?.paneId || this.state.workspace?.focusedPaneId || 'primary';
+    const command = align === 'center' ? 'justifyCenter' : align === 'justify' ? 'justifyFull' : 'justifyLeft';
+    if (this.nocturneEditor?.runCommand(paneId, command)) {
+      this.updateToolbarState();
+      return;
+    }
     const block = this.currentBlockElement();
     if (!block) return;
     block.style.textAlign = align;
@@ -4403,6 +4432,13 @@ class NocturneWriter {
 
   setCurrentBlockType(type) {
     if (this.state.reviewMode === 'editor') return;
+    const paneId = this.selectionSnapshot?.paneId || this.state.workspace?.focusedPaneId || 'primary';
+    if (this.nocturneEditor?.runCommand(paneId, 'formatBlock', type)) {
+      this.closeFloatingMenu('format');
+      this.updateFormatLabel(type);
+      this.updateToolbarState();
+      return;
+    }
     this.restoreSelectionSnapshot(this.selectionSnapshot);
     const block = this.currentBlockElement();
     if (!block) {
@@ -4453,6 +4489,24 @@ class NocturneWriter {
   }
 
   updateToolbarState() {
+    const paneId = this.selectionSnapshot?.paneId || this.state.workspace?.focusedPaneId || 'primary';
+    const editor = this.nocturneEditor?.get(paneId);
+    if (editor) {
+      const states = {
+        bold: editor.isActive('bold'),
+        italic: editor.isActive('italic'),
+        underline: editor.isActive('underline'),
+        strikeThrough: editor.isActive('strike'),
+        justifyLeft: editor.isActive({ textAlign: 'left' }) || !['center', 'justify'].some((align) => editor.isActive({ textAlign: align })),
+        justifyCenter: editor.isActive({ textAlign: 'center' }),
+        justifyFull: editor.isActive({ textAlign: 'justify' }),
+      };
+      Object.entries(states).forEach(([command, active]) => {
+        document.querySelectorAll(`[data-command="${command}"]`).forEach((button) => button.classList.toggle('active', !!active));
+      });
+      this.updateFormatLabel(editor.isActive('heading') ? 'heading' : editor.isActive('blockquote') ? 'quote' : 'paragraph');
+      return;
+    }
     ['bold', 'italic', 'justifyLeft', 'justifyCenter', 'justifyFull'].forEach((command) => {
       const button = document.querySelector(`[data-command="${command}"]`);
       const block = this.currentBlockElement();
@@ -4483,6 +4537,7 @@ class NocturneWriter {
   handleInput(event) {
     const editable = event.target.closest?.('.page-content');
     if (editable) {
+      if (this.nocturneEditor?.getByElement(event.target)) return;
       if (this.state.reviewMode === 'editor') return;
       this.hideEntityHoverCards();
       this.removeSoftEmptyLinePlaceholders(editable);
@@ -4581,6 +4636,10 @@ class NocturneWriter {
   handleBeforeInput(event) {
     const editable = event.target.closest?.('.page-content');
     if (!editable) return;
+    if (this.nocturneEditor?.getByElement(event.target)) {
+      if (this.state.reviewMode === 'editor') event.preventDefault();
+      return;
+    }
     if (this.state.reviewMode === 'editor') {
       event.preventDefault();
       return;
@@ -4602,6 +4661,10 @@ class NocturneWriter {
   handlePaste(event) {
     const editable = event.target.closest?.('.page-content');
     if (editable) {
+      if (this.nocturneEditor?.getByElement(event.target)) {
+        if (this.state.reviewMode === 'editor') event.preventDefault();
+        return;
+      }
       event.preventDefault();
       if (this.state.reviewMode === 'editor') return;
       const text = event.clipboardData?.getData('text/plain') || '';
@@ -7458,26 +7521,29 @@ class NocturneWriter {
       }
       return;
     }
-    
-    // Initial pagination to keep background pageStates sync
-    const pages = this.paginate(this.astWithAiPreview(doc, paneId), paneId);
-    
-    // Render each page containing its own contenteditable page-content container
-    container.innerHTML = pages.map((page, index) => `
-      <section class="page" data-pane-id="${paneId}" data-doc-id="${doc.id}" data-page-index="${index}">
+    this.nocturneEditor?.destroy(paneId);
+    container.innerHTML = `
+      <section class="page visual-page-shell" data-pane-id="${paneId}" data-doc-id="${doc.id}" data-page-index="0">
         <div class="cursor-light"></div>
-        <div class="page-content" data-pane-id="${paneId}" data-doc-id="${doc.id}" contenteditable="${doc.locked || this.state.reviewMode === 'editor' ? 'false' : 'true'}" spellcheck="false">
-          ${this.renderBlocks(page.blocks)}
-        </div>
-        <div class="page-number">${index + 1}</div>
+        <div class="page-content pm-editor-host" data-pane-id="${paneId}" data-doc-id="${doc.id}" spellcheck="false"></div>
+        <div class="page-overlay" aria-hidden="true"></div>
+        <div class="page-number">1</div>
       </section>
-    `).join('');
-    
+    `;
+    const host = container.querySelector('.page-content');
+    const pageShell = container.querySelector('.page');
+    const overlay = container.querySelector('.page-overlay');
+    this.nocturneEditor?.mount({
+      paneId,
+      doc,
+      host,
+      pageShell,
+      overlay,
+      readOnly: doc.locked || this.state.reviewMode === 'editor',
+    });
+
     this.updateActiveBlock();
     this.disableBrowserSpellcheck();
-    this.updateReadabilityHighlights();
-    this.updateTypoHighlights();
-    this.updateReviewHighlights();
     this.applyReviewMode();
   }
 
@@ -8617,7 +8683,30 @@ class NocturneWriter {
     return cleanedHtmls.join('');
   }
 
+  handleRichEditorChange(paneId, doc, transaction = null) {
+    if (!doc || doc.locked || this.isComposing) return;
+    if (this.state.workspace?.focusedPaneId !== paneId) this.setFocusedPane(paneId);
+    if (this.state.suggestion?.docId === doc.id) {
+      this.clearSuggestion();
+      this.toast('AI-РїСЂРµРґР»РѕР¶РµРЅРёРµ РѕС‚РјРµРЅРµРЅРѕ: РґРѕРєСѓРјРµРЅС‚ Р±С‹Р» РёР·РјРµРЅС‘РЅ.');
+      this.renderWorkspacePane(paneId);
+      return;
+    }
+
+    this.bumpDocRenderRevision(doc);
+    doc.summary = doc.description || buildSummary(doc.ast);
+    doc.updatedAt = Date.now();
+    this.updateActiveBlock();
+    this.renderGoal();
+    this.writeLiveDraft(doc.id);
+    this.saveDocByIdDebounced(doc.id);
+    this.scheduleSyncForDoc(doc.id, { inputType: transaction?.getMeta?.('uiEvent') || 'prosemirrorTransaction' });
+    if (this.searchSession?.docId === doc.id) this.searchRefreshDebounced();
+    this.nocturneEditor?.scheduleVisualPages(paneId);
+  }
+
   editorInput(editable, inputEvent = null) {
+    if (this.nocturneEditor?.getByElement(editable)) return;
     if (this.isComposing) return;
     const paneId = editable.dataset.paneId || this.state.workspace?.focusedPaneId || 'primary';
     const doc = this.getDocForPane(paneId);
@@ -10875,6 +10964,14 @@ class NocturneWriter {
   }
 
   replaceTextBeforeCaret(count, replacement) {
+    const activeEditable = document.activeElement?.closest?.('.page-content');
+    const editor = this.nocturneEditor?.getByElement(activeEditable);
+    if (editor) {
+      const { from, to } = editor.state.selection;
+      if (from !== to) return false;
+      const start = Math.max(0, from - count);
+      return editor.chain().focus().deleteRange({ from: start, to: from }).insertContent(replacement).run();
+    }
     const sel = getSelection();
     if (!sel || !sel.rangeCount) return false;
     const range = sel.getRangeAt(0);
@@ -11233,6 +11330,12 @@ class NocturneWriter {
   }
 
   insertTextAtCaret(text) {
+    const activeEditable = document.activeElement?.closest?.('.page-content');
+    const editor = this.nocturneEditor?.getByElement(activeEditable);
+    if (editor) {
+      editor.chain().focus().insertContent(String(text || '')).run();
+      return;
+    }
     try {
       document.execCommand('insertText', false, text);
     } catch (e) {

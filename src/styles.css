@@ -1516,6 +1516,67 @@ body.resizing-workspace {
 .app-shell.flexible-pages .page-content {
   overflow: visible;
 }
+.page.visual-page-shell {
+  height: auto;
+  min-height: 1123px;
+  overflow: visible;
+  contain: layout style;
+}
+.workspace-stage[data-mode="split"] .page.visual-page-shell {
+  height: auto;
+  min-height: calc(min(794px, calc(100% - 32px)) * 1.414);
+  aspect-ratio: auto;
+}
+.pm-editor-host {
+  min-height: calc(1123px - 192px);
+  overflow: visible;
+}
+.pm-editor-host .ProseMirror {
+  min-height: inherit;
+  outline: 0;
+  font-family: var(--font-editor);
+  font-size: var(--font-size-editor);
+  line-height: var(--line-height-editor);
+  letter-spacing: var(--letter-spacing-editor);
+  color: var(--text-paper);
+  white-space: normal;
+}
+.pm-editor-host .ProseMirror p,
+.pm-editor-host .ProseMirror blockquote {
+  margin: 0 0 var(--paragraph-spacing);
+  position: relative;
+  min-height: calc(var(--font-size-editor) * var(--line-height-editor));
+  white-space: pre-wrap;
+}
+.pm-editor-host .ProseMirror h1,
+.pm-editor-host .ProseMirror h2,
+.pm-editor-host .ProseMirror h3 {
+  font-family: var(--font-editor);
+  font-weight: 500;
+  line-height: 1.25;
+  color: white;
+  margin: 0 0 1.2em;
+  white-space: pre-wrap;
+}
+.page-overlay {
+  position: absolute;
+  inset: 96px;
+  z-index: 1;
+  pointer-events: none;
+}
+.page-divider {
+  position: absolute;
+  left: -96px;
+  right: -96px;
+  border-top: 1px dashed var(--border);
+  opacity: .72;
+}
+.visual-page-number {
+  position: absolute;
+  right: -68px;
+  color: #555566;
+  font-size: 11px;
+}
 .page.placeholder { justify-content: center; align-items: center; color: var(--text-muted); font-size: 12px; }
 .page:focus-within { border-color: rgba(var(--accent-rgb, 139, 92, 246),.34); box-shadow: var(--shadow-glow), var(--shadow-float); }
 .page-number {
