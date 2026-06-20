@@ -84,6 +84,13 @@ export class NocturneEditorBridge {
     return instance;
   }
 
+  setEditable(paneId, editable) {
+    const instance = this.instances.get(paneId);
+    if (instance) {
+      instance.editor.setOptions({ editable });
+    }
+  }
+
   destroy(paneId) {
     const instance = this.instances.get(paneId);
     if (!instance) return;

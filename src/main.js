@@ -1380,8 +1380,13 @@ class NocturneWriter {
     });
     document.querySelectorAll('.page-content').forEach((editable) => {
       const doc = this.state.docs.find((item) => item.id === editable.dataset.docId);
-      editable.contentEditable = doc?.locked || mode === 'editor' ? 'false' : 'true';
+      const isLocked = !!(doc?.locked || mode === 'editor');
+      editable.contentEditable = 'false';
       editable.classList.toggle('review-readonly', mode === 'editor');
+      const paneId = editable.dataset.paneId || editable.closest('.workspace-pane')?.dataset.paneId;
+      if (paneId) {
+        this.nocturneEditor?.setEditable(paneId, !isLocked);
+      }
     });
     this.updateWorkspaceFocusClasses();
   }
@@ -1445,6 +1450,13 @@ class NocturneWriter {
   isMobileLayout() {
     const coarse = window.matchMedia?.('(hover: none) and (pointer: coarse)')?.matches;
     return this.isAndroidRuntime() || this.isCapacitorRuntime() || window.innerWidth <= 768 || (coarse && window.innerWidth <= 900);
+  }
+
+  isEditable(editable) {
+    if (!editable) return false;
+    const pm = editable.querySelector('.ProseMirror');
+    if (pm) return pm.getAttribute('contenteditable') !== 'false';
+    return editable.getAttribute('contenteditable') !== 'false';
   }
 
   mobileShellClasses() {
@@ -3178,6 +3190,17 @@ class NocturneWriter {
     }
     const clickedPane = event.target.closest?.('[data-pane-id]')?.dataset.paneId;
     if (clickedPane) this.setFocusedPane(clickedPane);
+
+    const pageEl = event.target.closest('.page');
+    if (pageEl && !event.target.closest('.ProseMirror, button, input, textarea, select, .entity-link, .floating-note, .context-menu, .doc-menu-btn')) {
+      const paneId = pageEl.dataset.paneId || pageEl.closest('[data-pane-id]')?.dataset.paneId;
+      if (paneId) {
+        const editor = this.nocturneEditor?.get(paneId);
+        if (editor) {
+          editor.commands.focus();
+        }
+      }
+    }
     const entityLink = event.target.closest?.('.entity-link');
     if (entityLink && (event.ctrlKey || event.metaKey)) {
       event.preventDefault();
@@ -4951,7 +4974,7 @@ class NocturneWriter {
 
     const macroTarget = event.target;
     const macroEditable = macroTarget?.closest?.('.page-content');
-    if (macroEditable && macroEditable.getAttribute('contenteditable') !== 'false') {
+    if (macroEditable && this.isEditable(macroEditable)) {
       if (this.triggerKeyboardMacro(event, macroEditable)) {
         return;
       }
@@ -5045,7 +5068,7 @@ class NocturneWriter {
       if (event.key === 'Delete' && this.handleEditorDeleteKey(editable, event)) return;
       if (event.key === 'Backspace' && this.handleEmptyEditorBackspace(editable, event)) return;
     }
-    if (editable && editable.getAttribute('contenteditable') !== 'false' && event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
+    if (editable && this.isEditable(editable) && event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
       setTimeout(() => this.spawnLetterAnimation(event.key), 0);
       if (this.state.settings.smartPunctuation) this.smartPunctuationKey(event);
     }
