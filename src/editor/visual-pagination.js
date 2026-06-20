@@ -155,6 +155,30 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
     return pIdx * (pageHeight + gap) + pageHeight - paddingBottom;
   }
 
+  function findSplitPos(startPos, endPos, contentBottom) {
+    let left = startPos;
+    let right = endPos;
+    let best = -1;
+    while (left <= right) {
+      const mid = Math.floor((left + right) / 2);
+      let coords;
+      try {
+        coords = view.coordsAtPos(mid);
+      } catch (e) {
+        right = mid - 1;
+        continue;
+      }
+      const charY = coords.bottom - editorRect.top;
+      if (charY <= contentBottom) {
+        best = mid;
+        left = mid + 1;
+      } else {
+        right = mid - 1;
+      }
+    }
+    return best;
+  }
+
   blocksData.forEach((block, idx) => {
     // Dynamically calculate pageIndex based on current y position
     pageIndex = Math.floor(y / (pageHeight + gap));
@@ -175,8 +199,8 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
 
     if (blockBottom > contentBottom) {
       // Overflows!
-      const nextPageStart = (pageIndex + 1) * (pageHeight + gap) + paddingTop;
-      const currentPageStart = pageIndex * (pageHeight + gap) + paddingTop;
+      let nextPageStart = (pageIndex + 1) * (pageHeight + gap) + paddingTop;
+      let currentPageStart = pageIndex * (pageHeight + gap) + paddingTop;
 
       if (blockTop >= contentBottom - 10) {
         // The block starts near or after the page bottom, push the ENTIRE block to the next page!
@@ -199,59 +223,72 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
         // The block crosses the page bottom. We split it inline!
         const blockNode = block.node;
         if (blockNode && blockNode.isTextblock) {
-          const startPos = block.pos + 1; // inside paragraph start
-          const endPos = block.pos + blockNode.nodeSize - 1; // inside paragraph end
+          let currentBlockY = y;
+          let remainingHeight = blockHeight;
+          let currentStartPos = block.pos + 1;
+          const endPos = block.pos + blockNode.nodeSize - 1;
 
-          let left = startPos;
-          let right = endPos;
-          let bestPos = startPos;
-
-          while (left <= right) {
-            const mid = Math.floor((left + right) / 2);
-            let coords;
-            try {
-              coords = view.coordsAtPos(mid);
-            } catch (e) {
-              right = mid - 1;
-              continue;
-            }
-
-            const charY = coords.bottom - editorRect.top;
-            if (charY <= contentBottom) {
-              bestPos = mid;
-              left = mid + 1;
-            } else {
-              right = mid - 1;
-            }
-          }
-
-          if (bestPos > startPos) {
-            pageBreaks.push({
-              pos: bestPos,
-              height: H_spacer,
-              type: 'inline',
-              index: block.index,
-              pageIndex,
-              y: contentBottom
-            });
-            y = nextPageStart + (blockBottom - contentBottom);
-          } else {
-            // Push entire block
-            if (y <= currentPageStart + 5) {
-              y = blockBottom;
-            } else {
-              const spacerHeight = nextPageStart - y;
+          while (currentBlockY + remainingHeight > contentBottom) {
+            const splitPos = findSplitPos(currentStartPos, endPos, contentBottom);
+            if (splitPos > currentStartPos && splitPos < endPos) {
               pageBreaks.push({
-                pos: block.pos,
-                height: spacerHeight,
-                type: 'block',
+                pos: splitPos,
+                height: H_spacer,
+                type: 'inline',
                 index: block.index,
                 pageIndex,
-                y: blockTop
+                y: contentBottom
               });
-              y = nextPageStart + blockHeight;
+
+              let splitY;
+              try {
+                splitY = view.coordsAtPos(splitPos).bottom - editorRect.top;
+              } catch (e) {
+                splitY = contentBottom;
+              }
+              const usedHeight = Math.max(0, splitY - currentBlockY);
+              remainingHeight = Math.max(0, remainingHeight - usedHeight);
+
+              currentBlockY = nextPageStart;
+              currentStartPos = splitPos;
+              pageIndex++;
+              contentBottom = getPageContentBottom(pageIndex);
+              nextPageStart = (pageIndex + 1) * (pageHeight + gap) + paddingTop;
+            } else {
+              // Push the remaining part of the block to the next page
+              if (currentStartPos === block.pos + 1) {
+                if (currentBlockY <= currentPageStart + 5) {
+                  currentBlockY = currentBlockY + remainingHeight;
+                  remainingHeight = 0;
+                } else {
+                  const spacerHeight = nextPageStart - currentBlockY;
+                  pageBreaks.push({
+                    pos: block.pos,
+                    height: spacerHeight,
+                    type: 'block',
+                    index: block.index,
+                    pageIndex,
+                    y: currentBlockY
+                  });
+                  currentBlockY = nextPageStart;
+                }
+              } else {
+                pageBreaks.push({
+                  pos: currentStartPos,
+                  height: nextPageStart - currentBlockY,
+                  type: 'inline',
+                  index: block.index,
+                  pageIndex,
+                  y: currentBlockY
+                });
+                currentBlockY = nextPageStart;
+              }
+              pageIndex++;
+              contentBottom = getPageContentBottom(pageIndex);
+              nextPageStart = (pageIndex + 1) * (pageHeight + gap) + paddingTop;
             }
           }
+          y = currentBlockY + remainingHeight;
         } else {
           // Push entire block
           if (y <= currentPageStart + 5) {
@@ -311,7 +348,12 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
           var(--bg-page) ${gapEnd}px
         )`;
         return el;
-      }, { key: `break-${brk.pos}`, side: -1 });
+      }, {
+        key: `break-${brk.pos}`,
+        side: -1,
+        ignoreSelection: true,
+        stopEvent: (event) => true
+      });
 
       decorations.push(spacer);
     });

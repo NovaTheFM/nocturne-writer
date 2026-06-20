@@ -8053,8 +8053,11 @@ body.theme-paper .accent-preset.active {
 /* Page Break Spacers in ProseMirror */
 .pm-page-break {
   display: block;
-  pointer-events: none;
-  user-select: none;
+  pointer-events: none !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
   box-sizing: border-box;
 }
 .pm-page-break::selection,
