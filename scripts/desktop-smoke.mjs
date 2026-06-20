@@ -55,13 +55,22 @@ async function runAppSmoke(page) {
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
     const editable = document.querySelector('.page-content') || document.querySelector('.editor-page [contenteditable="true"]');
-    const block = editable?.querySelector('[data-block-id]') || editable;
-    assertInPage(editable && block, 'editor surface was not rendered');
+    const getBlock = () => editable?.querySelector('[data-block-id]') || editable;
+    assertInPage(editable && getBlock(), 'editor surface was not rendered');
     const doc = app.getFocusedDoc();
     assertInPage(doc, 'focused document missing after createDoc');
 
-    block.innerHTML = 'alpha beta gamma';
-    app.editorInput(editable, { inputType: 'insertText', data: ' ' });
+    const setEditorContent = (html) => {
+      const pmEditor = app.nocturneEditor?.getByElement(editable);
+      if (pmEditor) {
+        pmEditor.commands.setContent(html);
+      } else {
+        getBlock().innerHTML = html;
+        app.editorInput(editable, { inputType: 'insertText', data: ' ' });
+      }
+    };
+
+    setEditorContent('<p>alpha beta gamma</p>');
     const liveKey = Object.keys(localStorage).find((key) => key.includes(doc.id) && key.startsWith('nocturne-live-v'));
     assertInPage(liveKey, 'live draft was not written to localStorage');
     await app.saveDocById(doc.id, { silent: true });
@@ -70,7 +79,33 @@ async function runAppSmoke(page) {
     assertInPage(stored && JSON.stringify(stored.ast).includes('alpha beta gamma'), 'IndexedDB save did not persist editor text');
 
     const selectWord = (word) => {
-      const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+      const pmEditor = app.nocturneEditor?.getByElement(editable);
+      const currentBlock = getBlock();
+      if (pmEditor) {
+        let found = false;
+        pmEditor.state.doc.descendants((node, pos) => {
+          if (node.isText) {
+            const index = node.text.indexOf(word);
+            if (index >= 0) {
+              const from = pos + index;
+              const to = from + word.length;
+              pmEditor.commands.setTextSelection({ from, to });
+              app.selectionSnapshot = {
+                range: null,
+                caret: null,
+                paneId: editable.dataset.paneId || editable.closest('.workspace-pane')?.dataset.paneId || 'primary',
+                docId: editable.dataset.docId,
+                text: word,
+              };
+              found = true;
+              return false;
+            }
+          }
+        });
+        return found;
+      }
+
+      const walker = document.createTreeWalker(currentBlock, NodeFilter.SHOW_TEXT);
       let node;
       while ((node = walker.nextNode())) {
         const index = node.nodeValue.indexOf(word);
@@ -94,30 +129,30 @@ async function runAppSmoke(page) {
       return false;
     };
 
-    block.innerHTML = 'alpha beta gamma';
+    setEditorContent('<p>alpha beta gamma</p>');
     selectWord('beta');
     app.runEditorCommand('bold');
-    assertInPage(/<strong>beta<\/strong>/.test(block.innerHTML), 'bold wrap failed');
+    assertInPage(/<strong>beta<\/strong>/.test(getBlock().innerHTML), 'bold wrap failed');
     selectWord('beta');
     app.runEditorCommand('bold');
-    assertInPage(!/<strong>beta<\/strong>/.test(block.innerHTML), 'bold unwrap failed');
+    assertInPage(!/<strong>beta<\/strong>/.test(getBlock().innerHTML), 'bold unwrap failed');
     selectWord('beta');
     app.runEditorCommand('italic');
-    assertInPage(/<em>beta<\/em>/.test(block.innerHTML), 'italic failed');
-    block.innerHTML = 'alpha beta gamma';
+    assertInPage(/<em>beta<\/em>/.test(getBlock().innerHTML), 'italic failed');
+    setEditorContent('<p>alpha beta gamma</p>');
     selectWord('beta');
     app.runEditorCommand('underline');
-    assertInPage(/<u>beta<\/u>/.test(block.innerHTML), 'underline failed');
-    block.innerHTML = 'alpha beta gamma';
+    assertInPage(/<u>beta<\/u>/.test(getBlock().innerHTML), 'underline failed');
+    setEditorContent('<p>alpha beta gamma</p>');
     selectWord('beta');
     app.runEditorCommand('strikeThrough');
-    assertInPage(/<s>beta<\/s>/.test(block.innerHTML), 'strike failed');
-    block.innerHTML = 'alpha beta gamma';
+    assertInPage(/<s>beta<\/s>/.test(getBlock().innerHTML), 'strike failed');
+    setEditorContent('<p>alpha beta gamma</p>');
     selectWord('beta');
     app.runEditorCommand('bold');
     selectWord('beta');
     app.runEditorCommand('italic');
-    assertInPage(/<em><strong>beta<\/strong><\/em>|<strong><em>beta<\/em><\/strong>/.test(block.innerHTML), 'nested bold+italic failed');
+    assertInPage(/<em><strong>beta<\/strong><\/em>|<strong><em>beta<\/em><\/strong>/.test(getBlock().innerHTML), 'nested bold+italic failed');
 
     const validWriting = await app.parseAiProtocolWithRepair(
       JSON.stringify({ type: 'writing', thinking: 'Готово.', mode: 'replace-selection', text: 'Исправленный текст.' }),
@@ -172,7 +207,7 @@ async function runAppSmoke(page) {
     app.streamAi = originalStreamAi;
     assertInPage(repairedReview.ok && repairedReview.review?.[0]?.replacement === 'прекрасный', 'contradictory proofread review was not repaired into actionable issue');
 
-    const currentText = block.textContent;
+    const currentText = getBlock().textContent;
     const unsafeInserted = app.insertSuggestion('<NOCTURNE_PROTOCOL></NOCTURNE_PROTOCOL>', {
       ok: true,
       doc,
@@ -241,8 +276,8 @@ async function main() {
   page.on('pageerror', (error) => errors.push(error.message));
 
   try {
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 25_000 });
-    await page.waitForFunction(() => !!window.nocturneApp?.createDoc, { timeout: 25_000 });
+    await page.goto(BASE_URL, { waitUntil: 'load', timeout: 25_000 });
+    await page.waitForFunction(() => !!window.nocturneApp?.state?.workspace, { timeout: 25_000 });
     const result = await runAppSmoke(page);
     await page.evaluate(() => window.nocturneApp.openSettingsTab('visual'));
     await page.waitForFunction(() => {

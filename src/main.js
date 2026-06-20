@@ -92,6 +92,95 @@ function isPlainObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value);
 }
 
+function defaultDeviceName(runtime) {
+  if (runtime?.isElectron) return 'Nocturne Desktop';
+  if (runtime?.isAndroid) return 'Nocturne Android';
+  return 'Nocturne Browser';
+}
+
+class LocalSyncClient {
+  constructor(app) {
+    this.app = app;
+    this.ws = null;
+  }
+
+  isOpen() {
+    return this.ws && this.ws.readyState === 1;
+  }
+
+  async connect({ host, port, token, trusted }) {
+    if (this.isOpen()) this.ws.close();
+    return new Promise((resolve, reject) => {
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${host}:${port}`;
+      const ws = new WebSocket(wsUrl);
+      this.ws = ws;
+
+      let resolved = false;
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({
+          type: 'pair',
+          protocolVersion: 1,
+          token,
+          deviceId: this.app.state.sync.deviceId,
+          deviceName: this.app.state.sync.deviceName || 'Browser',
+          deviceType: 'browser',
+          runtime: 'browser',
+        }));
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          if (message.type === 'paired') {
+            resolved = true;
+            this.app.state.sync.status = 'connected';
+            this.app.state.sync.statusDetail = 'Подключено.';
+            this.app.renderSyncStatus?.();
+            resolve();
+          } else if (message.type === 'error') {
+            this.app.toast(message.message || 'Ошибка синхронизации.');
+            if (!resolved) reject(new Error(message.message));
+          } else {
+            this.handleMessage(message);
+          }
+        } catch (e) {
+          console.error('[sync client] error handling message:', e);
+        }
+      };
+
+      ws.onerror = (err) => {
+        if (!resolved) reject(err);
+      };
+
+      ws.onclose = () => {
+        this.app.state.sync.status = 'disconnected';
+        this.app.state.sync.statusDetail = 'Соединение закрыто.';
+        this.app.renderSyncStatus?.();
+      };
+    });
+  }
+
+  send(message) {
+    if (this.isOpen()) {
+      this.ws.send(JSON.stringify(message));
+    }
+  }
+
+  handleMessage(message) {
+    if (message.type === 'project-state-request') {
+      this.app.sendSyncProjectState();
+    } else if (message.type === 'project-state') {
+      this.app.receiveSyncProjectState(message);
+    } else if (message.type === 'merge-accepted') {
+      this.app.receiveSyncMergeAccepted(message);
+    } else if (message.type === 'doc-patch') {
+      this.app.receiveSyncPatch(message.patch);
+    }
+  }
+}
+
 class NocturneWriter {
   constructor() {
     this.db = new Database();
@@ -105,6 +194,22 @@ class NocturneWriter {
       lore: { characters: [], locations: [], timeline: [] },
       activeDocId: null,
       workspace: null,
+      sync: {
+        deviceId: safeGetStorageItem(localStorage, 'nocturne-sync-device-id', uid('device')),
+        deviceName: safeGetStorageItem(localStorage, 'nocturne-sync-device-name', ''),
+        discoveredDevices: [],
+        rememberedDevices: [],
+        host: safeGetStorageItem(localStorage, 'nocturne-sync-host', ''),
+        port: safeGetStorageItem(localStorage, 'nocturne-sync-port', '8787'),
+        token: safeGetStorageItem(localStorage, 'nocturne-sync-token', ''),
+        discovery: { manualOpen: false },
+        status: 'disconnected',
+        statusDetail: '',
+        remoteState: null,
+        mergePreview: null,
+        pendingPatches: 0,
+        conflicts: 0,
+      },
       pageStates: {},
       activeKbTab: 'characters',
       activeSubtimelineId: null,
@@ -239,6 +344,7 @@ class NocturneWriter {
       },
       onChange: ({ paneId, doc, transaction }) => this.handleRichEditorChange(paneId, doc, transaction),
     });
+    this.syncClient = new LocalSyncClient(this);
                     this.lastAiContext = null;
     this.mobileResizeDebounced = debounce(() => this.handleMobileViewportChange(), 120);
       }
@@ -12817,7 +12923,8 @@ class NocturneWriter {
           ${row('Плавное дыхание каретки', 'Добавляет еле заметную анимацию каретки вместо резкого мигания.', toggle('caretBreath'))}
           ${row('Уровень контрастности текста', 'Поднимает или снижает яркость текста на странице, не меняя тему целиком.', range('textContrast', 45, 100, 1, '%'))}
           ${row('Компактный режим панелей', 'Сужает боковые панели и плотнее собирает служебный интерфейс.', toggle('compactPanels'))}
-          ${row('Режим пишущей машинки', 'Держит активную строку вертикально по центру экрана — как в профессиональных редакторах.', toggle('keepCaretCentered'))}
+          ${row('Режим пишущей машинки', 'Держит активную строку вертикально по центру экрана — как в профессиональных редакторах.', toggle('keepCaretCentered'))}
+
           ${row('Режим пишущей машинки', 'Держит активную строку вертикально по центру экрана — как в профессиональных редакторах.', toggle('keepCaretCentered'))}
           ${(this.isAndroidRuntime() || this.isCapacitorRuntime()) ? row('Уменьшить анимации на телефоне', 'По умолчанию мобильные анимации включены. Включите это только если устройство заметно тормозит.', toggle('reduceMobileAnimations')) : ''}
           ${this.isMobileLayout() ? '' : row('Горячие клавиши', 'Открывает справку по реально доступным сочетаниям клавиш.', `<button class="pill-btn" data-action="open-shortcuts"><i class="bx bx-keyboard"></i> Показать</button>`)}
@@ -15381,6 +15488,531 @@ ${raw}`;
     ['nocturne-master-password'].forEach((key) => safeRemoveStorageItem(sessionStorage, key));
     location.reload();
   }
+
+// --- syncActiveDocFromFocusedPane ---
+  syncActiveDocFromFocusedPane() {
+    const doc = this.getFocusedDoc();
+    this.state.activeDocId = doc ? doc.id : null;
+  }
+
+// --- syncFloatingMenuPortalState ---
+  syncFloatingMenuPortalState() {
+    const portal = document.getElementById('floating-menu-portal');
+    if (!portal) return;
+    const hasOpenMenu = ['kb', 'format', 'split', 'notes', 'search', 'review']
+      .some((key) => this.isFloatingMenuOpen(key));
+    portal.setAttribute('aria-hidden', hasOpenMenu ? 'false' : 'true');
+  }
+
+// --- renderMobileSync ---
+  renderMobileSync() {
+    const s = this.state.sync;
+    const preview = s.mergePreview;
+    const remembered = (s.rememberedDevices || []).filter((item) => item.trusted).slice(0, 3);
+    const discovered = s.discoveredDevices || [];
+    const scanProgress = s.discovery.total ? Math.round((s.discovery.checked / s.discovery.total) * 100) : 0;
+    return `
+      ${this.mobilePanelHeader('Связь с компьютером', 'Локальная синхронизация по Wi‑Fi')}
+      <div class="mobile-panel-body mobile-sync-body">
+        <section class="mobile-sync-status ${escapeHtml(s.status)} compact" data-sync-status-card>
+          ${iconSvg('phonePc', 'mobile-sync-icon')}
+          <div>
+            <strong data-sync-status-title>${this.syncStatusLabel(s.status)}</strong>
+            <span data-sync-status-detail>${escapeHtml(s.statusDetail || 'Найдите компьютер в Wi‑Fi или введите адрес вручную.')}</span>
+          </div>
+        </section>
+
+        ${remembered.length ? `<section class="sync-mobile-section"><div class="mobile-section-title">Быстрое подключение</div>${remembered.map((device) => this.renderSyncDeviceCard(device, 'remembered')).join('')}</section>` : ''}
+
+        <section class="sync-mobile-section">
+          <div class="mobile-section-title">Найденные компьютеры</div>
+          <div class="sync-scan-row">
+            <button class="pill-btn ai-btn" data-action="sync-scan">${iconSvg('scan', 'btn-svg')} Искать в Wi‑Fi</button>
+            ${s.discovery.scanning ? `<button class="pill-btn" data-action="sync-scan-cancel"><i class="bx bx-stop"></i> Стоп</button>` : ''}
+          </div>
+          ${s.discovery.scanning ? `<div class="sync-progress"><span style="width:${scanProgress}%"></span></div><small>${s.discovery.checked}/${s.discovery.total} адресов</small>` : `<small>${escapeHtml(s.discovery.message || 'Поиск запускается только вручную и не работает в фоне.')}</small>`}
+          ${discovered.length ? `<div class="sync-device-list">${discovered.map((device) => this.renderSyncDeviceCard(device, 'discovered')).join('')}</div>` : '<p class="form-helper">Если компьютер не найден, используйте ручной ввод ниже.</p>'}
+        </section>
+
+        <section class="sync-mobile-section">
+          <button class="mobile-collapser" data-action="sync-toggle-manual">${iconSvg('server', 'mobile-action-svg')} <span>Ввести вручную</span><i class="bx bx-chevron-down"></i></button>
+          ${s.discovery.manualOpen ? `<div class="mobile-sync-form compact">
+            <label>Имя устройства<input class="form-control" data-sync-field="deviceName" value="${escapeHtml(s.deviceName || '')}" placeholder="Android телефон"></label>
+            <label>IP компьютера<input class="form-control" data-sync-field="host" value="${escapeHtml(s.host || '')}" placeholder="192.168.1.10"></label>
+            <div class="sync-two-cols">
+              <label>Порт<input class="form-control" data-sync-field="port" value="${escapeHtml(s.port || '8787')}" inputmode="numeric"></label>
+              <label>Код подключения<input class="form-control" data-sync-field="token" value="${escapeHtml(s.token || '')}" placeholder="код"></label>
+            </div>
+          </div>` : ''}
+          <div class="mobile-panel-actions">
+            <button class="pill-btn ai-btn" data-action="sync-connect">${iconSvg('sync', 'btn-svg')} Подключиться</button>
+            <button class="pill-btn" data-action="sync-disconnect"><i class="bx bx-link-break"></i> Отключить</button>
+            <button class="pill-btn" data-action="sync-request-merge"><i class="bx bx-transfer"></i> Сравнить базы</button>
+          </div>
+        </section>
+
+        ${preview ? this.renderSyncMergePreview(preview) : '<p class="form-helper">Сервер только передаёт сообщения. Очереди, связи, конфликты и ревизии хранятся на этом устройстве в IndexedDB.</p>'}
+      </div>`;
+  }
+
+// --- renderSyncDeviceCard ---
+  renderSyncDeviceCard(device = {}, mode = 'discovered') {
+    const id = escapeHtml(device.id || device.deviceId || device.publicDeviceId || '');
+    const host = device.host || device.lastKnownIp || '';
+    const port = device.port || device.lastKnownPort || '8787';
+    const last = device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : 'нет данных';
+    const trusted = !!device.trusted;
+    return `<article class="sync-device-card ${trusted ? 'trusted' : ''}">
+      <div class="sync-device-icon">${iconSvg(device.deviceType === 'phone' ? 'phonePc' : 'server', 'sync-card-svg')}</div>
+      <div class="sync-device-main">
+        <strong>${escapeHtml(device.deviceName || 'Nocturne Sync')}</strong>
+        <span>${escapeHtml(host || 'адрес неизвестен')}:${escapeHtml(String(port))} · ${mode === 'remembered' ? 'доверенное' : 'найдено'} · ${escapeHtml(last)}</span>
+      </div>
+      <div class="sync-device-actions">
+        <button class="pill-btn mini" data-action="sync-connect-device" data-sync-device-id="${id}">${trusted ? 'Снова' : 'Подключить'}</button>
+        ${mode === 'remembered' ? `<button class="btn-icon" title="Автоподключение" data-action="sync-toggle-autoreconnect" data-sync-device-id="${id}">${iconSvg(device.autoReconnect ? 'trust' : 'sync', 'icon-btn-svg')}</button><button class="btn-icon" title="Забыть" data-action="sync-forget-device" data-sync-device-id="${id}"><i class="bx bx-trash"></i></button>` : ''}
+      </div>
+    </article>`;
+  }
+
+// --- syncStatusLabel ---
+  syncStatusLabel(status) {
+    return {
+      offline: 'Не подключено',
+      waiting: 'Ожидание',
+      connected: 'Подключено',
+      syncing: 'Синхронизация',
+      error: 'Ошибка',
+      conflict: 'Есть конфликт',
+    }[status] || 'Не подключено';
+  }
+
+// --- renderSyncMergePreview ---
+  renderSyncMergePreview(preview) {
+    const stats = preview.stats || {};
+    const folders = preview.connectFolders || [];
+    return `<section class="sync-preview-card">
+      <h3>Предпросмотр объединения</h3>
+      <div class="dump-summary-grid">
+        <span><strong>${stats.docs || 0}</strong> глав</span>
+        <span><strong>${stats.folders || 0}</strong> папок</span>
+        <span><strong>${stats.characters || 0}</strong> персонажей</span>
+        <span><strong>${stats.locations || 0}</strong> локаций</span>
+        <span><strong>${stats.timeline || 0}</strong> событий</span>
+        <span><strong>${stats.subtimelines || 0}</strong> сабтаймлайнов</span>
+        <span><strong>${stats.notes || 0}</strong> заметок</span>
+        <span><strong>${stats.conflicts || 0}</strong> конфликтов</span>
+      </div>
+      <p class="form-helper">Будут созданы/использованы папки: ${folders.map(escapeHtml).join(', ') || 'нет'}. Настройки не будут перезаписаны.</p>
+      <div class="mobile-panel-actions">
+        <button class="pill-btn ai-btn" data-action="sync-apply-merge"><i class="bx bx-check"></i> Применить объединение</button>
+        <button class="pill-btn" data-action="sync-clear-preview"><i class="bx bx-x"></i> Отмена</button>
+      </div>
+    </section>`;
+  }
+
+// --- renderSyncStatus ---
+  renderSyncStatus() {
+    document.querySelectorAll('[data-sync-status]').forEach((el) => {
+      el.textContent = this.syncStatusLabel(this.state.sync.status);
+      el.className = `sync-status-pill ${this.state.sync.status}`;
+    });
+  }
+
+// --- updateSyncStatusUi ---
+  updateSyncStatusUi() {
+    this.renderSyncStatus();
+    const status = this.state.sync.status;
+    const label = this.syncStatusLabel(status);
+    const detail = this.state.sync.statusDetail || 'Найдите компьютер в Wi-Fi или введите адрес вручную.';
+    document.querySelectorAll('[data-sync-status-card]').forEach((card) => {
+      card.className = `mobile-sync-status compact ${status}`;
+    });
+    document.querySelectorAll('[data-sync-status-title]').forEach((el) => {
+      el.textContent = label;
+    });
+    document.querySelectorAll('[data-sync-status-detail]').forEach((el) => {
+      el.textContent = detail;
+    });
+  }
+
+// --- isLocalSyncDevice ---
+  isLocalSyncDevice(device = {}) {
+    const publicId = device.publicDeviceId || device.id;
+    if (publicId && publicId === this.state.sync.server.publicDeviceId) return true;
+    if (publicId && publicId === this.state.sync.publicDeviceId) return true;
+    const serverIps = new Set([...(this.state.sync.server.lanIps || []), '127.0.0.1', 'localhost']);
+    return serverIps.has(device.host) && String(device.port || '') === String(this.state.sync.server.port || '');
+  }
+
+// --- applySyncServerStatus ---
+  applySyncServerStatus(payload = {}) {
+    const server = this.state.sync.server;
+    server.canControl = !!payload.canControl || server.canControl;
+    server.running = !!payload.running;
+    server.port = String(payload.port || server.port || '8787');
+    server.token = String(payload.token || server.token || '');
+    server.publicDeviceId = String(payload.publicDeviceId || server.publicDeviceId || '');
+    server.lanIps = Array.isArray(payload.lanIps) ? payload.lanIps : [];
+    server.startedAt = payload.startedAt || null;
+    server.output = payload.output || '';
+    if (server.running) {
+      this.state.sync.port = server.port;
+      this.state.sync.token = server.token || this.state.sync.token;
+      this.state.sync.host = this.preferredLanIps(server.lanIps)[0] || this.state.sync.host || '127.0.0.1';
+      safeSetStorageItem(localStorage, 'nocturne-sync-host', this.state.sync.host);
+      safeSetStorageItem(localStorage, 'nocturne-sync-port', this.state.sync.port);
+      safeSetStorageItem(localStorage, 'nocturne-sync-token', this.state.sync.token);
+    }
+  }
+
+// --- candidateSyncHosts ---
+  candidateSyncHosts() {
+    const hosts = new Set();
+    const add = (host) => {
+      const value = String(host || '').trim();
+      if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(value)) return;
+      if (value.startsWith('127.') && this.isAndroidRuntime()) return;
+      hosts.add(value);
+    };
+    add(this.state.sync.host);
+    this.preferredLanIps(this.state.sync.server.lanIps || []).forEach(add);
+    (this.state.sync.rememberedDevices || []).forEach((device) => add(device.lastKnownIp || device.host));
+    const seed = [...hosts].find((host) => this.isPrivateLanIp(host));
+    if (seed && !seed.startsWith('127.')) {
+      const parts = seed.split('.');
+      const prefix = `${parts[0]}.${parts[1]}.${parts[2]}.`;
+      for (let i = 1; i <= 254; i += 1) hosts.add(`${prefix}${i}`);
+    } else {
+      if (!this.isAndroidRuntime()) add('127.0.0.1');
+      ['192.168.0', '192.168.1', '192.168.31', '192.168.50', '192.168.88', '192.168.100', '10.0.0', '10.0.1'].forEach((prefix) => {
+        for (let i = 1; i <= 254; i += 1) hosts.add(`${prefix}.${i}`);
+      });
+    }
+    return [...hosts].slice(0, 900);
+  }
+
+// --- cancelSyncDiscoveryScan ---
+  cancelSyncDiscoveryScan() {
+    if (this.syncScanAbort) this.syncScanAbort.cancelled = true;
+    this.state.sync.discovery.scanning = false;
+    this.state.sync.discovery.message = 'Поиск остановлен.';
+    this.renderSyncSurfaces();
+  }
+
+// --- renderSyncSurfaces ---
+  renderSyncSurfaces() {
+    if (this.isMobileLayout()) this.renderMobileShell();
+    else if (document.getElementById('form-overlay')?.classList.contains('active')) this.renderOpenSyncPanel();
+  }
+
+// --- disconnectLocalSync ---
+  disconnectLocalSync() {
+    this.syncClient.disconnect();
+    this.toast('Локальная связь отключена.');
+  }
+
+// --- buildSyncMergePreview ---
+  buildSyncMergePreview(message) {
+    const payload = message.dump?.payload || {};
+    const lore = payload.lore || {};
+    const timeline = lore.timeline || [];
+    const deviceName = message.deviceName || 'устройство';
+    const folderTitle = this.remoteConnectFolderTitle(message);
+    const stats = {
+      docs: payload.docs?.length || 0,
+      folders: payload.folders?.length || 0,
+      characters: lore.characters?.length || 0,
+      locations: lore.locations?.length || 0,
+      timeline: timeline.length,
+      subtimelines: timeline.reduce((sum, item) => sum + (item.subEvents?.length || 0), 0),
+      notes: payload.floatingNotes?.length || 0,
+      conflicts: (payload.docs || []).filter((doc) => this.state.docs.some((local) => local.id === doc.id)).length,
+    };
+    return {
+      remoteDeviceId: message.from,
+      remoteDeviceName: deviceName,
+      stats,
+      connectFolders: [folderTitle],
+      receivedAt: Date.now(),
+    };
+  }
+
+// --- openSyncPanel ---
+  openSyncPanel() {
+    const overlay = document.getElementById('form-overlay');
+    if (!overlay) return;
+    overlay.innerHTML = this.renderDesktopSyncCenter();
+    overlay.classList.add('active');
+    overlay.querySelectorAll('[data-close-form]').forEach((button) => {
+      button.onclick = () => overlay.classList.remove('active');
+    });
+  }
+
+// --- renderOpenSyncPanel ---
+  renderOpenSyncPanel() {
+    const overlay = document.getElementById('form-overlay');
+    if (!overlay?.classList.contains('active')) return;
+    overlay.innerHTML = this.renderDesktopSyncCenter();
+    overlay.querySelectorAll('[data-close-form]').forEach((button) => {
+      button.onclick = () => overlay.classList.remove('active');
+    });
+  }
+
+// --- renderDesktopSyncCenter ---
+  renderDesktopSyncCenter() {
+    const s = this.state.sync;
+    const server = s.server || {};
+    const discovered = s.discoveredDevices || [];
+    const remembered = s.rememberedDevices || [];
+    const scanProgress = s.discovery.total ? Math.round((s.discovery.checked / s.discovery.total) * 100) : 0;
+    const preferredIps = this.preferredLanIps(server.lanIps || []);
+    const infoRows = [
+      ['Адрес в сети', preferredIps.join(', ') || s.host || 'не найден'],
+      ['Порт', server.port || s.port || '8787'],
+      ['Код подключения', server.token || s.token || 'запустите сервер'],
+    ];
+    return `
+      <div class="form-modal sync-center-modal">
+        <div class="sync-center-head">
+          <div class="sync-center-title">
+            <span class="sync-center-logo">${iconSvg('phonePc', 'sync-center-logo-svg')}</span>
+            <div><h2>Локальная связь</h2><p>Синхронизация телефона и компьютера по Wi‑Fi</p></div>
+          </div>
+          <div class="sync-center-head-actions">
+            <span class="sync-status-pill ${escapeHtml(s.status)}" data-sync-status>${escapeHtml(this.syncStatusLabel(s.status))}</span>
+            <button class="btn-icon" data-close-form><i class="bx bx-x"></i></button>
+          </div>
+        </div>
+
+        <section class="sync-center-hero">
+          <div class="sync-hero-icon">${iconSvg('phonePc', 'sync-center-logo-svg')}</div>
+          <div>
+            <span>${server.running ? 'Компьютер готов к подключению' : 'Сервер ещё не запущен'}</span>
+            <strong>${server.running ? 'Телефон может подключиться по Wi‑Fi' : (server.canControl || this.runtime?.isElectron ? 'Запустите сервер одной кнопкой' : 'Проверьте внешний sync server')}</strong>
+            <p>${escapeHtml(server.message || 'Сервер работает только как локальный брокер. Данные проекта остаются на устройствах.')}</p>
+          </div>
+          <button class="pill-btn ai-btn sync-hero-action" data-action="${server.running ? 'sync-copy-info' : 'sync-server-start'}">${server.running ? iconSvg('copy', 'btn-svg') : iconSvg('server', 'btn-svg')} ${server.running ? 'Скопировать данные' : 'Запустить сервер'}</button>
+        </section>
+
+        <div class="sync-center-grid">
+          <section class="sync-center-card sync-server-card">
+            <div class="sync-card-head">${iconSvg('server', 'sync-card-head-icon')}<div><strong>Сервер на компьютере</strong><span>${server.canControl ? 'Управление доступно из приложения' : 'Браузерный режим: запуск сервера снаружи'}</span></div></div>
+            <div class="sync-server-status ${server.running ? 'online' : 'offline'}">
+              <span>${server.running ? 'Сервер запущен' : 'Сервер не запущен'}</span>
+              <small>${escapeHtml(server.message || (server.canControl ? 'Запуск доступен только по явному нажатию.' : 'Проверьте уже запущенный сервер или скопируйте команду запуска.'))}</small>
+            </div>
+            <div class="sync-info-grid">${infoRows.map(([label, value]) => `<span><small>${label}</small><strong>${escapeHtml(value)}</strong></span>`).join('')}</div>
+            <div class="sync-card-actions">
+              <button class="pill-btn ai-btn" data-action="sync-server-start">${iconSvg('server', 'btn-svg')} Запустить сервер</button>
+              <button class="pill-btn" data-action="sync-server-stop"><i class="bx bx-stop"></i> Остановить</button>
+              <button class="pill-btn" data-action="sync-server-check"><i class="bx bx-refresh"></i> Проверить</button>
+              <button class="pill-btn" data-action="sync-server-refresh-token"><i class="bx bx-key"></i> Новый код</button>
+              <button class="pill-btn" data-action="sync-copy-info">${iconSvg('copy', 'btn-svg')} Скопировать</button>
+            </div>
+          </section>
+
+          <section class="sync-center-card">
+            <div class="sync-card-head">${iconSvg('scan', 'sync-card-head-icon')}<div><strong>Обнаружение в сети</strong><span>Поиск по Wi‑Fi ограничен по времени; ручной ввод остаётся запасным путём.</span></div></div>
+            <div class="sync-card-actions">
+              <button class="pill-btn ai-btn" data-action="sync-scan">${iconSvg('scan', 'btn-svg')} Искать устройства</button>
+              ${s.discovery.scanning ? `<button class="pill-btn" data-action="sync-scan-cancel"><i class="bx bx-stop"></i> Остановить</button>` : ''}
+            </div>
+            ${s.discovery.scanning ? `<div class="sync-progress"><span style="width:${scanProgress}%"></span></div><small>${s.discovery.checked}/${s.discovery.total} адресов проверено</small>` : `<p class="form-helper">${escapeHtml(s.discovery.message || 'Поиск запускается только пользователем, ограничен по времени и не работает в фоне.')}</p>`}
+            <div class="sync-device-list">${discovered.length ? discovered.map((device) => this.renderSyncDeviceCard(device, 'discovered')).join('') : '<p class="form-helper">Пока ничего не найдено.</p>'}</div>
+          </section>
+
+          <section class="sync-center-card">
+            <div class="sync-card-head">${iconSvg('trust', 'sync-card-head-icon')}<div><strong>Доверенные устройства</strong><span>Автоподключение включается только после успешной привязки.</span></div></div>
+            <div class="sync-device-list">${remembered.length ? remembered.map((device) => this.renderSyncDeviceCard(device, 'remembered')).join('') : '<p class="form-helper">Доверенных устройств пока нет.</p>'}</div>
+          </section>
+
+          <section class="sync-center-card">
+            <div class="sync-card-head">${iconSvg('sync', 'sync-card-head-icon')}<div><strong>Подключение и merge</strong><span>Сервер не хранит историю. Очереди, связи и конфликты остаются в IndexedDB клиентов.</span></div></div>
+            <div class="form-grid compact">
+              <label>Имя устройства <input class="form-control" data-sync-field="deviceName" value="${escapeHtml(s.deviceName || '')}"></label>
+              <label>IP компьютера <input class="form-control" data-sync-field="host" value="${escapeHtml(s.host || '127.0.0.1')}" placeholder="192.168.1.10"></label>
+              <label>Порт <input class="form-control" data-sync-field="port" value="${escapeHtml(s.port || '8787')}" inputmode="numeric"></label>
+              <label>Код подключения <input class="form-control" data-sync-field="token" value="${escapeHtml(s.token || '')}"></label>
+            </div>
+            <div class="sync-card-actions">
+              <button class="pill-btn ai-btn" data-action="sync-connect">${iconSvg('sync', 'btn-svg')} Подключиться</button>
+              <button class="pill-btn" data-action="sync-disconnect"><i class="bx bx-link-break"></i> Отключить</button>
+              <button class="pill-btn" data-action="sync-request-merge"><i class="bx bx-transfer"></i> Сравнить базы</button>
+            </div>
+            ${s.mergePreview ? this.renderSyncMergePreview(s.mergePreview) : ''}
+          </section>
+
+          <section class="sync-center-card sync-diagnostics-card">
+            <div class="sync-card-head">${iconSvg('trust', 'sync-card-head-icon')}<div><strong>Диагностика</strong><span>Что сейчас известно приложению.</span></div></div>
+            <div class="sync-diagnostics-list">
+              <span><i class="bx ${this.runtime?.isElectron ? 'bx-check-circle' : 'bx-info-circle'}"></i> Runtime: ${escapeHtml(this.runtime?.platform || 'browser')}</span>
+              <span><i class="bx ${server.canControl ? 'bx-check-circle' : 'bx-error-circle'}"></i> Управление сервером: ${server.canControl ? 'доступно' : 'недоступно'}</span>
+              <span><i class="bx ${server.running ? 'bx-check-circle' : 'bx-radio-circle'}"></i> LAN IP: ${escapeHtml(preferredIps.join(', ') || 'не найден')}</span>
+              <span><i class="bx bx-shield-quarter"></i> Discovery не отдаёт код подключения или данные проекта.</span>
+            </div>
+          </section>
+        </div>
+
+        <details class="sync-help">
+          <summary>Как подключить?</summary>
+          <p>На ПК запустите сервер кнопкой выше или командой <code>npm run sync:server</code>. На телефоне откройте “Связь с компьютером”, найдите ПК в Wi‑Fi или введите IP, порт и код вручную. Поиск не публикует код подключения и не отдаёт данные проекта.</p>
+        </details>
+      </div>`;
+  }
+
+// --- connectLocalSyncFromUi ---
+async connectLocalSyncFromUi() {
+    const { host, port, token, deviceName } = this.state.sync;
+    if (!host || !token) {
+      this.toast('Введите IP компьютера и код подключения.');
+      return;
+    }
+    if (this.isAndroidRuntime() && /^127\./.test(String(host))) {
+      this.state.sync.status = 'error';
+      this.state.sync.statusDetail = '127.0.0.1 на телефоне — это сам телефон, а не компьютер. Введите LAN IP ПК.';
+      this.updateSyncStatusUi();
+      return;
+    }
+    safeSetStorageItem(localStorage, 'nocturne-sync-device-name', deviceName || defaultDeviceName(this.runtime));
+    safeSetStorageItem(localStorage, 'nocturne-sync-host', host);
+    safeSetStorageItem(localStorage, 'nocturne-sync-port', port || '8787');
+    safeSetStorageItem(localStorage, 'nocturne-sync-token', token);
+    this.state.sync.status = 'waiting';
+    this.state.sync.statusDetail = 'Проверяю /discovery на указанном адресе...';
+    this.updateSyncStatusUi();
+    try {
+      const device = await this.probeSyncDiscoveryHost(host, port || '8787', 'manual');
+      if (!device) throw new Error('wrong protocol');
+      this.state.sync.statusDetail = device.pairingRequired ? 'Сервер найден, нужен код подключения.' : 'Сервер найден.';
+      this.updateSyncStatusUi();
+    } catch (error) {
+      this.state.sync.status = 'error';
+      this.state.sync.statusDetail = `Сервер не найден: ${error?.name === 'AbortError' ? 'timeout' : (error?.message || 'host unreachable')}.`;
+      this.updateSyncStatusUi();
+      return;
+    }
+    try {
+      await this.syncClient.connect({ host, port, token, trusted: true });
+    } catch (error) {
+      this.state.sync.status = 'error';
+      this.state.sync.statusDetail = error?.message || 'Подключение не удалось.';
+      this.updateSyncStatusUi();
+    }
+  }
+
+// --- probeSyncDiscoveryHost ---
+async probeSyncDiscoveryHost(host, port = this.state.sync.port || '8787', method = 'manual') {
+    const payload = await this.httpGetJson(`${buildHttpBase(host, port)}/discovery`, 750);
+    return this.normalizeDiscoveredDevice(payload, host, port, method);
+  }
+
+// --- preferredLanIps ---
+  preferredLanIps(ips = []) {
+    const clean = [...new Set((ips || []).filter((ip) => /^\d{1,3}(\.\d{1,3}){3}$/.test(String(ip))))];
+    return [
+      ...clean.filter((ip) => this.isPrivateLanIp(ip) && !ip.startsWith('127.')),
+      ...clean.filter((ip) => !this.isPrivateLanIp(ip) && !ip.startsWith('127.')),
+      ...clean.filter((ip) => ip.startsWith('127.')),
+    ];
+  }
+
+// --- isPrivateLanIp ---
+  isPrivateLanIp(ip = '') {
+    const parts = String(ip).split('.').map((part) => Number(part));
+    if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return false;
+    if (parts[0] === 10) return true;
+    if (parts[0] === 192 && parts[1] === 168) return true;
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+    return false;
+  }
+
+// --- remoteConnectFolderTitle ---
+  remoteConnectFolderTitle(message) {
+    const name = message.deviceName || 'устройство';
+    const source = /android|phone|тел/i.test(name) ? 'С телефона' : 'С компьютера';
+    return `${source} — ${name}`;
+  }
+
+// --- scanForSyncServers ---
+async scanForSyncServers() {
+    if (this.state.sync.discovery.scanning) return;
+    const hosts = this.candidateSyncHosts();
+    const port = this.state.sync.port || '8787';
+    const discovery = this.state.sync.discovery;
+    discovery.scanning = true;
+    discovery.checked = 0;
+    discovery.total = hosts.length;
+    discovery.error = '';
+    discovery.message = 'Идёт поиск в Wi-Fi...';
+    this.state.sync.discoveredDevices = [];
+    const token = { cancelled: false };
+    this.syncScanAbort = token;
+    this.renderSyncSurfaces();
+
+    const found = new Map();
+    const startedAt = Date.now();
+    let index = 0;
+    const concurrency = 12;
+    const maxDuration = 12000;
+    const worker = async () => {
+      while (!token.cancelled && index < hosts.length && Date.now() - startedAt < maxDuration) {
+        const host = hosts[index++];
+        try {
+          const device = await this.probeSyncDiscoveryHost(host, port, 'subnet-scan');
+          if (device && !this.isLocalSyncDevice(device) && !found.has(device.id)) found.set(device.id, device);
+        } catch (error) {
+          if (!discovery.error) discovery.error = error?.name === 'AbortError' ? 'timeout' : (error?.message || 'host unreachable');
+        }
+        discovery.checked += 1;
+        if (discovery.checked % 8 === 0 || found.size) this.renderSyncSurfaces();
+      }
+    };
+    await Promise.all(Array.from({ length: concurrency }, () => worker()));
+    discovery.scanning = false;
+    discovery.message = token.cancelled
+      ? 'Поиск остановлен.'
+      : (found.size ? 'Компьютеры найдены.' : `Компьютеры не найдены${discovery.error ? ` (${discovery.error})` : ''}. Проверьте, что ПК и телефон в одной Wi-Fi сети, сервер запущен и IP не 127.0.0.1.`);
+    this.state.sync.discoveredDevices = [...found.values()];
+    this.syncScanAbort = null;
+    this.renderSyncSurfaces();
+  }
+
+// --- normalizeDiscoveredDevice ---
+  normalizeDiscoveredDevice(payload, host, port, method = 'scan') {
+    if (!payload || payload.service !== 'nocturne-sync') return null;
+    return {
+      id: `${payload.publicDeviceId || host}:${port}`,
+      publicDeviceId: payload.publicDeviceId || '',
+      deviceName: payload.deviceName || 'Nocturne Sync',
+      deviceType: payload.deviceType || 'computer',
+      host,
+      port: String(payload.port || port),
+      discoveryMethod: method,
+      protocolVersion: payload.protocolVersion || SYNC_PROTOCOL_VERSION,
+      pairingRequired: payload.pairingRequired !== false,
+      lastSeenAt: Date.now(),
+    };
+  }
+
+// --- httpGetJson ---
+async httpGetJson(url, timeoutMs = 650) {
+    if (window.Capacitor?.Plugins?.Http?.get) {
+      const result = await window.Capacitor.Plugins.Http.get({ url, connectTimeout: timeoutMs, readTimeout: timeoutMs });
+      return typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+
 
   toast(message, duration = 2200) {
     const toast = document.getElementById('toast');

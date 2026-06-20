@@ -1,0 +1,245 @@
+import { uid } from '../core/utils.js';
+
+export const SYNC_PROTOCOL_VERSION = 1;
+
+export function createDeviceId() {
+  try {
+    const existing = localStorage.getItem('nocturne-sync-device-id');
+    if (existing) return existing;
+  } catch {}
+  const id = uid('device');
+  try { localStorage.setItem('nocturne-sync-device-id', id); } catch {}
+  return id;
+}
+
+export function defaultDeviceName(runtime = {}) {
+  if (runtime.isAndroid) return 'Android телефон';
+  if (runtime.isCapacitor) return 'Мобильное устройство';
+  return 'Компьютер';
+}
+
+export function publicDeviceId(deviceId = '') {
+  let hash = 2166136261;
+  for (const char of String(deviceId)) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `nd-${(hash >>> 0).toString(16).padStart(8, '0')}`;
+}
+
+function normalizeHostPort(host = '', port = '') {
+  let raw = String(host || '').trim();
+  let cleanPort = String(port || '').trim() || '8787';
+  raw = raw.replace(/^wss?:\/\//i, '').replace(/^https?:\/\//i, '').replace(/\/.*$/, '').trim();
+  if (raw.includes(':') && !raw.startsWith('[')) {
+    const parts = raw.split(':');
+    raw = parts[0];
+    cleanPort = parts[1] || cleanPort;
+  }
+  return { host: raw || '127.0.0.1', port: cleanPort };
+}
+
+export function buildSyncUrl(host = '', port = '') {
+  const clean = normalizeHostPort(host, port);
+  return `ws://${clean.host}:${clean.port}`;
+}
+
+export function buildHttpBase(host = '', port = '') {
+  const clean = normalizeHostPort(host, port);
+  return `http://${clean.host}:${clean.port}`;
+}
+
+export class LocalSyncClient {
+  constructor(app) {
+    this.app = app;
+    this.ws = null;
+    this.status = 'offline';
+    this.connectedDevice = null;
+    this.pendingPings = new Map();
+    this.connectAttempt = null;
+  }
+
+  setStatus(status, detail = '', stage = '') {
+    this.status = status;
+    this.app.state.sync.status = status;
+    this.app.state.sync.statusDetail = detail;
+    this.app.state.sync.diagnosticStage = stage;
+    this.app.updateSyncStatusUi?.();
+  }
+
+  fail(stage, detail) {
+    this.setStatus('error', `Этап ${stage}: ${detail}`, stage);
+    if (this.connectAttempt?.reject) {
+      this.connectAttempt.reject(new Error(`Этап ${stage}: ${detail}`));
+      this.connectAttempt = null;
+    }
+  }
+
+  connect({ host, port, token, trusted = false }) {
+    this.disconnect(false);
+    const url = buildSyncUrl(host, port);
+    this.app.state.sync.host = host;
+    this.app.state.sync.port = port || '8787';
+    this.app.state.sync.token = token;
+    this.setStatus('waiting', 'Этап ws open: открываю WebSocket...', 'ws open');
+
+    return new Promise((resolve, reject) => {
+      this.connectAttempt = { resolve, reject };
+      let opened = false;
+      this.ws = new WebSocket(url);
+
+      const timeout = window.setTimeout(() => {
+        if (!opened) {
+          this.fail('ws open', 'WebSocket не открылся. Проверьте Wi-Fi, IP, порт, firewall и Android cleartext policy.');
+          this.disconnect(false);
+        }
+      }, 6500);
+
+      this.ws.onopen = () => {
+        opened = true;
+        window.clearTimeout(timeout);
+        this.setStatus('waiting', 'Этап pair: проверяю pairing code...', 'pair');
+        this.send({
+          type: 'pair',
+          token,
+          trusted: !!trusted,
+          protocolVersion: SYNC_PROTOCOL_VERSION,
+          deviceId: this.app.state.sync.deviceId,
+          publicDeviceId: publicDeviceId(this.app.state.sync.deviceId),
+          deviceName: this.app.state.sync.deviceName,
+          deviceType: this.app.runtime?.isAndroid ? 'phone' : 'computer',
+          runtime: this.app.runtime?.platform || 'browser',
+        });
+      };
+
+      this.ws.onmessage = (event) => this.handleMessage(event.data);
+      this.ws.onerror = () => {
+        window.clearTimeout(timeout);
+        if (this.status !== 'error') {
+          this.fail(opened ? 'pair' : 'ws open', opened
+            ? 'WebSocket открылся, но сервер вернул сетевую ошибку во время pairing.'
+            : 'Ошибка WebSocket. Проверьте IP, порт, Wi-Fi, firewall и LAN HTTP/WS.');
+        }
+      };
+      this.ws.onclose = () => {
+        window.clearTimeout(timeout);
+        for (const ping of this.pendingPings.values()) {
+          window.clearTimeout(ping.timeout);
+          ping.reject(new Error('Соединение закрыто до pong.'));
+        }
+        this.pendingPings.clear();
+        if (this.status !== 'offline' && this.status !== 'error') {
+          this.setStatus('offline', 'Соединение потеряно. Очередь изменений сохранена локально.', 'close');
+        }
+      };
+    });
+  }
+
+  disconnect(updateStatus = true) {
+    if (this.ws) {
+      try { this.ws.close(); } catch {}
+    }
+    this.ws = null;
+    for (const ping of this.pendingPings.values()) {
+      window.clearTimeout(ping.timeout);
+      ping.reject(new Error('Соединение закрыто.'));
+    }
+    this.pendingPings.clear();
+    if (updateStatus) this.setStatus('offline', 'Отключено.', 'offline');
+  }
+
+  isOpen() {
+    return this.ws?.readyState === WebSocket.OPEN && this.status === 'connected';
+  }
+
+  send(message) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
+    this.ws.send(JSON.stringify(message));
+    return true;
+  }
+
+  ping(timeoutMs = 2600) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      return Promise.reject(new Error('WebSocket не открыт.'));
+    }
+    const id = `ping-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    return new Promise((resolve, reject) => {
+      const timeout = window.setTimeout(() => {
+        this.pendingPings.delete(id);
+        reject(new Error('Pong не получен за время ожидания.'));
+      }, timeoutMs);
+      this.pendingPings.set(id, { resolve, reject, timeout });
+      this.send({ type: 'ping', id, at: Date.now() });
+    });
+  }
+
+  async verifyAfterPair(message) {
+    this.connectedDevice = message.peer || message.server || null;
+    this.setStatus('waiting', 'Этап ping/pong: проверяю обмен сообщениями...', 'ping/pong');
+    try {
+      await this.ping();
+    } catch (error) {
+      this.fail('ping/pong', error?.message || 'Сервер не ответил на ping.');
+      return;
+    }
+    this.setStatus('connected', 'Связь установлена. Discovery, WebSocket, pair и ping/pong пройдены.', 'connected');
+    await this.app.persistSyncDevice?.({ ...(message.peer || message.server || {}), trusted: true, autoReconnect: true, pairingStatus: 'paired' });
+    if (!this.app.isMobileLayout?.()) this.app.renderSyncSurfaces?.({ preserveInputs: true });
+    await this.app.flushSyncQueue?.();
+    if (this.connectAttempt?.resolve) this.connectAttempt.resolve(message);
+    this.connectAttempt = null;
+  }
+
+  async handleMessage(raw) {
+    let message;
+    try {
+      message = JSON.parse(raw);
+    } catch {
+      this.fail('protocol', 'Сервер прислал некорректное JSON-сообщение.');
+      return;
+    }
+    if (message.type === 'pong') {
+      const pending = this.pendingPings.get(message.id);
+      if (pending) {
+        window.clearTimeout(pending.timeout);
+        this.pendingPings.delete(message.id);
+        pending.resolve(message);
+      }
+      return;
+    }
+    if (message.type === 'paired') {
+      await this.verifyAfterPair(message);
+      return;
+    }
+    if (message.type === 'peer-joined') {
+      this.connectedDevice = message.peer || null;
+      await this.app.persistSyncDevice?.(message.peer || {});
+      this.setStatus('connected', `${message.peer?.deviceName || 'Устройство'} подключено.`, 'connected');
+      if (!this.app.isMobileLayout?.()) this.app.renderSyncSurfaces?.({ preserveInputs: true });
+      return;
+    }
+    if (message.type === 'peer-left') {
+      this.setStatus('offline', `${message.peer?.deviceName || 'Устройство'} отключено.`, 'close');
+      return;
+    }
+    if (message.type === 'project-state-request') {
+      await this.app.sendSyncProjectState?.();
+      return;
+    }
+    if (message.type === 'project-state') {
+      await this.app.receiveSyncProjectState?.(message);
+      return;
+    }
+    if (message.type === 'merge-accepted') {
+      await this.app.receiveSyncMergeAccepted?.(message);
+      return;
+    }
+    if (message.type === 'doc-patch') {
+      await this.app.receiveSyncPatch?.(message.patch);
+      return;
+    }
+    if (message.type === 'error') {
+      this.fail(this.status === 'waiting' ? 'pair' : 'protocol', message.message || 'Ошибка локальной связи.');
+    }
+  }
+}
