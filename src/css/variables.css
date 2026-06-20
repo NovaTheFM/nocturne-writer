@@ -1,7 +1,5 @@
 /* Design System & Variables */
 :root {
-  --accent-rgb: 139, 92, 246;
-  --accent-hover-rgb: 167, 139, 250;
   --bg-deep: #08080a;
   --bg-panel: #121216;
   --bg-glass: rgba(18, 18, 22, 0.72);
@@ -10,7 +8,7 @@
   --text-muted: #73738c;
   --text-paper: #d1d1d8;
   --accent: #8b5cf6;
-  --accent-hover: rgb(var(--accent-hover-rgb));
+  --accent-hover: #a78bfa;
   --accent-glow: rgba(var(--accent-rgb, 139, 92, 246), 0.25);
   --border: #22222a;
   --border-light: rgba(255, 255, 255, 0.04);
@@ -25,16 +23,16 @@
   --line-height-editor: 1.8;
   --letter-spacing-editor: 0px;
   --paragraph-spacing: 1em;
-  --popover-bg-solid: var(--bg-panel);
+  --popover-bg-solid: #111116;
   --popover-bg-material: rgba(20, 20, 28, .58);
   --popover-backdrop-filter: blur(32px) saturate(1.34);
   --popover-border: rgba(var(--accent-rgb, 139, 92, 246), .2);
   --popover-shadow: 0 24px 64px rgba(0,0,0,.52), 0 1px 0 rgba(255,255,255,.07) inset, 0 0 0 1px rgba(255,255,255,.026) inset;
   --workspace-bg:
     radial-gradient(circle at 22% 18%, rgba(var(--accent-rgb, 139, 92, 246), .13), transparent 34%),
-    radial-gradient(circle at 80% 12%, rgba(var(--accent-rgb, 139, 92, 246), .075), transparent 30%),
+    radial-gradient(circle at 80% 12%, rgba(56, 189, 248, .075), transparent 30%),
     radial-gradient(circle at 52% 82%, rgba(16, 185, 129, .045), transparent 36%),
-    linear-gradient(145deg, var(--bg-deep) 0%, var(--bg-deep) 44%, var(--bg-deep) 100%);
+    linear-gradient(145deg, #07070a 0%, #0d0d12 44%, #09090d 100%);
   --workspace-grid: rgba(255,255,255,.025);
   --workspace-grid-2: rgba(255,255,255,.018);
   --workspace-grid-opacity: .38;
@@ -48,47 +46,4 @@
   --button-text-strong: #fff;
   --selection-bg: color-mix(in srgb, var(--accent) 46%, rgba(255,255,255,.08));
   --selection-text: #fff;
-
-  /* Unified Z-Indexes */
-  --z-layer-0: 0;
-  --z-layer-1: 1;
-  --z-layer-2: 2;
-  --z-layer-3: 3;
-  --z-layer-10: 10;
-  --z-layer-20: 20;
-  --z-layer-35: 35;
-  --z-layer-40: 40;
-  --z-layer-45: 45;
-  --z-layer-50: 50;
-  --z-layer-60: 60;
-  --z-layer-120: 120;
-  --z-layer-180: 180;
-  --z-layer-200: 200;
-  --z-layer-250: 250;
-  --z-layer-350: 350;
-  --z-layer-420: 420;
-  --z-layer-430: 430;
-  --z-layer-900: 900;
-  --z-layer-999: 999;
-  --z-layer-1000: 1000;
-  --z-layer-1002: 1002;
-  --z-layer-1005: 1005;
-  --z-layer-1006: 1006;
-  --z-layer-1010: 1010;
-  --z-layer-1050: 1050;
-  --z-layer-1200: 1200;
-  --z-layer-1550: 1550;
-  --z-layer-1700: 1700;
-  --z-layer-1900: 1900;
-  --z-layer-3000: 3000;
-  --z-layer-5000: 5000;
-  --z-layer-5200: 5200;
-  --z-layer-6000: 6000;
-  --z-layer-6100: 6100;
-  --z-layer-9000: 9000;
-  --z-layer-9200: 9200;
-  --z-layer-9500: 9500;
-  --z-layer-9600: 9600;
-  --z-layer-9999: 9999;
-  --z-layer-12000: 12000;
 }
