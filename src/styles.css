@@ -1,4 +1,5 @@
 :root {
+  --baseline-grid-color: rgba(255, 255, 255, 0.035);
   --bg-deep: #08080a;
   --bg-panel: #121216;
   --bg-glass: rgba(18, 18, 22, 0.72);
@@ -1618,7 +1619,7 @@ body.resizing-workspace {
 .indent-paragraphs .page-content p { text-indent: 2.2em; }
 .baseline-grid .page-content p,
 .baseline-grid .page-content blockquote {
-  background-image: linear-gradient(to bottom, rgba(255,255,255,.035) 1px, transparent 1px);
+  background-image: linear-gradient(to bottom, var(--baseline-grid-color) 1px, transparent 1px);
   background-size: 100% calc(var(--font-size-editor) * var(--line-height-editor));
   background-position-y: calc(var(--font-size-editor) * var(--line-height-editor) - 1px);
 }
@@ -4991,6 +4992,7 @@ body.mobile-shell-active .sortable-fallback-drag.timeline-item {
 
 
 .theme-midnight {
+  --baseline-grid-color: rgba(139, 172, 255, 0.05);
   --bg-deep: #060b1e;
   --bg-panel: #0d1430;
   --bg-glass: rgba(13, 20, 48, 0.76);
@@ -5012,7 +5014,77 @@ body.mobile-shell-active .sortable-fallback-drag.timeline-item {
   --workspace-grid-opacity: .42;
   --settings-header-bg: rgba(4,7,19,.9);
 }
+.theme-matrix {
+  --baseline-grid-color: rgba(34, 197, 94, 0.06);
+  --bg-deep: #020603;
+  --bg-panel: #041006;
+  --bg-glass: rgba(4, 16, 6, 0.78);
+  --bg-page: #061609;
+  --text-main: #d1ffd6;
+  --text-muted: #5da06c;
+  --border: rgba(34, 197, 94, 0.16);
+  --border-light: rgba(34, 197, 94, 0.06);
+  --popover-bg-solid: #051408;
+  --popover-bg-material: rgba(5, 20, 8, 0.72);
+  --popover-border: rgba(var(--accent-rgb, 139, 92, 246), 0.24);
+  --workspace-bg:
+    radial-gradient(circle at 16% 18%, rgba(var(--accent-rgb, 139, 92, 246), .18), transparent 34%),
+    radial-gradient(circle at 82% 10%, rgba(var(--accent-rgb, 139, 92, 246), .12), transparent 30%),
+    radial-gradient(circle at 54% 86%, rgba(16, 185, 129, .06), transparent 38%),
+    linear-gradient(145deg, var(--bg-deep) 0%, var(--bg-deep) 48%, #010302 100%);
+  --workspace-grid: rgba(34, 197, 94, .028);
+  --workspace-grid-2: rgba(var(--accent-hover-rgb, 167, 139, 250), .022);
+  --workspace-grid-opacity: .42;
+  --settings-header-bg: rgba(2, 6, 3, .9);
+}
+.theme-lavender {
+  --baseline-grid-color: rgba(216, 180, 254, 0.06);
+  --bg-deep: #0c0812;
+  --bg-panel: #140d1e;
+  --bg-glass: rgba(20, 13, 30, 0.76);
+  --bg-page: #1c132b;
+  --text-main: #f5f0fa;
+  --text-muted: #b49bc4;
+  --border: rgba(216, 180, 254, 0.16);
+  --border-light: rgba(216, 180, 254, 0.06);
+  --popover-bg-solid: #170f24;
+  --popover-bg-material: rgba(23, 15, 36, 0.72);
+  --popover-border: rgba(var(--accent-rgb, 139, 92, 246), 0.24);
+  --workspace-bg:
+    radial-gradient(circle at 16% 18%, rgba(var(--accent-rgb, 139, 92, 246), .18), transparent 34%),
+    radial-gradient(circle at 82% 10%, rgba(var(--accent-rgb, 139, 92, 246), .12), transparent 30%),
+    radial-gradient(circle at 54% 86%, rgba(244, 63, 94, .06), transparent 38%),
+    linear-gradient(145deg, var(--bg-deep) 0%, var(--bg-deep) 48%, #050308 100%);
+  --workspace-grid: rgba(216, 180, 254, .028);
+  --workspace-grid-2: rgba(var(--accent-hover-rgb, 167, 139, 250), .022);
+  --workspace-grid-opacity: .42;
+  --settings-header-bg: rgba(12, 8, 18, .9);
+}
+.theme-crimson {
+  --baseline-grid-color: rgba(239, 68, 68, 0.06);
+  --bg-deep: #160c0d;
+  --bg-panel: #201112;
+  --bg-glass: rgba(32, 17, 18, 0.78);
+  --bg-page: #2a1617;
+  --text-main: #f7e8e9;
+  --text-muted: #a89596;
+  --border: rgba(239, 68, 68, 0.18);
+  --border-light: rgba(239, 68, 68, 0.08);
+  --popover-bg-solid: #221213;
+  --popover-bg-material: rgba(34, 18, 19, 0.72);
+  --popover-border: rgba(239, 68, 68, 0.26);
+  --workspace-bg:
+    radial-gradient(circle at 16% 18%, rgba(var(--accent-rgb, 139, 92, 246), .18), transparent 34%),
+    radial-gradient(circle at 82% 10%, rgba(var(--accent-rgb, 139, 92, 246), .12), transparent 30%),
+    radial-gradient(circle at 54% 86%, rgba(239, 68, 68, .08), transparent 38%),
+    linear-gradient(145deg, var(--bg-deep) 0%, var(--bg-deep) 48%, #0b0506 100%);
+  --workspace-grid: rgba(239, 68, 68, .032);
+  --workspace-grid-2: rgba(var(--accent-hover-rgb, 167, 139, 250), .022);
+  --workspace-grid-opacity: .42;
+  --settings-header-bg: rgba(22, 12, 13, .9);
+}
 .theme-paper {
+  --baseline-grid-color: rgba(91, 72, 48, 0.07);
   --bg-deep: #f4ecdf;
   --bg-panel: #efe4d2;
   --bg-glass: rgba(250, 244, 233, .9);

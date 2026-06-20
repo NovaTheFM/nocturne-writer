@@ -53,6 +53,7 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
   const paddingBottom = parseFloat(pageStyle.paddingBottom) || DEFAULT_VERTICAL_PADDING;
   const gap = 60; // margin gap between pages
   const contentPageHeight = Math.max(120, pageHeight - paddingTop - paddingBottom);
+  const H_spacer = paddingBottom + gap + paddingTop;
 
   const editorDom = view.dom;
   const editorRect = editorDom.getBoundingClientRect();
@@ -99,7 +100,7 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
   // Sort current breaks by position
   const sortedBreaks = [...currentBreaks].sort((a, b) => a.pos - b.pos);
 
-  // Measure clean positions of blocks
+  // Measure clean positions of blocks (accounting for active spacer heights before and inside blocks)
   const blocksData = [];
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i];
@@ -110,28 +111,37 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
       continue;
     }
 
+    const blockNode = view.state.tr.doc.nodeAt(pos);
+    const nodeSize = blockNode ? blockNode.nodeSize : 0;
+
     const rect = block.getBoundingClientRect();
     const blockTop = rect.top - editorRect.top;
     const blockBottom = rect.bottom - editorRect.top;
 
-    // Calculate sum of active spacer heights before this block's position
-    let totalSpacerHeightBefore = 0;
+    let totalSpacersBefore = 0;
+    let totalSpacersInside = 0;
+
     sortedBreaks.forEach((brk) => {
       if (brk.pos <= pos) {
-        totalSpacerHeightBefore += brk.height;
+        totalSpacersBefore += brk.height;
+      } else if (brk.pos < pos + nodeSize) {
+        totalSpacersInside += brk.height;
       }
     });
 
-    const cleanTop = blockTop - totalSpacerHeightBefore;
-    const cleanBottom = blockBottom - totalSpacerHeightBefore;
+    const cleanTop = blockTop - totalSpacersBefore;
+    const cleanBottom = blockBottom - totalSpacersBefore - totalSpacersInside;
+    const height = cleanBottom - cleanTop;
 
     blocksData.push({
       element: block,
+      node: blockNode,
+      nodeSize,
       index: i,
       pos,
       cleanTop,
       cleanBottom,
-      height: cleanBottom - cleanTop,
+      height,
     });
   }
 
@@ -160,6 +170,7 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
     pageIndex = Math.floor(y / (pageHeight + gap));
     contentBottom = getPageContentBottom(pageIndex);
 
+    let blockTop = y;
     let blockBottom = y + blockHeight;
 
     if (blockBottom > contentBottom) {
@@ -167,18 +178,97 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
       const nextPageStart = (pageIndex + 1) * (pageHeight + gap) + paddingTop;
       const currentPageStart = pageIndex * (pageHeight + gap) + paddingTop;
 
-      if (y <= currentPageStart + 5) {
-        // Already starts at the top of a page, let it stay and overflow
-        y = blockBottom;
+      if (blockTop >= contentBottom - 10) {
+        // The block starts near or after the page bottom, push the ENTIRE block to the next page!
+        if (y <= currentPageStart + 5) {
+          // Already at top of page, let it stay and overflow
+          y = blockBottom;
+        } else {
+          const spacerHeight = nextPageStart - y;
+          pageBreaks.push({
+            pos: block.pos,
+            height: spacerHeight,
+            type: 'block',
+            index: block.index,
+            pageIndex,
+            y: blockTop
+          });
+          y = nextPageStart + blockHeight;
+        }
       } else {
-        const spacerHeight = nextPageStart - y;
-        pageBreaks.push({
-          pos: block.pos,
-          height: spacerHeight,
-          type: 'block',
-          index: block.index
-        });
-        y = nextPageStart + blockHeight;
+        // The block crosses the page bottom. We split it inline!
+        const blockNode = block.node;
+        if (blockNode && blockNode.isTextblock) {
+          const startPos = block.pos + 1; // inside paragraph start
+          const endPos = block.pos + blockNode.nodeSize - 1; // inside paragraph end
+
+          let left = startPos;
+          let right = endPos;
+          let bestPos = startPos;
+
+          while (left <= right) {
+            const mid = Math.floor((left + right) / 2);
+            let coords;
+            try {
+              coords = view.coordsAtPos(mid);
+            } catch (e) {
+              right = mid - 1;
+              continue;
+            }
+
+            const charY = coords.bottom - editorRect.top;
+            if (charY <= contentBottom) {
+              bestPos = mid;
+              left = mid + 1;
+            } else {
+              right = mid - 1;
+            }
+          }
+
+          if (bestPos > startPos) {
+            pageBreaks.push({
+              pos: bestPos,
+              height: H_spacer,
+              type: 'inline',
+              index: block.index,
+              pageIndex,
+              y: contentBottom
+            });
+            y = nextPageStart + (blockBottom - contentBottom);
+          } else {
+            // Push entire block
+            if (y <= currentPageStart + 5) {
+              y = blockBottom;
+            } else {
+              const spacerHeight = nextPageStart - y;
+              pageBreaks.push({
+                pos: block.pos,
+                height: spacerHeight,
+                type: 'block',
+                index: block.index,
+                pageIndex,
+                y: blockTop
+              });
+              y = nextPageStart + blockHeight;
+            }
+          }
+        } else {
+          // Push entire block
+          if (y <= currentPageStart + 5) {
+            y = blockBottom;
+          } else {
+            const spacerHeight = nextPageStart - y;
+            pageBreaks.push({
+              pos: block.pos,
+              height: spacerHeight,
+              type: 'block',
+              index: block.index,
+              pageIndex,
+              y: blockTop
+            });
+            y = nextPageStart + blockHeight;
+          }
+        }
       }
     } else {
       y = blockBottom;
@@ -192,8 +282,9 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
     const decorations = [];
     pageBreaks.forEach((brk) => {
       const spacer = Decoration.widget(brk.pos, () => {
-        const el = document.createElement('div');
+        const el = document.createElement('span');
         el.className = 'pm-page-break';
+        el.setAttribute('contenteditable', 'false');
         el.style.display = 'block';
         el.style.height = `${brk.height}px`;
         el.style.marginLeft = `-${pageStyle.paddingLeft}`;
@@ -201,6 +292,24 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
         el.style.pointerEvents = 'none';
         el.style.userSelect = 'none';
         el.style.boxSizing = 'border-box';
+
+        // Calculate dynamic gradient values
+        const spacerY = brk.y;
+        const pIdx = brk.pageIndex;
+        const sheetEnd = (pIdx + 1) * (pageHeight + gap) - gap;
+        const gapStart = Math.max(0, sheetEnd - spacerY);
+        const gapEnd = Math.min(brk.height, gapStart + gap);
+
+        el.style.background = `linear-gradient(to bottom, 
+          var(--bg-page) ${gapStart}px, 
+          var(--border) ${gapStart}px, 
+          var(--border) ${gapStart + 1}px, 
+          var(--bg-deep) ${gapStart + 1}px, 
+          var(--bg-deep) ${gapEnd - 1}px, 
+          var(--border) ${gapEnd - 1}px, 
+          var(--border) ${gapEnd}px, 
+          var(--bg-page) ${gapEnd}px
+        )`;
         return el;
       }, { key: `break-${brk.pos}`, side: -1 });
 

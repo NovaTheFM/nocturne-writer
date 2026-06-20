@@ -1,5 +1,6 @@
 /* Design System & Variables */
 :root {
+  --baseline-grid-color: rgba(255, 255, 255, 0.035);
   --bg-deep: #08080a;
   --bg-panel: #121216;
   --bg-glass: rgba(18, 18, 22, 0.72);
