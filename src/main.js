@@ -5042,12 +5042,14 @@ class NocturneWriter {
     }
         const target = event.target;
     const editable = target.closest?.('.page-content');
-    if (editable && this.state.reviewMode === 'editor') {
+    const isTiptap = !!this.nocturneEditor?.getByElement(target);
+
+    if (!isTiptap && editable && this.state.reviewMode === 'editor') {
       const allowed = event.ctrlKey || event.metaKey || ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown', 'Escape', 'Tab'].includes(event.key);
       if (!allowed) event.preventDefault();
       return;
     }
-    if (editable && event.key === 'Enter') {
+    if (!isTiptap && editable && event.key === 'Enter') {
       const shiftEnter = event.shiftKey || event.getModifierState?.('Shift') || this.shiftKeyDown;
       if (shiftEnter) {
         event.preventDefault();
@@ -5063,14 +5065,14 @@ class NocturneWriter {
       }
       return;
     }
-    if (editable && (event.key === 'Backspace' || event.key === 'Delete')) {
+    if (!isTiptap && editable && (event.key === 'Backspace' || event.key === 'Delete')) {
       if (this.handlePageBoundaryDeletion(editable, event)) return;
       if (event.key === 'Delete' && this.handleEditorDeleteKey(editable, event)) return;
       if (event.key === 'Backspace' && this.handleEmptyEditorBackspace(editable, event)) return;
     }
     if (editable && this.isEditable(editable) && event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
       setTimeout(() => this.spawnLetterAnimation(event.key), 0);
-      if (this.state.settings.smartPunctuation) this.smartPunctuationKey(event);
+      if (!isTiptap && this.state.settings.smartPunctuation) this.smartPunctuationKey(event);
     }
     if (editable) this.lastEditKey = event.key;
     if ((event.ctrlKey || event.metaKey) && this.getLayoutIndependentKey(event).toLowerCase() === 's') {
