@@ -7790,3 +7790,88 @@ body.theme-paper .accent-preset:hover,
 body.theme-paper .accent-preset.active {
   border-color: #2c261f !important;
 }
+
+/* --- MS WORD-STYLE PAGINATION --- */
+
+/* By default, in paginated mode, the main page shell is transparent, and sheets are drawn in the background */
+.page.visual-page-shell {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+/* In flexible pages mode (infinite canvas), the page shell is a single continuous white card */
+.app-shell.flexible-pages .page.visual-page-shell {
+  background: var(--bg-page) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: var(--shadow-float) !important;
+}
+
+.page-sheets-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.page-sheet-bg {
+  position: absolute;
+  left: 0;
+  background: var(--bg-page);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-float);
+  box-sizing: border-box;
+  contain: layout style paint;
+}
+
+.page-number-bg {
+  position: absolute;
+  right: 28px;
+  bottom: 24px;
+  color: #555566;
+  font-size: 11px;
+}
+
+/* Page Break Spacers in ProseMirror */
+.pm-page-break {
+  display: block;
+  pointer-events: none;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+/* --- DRAG AND DROP OVERLAY FIX --- */
+#docs-dnd-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: white;
+  font-size: 20px;
+  font-weight: 500;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease;
+}
+
+#docs-dnd-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+#docs-dnd-overlay i {
+  font-size: 48px;
+  color: var(--accent);
+}

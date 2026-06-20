@@ -1,6 +1,50 @@
-import { Editor, Extension, StarterKit, TextAlign, Underline, Placeholder } from '../vendor/tiptap/nocturne-tiptap.bundle.js';
+import { Editor, Extension, StarterKit, TextAlign, Underline, Placeholder, Plugin, PluginKey, Decoration, DecorationSet } from '../vendor/tiptap/nocturne-tiptap.bundle.js';
 import { ensureTiptapBlockIds, legacyAstToHtml, tiptapJsonToLegacyAst } from './document-adapter.js';
 import { calculateVisualPages } from './visual-pagination.js';
+
+export const paginationPluginKey = new PluginKey('nocturnePagination');
+
+const NocturnePagination = Extension.create({
+  name: 'nocturnePagination',
+  addProseMirrorPlugins() {
+    const bridge = this.options.bridge;
+    return [
+      new Plugin({
+        key: paginationPluginKey,
+        state: {
+          init() {
+            return {
+              decorations: DecorationSet.empty,
+              pageBreaks: [],
+            };
+          },
+          apply(tr, value) {
+            const meta = tr.getMeta(paginationPluginKey);
+            if (meta) {
+              return meta;
+            }
+            return {
+              decorations: value.decorations.map(tr.mapping, tr.doc),
+              pageBreaks: value.pageBreaks,
+            };
+          },
+        },
+        props: {
+          decorations(state) {
+            return paginationPluginKey.getState(state).decorations;
+          },
+        },
+        view(editorView) {
+          return {
+            update(view, prevState) {
+              bridge.scheduleVisualPages(view.dom.getAttribute('data-pane-id'));
+            },
+          };
+        },
+      }),
+    ];
+  },
+});
 
 const BlockIdentity = Extension.create({
   name: 'nocturneBlockIdentity',
@@ -47,6 +91,7 @@ export class NocturneEditorBridge {
         TextAlign.configure({ types: ['heading', 'paragraph'] }),
         Placeholder.configure({ placeholder: '' }),
         BlockIdentity,
+        NocturnePagination.configure({ bridge: this }),
       ],
       editorProps: {
         attributes: {
