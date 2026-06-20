@@ -1706,7 +1706,7 @@ body.ctrl-pressed .entity-family-link:hover {
 .syntax-dialogue { color: #f0f7ff; text-shadow: 0 0 10px rgba(139, 183, 255, .16); }
 .syntax-thought { color: #aaaabd; font-style: italic; }
 .weak-word { text-decoration: underline wavy rgba(245, 158, 11, .85); text-underline-offset: 3px; }
-.sentence-focus-on .page-content p:not(.active-block) { opacity: .28; transition: opacity 180ms ease; }
+.sentence-focus-on .page-content p:not(.active-block), .sentence-focus-on .page-content h2:not(.active-block), .sentence-focus-on .page-content blockquote:not(.active-block) { opacity: .28; transition: opacity 180ms ease; }
 .lens-dialogues .page-content p { opacity: .22; }
 .lens-dialogues .syntax-dialogue { opacity: 1; color: white; }
 .lens-descriptions .syntax-dialogue { opacity: .18; }

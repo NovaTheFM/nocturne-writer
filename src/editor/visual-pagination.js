@@ -9,7 +9,8 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
   if (!view?.dom || !pageShell) return [];
 
   const pageStyle = window.getComputedStyle(pageShell);
-  const pageHeight = parseFloat(pageStyle.height) || DEFAULT_PAGE_HEIGHT;
+  const pageWidth = parseFloat(pageStyle.width) || 794;
+  const pageHeight = Math.round(pageWidth * 1.4143577);
   const paddingTop = parseFloat(pageStyle.paddingTop) || DEFAULT_VERTICAL_PADDING;
   const paddingBottom = parseFloat(pageStyle.paddingBottom) || DEFAULT_VERTICAL_PADDING;
   const gap = 60; // margin gap between pages

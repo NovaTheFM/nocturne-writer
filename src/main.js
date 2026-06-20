@@ -339,6 +339,7 @@ class NocturneWriter {
       },
       onSelectionUpdate: () => {
         this.captureSelectionSnapshot();
+        this.updateActiveBlock();
         this.updateEditorSelectionState();
         this.updateToolbarState();
       },
