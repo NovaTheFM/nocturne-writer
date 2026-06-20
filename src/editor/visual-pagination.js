@@ -17,6 +17,10 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
   const contentPageHeight = Math.max(120, pageHeight - paddingTop - paddingBottom);
   const H_spacer = paddingBottom + gap + paddingTop;
 
+  const editorDom = view.dom;
+  const editorRect = editorDom.getBoundingClientRect();
+  if (editorRect.height === 0) return [];
+
   if (flexible) {
     // 1. Clear any pagination decorations if they exist
     const currentPluginState = paginationPluginKey.getState(view.state);
@@ -28,8 +32,7 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
     }
 
     // 2. Adjust pageShell minHeight to fit content
-    const editorDom = view.dom;
-    const docHeight = Math.max(editorDom.scrollHeight, editorDom.getBoundingClientRect().height);
+    const docHeight = Math.max(editorDom.scrollHeight, editorRect.height);
     const shellHeight = docHeight + paddingTop + paddingBottom;
     pageShell.style.minHeight = `${Math.ceil(shellHeight)}px`;
 
@@ -61,25 +64,70 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
     (el) => el.tagName === 'P' || el.tagName === 'H2' || el.tagName === 'BLOCKQUOTE'
   );
 
-  let current_page_y = 0;
-  const pageBreaks = []; // indices of blocks *before* which we need to insert a page break
+  const pageBreaks = []; // list of objects: { pos, type, index }
+
+  function getPageContentBottom(pageIdx) {
+    return pageIdx * (pageHeight + gap) + pageHeight - paddingBottom;
+  }
 
   blocks.forEach((block, index) => {
-    const blockHeight = block.offsetHeight;
-    const blockStyle = window.getComputedStyle(block);
-    const marginBottom = parseFloat(blockStyle.marginBottom) || 0;
-    const blockFullHeight = blockHeight + marginBottom;
+    const rect = block.getBoundingClientRect();
+    const blockTop = rect.top - editorRect.top;
+    const blockBottom = rect.bottom - editorRect.top;
 
-    if (current_page_y + blockFullHeight > contentPageHeight) {
-      if (current_page_y > 0) {
-        pageBreaks.push(index);
-        current_page_y = blockFullHeight;
-      } else {
-        // It's the first block on the page, keep it here even if it overflows
-        current_page_y = blockFullHeight;
+    const pageIndex = Math.floor(blockTop / (pageHeight + gap));
+    const contentBottom = getPageContentBottom(pageIndex);
+
+    if (blockBottom > contentBottom) {
+      // This block overflows the current page content bottom!
+      let pos;
+      try {
+        pos = view.posAtDOM(block, 0);
+      } catch (e) {
+        return;
       }
-    } else {
-      current_page_y += blockFullHeight;
+
+      if (blockTop >= contentBottom - 10) {
+        // The block starts near or after the page bottom, push the ENTIRE block to the next page!
+        pageBreaks.push({ pos, type: 'block', index });
+      } else {
+        // The block crosses the page bottom. Split it inline!
+        // We find the character position where it overflows using binary search
+        const blockNode = view.state.doc.nodeAt(pos);
+        if (blockNode) {
+          const startPos = pos;
+          const endPos = pos + blockNode.nodeSize - 1;
+          
+          let left = startPos;
+          let right = endPos;
+          let bestPos = startPos;
+
+          while (left <= right) {
+            const mid = Math.floor((left + right) / 2);
+            let coords;
+            try {
+              coords = view.coordsAtPos(mid);
+            } catch (e) {
+              right = mid - 1;
+              continue;
+            }
+
+            const y = coords.bottom - editorRect.top;
+            if (y <= contentBottom) {
+              bestPos = mid;
+              left = mid + 1;
+            } else {
+              right = mid - 1;
+            }
+          }
+
+          if (bestPos > startPos) {
+            pageBreaks.push({ pos: bestPos, type: 'inline', index });
+          } else {
+            pageBreaks.push({ pos, type: 'block', index });
+          }
+        }
+      }
     }
   });
 
@@ -88,18 +136,15 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
   const currentBreaks = currentPluginState?.pageBreaks || [];
 
   const isSame = currentBreaks.length === pageBreaks.length &&
-                 currentBreaks.every((val, i) => val === pageBreaks[i]);
+                 currentBreaks.every((val, i) => val.pos === pageBreaks[i].pos);
 
   if (!isSame) {
     const decorations = [];
-    pageBreaks.forEach((blockIndex) => {
-      const block = blocks[blockIndex];
-      const pos = view.posAtDOM(block, 0);
-
-      const spacer = Decoration.widget(pos, () => {
-        const el = document.createElement('div');
+    pageBreaks.forEach((brk) => {
+      const spacer = Decoration.widget(brk.pos, () => {
+        const el = document.createElement('span');
         el.className = 'pm-page-break';
-        el.contentEditable = 'false';
+        el.style.display = 'block';
         el.style.height = `${H_spacer}px`;
         el.style.marginLeft = `-${pageStyle.paddingLeft}`;
         el.style.marginRight = `-${pageStyle.paddingRight}`;
@@ -107,12 +152,12 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
         el.style.userSelect = 'none';
         el.style.boxSizing = 'border-box';
         return el;
-      }, { key: `break-${blockIndex}` });
+      }, { key: `break-${brk.pos}` });
 
       decorations.push(spacer);
     });
 
-    // Update pagination decorations in ProseMirror state
+    // Update decorations in ProseMirror state
     view.dispatch(view.state.tr.setMeta(paginationPluginKey, {
       decorations: DecorationSet.create(view.state.tr.doc, decorations),
       pageBreaks,
@@ -121,7 +166,9 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
   }
 
   // PAGE BREAKS ARE STABLE - RENDER BACKGROUND SHEETS
-  const pageCount = pageBreaks.length + 1;
+  // Make sure we have enough page sheets to cover the entire scroll height of the editor!
+  const minPageCount = Math.ceil(editorDom.scrollHeight / (pageHeight + gap));
+  const pageCount = Math.max(pageBreaks.length + 1, minPageCount, 1);
   const shellHeight = (pageCount * pageHeight) + ((pageCount - 1) * gap);
   pageShell.style.minHeight = `${Math.ceil(shellHeight)}px`;
 

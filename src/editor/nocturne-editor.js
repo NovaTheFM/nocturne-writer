@@ -120,7 +120,6 @@ export class NocturneEditorBridge {
       },
       onSelectionUpdate: ({ editor: selectionEditor }) => {
         this.onSelectionUpdate?.({ paneId, editor: selectionEditor });
-        this.scheduleVisualPages(paneId);
       },
     });
 

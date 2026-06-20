@@ -11551,12 +11551,19 @@ class NocturneWriter {
   }
 
   updateActiveBlock() {
+    const editables = document.querySelectorAll('.page-content');
+    editables.forEach(node => node.classList.remove('active-selection'));
     document.querySelectorAll('.page-content p,.page-content h2,.page-content blockquote').forEach((node) => node.classList.remove('active-block'));
     const sel = getSelection();
+    const isSelectionActive = sel && !sel.isCollapsed && sel.toString().length > 0;
     const block = sel?.anchorNode?.parentElement?.closest?.('.page-content p,.page-content h2,.page-content blockquote');
     if (block) {
       block.classList.add('active-block');
-      const paneId = block.closest('.page-content')?.dataset.paneId;
+      const editable = block.closest('.page-content');
+      if (isSelectionActive && editable) {
+        editable.classList.add('active-selection');
+      }
+      const paneId = editable?.dataset.paneId;
       if (paneId && this.state.workspace?.focusedPaneId !== paneId) this.setFocusedPane(paneId);
     }
   }
