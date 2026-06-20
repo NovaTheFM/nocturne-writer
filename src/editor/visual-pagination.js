@@ -4,6 +4,44 @@ import { paginationPluginKey } from './nocturne-editor.js';
 const DEFAULT_PAGE_HEIGHT = 1123;
 const DEFAULT_VERTICAL_PADDING = 96;
 
+export function updateActivePageHighlight(editor, pageShell) {
+  const view = editor?.view;
+  if (!view?.dom || !pageShell) return;
+
+  const bgContainer = pageShell.querySelector('.page-sheets-bg');
+  if (!bgContainer) return;
+
+  const selection = view.state.selection;
+  const $anchor = selection.$anchor;
+  const depth = $anchor.depth;
+  if (depth <= 0) return;
+
+  // Find the top-level block node containing the anchor
+  const blockDom = view.nodeDOM($anchor.before(1));
+  if (!blockDom) return;
+
+  const editorDom = view.dom;
+  const editorRect = editorDom.getBoundingClientRect();
+  const rect = blockDom.getBoundingClientRect();
+  const blockTop = rect.top - editorRect.top;
+
+  const pageStyle = window.getComputedStyle(pageShell);
+  const pageWidth = parseFloat(pageStyle.width) || 794;
+  const pageHeight = Math.round(pageWidth * 1.4143577);
+  const gap = 60;
+
+  const pageIndex = Math.floor(blockTop / (pageHeight + gap));
+
+  const sheets = bgContainer.querySelectorAll('.page-sheet-bg');
+  sheets.forEach((sheet, idx) => {
+    if (idx === pageIndex) {
+      sheet.classList.add('active');
+    } else {
+      sheet.classList.remove('active');
+    }
+  });
+}
+
 export function calculateVisualPages({ editor, pageShell, overlay, flexible = false }) {
   const view = editor?.view;
   if (!view?.dom || !pageShell) return [];
@@ -15,14 +53,12 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
   const paddingBottom = parseFloat(pageStyle.paddingBottom) || DEFAULT_VERTICAL_PADDING;
   const gap = 60; // margin gap between pages
   const contentPageHeight = Math.max(120, pageHeight - paddingTop - paddingBottom);
-  const H_spacer = paddingBottom + gap + paddingTop;
 
   const editorDom = view.dom;
   const editorRect = editorDom.getBoundingClientRect();
   if (editorRect.height === 0) return [];
 
   if (flexible) {
-    // 1. Clear any pagination decorations if they exist
     const currentPluginState = paginationPluginKey.getState(view.state);
     if (currentPluginState?.pageBreaks?.length > 0) {
       view.dispatch(view.state.tr.setMeta(paginationPluginKey, {
@@ -31,25 +67,18 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
       }));
     }
 
-    // 2. Adjust pageShell minHeight to fit content
-    const docHeight = Math.max(editorDom.scrollHeight, editorRect.height);
-    const shellHeight = docHeight + paddingTop + paddingBottom;
-    pageShell.style.minHeight = `${Math.ceil(shellHeight)}px`;
-
-    // 3. Remove background sheets
+    pageShell.style.minHeight = '';
     const bgContainer = pageShell.querySelector('.page-sheets-bg');
     if (bgContainer) {
       bgContainer.innerHTML = '';
     }
 
-    // 4. Reset standard page number visibility
     const pageNumEl = pageShell.querySelector('.page-number');
     if (pageNumEl) {
       pageNumEl.textContent = '1';
       pageNumEl.style.display = 'block';
     }
 
-    // 5. Hide old overlay (just in case)
     if (overlay) {
       overlay.style.height = '0px';
       overlay.replaceChildren();
@@ -64,100 +93,120 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
     (el) => el.tagName === 'P' || el.tagName === 'H2' || el.tagName === 'BLOCKQUOTE'
   );
 
-  const pageBreaks = []; // list of objects: { pos, type, index }
+  const currentPluginState = paginationPluginKey.getState(view.state);
+  const currentBreaks = currentPluginState?.pageBreaks || [];
+  
+  // Sort current breaks by position
+  const sortedBreaks = [...currentBreaks].sort((a, b) => a.pos - b.pos);
 
-  function getPageContentBottom(pageIdx) {
-    return pageIdx * (pageHeight + gap) + pageHeight - paddingBottom;
-  }
+  // Measure clean positions of blocks
+  const blocksData = [];
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i];
+    let pos;
+    try {
+      pos = view.posAtDOM(block);
+    } catch (e) {
+      continue;
+    }
 
-  blocks.forEach((block, index) => {
     const rect = block.getBoundingClientRect();
     const blockTop = rect.top - editorRect.top;
     const blockBottom = rect.bottom - editorRect.top;
 
-    const pageIndex = Math.floor(blockTop / (pageHeight + gap));
-    const contentBottom = getPageContentBottom(pageIndex);
+    // Calculate sum of active spacer heights before this block's position
+    let totalSpacerHeightBefore = 0;
+    sortedBreaks.forEach((brk) => {
+      if (brk.pos <= pos) {
+        totalSpacerHeightBefore += brk.height;
+      }
+    });
+
+    const cleanTop = blockTop - totalSpacerHeightBefore;
+    const cleanBottom = blockBottom - totalSpacerHeightBefore;
+
+    blocksData.push({
+      element: block,
+      index: i,
+      pos,
+      cleanTop,
+      cleanBottom,
+      height: cleanBottom - cleanTop,
+    });
+  }
+
+  if (blocksData.length === 0) return [];
+
+  const pageBreaks = [];
+  let y = paddingTop;
+  let pageIndex = 0;
+
+  function getPageContentBottom(pIdx) {
+    return pIdx * (pageHeight + gap) + pageHeight - paddingBottom;
+  }
+
+  blocksData.forEach((block, idx) => {
+    // Dynamically calculate pageIndex based on current y position
+    pageIndex = Math.floor(y / (pageHeight + gap));
+    let contentBottom = getPageContentBottom(pageIndex);
+    const blockHeight = block.height;
+    
+    // Spacing between paragraphs
+    const prevBlock = blocksData[idx - 1];
+    const spacing = prevBlock ? Math.max(0, block.cleanTop - prevBlock.cleanBottom) : 0;
+    
+    y += spacing;
+    // Re-evaluate pageIndex after spacing
+    pageIndex = Math.floor(y / (pageHeight + gap));
+    contentBottom = getPageContentBottom(pageIndex);
+
+    let blockBottom = y + blockHeight;
 
     if (blockBottom > contentBottom) {
-      // This block overflows the current page content bottom!
-      let pos;
-      try {
-        pos = view.posAtDOM(block, 0);
-      } catch (e) {
-        return;
-      }
+      // Overflows!
+      const nextPageStart = (pageIndex + 1) * (pageHeight + gap) + paddingTop;
+      const currentPageStart = pageIndex * (pageHeight + gap) + paddingTop;
 
-      if (blockTop >= contentBottom - 10) {
-        // The block starts near or after the page bottom, push the ENTIRE block to the next page!
-        pageBreaks.push({ pos, type: 'block', index });
+      if (y <= currentPageStart + 5) {
+        // Already starts at the top of a page, let it stay and overflow
+        y = blockBottom;
       } else {
-        // The block crosses the page bottom. Split it inline!
-        // We find the character position where it overflows using binary search
-        const blockNode = view.state.doc.nodeAt(pos);
-        if (blockNode) {
-          const startPos = pos;
-          const endPos = pos + blockNode.nodeSize - 1;
-          
-          let left = startPos;
-          let right = endPos;
-          let bestPos = startPos;
-
-          while (left <= right) {
-            const mid = Math.floor((left + right) / 2);
-            let coords;
-            try {
-              coords = view.coordsAtPos(mid);
-            } catch (e) {
-              right = mid - 1;
-              continue;
-            }
-
-            const y = coords.bottom - editorRect.top;
-            if (y <= contentBottom) {
-              bestPos = mid;
-              left = mid + 1;
-            } else {
-              right = mid - 1;
-            }
-          }
-
-          if (bestPos > startPos) {
-            pageBreaks.push({ pos: bestPos, type: 'inline', index });
-          } else {
-            pageBreaks.push({ pos, type: 'block', index });
-          }
-        }
+        const spacerHeight = nextPageStart - y;
+        pageBreaks.push({
+          pos: block.pos,
+          height: spacerHeight,
+          type: 'block',
+          index: block.index
+        });
+        y = nextPageStart + blockHeight;
       }
+    } else {
+      y = blockBottom;
     }
   });
 
-  // Compare pageBreaks with current plugin state to prevent infinite update loops
-  const currentPluginState = paginationPluginKey.getState(view.state);
-  const currentBreaks = currentPluginState?.pageBreaks || [];
-
   const isSame = currentBreaks.length === pageBreaks.length &&
-                 currentBreaks.every((val, i) => val.pos === pageBreaks[i].pos);
+                 currentBreaks.every((val, i) => val.pos === pageBreaks[i].pos && Math.abs(val.height - pageBreaks[i].height) < 2);
 
   if (!isSame) {
     const decorations = [];
     pageBreaks.forEach((brk) => {
       const spacer = Decoration.widget(brk.pos, () => {
-        const el = document.createElement('span');
+        const el = document.createElement('div');
         el.className = 'pm-page-break';
         el.style.display = 'block';
-        el.style.height = `${H_spacer}px`;
+        el.style.height = `${brk.height}px`;
         el.style.marginLeft = `-${pageStyle.paddingLeft}`;
         el.style.marginRight = `-${pageStyle.paddingRight}`;
         el.style.pointerEvents = 'none';
         el.style.userSelect = 'none';
         el.style.boxSizing = 'border-box';
         return el;
-      }, { key: `break-${brk.pos}` });
+      }, { key: `break-${brk.pos}`, side: -1 });
 
       decorations.push(spacer);
     });
 
-    // Update decorations in ProseMirror state
     view.dispatch(view.state.tr.setMeta(paginationPluginKey, {
       decorations: DecorationSet.create(view.state.tr.doc, decorations),
       pageBreaks,
@@ -166,13 +215,6 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
   }
 
   // PAGE BREAKS ARE STABLE - RENDER BACKGROUND SHEETS
-  // Make sure we have enough page sheets to cover the entire scroll height of the editor!
-  const minPageCount = Math.ceil(editorDom.scrollHeight / (pageHeight + gap));
-  const pageCount = Math.max(pageBreaks.length + 1, minPageCount, 1);
-  const shellHeight = (pageCount * pageHeight) + ((pageCount - 1) * gap);
-  pageShell.style.minHeight = `${Math.ceil(shellHeight)}px`;
-
-  // Get or create backgrounds container inside pageShell
   let bgContainer = pageShell.querySelector('.page-sheets-bg');
   if (!bgContainer) {
     bgContainer = document.createElement('div');
@@ -181,32 +223,49 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
     pageShell.insertBefore(bgContainer, pageShell.firstChild);
   }
 
-  bgContainer.replaceChildren();
-  for (let i = 0; i < pageCount; i++) {
-    const sheet = document.createElement('div');
-    sheet.className = 'page-sheet-bg';
-    sheet.style.top = `${i * (pageHeight + gap)}px`;
-    sheet.style.height = `${pageHeight}px`;
-    sheet.style.width = pageStyle.width;
-    sheet.style.borderRadius = pageStyle.borderRadius || '4px';
-    sheet.style.boxShadow = pageStyle.boxShadow || 'var(--shadow-float)';
+  const minPageCount = Math.ceil(editorDom.scrollHeight / (pageHeight + gap));
+  const lastBlockPage = Math.floor(y / (pageHeight + gap));
+  const pageCount = Math.max(lastBlockPage + 1, minPageCount, 1);
+  const shellHeight = (pageCount * pageHeight) + ((pageCount - 1) * gap);
+  pageShell.style.minHeight = `${Math.ceil(shellHeight)}px`;
 
-    // Page number
-    const num = document.createElement('div');
-    num.className = 'page-number-bg';
-    num.textContent = String(i + 1);
-    sheet.appendChild(num);
+  let existingSheets = bgContainer.querySelectorAll('.page-sheet-bg');
+  if (existingSheets.length !== pageCount) {
+    bgContainer.replaceChildren();
+    for (let i = 0; i < pageCount; i++) {
+      const sheet = document.createElement('div');
+      sheet.className = 'page-sheet-bg';
+      sheet.style.top = `${i * (pageHeight + gap)}px`;
+      sheet.style.height = `${pageHeight}px`;
+      sheet.style.width = pageStyle.width;
+      sheet.style.borderRadius = pageStyle.borderRadius || '4px';
+      sheet.style.boxShadow = pageStyle.boxShadow || 'var(--shadow-float)';
 
-    bgContainer.appendChild(sheet);
+      const num = document.createElement('div');
+      num.className = 'page-number-bg';
+      num.textContent = String(i + 1);
+      sheet.appendChild(num);
+
+      bgContainer.appendChild(sheet);
+    }
+  } else {
+    existingSheets.forEach((sheet, i) => {
+      sheet.style.top = `${i * (pageHeight + gap)}px`;
+      sheet.style.height = `${pageHeight}px`;
+      sheet.style.width = pageStyle.width;
+      const num = sheet.querySelector('.page-number-bg');
+      if (num) num.textContent = String(i + 1);
+    });
   }
 
-  // Hide the default page number element
+  // Highlight active page
+  updateActivePageHighlight(editor, pageShell);
+
   const pageNumEl = pageShell.querySelector('.page-number');
   if (pageNumEl) {
     pageNumEl.style.display = 'none';
   }
 
-  // Clear visual overlays
   if (overlay) {
     overlay.style.height = '0px';
     overlay.replaceChildren();
@@ -218,4 +277,3 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
   }
   return pages;
 }
-

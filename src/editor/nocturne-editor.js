@@ -1,6 +1,6 @@
 import { Editor, Extension, StarterKit, TextAlign, Underline, Placeholder, Plugin, PluginKey, Decoration, DecorationSet } from '../vendor/tiptap/nocturne-tiptap.bundle.js';
 import { ensureTiptapBlockIds, legacyAstToHtml, tiptapJsonToLegacyAst } from './document-adapter.js';
-import { calculateVisualPages } from './visual-pagination.js';
+import { calculateVisualPages, updateActivePageHighlight } from './visual-pagination.js';
 
 export const paginationPluginKey = new PluginKey('nocturnePagination');
 
@@ -23,15 +23,37 @@ const NocturnePagination = Extension.create({
             if (meta) {
               return meta;
             }
+            const mappedBreaks = value.pageBreaks.map(brk => {
+              try {
+                return { ...brk, pos: tr.mapping.map(brk.pos) };
+              } catch (e) {
+                return brk;
+              }
+            });
             return {
               decorations: value.decorations.map(tr.mapping, tr.doc),
-              pageBreaks: value.pageBreaks,
+              pageBreaks: mappedBreaks,
             };
           },
         },
         props: {
           decorations(state) {
-            return paginationPluginKey.getState(state).decorations;
+            const paginationState = paginationPluginKey.getState(state);
+            let decos = paginationState.decorations;
+            const { selection } = state;
+            const $anchor = selection.$anchor;
+            const depth = $anchor.depth;
+            if (depth > 0) {
+              const start = $anchor.before(depth);
+              const end = $anchor.after(depth);
+              try {
+                const activeBlockDeco = Decoration.node(start, end, { class: 'active-block' });
+                decos = decos.add(state.doc, [activeBlockDeco]);
+              } catch (e) {
+                // ignore decoration errors if out of bounds
+              }
+            }
+            return decos;
           },
         },
         view(editorView) {
@@ -113,12 +135,19 @@ export class NocturneEditorBridge {
       },
       onCreate: () => this.scheduleVisualPages(paneId),
       onUpdate: ({ editor: updatedEditor, transaction }) => {
+        if (transaction && !transaction.docChanged) {
+          return;
+        }
         doc.pmJson = ensureTiptapBlockIds(updatedEditor.getJSON());
         doc.ast = tiptapJsonToLegacyAst(doc.pmJson);
         this.onChange?.({ paneId, doc, transaction });
         this.scheduleVisualPages(paneId);
       },
       onSelectionUpdate: ({ editor: selectionEditor }) => {
+        const instance = [...this.instances.values()].find((inst) => inst.editor === selectionEditor);
+        if (instance) {
+          updateActivePageHighlight(selectionEditor, instance.pageShell);
+        }
         this.onSelectionUpdate?.({ paneId, editor: selectionEditor });
       },
     });

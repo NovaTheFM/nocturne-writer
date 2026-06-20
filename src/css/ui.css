@@ -26,7 +26,7 @@ textarea::selection {
 }
 
 .page-content ::selection {
-  color: currentColor;
+  color: #ffffff !important;
   background: rgba(var(--accent-rgb, 139, 92, 246), .08);
 }
 
@@ -45,6 +45,7 @@ textarea::selection {
 
 #nocturne-selection-layer .nocturne-selection-rect {
   position: fixed;
+  pointer-events: none !important;
   border: 1px solid color-mix(in srgb, var(--accent-hover) 64%, rgba(255,255,255,.18));
   border-radius: 7px;
   background:
@@ -7825,6 +7826,11 @@ body.theme-paper .accent-preset.active {
   box-shadow: var(--shadow-float);
   box-sizing: border-box;
   contain: layout style paint;
+  transition: border-color 220ms ease, box-shadow 220ms ease;
+}
+.page-sheet-bg.active {
+  border-color: rgba(var(--accent-rgb, 139, 92, 246), .34) !important;
+  box-shadow: var(--shadow-glow), var(--shadow-float) !important;
 }
 
 .page-number-bg {

@@ -4473,27 +4473,50 @@ class NocturneWriter {
 
   renderNocturneSelectionLayer() {
     const layer = this.ensureNocturneSelectionLayer();
-    layer.innerHTML = '';
     const custom = !!(this.selectionController?.active && this.selectionController.range && this.selectionController.editable);
     const sel = getSelection();
     const editable = custom ? this.selectionController.editable : this.editableFromSelection();
     const range = custom ? this.selectionController.range.cloneRange() : (sel?.rangeCount ? sel.getRangeAt(0) : null);
     if (!range || range.collapsed || !editable) {
       layer.classList.remove('active');
+      layer.innerHTML = '';
+      this._lastSerializedRects = '';
       return;
     }
+
+    const breakElements = document.querySelectorAll('.pm-page-break');
+    const breakRects = [...breakElements].map(el => el.getBoundingClientRect());
+
     const rects = [...range.getClientRects()]
       .filter((rect) => rect.width > 1 && rect.height > 1)
+      .filter((rect) => {
+        // Filter out rects that overlap with page breaks
+        const overlap = breakRects.some(br => {
+          return (rect.left < br.right && rect.right > br.left &&
+                  rect.top < br.bottom && rect.bottom > br.top);
+        });
+        return !overlap;
+      })
       .map((rect) => ({
-        left: Math.max(0, rect.left - 2),
-        top: Math.max(0, rect.top - 1),
-        width: rect.width + 4,
-        height: rect.height + 2,
+        left: Math.round(rect.left - 2),
+        top: Math.round(rect.top - 1),
+        width: Math.round(rect.width + 4),
+        height: Math.round(rect.height + 2),
       }));
+
     if (!rects.length) {
       layer.classList.remove('active');
+      layer.innerHTML = '';
+      this._lastSerializedRects = '';
       return;
     }
+
+    const serialized = rects.map(r => `${r.left},${r.top},${r.width},${r.height}`).join(';');
+    if (this._lastSerializedRects === serialized) {
+      return;
+    }
+    this._lastSerializedRects = serialized;
+
     const merged = [];
     rects.forEach((rect) => {
       const last = merged.at(-1);
@@ -4506,6 +4529,7 @@ class NocturneWriter {
         merged.push({ ...rect });
       }
     });
+
     layer.classList.add('active');
     const highlights = merged.map((rect) => `<span class="nocturne-selection-rect" style="left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px"></span>`).join('');
     const handles = custom && merged.length
@@ -11553,12 +11577,10 @@ class NocturneWriter {
   updateActiveBlock() {
     const editables = document.querySelectorAll('.page-content');
     editables.forEach(node => node.classList.remove('active-selection'));
-    document.querySelectorAll('.page-content p,.page-content h2,.page-content blockquote').forEach((node) => node.classList.remove('active-block'));
     const sel = getSelection();
     const isSelectionActive = sel && !sel.isCollapsed && sel.toString().length > 0;
     const block = sel?.anchorNode?.parentElement?.closest?.('.page-content p,.page-content h2,.page-content blockquote');
     if (block) {
-      block.classList.add('active-block');
       const editable = block.closest('.page-content');
       if (isSelectionActive && editable) {
         editable.classList.add('active-selection');
