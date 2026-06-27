@@ -3078,7 +3078,7 @@ class NocturneWriter {
       _dndOverlay?.classList.remove('active');
       const files = e.dataTransfer?.files;
       if (!files?.length) return;
-      const supportedExts = ['.docx', '.pdf', '.txt', '.md', '.html', '.htm', '.nocturned', '.nocturnedump', '.nocturnmemory', '.nocturnechar', '.nocturneplace', '.nocturnetime', '.nocturnecharacters', '.nocturneplaces', '.nocturnetimelines'];
+      const supportedExts = ['.docx', '.pdf', '.txt', '.md', '.html', '.htm', '.nocturned', '.nocturnedump', '.nocturnmemory', '.nocturnechar', '.nocturneplace', '.nocturnetime', '.nocturnenote', '.nocturnecharacters', '.nocturneplaces', '.nocturnetimelines', '.nocturnenotes'];
       const droppedFiles = Array.from(files).filter(f => supportedExts.some(ext => f.name.toLowerCase().endsWith(ext)));
       if (droppedFiles.length) {
         e.preventDefault();
@@ -3257,6 +3257,10 @@ class NocturneWriter {
     }
     if (action === 'dump-kb-timeline') {
       this.openDumpChooser('kb-timeline');
+      return;
+    }
+    if (action === 'dump-kb-notes') {
+      this.openDumpChooser('kb-notes');
       return;
     }
     if (action === 'dump-single-entity') {
@@ -12142,6 +12146,33 @@ class NocturneWriter {
     this.downloadBlob(blob, `${cleanName}.docx`);
   }
 
+  exportAllNotesAsDocx() {
+    const esc = (v) => String(v || '').trim()
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    let paragraphs = `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Сводка записей</w:t></w:r></w:p>`;
+    (this.state.lore.notes || []).forEach((note) => {
+      const title = note.title || '';
+      paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>${esc(title)}</w:t></w:r></w:p>`;
+      if (note.body) {
+        paragraphs += note.body.split('\n').map(line => `<w:p><w:r><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`).join('');
+      }
+    });
+    const blob = this.generateDocxBlob('Сводка записей', paragraphs);
+    this.downloadBlob(blob, 'notes_dump.docx');
+  }
+
+  exportNoteAsDocx(note, cleanName) {
+    const esc = (v) => String(v || '').trim()
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const title = note.title || '';
+    let paragraphs = `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>${esc('Запись: ' + title)}</w:t></w:r></w:p>`;
+    if (note.body) {
+      paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Текст</w:t></w:r></w:p>` + note.body.split('\n').map(line => `<w:p><w:r><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`).join('');
+    }
+    const blob = this.generateDocxBlob(title || 'Запись', paragraphs);
+    this.downloadBlob(blob, `${cleanName}.docx`);
+  }
+
   exportEventAsDocx(eventItem, cleanName) {
     const esc = (v) => String(v || '').trim()
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -12390,6 +12421,14 @@ class NocturneWriter {
       appExt = 'timeline.nocturnetimelines';
       docxLabel = 'Документ Word (.docx)';
       docxDesc = 'Сводный текстовый файл со всей хронологией событий.';
+    } else if (dumpType === 'kb-notes') {
+      title = 'Дамп записей';
+      subtitle = 'Экспортируйте ваши записи базы знаний.';
+      appLabel = 'Резервная копия записей (.nocturnenotes)';
+      appDesc = 'Файл обмена для переноса записей.';
+      appExt = 'notes.nocturnenotes';
+      docxLabel = 'Документ Word (.docx)';
+      docxDesc = 'Сводный текстовый файл со всеми записями.';
     } else if (dumpType === 'single-entity') {
       const type = options.type;
       const item = options.item;
@@ -12406,6 +12445,12 @@ class NocturneWriter {
         appExt = `${cleanName}.nocturneplace`;
         docxLabel = 'Документ Word (.docx)';
         docxDesc = 'Карточка локации для печати и вычитки.';
+      } else if (type === 'notes') {
+        appLabel = 'Файл записи (.nocturnenote)';
+        appDesc = 'Для переноса этой записи между проектами Ноктюрна.';
+        appExt = `${cleanName}.nocturnenote`;
+        docxLabel = 'Документ Word (.docx)';
+        docxDesc = 'Запись для печати и вычитки.';
       } else {
         appLabel = 'Файл события (.nocturnetime)';
         appDesc = 'Для переноса этого события между проектами Ноктюрна.';
@@ -12450,11 +12495,15 @@ class NocturneWriter {
             this.exportKbData({ type: 'nocturneplaces', locations: this.state.lore.locations }, 'places.nocturneplaces');
           } else if (dumpType === 'kb-timeline') {
             this.exportKbData({ type: 'nocturnetimelines', timeline: this.state.lore.timeline }, 'timeline.nocturnetimelines');
+          } else if (dumpType === 'kb-notes') {
+            this.exportKbData({ type: 'nocturnenotes', notes: this.state.lore.notes }, 'notes.nocturnenotes');
           } else if (dumpType === 'single-entity') {
             const type = options.type;
             const item = options.item;
             if (type === 'locations') {
               this.exportKbData({ type: 'nocturneplace', location: item }, appExt);
+            } else if (type === 'notes') {
+              this.exportKbData({ type: 'nocturnenote', note: item }, appExt);
             } else {
               this.exportKbData({ type: 'nocturnetime', event: item }, appExt);
             }
@@ -12468,12 +12517,16 @@ class NocturneWriter {
             this.exportAllLocationsAsDocx();
           } else if (dumpType === 'kb-timeline') {
             this.exportAllTimelineAsDocx();
+          } else if (dumpType === 'kb-notes') {
+            this.exportAllNotesAsDocx();
           } else if (dumpType === 'single-entity') {
             const type = options.type;
             const item = options.item;
             const cleanName = options.cleanName;
             if (type === 'locations') {
               this.exportLocationAsDocx(item, cleanName);
+            } else if (type === 'notes') {
+              this.exportNoteAsDocx(item, cleanName);
             } else {
               this.exportEventAsDocx(item, cleanName);
             }
@@ -12627,7 +12680,30 @@ class NocturneWriter {
         return true;
       }
     }
+    if (type === 'nocturnenotes') {
+      if (Array.isArray(data.notes)) {
+        data.notes.forEach(n => this.upsertNote(n));
+        return true;
+      }
+    }
+    if (type === 'nocturnenote') {
+      if (data.note) {
+        this.upsertNote(data.note);
+        return true;
+      }
+    }
     return false;
+  }
+
+  upsertNote(note) {
+    const norm = this.normalizeNote(note, (this.state.lore.notes || []).length);
+    const idx = (this.state.lore.notes || []).findIndex(n => n.id === norm.id);
+    if (idx >= 0) {
+      this.state.lore.notes[idx] = norm;
+    } else {
+      if (!this.state.lore.notes) this.state.lore.notes = [];
+      this.state.lore.notes.push(norm);
+    }
   }
 
   upsertCharacter(char) {
