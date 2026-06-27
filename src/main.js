@@ -191,7 +191,7 @@ class NocturneWriter {
       settings: { ...defaultSettings },
       folders: [],
       docs: [],
-      lore: { characters: [], locations: [], timeline: [] },
+      lore: { characters: [], locations: [], timeline: [], notes: [] },
       activeDocId: null,
       workspace: null,
       sync: {
@@ -333,6 +333,7 @@ class NocturneWriter {
     this.commandPalette = new CommandPalette(this);
     this.nocturneEditor = new NocturneEditorBridge({
       getSettings: () => this.state.settings,
+      getMentionIndex: () => this.buildEntityMentionIndex(),
       onFocus: (paneId) => {
         if (this.state.workspace?.focusedPaneId !== paneId) this.setFocusedPane(paneId);
         this.handleMobileViewportChange();
@@ -387,6 +388,25 @@ class NocturneWriter {
     this.bindGlobalEvents();
     this.startMobileSystemBar();
     this.applyAndroidSystemBars();
+    this.startGitAutosave();
+  }
+
+  startGitAutosave() {
+    if (this.gitAutosaveInterval) {
+      clearInterval(this.gitAutosaveInterval);
+    }
+    const minutes = Math.max(1, this.state.settings.autosaveMinutes || 3);
+    this.gitAutosaveInterval = setInterval(async () => {
+      if (!this.state.settings.gitVersioning) return;
+      try {
+        const dump = await this.buildNocturneDump();
+        const data = JSON.stringify(dump, null, 2);
+        const projectName = dump.projectTitle || 'nocturne-project';
+        await platformFiles.saveGitSnapshot(data, projectName);
+      } catch (err) {
+        console.warn('Git autosave failed:', err);
+      }
+    }, minutes * 60000);
   }
 
   showStorageWarnings() {
@@ -402,7 +422,7 @@ class NocturneWriter {
       const value = Number(merged[key]);
       merged[key] = Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
     };
-    const bools = ['windowMaterial', 'cursorGlow', 'compactPanels', 'experimentalDesign', 'caretBreath', 'paragraphIndent', 'smartPunctuation', 'writerSyntax', 'baselineGrid', 'readability', 'typewriterSound', 'typewriterMode', 'strictSpellcheck', 'smartDictionary', 'sentenceFocus', 'showDontTell', 'sentimentTimeline', 'sprintLock', 'timeMachine', 'gitVersioning', 'e2e', 'watermark', 'liveSave', 'autoPaginate', 'flexiblePageHeight', 'showPageRulers', 'showZenButton', 'notesAutosave', 'toolbarSticky', 'reduceMobileAnimations', 'aiKnowledgeContext', 'aiContextCharacters', 'aiContextLocations', 'aiContextTimeline', 'aiContextSubtimelines', 'aiContextRules', 'aiContextNotes', 'keepCaretCentered'];
+    const bools = ['windowMaterial', 'cursorGlow', 'compactPanels', 'experimentalDesign', 'caretBreath', 'paragraphIndent', 'smartPunctuation', 'writerSyntax', 'baselineGrid', 'readability', 'typewriterSound', 'typewriterMode', 'strictSpellcheck', 'smartDictionary', 'sentenceFocus', 'showDontTell', 'sentimentTimeline', 'sprintLock', 'timeMachine', 'gitVersioning', 'e2e', 'watermark', 'liveSave', 'autoPaginate', 'showPageRulers', 'showZenButton', 'notesAutosave', 'toolbarSticky', 'reduceMobileAnimations', 'aiKnowledgeContext', 'aiContextCharacters', 'aiContextLocations', 'aiContextTimeline', 'aiContextSubtimelines', 'aiContextRules', 'aiContextNotes'];
     bools.forEach((key) => { merged[key] = !!merged[key]; });
     const allowedFonts = ['Lora', 'Manrope', 'Georgia', 'Inter', 'Playfair Display', 'Merriweather', 'Courier New'];
     if (Array.isArray(merged.customFonts)) {
@@ -464,6 +484,7 @@ class NocturneWriter {
       characters: Array.isArray(this.state.lore?.characters) ? this.state.lore.characters : [],
       locations: Array.isArray(this.state.lore?.locations) ? this.state.lore.locations : [],
       timeline: Array.isArray(this.state.lore?.timeline) ? this.state.lore.timeline : [],
+      notes: Array.isArray(this.state.lore?.notes) ? this.state.lore.notes : [],
     };
     if (!this.state.docs.some((doc) => doc.id === this.state.activeDocId)) this.state.activeDocId = this.state.docs[0]?.id || null;
     if (this.state.activeSubtimelineId && !this.timelineEvent(this.state.activeSubtimelineId)) this.state.activeSubtimelineId = null;
@@ -662,6 +683,18 @@ class NocturneWriter {
       characters: (lore?.characters || []).map((item, index) => this.normalizeCharacter(item, index)),
       locations: (lore?.locations || []).map((item, index) => this.normalizeLocation(item, index)),
       timeline: (lore?.timeline || []).map((item, index) => this.normalizeTimelineEvent(item, index)),
+      notes: (lore?.notes || []).map((item, index) => this.normalizeNote(item, index)),
+    };
+  }
+
+  normalizeNote(item = {}, index = 0) {
+    return {
+      ...item,
+      id: String(item.id || uid('note')),
+      type: 'note',
+      title: String(item.title || '').trim(),
+      body: String(item.body || '').trim(),
+      order: Number.isFinite(item.order) ? item.order : index,
     };
   }
 
@@ -721,6 +754,7 @@ class NocturneWriter {
       characterIds: Array.isArray(item.characterIds) ? item.characterIds : [],
       locationIds: Array.isArray(item.locationIds) ? item.locationIds : [],
       chapterIds: Array.isArray(item.chapterIds) ? item.chapterIds : [],
+      noteIds: Array.isArray(item.noteIds) ? item.noteIds : [],
       characterRoles: (item.characterRoles && typeof item.characterRoles === 'object') ? item.characterRoles : {},
       subEvents: Array.isArray(item.subEvents)
         ? item.subEvents.map((event, eventIndex) => ({
@@ -734,6 +768,7 @@ class NocturneWriter {
           characterIds: Array.isArray(event.characterIds) ? event.characterIds : [],
           locationIds: Array.isArray(event.locationIds) ? event.locationIds : [],
           chapterIds: Array.isArray(event.chapterIds) ? event.chapterIds : [],
+          noteIds: Array.isArray(event.noteIds) ? event.noteIds : [],
           characterRoles: (event.characterRoles && typeof event.characterRoles === 'object') ? event.characterRoles : {},
           order: Number.isFinite(Number(event.order)) ? Number(event.order) : eventIndex,
         }))
@@ -763,7 +798,7 @@ class NocturneWriter {
       return docId ? { ...this.emptyPaneDescriptor(id), type: 'document', docId } : this.emptyPaneDescriptor(id);
     }
     if (type === 'kb-tab') return { ...this.emptyPaneDescriptor(id), type, kbTab: raw.kbTab || 'characters', subtimelineParentId: raw.subtimelineParentId || null };
-    if (type === 'character-detail' || type === 'location-detail') return { ...this.emptyPaneDescriptor(id), type, entityType: raw.entityType || type.replace('-detail', ''), entityId: raw.entityId || null };
+    if (type === 'character-detail' || type === 'location-detail' || type === 'note-detail') return { ...this.emptyPaneDescriptor(id), type, entityType: raw.entityType || type.replace('-detail', ''), entityId: raw.entityId || null };
     return this.emptyPaneDescriptor(id);
   }
 
@@ -1254,7 +1289,7 @@ class NocturneWriter {
       }
       return `<div class="editor-scroll-area" data-editor-container data-pane-id="${paneId}"></div>`;
     }
-    if (pane.type === 'character-detail' || pane.type === 'location-detail') return this.renderLoreDetailPane(pane);
+    if (pane.type === 'character-detail' || pane.type === 'location-detail' || pane.type === 'note-detail') return this.renderLoreDetailPane(pane);
     if (pane.type === 'kb-tab') return this.renderKbPane(paneId, pane);
     return '';
   }
@@ -1286,8 +1321,8 @@ class NocturneWriter {
   }
 
   renderLoreDetailPane(pane) {
-    const type = pane.entityType === 'location' ? 'locations' : 'characters';
-    const item = this.state.lore[type].find((entry) => entry.id === pane.entityId);
+    const type = pane.entityType === 'location' ? 'locations' : pane.entityType === 'note' ? 'notes' : 'characters';
+    const item = this.state.lore[type]?.find((entry) => entry.id === pane.entityId);
     if (!item) return '<div class="workspace-empty"><p>Карточка не найдена.</p></div>';
     return this.renderLoreDetail(type, item);
   }
@@ -2036,8 +2071,6 @@ class NocturneWriter {
     return iconSvg(map[icon] || 'command', 'command-ai-svg');
   }
 
-  async 
-
   async connectDiscoveredSyncDevice(id) {
     const device = [...(this.state.sync.discoveredDevices || []), ...(this.state.sync.rememberedDevices || [])]
       .find((item) => String(item.id || item.deviceId || item.publicDeviceId) === String(id));
@@ -2300,21 +2333,6 @@ class NocturneWriter {
       </div>`;
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
-    overlay.querySelectorAll('.assoc-card').forEach(card => {
-      card.onclick = (e) => {
-        const roleBtn = e.target.closest('.role-btn');
-        if (roleBtn) {
-          e.stopPropagation();
-          const role = roleBtn.dataset.role;
-          card.querySelector('.assoc-hidden-role').value = role;
-          card.querySelectorAll('.role-btn').forEach(btn => btn.classList.toggle('active', btn === roleBtn));
-          return;
-        }
-        const checkbox = card.querySelector('input[type="checkbox"]');
-        checkbox.checked = !checkbox.checked;
-        card.classList.toggle('active', checkbox.checked);
-      };
-    });
   }
 
   async loadSyncMappings() {
@@ -2566,7 +2584,7 @@ class NocturneWriter {
               <button class="pill-btn" data-action="toggle-notes"><i class="bx bx-notepad"></i> <span>Заметки</span></button>
               <button class="pill-btn" data-action="import-doc"><i class="bx bx-import"></i> <span>Импорт</span></button>
               <button class="pill-btn ai-btn" data-action="toggle-ai">${aiIcon('toolbar-ai-svg')} <span>Ассистент</span></button>
-              <input id="import-input" type="file" accept=".txt,.md,.html,.htm,.docx,.nocturned,.nocturnedump,application/json" multiple hidden>
+              <input id="import-input" type="file" accept=".txt,.md,.html,.htm,.docx,.pdf,.nocturned,.nocturnedump,application/json" multiple hidden>
             </div>
           </header>
           <div class="workspace-stage" id="workspace-stage" data-mode="single">
@@ -2637,6 +2655,7 @@ class NocturneWriter {
           <div class="drop-item kb-drop-row" data-kb-open="characters"><i class="bx bx-user-pin"></i><span>Персонажи</span><button type="button" data-action="open-kb-right" data-kb-tab="characters" title="Открыть справа"><i class="bx bx-sidebar"></i></button></div>
           <div class="drop-item kb-drop-row" data-kb-open="locations"><i class="bx bx-map-alt"></i><span>Локации</span><button type="button" data-action="open-kb-right" data-kb-tab="locations" title="Открыть справа"><i class="bx bx-sidebar"></i></button></div>
           <div class="drop-item kb-drop-row" data-kb-open="timeline"><i class="bx bx-git-commit"></i><span>Таймлайн</span><button type="button" data-action="open-kb-right" data-kb-tab="timeline" title="Открыть справа"><i class="bx bx-sidebar"></i></button></div>
+          <div class="drop-item kb-drop-row" data-kb-open="notes"><i class="bx bx-note"></i><span>Записи</span><button type="button" data-action="open-kb-right" data-kb-tab="notes" title="Открыть справа"><i class="bx bx-sidebar"></i></button></div>
         </div>
         <div class="format-menu popover-surface portal-floating-menu" id="format-menu" data-floating-menu="format" aria-hidden="true">
           <button data-format-block="paragraph"><i class="bx bx-text"></i><span>Обычный текст</span></button>
@@ -2726,7 +2745,7 @@ class NocturneWriter {
     }
     const progressFill = document.querySelector('.preloader-progress-fill');
     if (progressFill) {
-      progressFill.style.transition = 'width 300ms cubic-bezier(0.22, 1, 0.36, 1)';
+      progressFill.style.transition = 'width 1500ms cubic-bezier(0.22, 1, 0.36, 1)';
       progressFill.style.width = '100%';
     }
     setTimeout(() => {
@@ -2735,7 +2754,7 @@ class NocturneWriter {
       const appShell = document.getElementById('app-shell');
       if (appShell) appShell.classList.add('ready');
       if (!this.isMobileLayout()) document.querySelector('.page-content')?.focus();
-    }, 450);
+    }, 1800);
   }
 
   renderAll() {
@@ -3059,7 +3078,7 @@ class NocturneWriter {
       _dndOverlay?.classList.remove('active');
       const files = e.dataTransfer?.files;
       if (!files?.length) return;
-      const supportedExts = ['.docx', '.nocturnmemory', '.nocturnechar', '.nocturneplace', '.nocturnetime', '.nocturnecharacters', '.nocturneplaces', '.nocturnetimelines'];
+      const supportedExts = ['.docx', '.pdf', '.txt', '.md', '.html', '.htm', '.nocturned', '.nocturnedump', '.nocturnmemory', '.nocturnechar', '.nocturneplace', '.nocturnetime', '.nocturnecharacters', '.nocturneplaces', '.nocturnetimelines'];
       const droppedFiles = Array.from(files).filter(f => supportedExts.some(ext => f.name.toLowerCase().endsWith(ext)));
       if (droppedFiles.length) {
         e.preventDefault();
@@ -3225,19 +3244,19 @@ class NocturneWriter {
     if (this.handleDictionaryAction(action, event)) return;
     if (this.handleMobileAction(action, event)) return;
     if (action === 'dump-full-kb') {
-      this.exportKbData({ type: 'nocturnmemory', lore: this.state.lore }, 'world_kb.nocturnmemory');
+      this.openDumpChooser('full-kb');
       return;
     }
     if (action === 'dump-kb-characters') {
-      this.exportKbData({ type: 'nocturnecharacters', characters: this.state.lore.characters }, 'characters.nocturnecharacters');
+      this.openDumpChooser('kb-characters');
       return;
     }
     if (action === 'dump-kb-locations') {
-      this.exportKbData({ type: 'nocturneplaces', locations: this.state.lore.locations }, 'places.nocturneplaces');
+      this.openDumpChooser('kb-locations');
       return;
     }
     if (action === 'dump-kb-timeline') {
-      this.exportKbData({ type: 'nocturnetimelines', timeline: this.state.lore.timeline }, 'timeline.nocturnetimelines');
+      this.openDumpChooser('kb-timeline');
       return;
     }
     if (action === 'dump-single-entity') {
@@ -3256,13 +3275,7 @@ class NocturneWriter {
         if (item) {
           const name = item.displayName || item.name || item.title || 'entity';
           const cleanName = name.replace(/[^a-zA-Z0-9а-яА-ЯёЁ_ -]/g, '');
-          if (type === 'characters') {
-            this.showCharExportModal(item, cleanName);
-          } else if (type === 'locations') {
-            this.exportKbData({ type: 'nocturneplace', location: item }, `${cleanName}.nocturneplace`);
-          } else {
-            this.exportKbData({ type: 'nocturnetime', event: item }, `${cleanName}.nocturnetime`);
-          }
+          this.openDumpChooser('single-entity', { type, item, cleanName });
         }
       }
       return;
@@ -3276,10 +3289,10 @@ class NocturneWriter {
       const paneId = event.target.closest('[data-pane-id]')?.dataset.paneId || event.target.closest('.workspace-pane[data-pane-id]')?.dataset.paneId;
       if (paneId) {
         const pane = this.getPane(paneId);
-        if (pane && (pane.type === 'character-detail' || pane.type === 'location-detail')) {
+        if (pane && (pane.type === 'character-detail' || pane.type === 'location-detail' || pane.type === 'note-detail')) {
           const originalType = pane.type;
           pane.type = 'kb-tab';
-          pane.kbTab = originalType === 'location-detail' ? 'locations' : 'characters';
+          pane.kbTab = originalType === 'location-detail' ? 'locations' : originalType === 'note-detail' ? 'notes' : 'characters';
           pane.entityId = null;
           pane.entityType = null;
           this.persistWorkspaceState();
@@ -3555,7 +3568,12 @@ class NocturneWriter {
     const settingsTab = event.target.closest('[data-settings-tab]')?.dataset.settingsTab;
     if (settingsTab) {
       this.state.activeSettingsTab = settingsTab;
-      this.renderSettings();
+      if (this.isMobileLayout()) {
+        this.state.mobile.settingsTab = settingsTab;
+        this.renderMobileShell();
+      } else {
+        this.renderSettings();
+      }
     }
     const mobileSettingsTab = event.target.closest('[data-mobile-settings-tab]')?.dataset.mobileSettingsTab;
     if (mobileSettingsTab) {
@@ -4484,19 +4502,8 @@ class NocturneWriter {
       return;
     }
 
-    const breakElements = document.querySelectorAll('.pm-page-break');
-    const breakRects = [...breakElements].map(el => el.getBoundingClientRect());
-
     const rects = [...range.getClientRects()]
       .filter((rect) => rect.width > 1 && rect.height > 1)
-      .filter((rect) => {
-        // Filter out rects that overlap with page breaks
-        const overlap = breakRects.some(br => {
-          return (rect.left < br.right && rect.right > br.left &&
-                  rect.top < br.bottom && rect.bottom > br.top);
-        });
-        return !overlap;
-      })
       .map((rect) => ({
         left: Math.round(rect.left - 2),
         top: Math.round(rect.top - 1),
@@ -4742,6 +4749,10 @@ class NocturneWriter {
     if (event.target.matches('[data-dictionary-search]')) {
       this.state.dictionarySearch = event.target.value;
       this.updateDictionarySearchList();
+    }
+    if (event.target.id === 'settings-search-field') {
+      this.state.settingsSearchQuery = event.target.value;
+      this.updateSettingsSearchList();
     }
     if (event.target.matches('[data-doc-search-query]')) {
       if (!this.searchSession) return;
@@ -5079,13 +5090,13 @@ class NocturneWriter {
       if (shiftEnter) {
         event.preventDefault();
         if (!this.handledSoftBreakRecently) this.insertSoftLineBreak(editable);
-        this.shouldCenterActiveLineNext = true;
+
       } else {
         event.preventDefault();
         const now = Date.now();
         if (this.lastParagraphBreakTime && now - this.lastParagraphBreakTime < 50) return;
         this.lastParagraphBreakTime = now;
-        this.shouldCenterActiveLineNext = true;
+
         this.insertParagraphBreak(editable);
       }
       return;
@@ -6258,7 +6269,15 @@ class NocturneWriter {
       'accept-ai': () => this.acceptSuggestion(),
       'reject-ai': () => this.rejectSuggestion(),
       'manual-snapshot': () => this.createSnapshot(true),
-            'confirm-export-project-dump-plaintext': async () => {
+      'export-html': () => this.exportPrintable(),
+      'export-docx': () => this.exportDocx(),
+      'export-project-dump': () => this.openProjectExportModal(),
+      'confirm-export-project-dump': async () => {
+        document.getElementById('form-overlay')?.classList.remove('active');
+        await this.exportProjectDump();
+      },
+      'import-project-dump': () => this.startProjectDumpImport(),
+      'confirm-export-project-dump-plaintext': async () => {
         const ok = await this.confirmDialog({
           title: 'Экспортировать E2E-данные открытым текстом?',
           message: 'Plaintext-экспорт может включать расшифрованные документы, заметки и снапшоты. Используйте его только для доверенного места хранения.',
@@ -6271,6 +6290,116 @@ class NocturneWriter {
       'show-history': () => this.showHistory(),
       'save-password': () => this.setSessionPassword(),
       'reset-data': () => this.resetData(),
+      'clear-all-docs': async () => {
+        const ok = await this.confirmDialog({
+          title: 'Удалить все документы?',
+          message: 'Все ваши папки, документы, снапшоты и история версий будут безвозвратно удалены. Рекомендуется сначала сделать экспорт проекта (.nocturnedump).',
+          confirmText: 'Удалить все',
+          icon: 'bx-trash',
+          danger: true,
+        });
+        if (ok) {
+          await this.db.clear('docs');
+          await this.db.clear('folders');
+          await this.db.clear('snapshots');
+          safeStorageKeys(localStorage).forEach((key) => {
+            if (key.startsWith(LIVE_PREFIX)) safeRemoveStorageItem(localStorage, key);
+          });
+          this.state.folders = this.validateFolders([]);
+          this.state.docs = [];
+          this.state.activeDocId = null;
+          await Promise.all(this.state.folders.map((item) => this.db.put('folders', item)));
+          this.initWorkspace();
+          this.renderAll();
+          this.renderSettings();
+          this.toast('Все документы и папки удалены.');
+        }
+      },
+      'clear-all-characters': async () => {
+        const ok = await this.confirmDialog({
+          title: 'Удалить всех персонажей?',
+          message: 'Все персонажи будут навсегда удалены из Базы Знаний.',
+          confirmText: 'Удалить',
+          icon: 'bx-user-x',
+          danger: true,
+        });
+        if (ok) {
+          this.state.lore.characters = [];
+          await this.saveLore();
+          this.renderAll();
+          this.renderSettings();
+          this.toast('Все персонажи удалены.');
+        }
+      },
+      'clear-all-locations': async () => {
+        const ok = await this.confirmDialog({
+          title: 'Удалить все локации?',
+          message: 'Все локации и места будут навсегда удалены из Базы Знаний.',
+          confirmText: 'Удалить',
+          icon: 'bx-map-x',
+          danger: true,
+        });
+        if (ok) {
+          this.state.lore.locations = [];
+          await this.saveLore();
+          this.renderAll();
+          this.renderSettings();
+          this.toast('Все локации удалены.');
+        }
+      },
+      'clear-all-timeline': async () => {
+        const ok = await this.confirmDialog({
+          title: 'Удалить все события?',
+          message: 'Все события хронологии и сабтаймлайны будут навсегда удалены.',
+          confirmText: 'Удалить',
+          icon: 'bx-git-commit',
+          danger: true,
+        });
+        if (ok) {
+          this.state.lore.timeline = [];
+          this.state.activeSubtimelineId = null;
+          await this.saveLore();
+          this.renderAll();
+          this.renderSettings();
+          this.toast('Хронология очищена.');
+        }
+      },
+      'clear-all-notes': async () => {
+        const ok = await this.confirmDialog({
+          title: 'Удалить все записи?',
+          message: 'Все записи и заметки будут навсегда удалены из Базы Знаний.',
+          confirmText: 'Удалить',
+          icon: 'bx-note',
+          danger: true,
+        });
+        if (ok) {
+          this.state.lore.notes = [];
+          await this.saveLore();
+          this.renderAll();
+          this.renderSettings();
+          this.toast('Все записи удалены.');
+        }
+      },
+      'clear-all-kb': async () => {
+        const ok = await this.confirmDialog({
+          title: 'Очистить всю Базу Знаний?',
+          message: 'Все персонажи, локации, события таймлайна и записи будут навсегда удалены.',
+          confirmText: 'Очистить базу',
+          icon: 'bx-book-content',
+          danger: true,
+        });
+        if (ok) {
+          this.state.lore.characters = [];
+          this.state.lore.locations = [];
+          this.state.lore.timeline = [];
+          this.state.lore.notes = [];
+          this.state.activeSubtimelineId = null;
+          await this.saveLore();
+          this.renderAll();
+          this.renderSettings();
+          this.toast('База Знаний полностью очищена.');
+        }
+      },
       'reset-settings': () => this.resetSettings(),
       'demo-add-docs': () => this.addDemoDocs(),
       'demo-remove-docs': () => this.removeDemoDocs(),
@@ -6495,21 +6624,6 @@ class NocturneWriter {
     `;
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
-    overlay.querySelectorAll('.assoc-card').forEach(card => {
-      card.onclick = (e) => {
-        const roleBtn = e.target.closest('.role-btn');
-        if (roleBtn) {
-          e.stopPropagation();
-          const role = roleBtn.dataset.role;
-          card.querySelector('.assoc-hidden-role').value = role;
-          card.querySelectorAll('.role-btn').forEach(btn => btn.classList.toggle('active', btn === roleBtn));
-          return;
-        }
-        const checkbox = card.querySelector('input[type="checkbox"]');
-        checkbox.checked = !checkbox.checked;
-        card.classList.toggle('active', checkbox.checked);
-      };
-    });
     overlay.querySelector('[data-confirm-folder-delete]').onclick = async () => {
       await this.deleteFolder(folder.id);
       overlay.classList.remove('active');
@@ -6677,29 +6791,41 @@ class NocturneWriter {
     const importedDocs = [];
     const importFolderId = this.defaultFolderId();
     for (const file of docFiles) {
-      const title = file.name.replace(/\.[^.]+$/, '');
-      const isHtml = /\.html?$/i.test(file.name);
-      const blocks = /\.docx$/i.test(file.name)
-        ? await this.blocksFromDocxFile(file)
-        : this.blocksFromImportedText(await file.text(), isHtml);
-      const doc = {
-        id: uid('doc'),
-        folderId: importFolderId,
-        title,
-        description: `Импортировано из ${file.name}`,
-        order: this.state.docs.filter((item) => item.folderId === importFolderId).length,
-        notes: '',
-        globalNotes: '',
-        summary: `Импортировано из ${file.name}`,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        ast: { type: 'doc', blocks },
-      };
-      this.state.docs.push(doc);
-      this.docWordBaselines.set(doc.id, countWords(docText(doc.ast)));
-      await this.db.put('docs', doc);
-      this.state.activeDocId = doc.id;
-      importedDocs.push({ doc, file });
+      try {
+        const title = file.name.replace(/\.[^.]+$/, '');
+        const isHtml = /\.html?$/i.test(file.name);
+        const isPdf = /\.pdf$/i.test(file.name);
+        let blocks;
+        if (isPdf) {
+          const text = await this.extractTextFromPdf(file);
+          blocks = this.blocksFromImportedText(text, false);
+        } else if (/\.docx$/i.test(file.name)) {
+          blocks = await this.blocksFromDocxFile(file);
+        } else {
+          blocks = this.blocksFromImportedText(await file.text(), isHtml);
+        }
+        const doc = {
+          id: uid('doc'),
+          folderId: importFolderId,
+          title,
+          description: `Импортировано из ${file.name}`,
+          order: this.state.docs.filter((item) => item.folderId === importFolderId).length,
+          notes: '',
+          globalNotes: '',
+          summary: `Импортировано из ${file.name}`,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          ast: { type: 'doc', blocks },
+        };
+        this.state.docs.push(doc);
+        this.docWordBaselines.set(doc.id, countWords(docText(doc.ast)));
+        await this.db.put('docs', doc);
+        this.state.activeDocId = doc.id;
+        importedDocs.push({ doc, file });
+      } catch (err) {
+        console.error('File import error:', err);
+        this.toast(`Ошибка при импорте ${file.name}: ${err.message || err}`);
+      }
     }
     for (const reviewFile of reviewFiles) {
       const payload = await this.readNocturnedFile(reviewFile);
@@ -6718,7 +6844,86 @@ class NocturneWriter {
     }
     document.getElementById('import-input').value = '';
     this.renderAll();
-    this.toast(reviewFiles.length && docFiles.length ? 'Документ и редакторские правки импортированы.' : `Импортировано документов: ${docFiles.length}`);
+    this.toast(reviewFiles.length && docFiles.length ? 'Документ и редакторские правки импортированы.' : `Импортировано документов: ${importedDocs.length}`);
+  }
+
+  async extractTextFromPdf(file) {
+    try {
+      const pdfjsLib = await import('https://unpkg.com/pdfjs-dist@4.3.136/build/pdf.min.mjs');
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@4.3.136/build/pdf.worker.min.mjs';
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const pages = [];
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        let pageText = '';
+        let lastY = null;
+        let lastX = null;
+        let lastWidth = null;
+        let lastHeight = null;
+        for (const item of textContent.items) {
+          const str = item.str;
+          const y = item.transform ? item.transform[5] : null;
+          const x = item.transform ? item.transform[4] : null;
+          const w = item.width || 0;
+          const h = item.height || (item.transform ? Math.abs(item.transform[3]) : 12);
+          if (lastY !== null && y !== null) {
+            const diff = Math.abs(y - lastY);
+            if (diff > 5) {
+              if (lastHeight !== null && diff > lastHeight * 1.9) {
+                pageText += '\n\n';
+              } else {
+                if (/[a-zA-Zа-яА-ЯёЁ]-\s*$/.test(pageText)) {
+                  pageText = pageText.replace(/-\s*$/, '');
+                } else if (pageText && !pageText.endsWith(' ') && !pageText.endsWith('\n') && !pageText.endsWith('\n\n')) {
+                  pageText += ' ';
+                }
+              }
+            } else if (str && pageText && !pageText.endsWith('\n') && !pageText.endsWith(' ') && !pageText.endsWith('\n\n') && !str.startsWith(' ')) {
+              if (x !== null && lastX !== null && lastWidth !== null) {
+                const gap = x - (lastX + lastWidth);
+                if (gap > h * 0.18) {
+                  pageText += ' ';
+                }
+              }
+            }
+          }
+          pageText += str;
+          if (y !== null) lastY = y;
+          if (x !== null) lastX = x;
+          lastWidth = w;
+          if (h) lastHeight = h;
+        }
+        pages.push(pageText);
+      }
+      
+      const joinPages = (p1, p2) => {
+        const t1 = p1.trimEnd();
+        const t2 = p2.trimStart();
+        if (!t1) return t2;
+        if (!t2) return t1;
+        const lastChar = t1.slice(-1);
+        const isSentenceEnd = /[.!?…”"»]/.test(lastChar);
+        const isParagraphStart = /^[—\-–A-ZА-ЯЁ]/.test(t2);
+        if (isSentenceEnd && isParagraphStart) {
+          return t1 + '\n\n' + t2;
+        }
+        if (/[a-zA-Zа-яА-ЯёЁ]-\s*$/.test(t1)) {
+          return t1.replace(/-\s*$/, '') + t2;
+        }
+        return t1 + ' ' + t2;
+      };
+      
+      let fullText = '';
+      for (const p of pages) {
+        fullText = joinPages(fullText, p);
+      }
+      return fullText;
+    } catch (err) {
+      console.error('PDF import error:', err);
+      throw new Error('Убедитесь, что вы подключены к интернету.');
+    }
   }
 
   async blocksFromDocxFile(file) {
@@ -6919,21 +7124,6 @@ class NocturneWriter {
     `;
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
-    overlay.querySelectorAll('.assoc-card').forEach(card => {
-      card.onclick = (e) => {
-        const roleBtn = e.target.closest('.role-btn');
-        if (roleBtn) {
-          e.stopPropagation();
-          const role = roleBtn.dataset.role;
-          card.querySelector('.assoc-hidden-role').value = role;
-          card.querySelectorAll('.role-btn').forEach(btn => btn.classList.toggle('active', btn === roleBtn));
-          return;
-        }
-        const checkbox = card.querySelector('input[type="checkbox"]');
-        checkbox.checked = !checkbox.checked;
-        card.classList.toggle('active', checkbox.checked);
-      };
-    });
     overlay.querySelector('[data-confirm-delete]').onclick = async () => {
       await this.deleteDoc(doc.id);
       overlay.classList.remove('active');
@@ -7002,21 +7192,6 @@ class NocturneWriter {
     `;
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
-    overlay.querySelectorAll('.assoc-card').forEach(card => {
-      card.onclick = (e) => {
-        const roleBtn = e.target.closest('.role-btn');
-        if (roleBtn) {
-          e.stopPropagation();
-          const role = roleBtn.dataset.role;
-          card.querySelector('.assoc-hidden-role').value = role;
-          card.querySelectorAll('.role-btn').forEach(btn => btn.classList.toggle('active', btn === roleBtn));
-          return;
-        }
-        const checkbox = card.querySelector('input[type="checkbox"]');
-        checkbox.checked = !checkbox.checked;
-        card.classList.toggle('active', checkbox.checked);
-      };
-    });
     overlay.querySelector('form').onsubmit = async (e) => {
       e.preventDefault();
       const data = Object.fromEntries(new FormData(e.target));
@@ -7321,7 +7496,7 @@ class NocturneWriter {
       targetWidth = parseFloat(pageStyle.width) || 794;
     }
 
-    if (this.state.settings.flexiblePageHeight) {
+    if (!this.state.settings.autoPaginate) {
       maxContentHeight = Infinity;
     }
     
@@ -8406,21 +8581,6 @@ class NocturneWriter {
       </div>`;
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
-    overlay.querySelectorAll('.assoc-card').forEach(card => {
-      card.onclick = (e) => {
-        const roleBtn = e.target.closest('.role-btn');
-        if (roleBtn) {
-          e.stopPropagation();
-          const role = roleBtn.dataset.role;
-          card.querySelector('.assoc-hidden-role').value = role;
-          card.querySelectorAll('.role-btn').forEach(btn => btn.classList.toggle('active', btn === roleBtn));
-          return;
-        }
-        const checkbox = card.querySelector('input[type="checkbox"]');
-        checkbox.checked = !checkbox.checked;
-        card.classList.toggle('active', checkbox.checked);
-      };
-    });
     overlay.querySelector('#save-review-comment').onclick = async () => {
       await this.createReviewMarkFromSelection('comment', overlay.querySelector('#review-category').value, { comment: overlay.querySelector('#review-comment').value.trim() });
       overlay.classList.remove('active');
@@ -8444,21 +8604,6 @@ class NocturneWriter {
       </div>`;
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
-    overlay.querySelectorAll('.assoc-card').forEach(card => {
-      card.onclick = (e) => {
-        const roleBtn = e.target.closest('.role-btn');
-        if (roleBtn) {
-          e.stopPropagation();
-          const role = roleBtn.dataset.role;
-          card.querySelector('.assoc-hidden-role').value = role;
-          card.querySelectorAll('.role-btn').forEach(btn => btn.classList.toggle('active', btn === roleBtn));
-          return;
-        }
-        const checkbox = card.querySelector('input[type="checkbox"]');
-        checkbox.checked = !checkbox.checked;
-        card.classList.toggle('active', checkbox.checked);
-      };
-    });
     overlay.querySelector('#save-review-suggestion').onclick = async () => {
       await this.createReviewMarkFromSelection('suggestion', 'style', { suggestion: overlay.querySelector('#review-suggestion').value, comment: overlay.querySelector('#review-comment').value.trim() });
       overlay.classList.remove('active');
@@ -8950,21 +9095,6 @@ class NocturneWriter {
       </div>`;
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
-    overlay.querySelectorAll('.assoc-card').forEach(card => {
-      card.onclick = (e) => {
-        const roleBtn = e.target.closest('.role-btn');
-        if (roleBtn) {
-          e.stopPropagation();
-          const role = roleBtn.dataset.role;
-          card.querySelector('.assoc-hidden-role').value = role;
-          card.querySelectorAll('.role-btn').forEach(btn => btn.classList.toggle('active', btn === roleBtn));
-          return;
-        }
-        const checkbox = card.querySelector('input[type="checkbox"]');
-        checkbox.checked = !checkbox.checked;
-        card.classList.toggle('active', checkbox.checked);
-      };
-    });
   }
 
   openDocumentSearch(seed = {}) {
@@ -9172,21 +9302,6 @@ class NocturneWriter {
       </div>`;
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
-    overlay.querySelectorAll('.assoc-card').forEach(card => {
-      card.onclick = (e) => {
-        const roleBtn = e.target.closest('.role-btn');
-        if (roleBtn) {
-          e.stopPropagation();
-          const role = roleBtn.dataset.role;
-          card.querySelector('.assoc-hidden-role').value = role;
-          card.querySelectorAll('.role-btn').forEach(btn => btn.classList.toggle('active', btn === roleBtn));
-          return;
-        }
-        const checkbox = card.querySelector('input[type="checkbox"]');
-        checkbox.checked = !checkbox.checked;
-        card.classList.toggle('active', checkbox.checked);
-      };
-    });
   }
 
   runGlobalSearch() {
@@ -9286,21 +9401,6 @@ class NocturneWriter {
       </div>`;
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
-    overlay.querySelectorAll('.assoc-card').forEach(card => {
-      card.onclick = (e) => {
-        const roleBtn = e.target.closest('.role-btn');
-        if (roleBtn) {
-          e.stopPropagation();
-          const role = roleBtn.dataset.role;
-          card.querySelector('.assoc-hidden-role').value = role;
-          card.querySelectorAll('.role-btn').forEach(btn => btn.classList.toggle('active', btn === roleBtn));
-          return;
-        }
-        const checkbox = card.querySelector('input[type="checkbox"]');
-        checkbox.checked = !checkbox.checked;
-        card.classList.toggle('active', checkbox.checked);
-      };
-    });
   }
 
   replaceOption(key, label, tip) {
@@ -9535,21 +9635,6 @@ class NocturneWriter {
       </div>`;
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
-    overlay.querySelectorAll('.assoc-card').forEach(card => {
-      card.onclick = (e) => {
-        const roleBtn = e.target.closest('.role-btn');
-        if (roleBtn) {
-          e.stopPropagation();
-          const role = roleBtn.dataset.role;
-          card.querySelector('.assoc-hidden-role').value = role;
-          card.querySelectorAll('.role-btn').forEach(btn => btn.classList.toggle('active', btn === roleBtn));
-          return;
-        }
-        const checkbox = card.querySelector('input[type="checkbox"]');
-        checkbox.checked = !checkbox.checked;
-        card.classList.toggle('active', checkbox.checked);
-      };
-    });
   }
 
 
@@ -9575,31 +9660,19 @@ class NocturneWriter {
   }
 
   refreshEntityLinksNearCaret(editable) {
-    if (!editable?.isConnected) return;
-    const snapshot = this.getCaretSnapshot();
-    const block = snapshot?.blockId
-      ? editable.querySelector(`[data-block-id="${snapshot.blockId}"]`)
-      : this.currentBlockElement();
-    if (!block || !editable.contains(block)) return;
-    this.refreshEntityLinksInBlock(block, snapshot);
   }
 
   refreshVisibleEntityLinks() {
-    const snapshot = this.getCaretSnapshot();
-    document.querySelectorAll('.page-content [data-block-id]').forEach((block) => this.refreshEntityLinksInBlock(block, snapshot, false));
-    this.restoreCaret(snapshot);
+    if (!this.nocturneEditor) return;
+    for (const instance of this.nocturneEditor.instances.values()) {
+      const { editor } = instance;
+      if (editor?.view) {
+        editor.view.dispatch(editor.view.state.tr.setMeta('nocturneEntityMentionsForceUpdate', true));
+      }
+    }
   }
 
   refreshEntityLinksInBlock(block, snapshot = this.getCaretSnapshot(), restore = true) {
-    if (!block?.isConnected) return;
-    const beforeText = block.textContent;
-    this.stripEntityMarkup(block);
-    const cleaned = cleanAnalysisResidue(block.innerHTML || '');
-    const decorated = this.decorateEntities(cleaned);
-    if (block.innerHTML !== decorated) block.innerHTML = decorated || '<br>';
-    this.ensureEditableBlockContent(block);
-    if (restore) this.restoreCaret(snapshot);
-    if (beforeText !== block.textContent) this.editorInput(block.closest('.page-content'), { inputType: 'formatSetBlockText' });
   }
 
   stripEntityMarkup(root) {
@@ -9673,6 +9746,16 @@ class NocturneWriter {
     };
     await this.db.put('snapshots', snapshot);
     await this.pruneSnapshots(doc.id);
+    if (this.state.settings.gitVersioning) {
+      try {
+        const dump = await this.buildNocturneDump();
+        const data = JSON.stringify(dump, null, 2);
+        const projectName = dump.projectTitle || 'nocturne-project';
+        await platformFiles.saveGitSnapshot(data, projectName);
+      } catch (err) {
+        console.warn('Manual git snapshot failed:', err);
+      }
+    }
     if (showToast) this.toast('Снапшот создан вручную.');
   }
 
@@ -9767,8 +9850,8 @@ class NocturneWriter {
     const doc = this.getFocusedDoc();
     if (doc) return { scope: 'document', linkedId: doc.id };
     const pane = this.getFocusedPane();
-    if ((pane?.type === 'character-detail' || pane?.type === 'location-detail') && pane.entityId) {
-      return { scope: pane.entityType === 'location' ? 'location' : 'character', linkedId: pane.entityId };
+    if ((pane?.type === 'character-detail' || pane?.type === 'location-detail' || pane?.type === 'note-detail') && pane.entityId) {
+      return { scope: pane.entityType === 'location' ? 'location' : pane.entityType === 'note' ? 'note' : 'character', linkedId: pane.entityId };
     }
     return { scope: 'global', linkedId: null };
   }
@@ -10957,21 +11040,6 @@ class NocturneWriter {
     `;
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
-    overlay.querySelectorAll('.assoc-card').forEach(card => {
-      card.onclick = (e) => {
-        const roleBtn = e.target.closest('.role-btn');
-        if (roleBtn) {
-          e.stopPropagation();
-          const role = roleBtn.dataset.role;
-          card.querySelector('.assoc-hidden-role').value = role;
-          card.querySelectorAll('.role-btn').forEach(btn => btn.classList.toggle('active', btn === roleBtn));
-          return;
-        }
-        const checkbox = card.querySelector('input[type="checkbox"]');
-        checkbox.checked = !checkbox.checked;
-        card.classList.toggle('active', checkbox.checked);
-      };
-    });
     overlay.querySelector('#save-typo-rule').onclick = async () => {
       const nextWrong = overlay.querySelector('#typo-wrong').value.trim().replace(/\s+/g, ' ');
       const correct = overlay.querySelector('#typo-correct').value.trim();
@@ -11435,15 +11503,7 @@ class NocturneWriter {
     caret.style.height = `${Math.max(4, rect.height || this.state.settings.fontSize * this.state.settings.lineHeight)}px`;
     this.updateCursorLight(activeEditable);
 
-    // Typewriter centering mode (Item 15)
-    if (this.state.settings.keepCaretCentered && this.shouldCenterActiveLineNext) {
-      this.shouldCenterActiveLineNext = false;
-      const sc = scrollContainer;
-      const scRect = sc.getBoundingClientRect();
-      const caretMid = rect.top + rect.height / 2;
-      const targetScrollTop = sc.scrollTop + (caretMid - scRect.top) - scRect.height / 2;
-      sc.scrollTo({ top: Math.max(0, targetScrollTop), behavior: 'smooth' });
-    }
+
   }
 
   expandRangeToWord(range) {
@@ -11566,12 +11626,20 @@ class NocturneWriter {
     const letter = document.createElement('span');
     letter.className = `anim-letter type-${anim}`;
     letter.textContent = char;
-    letter.style.left = `${Math.max(0, rect.left - this.state.settings.fontSize * 0.55)}px`;
-    letter.style.top = `${Math.max(0, rect.top)}px`;
-    letter.style.fontFamily = this.state.settings.fontFamily;
-    letter.style.fontSize = `${this.state.settings.fontSize}px`;
-    document.body.appendChild(letter);
-    setTimeout(() => letter.remove(), 520);
+    
+    // Append to page shell instead of body so it scrolls with the text
+    const pageShell = sel.anchorNode?.parentElement?.closest('.page-shell');
+    if (pageShell) {
+      pageShell.style.position = 'relative';
+      const shellRect = pageShell.getBoundingClientRect();
+      letter.style.position = 'absolute';
+      letter.style.left = `${Math.max(0, rect.left - shellRect.left - this.state.settings.fontSize * 0.55)}px`;
+      letter.style.top = `${Math.max(0, rect.top - shellRect.top)}px`;
+      letter.style.fontFamily = this.state.settings.fontFamily;
+      letter.style.fontSize = `${this.state.settings.fontSize}px`;
+      pageShell.appendChild(letter);
+      setTimeout(() => letter.remove(), 520);
+    }
   }
 
   updateActiveBlock() {
@@ -11597,6 +11665,7 @@ class NocturneWriter {
     let chars = [...this.state.lore.characters].sort((a, b) => a.order - b.order);
     let locs = [...this.state.lore.locations].sort((a, b) => a.order - b.order);
     let time = [...this.state.lore.timeline].sort((a, b) => (a.order - b.order) || parseTimelineRank(a.date) - parseTimelineRank(b.date));
+    let notes = [...(this.state.lore.notes || [])].sort((a, b) => a.order - b.order);
     const activeSubtimeline = this.activeSubtimeline();
 
     document.getElementById('kb-modal').innerHTML = `
@@ -11606,6 +11675,7 @@ class NocturneWriter {
         ['characters', 'bx-user-pin', 'Персонажи'],
         ['locations', 'bx-map-alt', 'Локации'],
         ['timeline', 'bx-git-commit', 'Таймлайн'],
+        ['notes', 'bx-note', 'Записи'],
       ].map(([id, icon, label]) => `<div class="settings-tab ${active === id ? 'active' : ''}" data-kb-tab="${id}"><i class="bx ${icon}"></i> ${label}</div>`).join('')}
         <div class="kb-dump-sidebar-section">
           <button class="pill-btn kb-sidebar-dump-btn" data-action="dump-full-kb" title="Скачать резервную копию всей базы знаний"><i class="bx bx-download"></i> Дамп всей БЗ</button>
@@ -11650,6 +11720,17 @@ class NocturneWriter {
           </div>
           <div class="timeline-container" data-dnd-zone="timeline">${time.length ? time.map((item, i, arr) => this.timelineCard(item, { isLast: i === arr.length - 1, draggable: true })).join('') : this.emptyStateMarkup('bx-git-commit', 'Хронология пока пуста.', 'Добавьте первое событие, чтобы выстроить историю.', 'new-lore', 'Добавить событие', 'data-lore-type="timeline"')}</div>
         </section>
+        <section class="kb-section ${active === 'notes' ? 'active' : ''}" id="kb-sec-notes">
+          <div class="kb-header">
+            <h1>Записи и Заметки</h1>
+            <div class="kb-header-actions">
+              <button class="pill-btn" data-action="dump-kb-notes" title="Экспорт записей"><i class="bx bx-download"></i> Дамп записей</button>
+              <button class="pill-btn ai-btn" data-action="new-lore" data-lore-type="notes"><i class="bx bx-plus"></i> Новая запись</button>
+              <i class="bx bx-x kb-close-btn" data-action="close-kb"></i>
+            </div>
+          </div>
+          <div class="character-grid" data-dnd-zone="notes">${notes.length ? notes.map((item) => this.noteCard(item, true)).join('') : this.emptyStateMarkup('bx-note', 'Записей пока нет.', 'Добавьте первую свободную запись или заметку к миру.', 'new-lore', 'Создать запись', 'data-lore-type="notes"')}</div>
+        </section>
         ${activeSubtimeline ? this.subtimelinePanel(activeSubtimeline) : ''}
         `}
       </main>
@@ -11657,7 +11738,7 @@ class NocturneWriter {
         <div class="kb-dnd-overlay-box">
           <div class="kb-dnd-icon"><i class="bx bx-cloud-upload"></i></div>
           <h2>Импорт базы знаний Nocturne</h2>
-          <p>Перетащите файлы с расширением .nocturnmemory, .nocturnecharacters, .nocturneplaces, .nocturnetimelines или файлы отдельных сущностей сюда</p>
+          <p>Перетащите файлы с расширением .nocturnmemory, .nocturnecharacters, .nocturneplaces, .nocturnetimelines, .nocturnenotes или файлы отдельных сущностей сюда</p>
           <small>Дубликаты будут перезаписаны или добавлены как новые элементы</small>
         </div>
       </div>
@@ -11690,16 +11771,17 @@ class NocturneWriter {
   normalizeLoreType(type) {
     if (type === 'character') return 'characters';
     if (type === 'location') return 'locations';
+    if (type === 'note') return 'notes';
     return type;
   }
 
   singularLoreType(type) {
-    return type === 'locations' ? 'location' : type === 'characters' ? 'character' : type;
+    return type === 'locations' ? 'location' : type === 'characters' ? 'character' : type === 'notes' ? 'note' : type;
   }
 
   openLoreDetail(type, id) {
     const normalizedType = this.normalizeLoreType(type);
-    if (!['characters', 'locations'].includes(normalizedType)) return;
+    if (!['characters', 'locations', 'notes'].includes(normalizedType)) return;
     if (!this.state.lore[normalizedType]?.some((item) => item.id === id)) return;
     this.state.activeKbTab = normalizedType;
     this.state.mobile.kbTab = normalizedType;
@@ -11719,9 +11801,9 @@ class NocturneWriter {
 
   renderLoreDetail(type, item) {
     const kind = this.singularLoreType(type);
-    const label = kind === 'location' ? 'Локация' : 'Персонаж';
-    const title = this.entityDisplayName(item);
-    const visual = item.image ? `<img src="${item.image}" alt="">` : `<i class="bx ${item.icon || (kind === 'location' ? 'bx-buildings' : 'bx-user')}"></i>`;
+    const label = kind === 'location' ? 'Локация' : kind === 'note' ? 'Запись' : 'Персонаж';
+    const title = this.entityDisplayName(item) || item.title || 'Без названия';
+    const visual = kind === 'note' ? `<i class="bx bx-note"></i>` : (item.image ? `<img src="${item.image}" alt="">` : `<i class="bx ${item.icon || (kind === 'location' ? 'bx-buildings' : 'bx-user')}"></i>`);
     const docs = (item.documentIds || [])
       .map((id) => this.state.docs.find((doc) => doc.id === id))
       .filter(Boolean);
@@ -11732,13 +11814,15 @@ class NocturneWriter {
     const associatedEvents = [];
     (this.state.lore.timeline || []).forEach(event => {
       const matchesMain = (kind === 'character' && Array.isArray(event.characterIds) && event.characterIds.includes(item.id)) ||
-                          (kind === 'location' && Array.isArray(event.locationIds) && event.locationIds.includes(item.id));
+                          (kind === 'location' && Array.isArray(event.locationIds) && event.locationIds.includes(item.id)) ||
+                          (kind === 'note' && Array.isArray(event.noteIds) && event.noteIds.includes(item.id));
       
       const matchedSubEvents = [];
       if (Array.isArray(event.subEvents)) {
         event.subEvents.forEach(sub => {
           const matchesSub = (kind === 'character' && Array.isArray(sub.characterIds) && sub.characterIds.includes(item.id)) ||
-                             (kind === 'location' && Array.isArray(sub.locationIds) && sub.locationIds.includes(item.id));
+                             (kind === 'location' && Array.isArray(sub.locationIds) && sub.locationIds.includes(item.id)) ||
+                             (kind === 'note' && Array.isArray(sub.noteIds) && sub.noteIds.includes(item.id));
           if (matchesSub) {
             matchedSubEvents.push(sub);
           }
@@ -11795,8 +11879,38 @@ class NocturneWriter {
       timelinePanelHTML = `
         <div class="lore-detail-panel lore-detail-main timeline-associations-panel">
           <h3>Хронология и события</h3>
-          <p class="empty-state">Событий с участием ${kind === 'location' ? 'этого места' : 'этого персонажа'} пока не зафиксировано.</p>
+          <p class="empty-state">Событий с участием этой записи пока не зафиксировано.</p>
         </div>
+      `;
+    }
+
+    if (kind === 'note') {
+      return `
+        <article class="lore-detail note-detail">
+          <div class="lore-detail-topbar">
+            <button class="pill-btn" data-action="back-lore-list"><i class="bx bx-arrow-back"></i> Назад к списку</button>
+            <button class="btn-icon" data-action="close-kb"><i class="bx bx-x"></i></button>
+          </div>
+          <header class="lore-detail-hero">
+            <div class="lore-detail-visual">${visual}</div>
+            <div>
+              <div class="entity-chip">${label}</div>
+              <h1>${escapeHtml(title)}</h1>
+              <div class="lore-detail-actions">
+                <button class="pill-btn ai-btn" data-action="edit-lore" data-lore-type="${type}" data-lore-id="${item.id}"><i class="bx bx-edit"></i> Редактировать</button>
+                <button class="pill-btn" data-action="dump-single-entity" data-lore-type="${type}" data-lore-id="${item.id}"><i class="bx bx-download"></i> Дамп карточки</button>
+                <button class="pill-btn" data-action="open-lore-side" data-entity-kind="${kind}" data-entity-id="${item.id}"><i class="bx bx-dock-right"></i> Открыть справа</button>
+              </div>
+            </div>
+          </header>
+          <section class="lore-detail-grid">
+            <div class="lore-detail-panel lore-detail-main">
+              <h3>Описание</h3>
+              <p>${escapeHtml(item.body || 'Текст записи пуст.').replace(/\n/g, '<br>')}</p>
+            </div>
+            ${timelinePanelHTML}
+          </section>
+        </article>
       `;
     }
 
@@ -11885,34 +11999,36 @@ class NocturneWriter {
   showCharExportModal(char, cleanName) {
     const overlay = document.getElementById('form-overlay');
     overlay.innerHTML = `
-      <div class="form-modal char-export-modal">
-        <h2>Выберите формат экспорта</h2>
-        <p class="char-export-subtitle">Персонаж: <strong>${escapeHtml(char.displayName || char.name || 'Без имени')}</strong></p>
-        <div class="char-export-options">
-          <button class="char-export-option" data-fmt="nocturnechar">
-            <i class="bx bx-transfer-alt"></i>
-            <span class="char-export-fmt">.nocturnechar</span>
-            <span class="char-export-desc">Для переноса между проектами Ноктюрна</span>
-          </button>
-          <button class="char-export-option" data-fmt="txt">
-            <i class="bx bx-text"></i>
-            <span class="char-export-fmt">.txt</span>
-            <span class="char-export-desc">Плоский текст — досье для чтения и AI</span>
-          </button>
-          <button class="char-export-option" data-fmt="docx">
-            <i class="bx bx-file"></i>
-            <span class="char-export-fmt">.docx</span>
-            <span class="char-export-desc">Microsoft Word — для печати и редактирования</span>
-          </button>
+      <div class="form-modal search-choice-modal" style="width: min(920px, calc(100vw - 44px));">
+        <div class="modal-head-row">
+          <div><h2>Выберите формат экспорта</h2><p>Персонаж: <strong>${escapeHtml(char.displayName || char.name || 'Без имени')}</strong></p></div>
+          <button class="btn-icon" data-close-form><i class="bx bx-x"></i></button>
         </div>
-        <div class="form-actions">
-          <button class="pill-btn" data-close-form>Отмена</button>
+        <div class="search-mode-grid" style="grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;">
+          <button class="search-mode-card" data-fmt="nocturnechar" style="min-height: 150px; padding: 14px; gap: 6px;">
+            <i class="bx bx-file-blank"></i>
+            <strong>Резервная копия (.nocturnechar)</strong>
+            <span>Для переноса персонажа между проектами Ноктюрна.</span>
+            <small>Рекомендуемый формат импорта/экспорта Ноктюрна.</small>
+          </button>
+          <button class="search-mode-card" data-fmt="txt" style="min-height: 150px; padding: 14px; gap: 6px;">
+            <i class="bx bx-text"></i>
+            <strong>Текстовое досье (.txt)</strong>
+            <span>Плоский текст — досье для чтения, печати и AI.</span>
+            <small>Текстовый формат plain text.</small>
+          </button>
+          <button class="search-mode-card" data-fmt="docx" style="min-height: 150px; padding: 14px; gap: 6px;">
+            <i class="bx bxs-file-doc"></i>
+            <strong>Документ Word (.docx)</strong>
+            <span>Microsoft Word — для детального чтения и редактирования.</span>
+            <small>Текстовый формат Microsoft Word.</small>
+          </button>
         </div>
       </div>
     `;
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
-    overlay.querySelectorAll('.char-export-option').forEach(btn => {
+    overlay.querySelectorAll('.search-mode-card').forEach(btn => {
       btn.addEventListener('click', () => {
         const fmt = btn.dataset.fmt;
         overlay.classList.remove('active');
@@ -11959,6 +12075,18 @@ class NocturneWriter {
     this.downloadBlob(blob, `${cleanName}.txt`);
   }
 
+  generateDocxBlob(title, paragraphsHtml) {
+    const esc = (v) => String(v || '').trim()
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const files = {
+      '[Content_Types].xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>`,
+      '_rels/.rels': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`,
+      'word/styles.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"/><w:sz w:val="24"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:rPr><w:b/><w:sz w:val="36"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:rPr><w:b/><w:sz w:val="28"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Subtitle"><w:name w:val="Subtitle"/><w:rPr><w:i/><w:color w:val="666666"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:pPr><w:ind w:left="720"/></w:pPr><w:rPr><w:i/></w:rPr></w:style></w:styles>`,
+      'word/document.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${paragraphsHtml}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>`,
+    };
+    return this.createZip(files);
+  }
+
   exportCharAsDocx(char, cleanName) {
     const esc = (v) => String(v || '').trim()
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -11977,28 +12105,382 @@ class NocturneWriter {
     if (char.aliases?.length) addRow('Имена', char.aliases.join(', '));
     if (char.traits?.length) addRow('Черты', char.traits.join(', '));
     const events = (this.state.lore.timeline || []).filter(e => Array.isArray(e.characterIds) && e.characterIds.includes(char.id));
-    const ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
-    const docBody = [
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
-      '<w:document xmlns:w="' + ns + '">',
-      '<w:body>',
-      '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>' + esc('Персонаж: ' + fullName) + '</w:t></w:r></w:p>',
-      rows.length ? '<w:tbl>' + rows.join('') + '</w:tbl>' : '',
-      char.body ? '<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Сведения</w:t></w:r></w:p>' + char.body.split('\n').map(line => '<w:p><w:r><w:t xml:space="preserve">' + esc(line) + '</w:t></w:r></w:p>').join('') : '',
-      events.length ? '<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>События таймлайна</w:t></w:r></w:p>' + events.map(e => '<w:p><w:r><w:t xml:space="preserve">' + esc(e.date + ' — ' + e.title) + '</w:t></w:r></w:p>').join('') : '',
-      '<w:sectPr/></w:body></w:document>',
-    ].join('');
-    const ZipClass = (typeof JSZip !== 'undefined' ? JSZip : null) || (typeof window !== 'undefined' ? window.JSZip : null);
-    if (!ZipClass) { this.toast('Невозможно создать DOCX: JSZip не найден.'); return; }
-    const zip = new ZipClass();
-    const rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>';
-    const ct = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>';
-    zip.file('_rels/.rels', rels);
-    zip.file('[Content_Types].xml', ct);
-    zip.file('word/document.xml', docBody);
-    zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
-      .then(blob => this.downloadBlob(blob, `${cleanName}.docx`))
-      .catch(() => this.toast('Ошибка создания DOCX.'));
+    let paragraphs = `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>${esc('Персонаж: ' + fullName)}</w:t></w:r></w:p>`;
+    if (rows.length) {
+      paragraphs += `<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:left w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:right w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/></w:tblBorders></w:tblPr>${rows.join('')}</w:tbl>`;
+    }
+    if (char.body) {
+      paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Сведения</w:t></w:r></w:p>` + char.body.split('\n').map(line => `<w:p><w:r><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`).join('');
+    }
+    if (events.length) {
+      paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>События таймлайна</w:t></w:r></w:p>` + events.map(e => `<w:p><w:r><w:t xml:space="preserve">${esc(e.date + ' — ' + e.title)}</w:t></w:r></w:p>`).join('');
+    }
+    const blob = this.generateDocxBlob(fullName, paragraphs);
+    this.downloadBlob(blob, `${cleanName}.docx`);
+  }
+
+  exportLocationAsDocx(loc, cleanName) {
+    const esc = (v) => String(v || '').trim()
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const name = loc.displayName || loc.name || '';
+    const rows = [];
+    const addRow = (label, value) => {
+      if (!value) return;
+      rows.push(`<w:tr><w:tc><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>${esc(label)}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve">${esc(value)}</w:t></w:r></w:p></w:tc></w:tr>`);
+    };
+    addRow('Название', name);
+    addRow('Альтернативные названия', loc.aliases?.join(', '));
+    addRow('Тип / Описание', loc.role);
+    let paragraphs = `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>${esc('Локация: ' + name)}</w:t></w:r></w:p>`;
+    if (rows.length) {
+      paragraphs += `<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:left w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:right w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/></w:tblBorders></w:tblPr>${rows.join('')}</w:tbl>`;
+    }
+    if (loc.body) {
+      paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Описание</w:t></w:r></w:p>` + loc.body.split('\n').map(line => `<w:p><w:r><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`).join('');
+    }
+    const blob = this.generateDocxBlob(name, paragraphs);
+    this.downloadBlob(blob, `${cleanName}.docx`);
+  }
+
+  exportEventAsDocx(eventItem, cleanName) {
+    const esc = (v) => String(v || '').trim()
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const title = eventItem.title || '';
+    const rows = [];
+    const addRow = (label, value) => {
+      if (!value) return;
+      rows.push(`<w:tr><w:tc><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>${esc(label)}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve">${esc(value)}</w:t></w:r></w:p></w:tc></w:tr>`);
+    };
+    addRow('Название события', title);
+    addRow('Дата / Время', eventItem.date);
+    const charNames = (eventItem.characterIds || []).map(id => this.state.lore.characters.find(c => c.id === id)?.name).filter(Boolean).join(', ');
+    const locNames = (eventItem.locationIds || []).map(id => this.state.lore.locations.find(l => l.id === id)?.name).filter(Boolean).join(', ');
+    addRow('Персонажи', charNames);
+    addRow('Локации', locNames);
+    let paragraphs = `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>${esc('Событие: ' + title)}</w:t></w:r></w:p>`;
+    if (rows.length) {
+      paragraphs += `<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:left w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:right w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/></w:tblBorders></w:tblPr>${rows.join('')}</w:tbl>`;
+    }
+    if (eventItem.body) {
+      paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Описание</w:t></w:r></w:p>` + eventItem.body.split('\n').map(line => `<w:p><w:r><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`).join('');
+    }
+    if (eventItem.subEvents?.length) {
+      paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Вложенные события (Сабтаймлайн)</w:t></w:r></w:p>`;
+      eventItem.subEvents.forEach(sub => {
+        paragraphs += `<w:p><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">${esc(sub.date || '')} — ${esc(sub.title || '')}</w:t></w:r></w:p>`;
+        if (sub.body) {
+          paragraphs += sub.body.split('\n').map(line => `<w:p><w:r><w:t xml:space="preserve">  ${esc(line)}</w:t></w:r></w:p>`).join('');
+        }
+      });
+    }
+    const blob = this.generateDocxBlob(title, paragraphs);
+    this.downloadBlob(blob, `${cleanName}.docx`);
+  }
+
+  exportAllCharactersAsDocx() {
+    const esc = (v) => String(v || '').trim()
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    let paragraphs = `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Все персонажи Базы Знаний</w:t></w:r></w:p>`;
+    this.state.lore.characters.forEach((char) => {
+      const fullName = [char.firstName, char.lastName].filter(Boolean).join(' ') || char.displayName || char.name || '';
+      paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>${esc(fullName)}</w:t></w:r></w:p>`;
+      const rows = [];
+      const addRow = (label, value) => {
+        if (!value) return;
+        rows.push(`<w:tr><w:tc><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>${esc(label)}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve">${esc(value)}</w:t></w:r></w:p></w:tc></w:tr>`);
+      };
+      addRow('Псевдоним', char.displayName);
+      addRow('Возраст', char.age);
+      addRow('Пол', char.gender);
+      addRow('Фракция', char.faction);
+      addRow('Роль', char.role);
+      if (char.aliases?.length) addRow('Имена', char.aliases.join(', '));
+      if (char.traits?.length) addRow('Черты', char.traits.join(', '));
+      if (rows.length) {
+        paragraphs += `<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:left w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:right w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/></w:tblBorders></w:tblPr>${rows.join('')}</w:tbl>`;
+      }
+      if (char.body) {
+        paragraphs += char.body.split('\n').map(line => `<w:p><w:r><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`).join('');
+      }
+    });
+    const blob = this.generateDocxBlob('Персонажи', paragraphs);
+    this.downloadBlob(blob, 'characters.docx');
+  }
+
+  exportAllLocationsAsDocx() {
+    const esc = (v) => String(v || '').trim()
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    let paragraphs = `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Все локации Базы Знаний</w:t></w:r></w:p>`;
+    this.state.lore.locations.forEach((loc) => {
+      const name = loc.displayName || loc.name || '';
+      paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>${esc(name)}</w:t></w:r></w:p>`;
+      const rows = [];
+      const addRow = (label, value) => {
+        if (!value) return;
+        rows.push(`<w:tr><w:tc><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>${esc(label)}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve">${esc(value)}</w:t></w:r></w:p></w:tc></w:tr>`);
+      };
+      addRow('Альтернативные названия', loc.aliases?.join(', '));
+      addRow('Тип / Описание', loc.role);
+      if (rows.length) {
+        paragraphs += `<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:left w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:right w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/></w:tblBorders></w:tblPr>${rows.join('')}</w:tbl>`;
+      }
+      if (loc.body) {
+        paragraphs += loc.body.split('\n').map(line => `<w:p><w:r><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`).join('');
+      }
+    });
+    const blob = this.generateDocxBlob('Локации', paragraphs);
+    this.downloadBlob(blob, 'locations.docx');
+  }
+
+  exportAllTimelineAsDocx() {
+    const esc = (v) => String(v || '').trim()
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    let paragraphs = `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Хронология Событий</w:t></w:r></w:p>`;
+    this.state.lore.timeline.forEach((eventItem) => {
+      const title = eventItem.title || '';
+      paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>${esc(eventItem.date || '')} — ${esc(title)}</w:t></w:r></w:p>`;
+      const rows = [];
+      const addRow = (label, value) => {
+        if (!value) return;
+        rows.push(`<w:tr><w:tc><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>${esc(label)}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve">${esc(value)}</w:t></w:r></w:p></w:tc></w:tr>`);
+      };
+      const charNames = (eventItem.characterIds || []).map(id => this.state.lore.characters.find(c => c.id === id)?.name).filter(Boolean).join(', ');
+      const locNames = (eventItem.locationIds || []).map(id => this.state.lore.locations.find(l => l.id === id)?.name).filter(Boolean).join(', ');
+      addRow('Персонажи', charNames);
+      addRow('Локации', locNames);
+      if (rows.length) {
+        paragraphs += `<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:left w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:right w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/></w:tblBorders></w:tblPr>${rows.join('')}</w:tbl>`;
+      }
+      if (eventItem.body) {
+        paragraphs += eventItem.body.split('\n').map(line => `<w:p><w:r><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`).join('');
+      }
+      if (eventItem.subEvents?.length) {
+        paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Вложенные события (Сабтаймлайн)</w:t></w:r></w:p>`;
+        eventItem.subEvents.forEach(sub => {
+          paragraphs += `<w:p><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">  ${esc(sub.date || '')} — ${esc(sub.title || '')}</w:t></w:r></w:p>`;
+          if (sub.body) {
+            paragraphs += sub.body.split('\n').map(line => `<w:p><w:r><w:t xml:space="preserve">    ${esc(line)}</w:t></w:r></w:p>`).join('');
+          }
+        });
+      }
+    });
+    const blob = this.generateDocxBlob('Таймлайн', paragraphs);
+    this.downloadBlob(blob, 'timeline.docx');
+  }
+
+  exportAllKbAsDocx() {
+    const esc = (v) => String(v || '').trim()
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    let paragraphs = `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>База Знаний Проекта</w:t></w:r></w:p>`;
+    
+    paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Раздел 1: Персонажи</w:t></w:r></w:p>`;
+    this.state.lore.characters.forEach((char) => {
+      const fullName = [char.firstName, char.lastName].filter(Boolean).join(' ') || char.displayName || char.name || '';
+      paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>${esc(fullName)}</w:t></w:r></w:p>`;
+      const rows = [];
+      const addRow = (label, value) => {
+        if (!value) return;
+        rows.push(`<w:tr><w:tc><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>${esc(label)}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve">${esc(value)}</w:t></w:r></w:p></w:tc></w:tr>`);
+      };
+      addRow('Псевдоним', char.displayName);
+      addRow('Возраст', char.age);
+      addRow('Пол', char.gender);
+      addRow('Фракция', char.faction);
+      addRow('Роль', char.role);
+      if (char.aliases?.length) addRow('Имена', char.aliases.join(', '));
+      if (char.traits?.length) addRow('Черты', char.traits.join(', '));
+      if (rows.length) {
+        paragraphs += `<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:left w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:right w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/></w:tblBorders></w:tblPr>${rows.join('')}</w:tbl>`;
+      }
+      if (char.body) {
+        paragraphs += char.body.split('\n').map(line => `<w:p><w:r><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`).join('');
+      }
+    });
+
+    paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Раздел 2: Локации</w:t></w:r></w:p>`;
+    this.state.lore.locations.forEach((loc) => {
+      const name = loc.displayName || loc.name || '';
+      paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>${esc(name)}</w:t></w:r></w:p>`;
+      const rows = [];
+      const addRow = (label, value) => {
+        if (!value) return;
+        rows.push(`<w:tr><w:tc><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>${esc(label)}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve">${esc(value)}</w:t></w:r></w:p></w:tc></w:tr>`);
+      };
+      addRow('Альтернативные названия', loc.aliases?.join(', '));
+      addRow('Тип / Описание', loc.role);
+      if (rows.length) {
+        paragraphs += `<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:left w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:right w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/></w:tblBorders></w:tblPr>${rows.join('')}</w:tbl>`;
+      }
+      if (loc.body) {
+        paragraphs += loc.body.split('\n').map(line => `<w:p><w:r><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`).join('');
+      }
+    });
+
+    paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Раздел 3: Хронология Событий</w:t></w:r></w:p>`;
+    this.state.lore.timeline.forEach((eventItem) => {
+      const title = eventItem.title || '';
+      paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>${esc(eventItem.date || '')} — ${esc(title)}</w:t></w:r></w:p>`;
+      const rows = [];
+      const addRow = (label, value) => {
+        if (!value) return;
+        rows.push(`<w:tr><w:tc><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>${esc(label)}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve">${esc(value)}</w:t></w:r></w:p></w:tc></w:tr>`);
+      };
+      const charNames = (eventItem.characterIds || []).map(id => this.state.lore.characters.find(c => c.id === id)?.name).filter(Boolean).join(', ');
+      const locNames = (eventItem.locationIds || []).map(id => this.state.lore.locations.find(l => l.id === id)?.name).filter(Boolean).join(', ');
+      addRow('Персонажи', charNames);
+      addRow('Локации', locNames);
+      if (rows.length) {
+        paragraphs += `<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:left w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:right w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/></w:tblBorders></w:tblPr>${rows.join('')}</w:tbl>`;
+      }
+      if (eventItem.body) {
+        paragraphs += eventItem.body.split('\n').map(line => `<w:p><w:r><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`).join('');
+      }
+      if (eventItem.subEvents?.length) {
+        paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Вложенные события (Сабтаймлайн)</w:t></w:r></w:p>`;
+        eventItem.subEvents.forEach(sub => {
+          paragraphs += `<w:p><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">  ${esc(sub.date || '')} — ${esc(sub.title || '')}</w:t></w:r></w:p>`;
+          if (sub.body) {
+            paragraphs += sub.body.split('\n').map(line => `<w:p><w:r><w:t xml:space="preserve">    ${esc(line)}</w:t></w:r></w:p>`).join('');
+          }
+        });
+      }
+    });
+    const blob = this.generateDocxBlob('База Знаний', paragraphs);
+    this.downloadBlob(blob, 'world_kb.docx');
+  }
+
+  openDumpChooser(dumpType, options = {}) {
+    const overlay = document.getElementById('form-overlay');
+    let title = '';
+    let subtitle = '';
+    let appLabel = '';
+    let appDesc = '';
+    let appExt = '';
+    let docxLabel = '';
+    let docxDesc = '';
+    if (dumpType === 'full-kb') {
+      title = 'Дамп всей Базы Знаний';
+      subtitle = 'Экспортируйте всех персонажей, локации и хронологию.';
+      appLabel = 'Резервная копия БЗ (.nocturnmemory)';
+      appDesc = 'Для переноса базы знаний в другие проекты Ноктюрна.';
+      appExt = 'world_kb.nocturnmemory';
+      docxLabel = 'Документ Word (.docx)';
+      docxDesc = 'Красиво оформленный текстовый файл со всеми статьями БЗ.';
+    } else if (dumpType === 'kb-characters') {
+      title = 'Дамп персонажей';
+      subtitle = 'Экспортируйте весь список персонажей вашей истории.';
+      appLabel = 'Резервная копия персонажей (.nocturnecharacters)';
+      appDesc = 'Файл обмена для переноса персонажей.';
+      appExt = 'characters.nocturnecharacters';
+      docxLabel = 'Документ Word (.docx)';
+      docxDesc = 'Сводный текстовый файл со всеми досье персонажей.';
+    } else if (dumpType === 'kb-locations') {
+      title = 'Дамп локаций';
+      subtitle = 'Экспортируйте все места и локации мира.';
+      appLabel = 'Резервная копия локаций (.nocturneplaces)';
+      appDesc = 'Файл обмена для переноса локаций.';
+      appExt = 'places.nocturneplaces';
+      docxLabel = 'Документ Word (.docx)';
+      docxDesc = 'Сводный текстовый файл со всеми описаниями локаций.';
+    } else if (dumpType === 'kb-timeline') {
+      title = 'Дамп таймлайнов';
+      subtitle = 'Экспортируйте хронологию событий.';
+      appLabel = 'Резервная копия таймлайнов (.nocturnetimelines)';
+      appDesc = 'Файл обмена для переноса событий хронологии.';
+      appExt = 'timeline.nocturnetimelines';
+      docxLabel = 'Документ Word (.docx)';
+      docxDesc = 'Сводный текстовый файл со всей хронологией событий.';
+    } else if (dumpType === 'single-entity') {
+      const type = options.type;
+      const item = options.item;
+      const cleanName = options.cleanName;
+      const name = item.displayName || item.name || item.title || 'Карточка';
+      title = `Дамп карточки: ${name}`;
+      subtitle = `Экспортируйте информацию о сущности.`;
+      if (type === 'characters') {
+        this.showCharExportModal(item, cleanName);
+        return;
+      } else if (type === 'locations') {
+        appLabel = 'Файл локации (.nocturneplace)';
+        appDesc = 'Для переноса этой локации между проектами Ноктюрна.';
+        appExt = `${cleanName}.nocturneplace`;
+        docxLabel = 'Документ Word (.docx)';
+        docxDesc = 'Карточка локации для печати и вычитки.';
+      } else {
+        appLabel = 'Файл события (.nocturnetime)';
+        appDesc = 'Для переноса этого события между проектами Ноктюрна.';
+        appExt = `${cleanName}.nocturnetime`;
+        docxLabel = 'Документ Word (.docx)';
+        docxDesc = 'Карточка события и его сабтаймлайн.';
+      }
+    }
+    overlay.innerHTML = `
+      <div class="form-modal search-choice-modal dump-choice-modal">
+        <div class="modal-head-row">
+          <div><h2>${escapeHtml(title)}</h2><p>${escapeHtml(subtitle)}</p></div>
+          <button class="btn-icon" data-close-form><i class="bx bx-x"></i></button>
+        </div>
+        <div class="search-mode-grid">
+          <button class="search-mode-card" data-format-type="app">
+            <i class="bx bx-file-blank"></i>
+            <strong>${escapeHtml(appLabel)}</strong>
+            <span>${escapeHtml(appDesc)}</span>
+            <small>Рекомендуемый формат импорта/экспорта Ноктюрна.</small>
+          </button>
+          <button class="search-mode-card" data-format-type="docx">
+            <i class="bx bxs-file-doc"></i>
+            <strong>${escapeHtml(docxLabel)}</strong>
+            <span>${escapeHtml(docxDesc)}</span>
+            <small>Текстовый формат Microsoft Word.</small>
+          </button>
+        </div>
+      </div>`;
+    overlay.classList.add('active');
+    overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
+    overlay.querySelectorAll('.search-mode-card').forEach((btn) => {
+      btn.onclick = () => {
+        overlay.classList.remove('active');
+        const format = btn.dataset.formatType;
+        if (format === 'app') {
+          if (dumpType === 'full-kb') {
+            this.exportKbData({ type: 'nocturnmemory', lore: this.state.lore }, 'world_kb.nocturnmemory');
+          } else if (dumpType === 'kb-characters') {
+            this.exportKbData({ type: 'nocturnecharacters', characters: this.state.lore.characters }, 'characters.nocturnecharacters');
+          } else if (dumpType === 'kb-locations') {
+            this.exportKbData({ type: 'nocturneplaces', locations: this.state.lore.locations }, 'places.nocturneplaces');
+          } else if (dumpType === 'kb-timeline') {
+            this.exportKbData({ type: 'nocturnetimelines', timeline: this.state.lore.timeline }, 'timeline.nocturnetimelines');
+          } else if (dumpType === 'single-entity') {
+            const type = options.type;
+            const item = options.item;
+            if (type === 'locations') {
+              this.exportKbData({ type: 'nocturneplace', location: item }, appExt);
+            } else {
+              this.exportKbData({ type: 'nocturnetime', event: item }, appExt);
+            }
+          }
+        } else if (format === 'docx') {
+          if (dumpType === 'full-kb') {
+            this.exportAllKbAsDocx();
+          } else if (dumpType === 'kb-characters') {
+            this.exportAllCharactersAsDocx();
+          } else if (dumpType === 'kb-locations') {
+            this.exportAllLocationsAsDocx();
+          } else if (dumpType === 'kb-timeline') {
+            this.exportAllTimelineAsDocx();
+          } else if (dumpType === 'single-entity') {
+            const type = options.type;
+            const item = options.item;
+            const cleanName = options.cleanName;
+            if (type === 'locations') {
+              this.exportLocationAsDocx(item, cleanName);
+            } else {
+              this.exportEventAsDocx(item, cleanName);
+            }
+          }
+        }
+      };
+    });
   }
 
   exportKbData(data, filename) {
@@ -12303,6 +12785,10 @@ class NocturneWriter {
     return `<div class="loc-card" data-lore-type="locations" data-lore-id="${item.id}" ${draggable ? 'draggable="true"' : ''}>${this.loreCardActions('locations', item.id)}<div class="loc-img">${visual}</div><div class="loc-info"><h3>${escapeHtml(this.entityDisplayName(item))}</h3><p>${escapeHtml(item.role || item.body)}</p></div></div>`;
   }
 
+  noteCard(item, draggable = false) {
+    return `<div class="char-card note-card" data-lore-type="notes" data-lore-id="${item.id}" ${draggable ? 'draggable="true"' : ''}>${this.loreCardActions('notes', item.id)}<div class="char-img"><i class="bx bx-note"></i></div><div class="char-info"><h3>${escapeHtml(item.title || 'Без названия')}</h3><p>${escapeHtml(item.body || 'Пустая запись')}</p></div></div>`;
+  }
+
   timelineCard(item, options = {}) {
     const { isLast = false, draggable = false, isSub = false, parentId = '' } = options;
     const type = isSub ? 'subtimeline' : 'timeline';
@@ -12337,13 +12823,20 @@ class NocturneWriter {
     const docBadges = (Array.isArray(item.chapterIds) ? item.chapterIds : []).map(docId => {
       const doc = this.state.docs.find(d => d.id === docId);
       if (!doc) return '';
-      return `<span class="association-badge doc-badge" data-doc-id="${doc.id}"><i class="bx bx-book-content"></i>${escapeHtml(doc.title || 'Без названия')}</span>`;
+      return `<span class="association-badge doc-badge" data-action="open-search-result" data-doc-id="${doc.id}"><i class="bx bx-book-content"></i>${escapeHtml(doc.title || 'Без названия')}</span>`;
     }).filter(Boolean).join('');
 
-    const badgesHTML = (charBadges || locBadges || docBadges) ? `
+    const noteBadges = (Array.isArray(item.noteIds) ? item.noteIds : []).map(noteId => {
+      const note = (this.state.lore.notes || []).find(n => n.id === noteId);
+      if (!note) return '';
+      return `<span class="association-badge note-badge" data-action="open-lore-detail" data-entity-kind="note" data-entity-id="${note.id}"><i class="bx bx-note"></i>${escapeHtml(note.title || 'Без названия')}</span>`;
+    }).filter(Boolean).join('');
+
+    const badgesHTML = (charBadges || locBadges || noteBadges || docBadges) ? `
       <div class="timeline-event-associations">
         ${charBadges}
         ${locBadges}
+        ${noteBadges}
         ${docBadges}
       </div>
     ` : '';
@@ -12527,12 +13020,14 @@ class NocturneWriter {
     ];
     const overlay = document.getElementById('form-overlay');
     overlay.innerHTML = `
-      <form class="form-modal" id="lore-form">
+      <form class="form-modal lore-form-${type}" id="lore-form">
         <h2>${id ? 'Редактировать' : 'Создать'} ${isSubtimeline ? 'саб-событие' : isTimeline ? 'событие' : 'карточку'}</h2>
         <div class="form-grid">
           ${isTimeline ? `
             <label>Дата <input class="form-control" name="date" value="${escapeHtml(item.date || 'Эпоха Пепла, год 1')}" required></label>
             <label>Название <input class="form-control" name="title" value="${escapeHtml(item.title || '')}" required></label>
+          ` : type === 'notes' ? `
+            <label class="lore-field lore-field-wide">Заголовок <input class="form-control" name="title" value="${escapeHtml(item.title || '')}" required></label>
           ` : this.renderLoreEntityFields(type, item, iconOptions)}
           <label class="lore-field lore-field-wide lore-description-field">Описание <textarea class="form-control" name="body" required>${escapeHtml(item.body || '')}</textarea></label>
           ${isTimeline ? `
@@ -12541,6 +13036,7 @@ class NocturneWriter {
               <div class="assoc-tabs-header">
                 <button type="button" class="assoc-tab-btn active" data-assoc-tab="char"><i class="bx bx-user"></i> Персонажи</button>
                 <button type="button" class="assoc-tab-btn" data-assoc-tab="loc"><i class="bx bx-map-alt"></i> Локации</button>
+                <button type="button" class="assoc-tab-btn" data-assoc-tab="note"><i class="bx bx-note"></i> Записи</button>
                 <button type="button" class="assoc-tab-btn" data-assoc-tab="doc"><i class="bx bx-file"></i> Документы</button>
               </div>
               
@@ -12592,6 +13088,26 @@ class NocturneWriter {
                       </div>
                     `;
                   }).join('') || '<div class="empty-state-text">Нет локаций</div>'}
+                </div>
+              </div>
+
+              <div class="assoc-tab-content" data-assoc-content="note">
+                <div class="assoc-search-wrap">
+                  <input type="text" class="form-control assoc-search-input" placeholder="Поиск записей..." data-assoc-search="note" autocomplete="off">
+                </div>
+                <div class="assoc-cards-grid" data-assoc-grid="note">
+                  ${(this.state.lore.notes || []).map(note => {
+                    const checked = Array.isArray(item.noteIds) && item.noteIds.includes(note.id);
+                    return `
+                      <div class="assoc-card note-assoc-card ${checked ? 'active' : ''}" data-id="${note.id}">
+                        <div class="assoc-card-main">
+                          <span class="assoc-card-icon"><i class="bx bx-note"></i></span>
+                          <span class="assoc-card-title">${escapeHtml(note.title || 'Без названия')}</span>
+                        </div>
+                        <input type="checkbox" name="note_assoc_${note.id}" ${checked ? 'checked' : ''} style="display:none">
+                      </div>
+                    `;
+                  }).join('') || '<div class="empty-state-text">Нет записей</div>'}
                 </div>
               </div>
               
@@ -12688,6 +13204,7 @@ class NocturneWriter {
         const characterIds = [];
         const characterRoles = {};
         const locationIds = [];
+        const noteIds = [];
         const chapterIds = [];
         this.state.lore.characters.forEach(char => {
           if (event.target.elements[`char_assoc_${char.id}`]?.checked) {
@@ -12698,6 +13215,11 @@ class NocturneWriter {
         this.state.lore.locations.forEach(loc => {
           if (event.target.elements[`loc_assoc_${loc.id}`]?.checked) {
             locationIds.push(loc.id);
+          }
+        });
+        (this.state.lore.notes || []).forEach(note => {
+          if (event.target.elements[`note_assoc_${note.id}`]?.checked) {
+            noteIds.push(note.id);
           }
         });
         this.state.docs.forEach(doc => {
@@ -12716,6 +13238,7 @@ class NocturneWriter {
           characterIds,
           characterRoles,
           locationIds,
+          noteIds,
           chapterIds
         };
       } else if (type === 'characters') {
@@ -12736,6 +13259,14 @@ class NocturneWriter {
           aliases: this.parseCsv(data.aliases),
           mentionForms: this.parseCsv(data.mentionForms),
           documentIds: existingDocs,
+          order,
+        }, order);
+      } else if (type === 'notes') {
+        next = this.normalizeNote({
+          ...item,
+          id: id || uid('note'),
+          title: data.title,
+          body: data.body,
           order,
         }, order);
       } else {
@@ -12787,21 +13318,6 @@ class NocturneWriter {
     `;
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
-    overlay.querySelectorAll('.assoc-card').forEach(card => {
-      card.onclick = (e) => {
-        const roleBtn = e.target.closest('.role-btn');
-        if (roleBtn) {
-          e.stopPropagation();
-          const role = roleBtn.dataset.role;
-          card.querySelector('.assoc-hidden-role').value = role;
-          card.querySelectorAll('.role-btn').forEach(btn => btn.classList.toggle('active', btn === roleBtn));
-          return;
-        }
-        const checkbox = card.querySelector('input[type="checkbox"]');
-        checkbox.checked = !checkbox.checked;
-        card.classList.toggle('active', checkbox.checked);
-      };
-    });
     overlay.querySelector('[data-confirm-delete-lore]').onclick = async () => {
       await this.deleteLore(type, id, parentEvent?.id);
       overlay.classList.remove('active');
@@ -12822,6 +13338,16 @@ class NocturneWriter {
     this.state.lore[type] = this.state.lore[type].filter((entry) => entry.id !== id).map((entry, order) => ({ ...entry, order }));
     if (type === 'characters') await this.deleteFloatingNotesForLink('character', id);
     if (type === 'locations') await this.deleteFloatingNotesForLink('location', id);
+    if (type === 'notes') {
+      (this.state.lore.timeline || []).forEach(evt => {
+        if (Array.isArray(evt.noteIds)) evt.noteIds = evt.noteIds.filter(nid => nid !== id);
+        if (Array.isArray(evt.subEvents)) {
+          evt.subEvents.forEach(sub => {
+            if (Array.isArray(sub.noteIds)) sub.noteIds = sub.noteIds.filter(nid => nid !== id);
+          });
+        }
+      });
+    }
     if (type === 'timeline') {
       if (this.state.activeSubtimelineId === id || !this.timelineEvent(this.state.activeSubtimelineId)) this.state.activeSubtimelineId = null;
       Object.values(this.state.workspace?.panes || {}).forEach((pane) => {
@@ -12847,6 +13373,7 @@ class NocturneWriter {
     this.state.lore.characters = (this.state.lore.characters || []).map((item, index) => this.normalizeCharacter(item, index));
     this.state.lore.locations = (this.state.lore.locations || []).map((item, index) => this.normalizeLocation(item, index));
     this.state.lore.timeline = (this.state.lore.timeline || []).map((item, index) => this.normalizeTimelineEvent(item, index));
+    this.state.lore.notes = (this.state.lore.notes || []).map((item, index) => this.normalizeNote(item, index));
     if (this.state.activeSubtimelineId && !this.timelineEvent(this.state.activeSubtimelineId)) this.state.activeSubtimelineId = null;
     await this.db.put('lore', { id: 'world', ...this.state.lore });
     this.updateTypoHighlightsDebounced();
@@ -12854,6 +13381,7 @@ class NocturneWriter {
 
   renderSettings() {
     const tabs = [
+      ['search', 'bx-search', 'Поиск настроек'],
       ['visual', 'bx-palette', 'Визуал и UI'],
       ['editor', 'bx-text', 'Микро-типографика'],
       ['dictionary', 'bx-book-content', 'Словарь ошибок'],
@@ -12880,13 +13408,24 @@ class NocturneWriter {
     `;
     this.updateRangeControls();
     this.updateAccentPickerControls();
+    if (active === 'search') {
+      setTimeout(() => {
+        const field = document.getElementById('settings-search-field');
+        if (field) {
+          field.focus();
+          const val = field.value;
+          field.value = '';
+          field.value = val;
+        }
+      }, 0);
+    }
   }
 
   openSettingsTab(tab = 'visual') {
     this.state.activeSettingsTab = tab;
     this.closeAllFloatingMenus();
     if (this.isMobileLayout()) {
-      this.state.mobile.settingsTab = ['visual', 'editor', 'dictionary', 'review', 'focus', 'macros', 'ai', 'data', 'export', 'misc'].includes(tab) ? tab : null;
+      this.state.mobile.settingsTab = ['visual', 'editor', 'dictionary', 'review', 'focus', 'macros', 'ai', 'data', 'export', 'misc', 'search'].includes(tab) ? tab : null;
       this.openMobilePanel('settings', 'more');
       return;
     }
@@ -12978,9 +13517,7 @@ class NocturneWriter {
           ${row('Плавное дыхание каретки', 'Добавляет еле заметную анимацию каретки вместо резкого мигания.', toggle('caretBreath'))}
           ${row('Уровень контрастности текста', 'Поднимает или снижает яркость текста на странице, не меняя тему целиком.', range('textContrast', 45, 100, 1, '%'))}
           ${row('Компактный режим панелей', 'Сужает боковые панели и плотнее собирает служебный интерфейс.', toggle('compactPanels'))}
-          ${row('Режим пишущей машинки', 'Держит активную строку вертикально по центру экрана — как в профессиональных редакторах.', toggle('keepCaretCentered'))}
-
-          ${row('Режим пишущей машинки', 'Держит активную строку вертикально по центру экрана — как в профессиональных редакторах.', toggle('keepCaretCentered'))}
+          ${row('Режим пишущей машинки', 'Держит активную строку вертикально по центру экрана — как в профессиональных редакторах.', toggle('typewriterMode'))}
           ${(this.isAndroidRuntime() || this.isCapacitorRuntime()) ? row('Уменьшить анимации на телефоне', 'По умолчанию мобильные анимации включены. Включите это только если устройство заметно тормозит.', toggle('reduceMobileAnimations')) : ''}
           ${this.isMobileLayout() ? '' : row('Горячие клавиши', 'Открывает справку по реально доступным сочетаниям клавиш.', `<button class="pill-btn" data-action="open-shortcuts"><i class="bx bx-keyboard"></i> Показать</button>`)}
         </div>`,
@@ -13042,9 +13579,9 @@ class NocturneWriter {
         <div class="tab-content active">
           ${row('Показывать кнопку «Дзен» в верхней панели', 'Добавляет кнопку быстрого входа в режим концентрации. При выключении кнопка скрывается из toolbar.', toggle('showZenButton'))}
           ${row('Фокус на предложении / абзаце', 'Приглушает соседний текст и помогает вычитывать текущий фрагмент.', toggle('sentenceFocus'))}
-          ${row('Автопереход страниц', 'Когда текущий лист переполняется, приложение пересобирает страницы и возвращает каретку в тот же блок.', toggle('autoPaginate'))}
-          ${row('Гибкая высота страниц', 'Экспериментально: разрешает листам увеличиваться по высоте вместе с содержимым. По умолчанию страницы фиксированы и текст переносится на новые листы.', toggle('flexiblePageHeight'))}
+          ${row('Пагинация MS Word (Экспериментально)', 'Разбивает ваш текст на страницы визуально, симулируя печатный лист. Может вызывать баги при быстром наборе текста на стыке страниц.', toggle('autoPaginate'))}
           ${row('Линейки страниц', 'Показывает тонкие направляющие полей и рабочей области страницы.', toggle('showPageRulers'))}
+          ${row('Звуки клавиш (Экспериментально)', 'Мягкий тихий щелчок синтезатора при наборе текста.', toggle('typewriterSound'))}
           ${row('Анимация письма', 'Искры, волна, туман или отключение анимации ввода.', select('writingAnimation', [['sparkles', 'Искры'], ['ripple', 'Волна'], ['mist', 'Туман'], ['off', 'Выключено']]))}
           ${row('Дневная цель слов', 'Количество слов, к которому стремится дневной прогресс в нижней части sidebar.', range('dailyGoal', 100, 10000, 100))}
                               ${row('Show, Don’t Tell анализатор', 'Локально подсвечивает слабые слова и места, где фразу можно показать действием.', toggle('showDontTell'))}
@@ -13084,12 +13621,303 @@ class NocturneWriter {
           ${row('Сквозное шифрование', 'AES-GCM для содержимого документов перед записью в IndexedDB.', toggle('e2e'))}
           ${row('Мастер-пароль сессии', 'Используется для расшифровки в текущей сессии и не отправляется наружу.', `<input class="form-control" type="password" id="session-password" value="${escapeHtml(this.state.sessionPassword)}"><button class="pill-btn" data-action="save-password">Применить</button>`)}
           ${row('Сбросить настройки', 'Возвращает все настройки интерфейса, текста, ИИ и экспорта к базовым значениям. Документы не удаляются.', `<button class="pill-btn" data-action="reset-settings">Сбросить настройки</button>`)}
+          <section class="misc-card" style="margin-top: 24px; border: 1px solid rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.02); padding: 18px 24px; border-radius: 8px;">
+            <div class="misc-card-head" style="margin-bottom: 18px;">
+              <div>
+                <h3 style="color: #ef4444; font-weight: 600;">Очистка данных</h3>
+                <p>Выборочное удаление элементов вашего проекта. Эти действия необратимы.</p>
+              </div>
+            </div>
+            <div class="misc-action-grid">
+              <button class="pill-btn danger-btn" data-action="clear-all-docs"><i class="bx bx-trash"></i> Удалить документы</button>
+              <button class="pill-btn danger-btn" data-action="clear-all-characters"><i class="bx bx-user-x"></i> Удалить персонажей</button>
+              <button class="pill-btn danger-btn" data-action="clear-all-locations"><i class="bx bx-map-alt"></i> Удалить локации</button>
+              <button class="pill-btn danger-btn" data-action="clear-all-notes"><i class="bx bx-note"></i> Удалить записи</button>
+              <button class="pill-btn danger-btn" data-action="clear-all-timeline"><i class="bx bx-git-commit"></i> Удалить таймлайн</button>
+              <button class="pill-btn danger-btn" data-action="clear-all-kb"><i class="bx bx-book-content"></i> Очистить БЗ</button>
+              <button class="pill-btn danger-btn" data-action="reset-data" style="grid-column: 1 / -1;"><i class="bx bx-reset"></i> Сбросить проект</button>
+            </div>
+          </section>
         </div>`,
 
       macros: this.macrosSettingsContent(),
       export: this.exportSettingsContent(row, toggle, input),
+      search: this.searchSettingsContent(),
     };
     return content[tab] || content.visual;
+  }
+
+  getSettingsRegistry() {
+    const presetFonts = [
+      ['Lora', 'Lora (Serif)'],
+      ['Georgia', 'Georgia (Classic)'],
+      ['Manrope', 'Manrope (Sans)'],
+      ['Inter', 'Inter (Modern)'],
+      ['Playfair Display', 'Playfair Display (Elegant)'],
+      ['Merriweather', 'Merriweather (Readability)'],
+      ['Courier New', 'Courier New (Monospace)'],
+    ];
+    const customFonts = (this.state.settings.customFonts || []).map((f) => [f.name, f.name]);
+    return [
+      { tab: 'visual', label: 'Тема оформления', note: 'Меняет базовую палитру интерфейса без изменения структуры документов.', key: 'theme', type: 'select', options: [['nocturne', 'Nocturne Dark'], ['midnight', 'Deep Midnight'], ['paper', 'Paper Light'], ['matrix', 'Cyberpunk Matrix'], ['lavender', 'Lavender Bloom'], ['crimson', 'Crimson Flame']] },
+      { tab: 'visual', label: 'Кастомный акцентный цвет', note: 'Обновляет кнопки, свечения и подсветку сущностей.', key: 'accent', type: 'accent' },
+      { tab: 'visual', label: 'Прозрачность окна / Blur', note: 'В веб-версии включает CSS-материал; desktop bridge сможет подключить Mica/Vibrancy.', key: 'windowMaterial', type: 'toggle' },
+      { tab: 'visual', label: 'Свечение курсора', note: 'Добавляет мягкую подсветку вокруг позиции ввода, чтобы легче держать фокус на строке.', key: 'cursorGlow', type: 'toggle' },
+      { tab: 'visual', label: 'Стиль каретки', note: 'Выберите форму курсора ввода: тонкая линия, блок или нижнее подчёркивание.', key: 'caretStyle', type: 'select', options: [['line', 'Тонкая линия'], ['block', 'Блок'], ['underline', 'Подчеркивание']] },
+      { tab: 'visual', label: 'Скорость мигания', note: 'Интервал мигания кастомной каретки в миллисекундах.', key: 'caretBlink', type: 'range', min: 250, max: 1400, step: 10, suffix: 'ms' },
+      { tab: 'visual', label: 'Плавное дыхание каретки', note: 'Добавляет еле заметную анимацию каретки вместо резкого мигания.', key: 'caretBreath', type: 'toggle' },
+      { tab: 'visual', label: 'Уровень контрастности текста', note: 'Поднимает или снижает яркость текста на странице, не меняя тему целиком.', key: 'textContrast', type: 'range', min: 45, max: 100, step: 1, suffix: '%' },
+      { tab: 'visual', label: 'Компактный режим панелей', note: 'Сужает боковые панели и плотнее собирает служебный интерфейс.', key: 'compactPanels', type: 'toggle' },
+      { tab: 'visual', label: 'Режим пишущей машинки', note: 'Держит активную строку вертикально по центру экрана — как в профессиональных редакторах.', key: 'typewriterMode', type: 'toggle' },
+      { tab: 'editor', label: 'Шрифт рукописи', note: 'Меняет семейство шрифта только в рабочей рукописи, не в интерфейсе.', key: 'fontFamily', type: 'select', options: [...presetFonts, ...customFonts] },
+      { tab: 'editor', label: 'Размер шрифта', note: 'Базовый размер текста на странице редактора.', key: 'fontSize', type: 'range', min: 14, max: 26, step: 1, suffix: 'px' },
+      { tab: 'editor', label: 'Межстрочный интервал', note: 'Высота строки. Большие значения дают больше воздуха для вычитки.', key: 'lineHeight', type: 'range', min: 1.35, max: 2.25, step: 0.05 },
+      { tab: 'editor', label: 'Межбуквенный интервал', note: 'Дополнительный трекинг между буквами для комфортного чтения.', key: 'letterSpacing', type: 'range', min: 0, max: 1.8, step: 0.1, suffix: 'px' },
+      { tab: 'editor', label: 'Отступ между абзацами', note: 'Вертикальный интервал после абзаца в em относительно текущего шрифта.', key: 'paragraphSpacing', type: 'range', min: 0.25, max: 2.2, step: 0.05, suffix: 'em' },
+      { tab: 'editor', label: 'Абзацный отступ', note: 'Добавляет красную строку в прозе вместо разделения только вертикальным отступом.', key: 'paragraphIndent', type: 'toggle' },
+      { tab: 'editor', label: 'Умная пунктуация', note: 'Заменяет --, ..., прямые кавычки на типографские символы.', key: 'smartPunctuation', type: 'toggle' },
+      { tab: 'editor', label: 'Подсветка синтаксиса писателя', note: 'Диалоги и мысли получают отдельный визуальный слой.', key: 'writerSyntax', type: 'toggle' },
+      { tab: 'editor', label: 'Ритм чтения', note: 'Длинные предложения подсвечиваются красным, короткие зеленым.', key: 'readability', type: 'toggle' },
+      { tab: 'editor', label: 'Проверка частых ошибок', note: 'Локальная точечная проверка распространённых опечаток и неправильных написаний.', key: 'strictSpellcheck', type: 'toggle' },
+      { tab: 'editor', label: 'Типографская сетка', note: 'Показывает ритмическую направляющую строк для оценки вертикального набора.', key: 'baselineGrid', type: 'toggle' },
+      { tab: 'focus', label: 'Показывать кнопку «Дзен» в верхней панели', note: 'Добавляет кнопку быстрого входа в режим концентрации.', key: 'showZenButton', type: 'toggle' },
+      { tab: 'focus', label: 'Фокус на предложении / абзаце', note: 'Приглушает соседний текст и помогает вычитывать текущий фрагмент.', key: 'sentenceFocus', type: 'toggle' },
+      { tab: 'focus', label: 'Пагинация MS Word (Экспериментально)', note: 'Разбивает ваш текст на страницы визуально, симулируя печатный лист.', key: 'autoPaginate', type: 'toggle' },
+      { tab: 'focus', label: 'Линейки страниц', note: 'Показывает тонкие направляющие полей и рабочей области страницы.', key: 'showPageRulers', type: 'toggle' },
+      { tab: 'focus', label: 'Звуки клавиш (Экспериментально)', note: 'Мягкий тихий щелчок синтезатора при наборе текста.', key: 'typewriterSound', type: 'toggle' },
+      { tab: 'focus', label: 'Анимация письма', note: 'Искры, волна, туман или отключение анимации ввода.', key: 'writingAnimation', type: 'select', options: [['sparkles', 'Искры'], ['ripple', 'Волна'], ['mist', 'Туман'], ['off', 'Выключено']] },
+      { tab: 'focus', label: 'Дневная цель слов', note: 'Количество слов, к которому стремится дневной прогресс в нижней части sidebar.', key: 'dailyGoal', type: 'range', min: 100, max: 10000, step: 100 },
+      { tab: 'focus', label: 'Show, Don’t Tell анализатор', note: 'Локально подсвечивает слабые слова и места, где фразу можно показать действием.', key: 'showDontTell', type: 'toggle' },
+      { tab: 'focus', label: 'Фокус-линза', note: 'Позволяет временно выделить диалоги или описания и приглушить остальной текст.', key: 'dialogueLens', type: 'select', options: [['off', 'Выключено'], ['dialogues', 'Только диалоги'], ['descriptions', 'Только описания']] },
+      { tab: 'ai', label: 'LLM Provider', note: 'Режим «Не настроен» ничего не генерирует.', key: 'aiProvider', type: 'select', options: [['local', 'Не настроен / без генерации'], ['ollama', 'Ollama'], ['groq', 'Groq free tier'], ['gemini', 'Gemini free tier'], ['openai', 'OpenAI-compatible'], ['anthropic', 'Anthropic-compatible']] },
+      { tab: 'ai', label: 'Endpoint', note: 'Адрес API выбранного провайдера.', key: 'aiEndpoint', type: 'input' },
+      { tab: 'ai', label: 'API Key', note: 'Ключ хранится локально в настройках браузера.', key: 'aiKey', type: 'input', inputType: 'password' },
+      { tab: 'ai', label: 'Model', note: 'Идентификатор модели, который понимает выбранный провайдер.', key: 'aiModel', type: 'input' },
+      { tab: 'ai', label: 'Персона редактора', note: 'Стиль поведения AI ассистента.', key: 'aiPersona', type: 'select', options: [['critic', 'Злой критик'], ['muse', 'Муза'], ['coauthor', 'Соавтор']] },
+      { tab: 'ai', label: 'Креативность', note: 'Температура запроса: ниже — предсказуемее, выше — свободнее.', key: 'aiTemperature', type: 'range', min: 0, max: 1.4, step: 0.05 },
+      { tab: 'ai', label: 'Контекст базы знаний', note: 'Передаёт ассистенту релевантных персонажей, локации, таймлайн и т.д.', key: 'aiKnowledgeContext', type: 'toggle' },
+      { tab: 'ai', label: 'Строгость хранителя лора', note: 'Насколько жёстко локальная проверка реагирует на противоречия с Базой знаний.', key: 'loreStrictness', type: 'range', min: 0, max: 100, step: 1, suffix: '%' },
+      { tab: 'ai', label: 'Реакция на конфликт лора', note: 'Действие при обнаружении нестыковок с Базой Знаний.', key: 'loreReaction', type: 'select', options: [['soft', 'Подсказать'], ['warn', 'Предупредить'], ['hard', 'Блокировать сохранение абзаца']] },
+      { tab: 'ai', label: 'Sentiment Timeline', note: 'Показывает локальную кривую эмоциональной напряжённости.', key: 'sentimentTimeline', type: 'toggle' },
+      { tab: 'data', label: 'Живое сохранение', note: 'Каждое изменение мгновенно попадает в localStorage, а затем в IndexedDB.', key: 'liveSave', type: 'toggle' },
+      { tab: 'data', label: 'Интервал автосохранения', note: 'Как часто фоновый autosave подтверждает состояние документов.', key: 'autosaveMinutes', type: 'range', min: 1, max: 15, step: 1, suffix: ' мин' },
+      { tab: 'data', label: 'Снапшоты / Машина времени', note: 'Снапшоты теперь создаются только вручную.', key: 'timeMachine', type: 'toggle' },
+      { tab: 'data', label: 'Невидимое Git-версионирование', note: 'Автоматическое сохранение в локальный git-репозиторий.', key: 'gitVersioning', type: 'toggle' },
+      { tab: 'data', label: 'Сквозное шифрование', note: 'AES-GCM для содержимого документов перед записью.', key: 'e2e', type: 'toggle' },
+      { tab: 'export', label: 'Водяной знак PDF', note: 'Добавляет полупрозрачную подпись автора и дату в печатный PDF-макет.', key: 'watermark', type: 'toggle' },
+      { tab: 'export', label: 'Имя автора', note: 'Попадает в метаданные DOCX и используется в водяном знаке PDF.', key: 'authorName', type: 'input' },
+      { tab: 'review', label: 'Экспортировать .nocturned рядом с DOCX', note: 'Если у документа есть редакторские правок, рядом с DOCX скачивается JSON-файл обмена правками.', key: 'exportNocturned', type: 'toggle' },
+      { tab: 'misc', label: 'Экспериментальный дизайн', note: 'Включает ультра-хайповый детализированный UI.', key: 'experimentalDesign', type: 'toggle' },
+    ];
+  }
+
+  scoreSetting(setting, query) {
+    const title = setting.label.toLowerCase();
+    const note = (setting.note || '').toLowerCase();
+    if (title === query) return 1000;
+    if (title.startsWith(query)) return 800 - title.indexOf(query);
+    if (title.includes(query)) return 500 - title.indexOf(query);
+    if (note.includes(query)) return 100 - note.indexOf(query);
+    return 0;
+  }
+
+  scoreSettingSection(tab, query) {
+    const label = tab.label.toLowerCase();
+    const note = tab.note.toLowerCase();
+    const id = tab.id.toLowerCase();
+    if (label === query || id === query) return 1000;
+    if (label.startsWith(query) || id.startsWith(query)) return 850 - label.indexOf(query);
+    if (label.includes(query) || id.includes(query)) return 600 - label.indexOf(query);
+    if (note.includes(query)) return 150 - note.indexOf(query);
+    return 0;
+  }
+
+  searchSettingsContent() {
+    const query = String(this.state.settingsSearchQuery || '').trim().toLowerCase();
+    let resultsHtml = '';
+    if (!query) {
+      resultsHtml = `
+        <div class="settings-search-empty">
+          <i class="bx bx-search-alt"></i>
+          <p>Введите поисковый запрос, чтобы найти нужную настройку...</p>
+        </div>
+      `;
+    } else {
+      const tabsList = [
+        { id: 'visual', label: 'Внешний вид и Оформление', note: 'Цветовая тема, акцентный цвет темы, стиль каретки, компактность, typewriter.' },
+        { id: 'editor', label: 'Настройки рукописи и Шрифты', note: 'Размер, отступы, шрифты рукописи, умная пунктуация, строгость проверки.' },
+        { id: 'focus', label: 'Концентрация и Фокус', note: 'Режим дзен, фокус на абзаце, пагинация MS Word, звуки клавиш, анимация.' },
+        { id: 'dictionary', label: 'Словарь автозамены', note: 'Настройка автоматического исправления опечаток и правил spellcheck.' },
+        { id: 'review', label: 'Режимы работы и Редактура', note: 'Режим письма, редактора или финализации, экспорт правок.' },
+        { id: 'macros', label: 'Клавиатурные макросы', note: 'Настройка клавиатурных макросов и автозамены.' },
+        { id: 'ai', label: 'AI Ассистент', note: 'Провайдеры искусственного интеллекта, ключи, температура, контекст базы знаний.' },
+        { id: 'data', label: 'Данные и Резервное копирование', note: 'Интервалы автосохранения, Git-версионирование, сквозное шифрование, удаление данных.' },
+        { id: 'export', label: 'Параметры экспорта', note: 'Водяной знак PDF, имя автора.' },
+        { id: 'misc', label: 'Прочее', note: 'Экспериментальный дизайн, очистка, сброс настроек.' }
+      ];
+      const scoredSections = tabsList
+        .map((tab) => ({ tab, score: this.scoreSettingSection(tab, query) }))
+        .filter((res) => res.score > 0)
+        .sort((a, b) => b.score - a.score);
+
+      const registry = this.getSettingsRegistry();
+      const scored = registry
+        .map((item) => {
+          const score = this.scoreSetting(item, query);
+          return { item, score };
+        })
+        .filter((res) => res.score > 0)
+        .sort((a, b) => b.score - a.score);
+
+      if (scored.length === 0 && scoredSections.length === 0) {
+        resultsHtml = `
+          <div class="settings-search-empty">
+            <i class="bx bx-search-alt"></i>
+            <p>Ничего не найдено по запросу «${escapeHtml(this.state.settingsSearchQuery)}»</p>
+          </div>
+        `;
+      } else {
+        const s = this.state.settings;
+        const row = (label, note, control) => `<div class="setting-row"><div class="setting-info"><span>${label}${note ? `<i class="bx bx-info-circle info-icon" tabindex="0" data-tip="${escapeHtml(note)}"></i>` : ''}</span>${note ? `<small>${note}</small>` : ''}</div><div class="setting-control">${control}</div></div>`;
+        const toggle = (key) => `<div class="toggle ${s[key] ? 'on' : ''}" data-setting="${key}" data-kind="toggle"></div>`;
+        const range = (key, min, max, step = 1, suffix = '') => `<div class="range-field" data-range-field><input class="range-control" type="range" min="${min}" max="${max}" step="${step}" value="${s[key]}" data-setting="${key}" data-suffix="${escapeHtml(suffix)}"><span class="range-value">${s[key]}${suffix}</span></div>`;
+        const select = (key, options) => this.renderSettingsSelect(key, options);
+        const input = (key, type = 'text') => `<input class="form-control" type="${type}" value="${escapeHtml(s[key] || '')}" data-setting="${key}">`;
+        
+        let sectionsHtml = scoredSections.map(({ tab }) => `
+          <div class="setting-row tab-link-row" style="background: rgba(var(--accent-rgb, 139, 92, 246), 0.04); border-left: 3px solid var(--accent); padding: 12px; border-radius: 6px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+            <div class="setting-info" style="display: flex; flex-direction: column; gap: 4px;">
+              <span style="font-weight: 600; color: var(--text-color);">Раздел: ${escapeHtml(tab.label)}</span>
+              <small style="color: var(--text-muted); font-size: 12px;">${escapeHtml(tab.note)}</small>
+            </div>
+            <div class="setting-control">
+              <button class="pill-btn" data-settings-tab="${tab.id}"><i class="bx bx-chevron-right"></i> Перейти</button>
+            </div>
+          </div>
+        `).join('');
+
+        let itemsHtml = scored.map(({ item }) => {
+          let control = '';
+          if (item.type === 'toggle') {
+            control = toggle(item.key);
+          } else if (item.type === 'range') {
+            control = range(item.key, item.min, item.max, item.step, item.suffix || '');
+          } else if (item.type === 'select') {
+            control = select(item.key, item.options);
+          } else if (item.type === 'input') {
+            control = input(item.key, item.inputType || 'text');
+          } else if (item.type === 'accent') {
+            control = this.renderAccentColorControl();
+          }
+          return row(item.label, item.note, control);
+        }).join('');
+
+        resultsHtml = itemsHtml + sectionsHtml;
+      }
+    }
+    return `
+      <div class="tab-content active settings-search-tab">
+        <div class="settings-search-container">
+          <div class="settings-search-input-wrap">
+            <i class="bx bx-search"></i>
+            <input type="text" id="settings-search-field" class="form-control settings-search-input" placeholder="Поиск по названию или описанию настройки..." value="${escapeHtml(this.state.settingsSearchQuery || '')}" autocomplete="off">
+          </div>
+        </div>
+        <div class="settings-search-results-list">
+          ${resultsHtml}
+        </div>
+      </div>
+    `;
+  }
+
+  updateSettingsSearchList() {
+    const listEl = document.querySelector('.settings-search-results-list');
+    if (!listEl) return;
+    const query = String(this.state.settingsSearchQuery || '').trim().toLowerCase();
+    let resultsHtml = '';
+    if (!query) {
+      resultsHtml = `
+        <div class="settings-search-empty">
+          <i class="bx bx-search-alt"></i>
+          <p>Введите поисковый запрос, чтобы найти нужную настройку...</p>
+        </div>
+      `;
+    } else {
+      const tabsList = [
+        { id: 'visual', label: 'Внешний вид и Оформление', note: 'Цветовая тема, акцентный цвет темы, стиль каретки, компактность, typewriter.' },
+        { id: 'editor', label: 'Настройки рукописи и Шрифты', note: 'Размер, отступы, шрифты рукописи, умная пунктуация, строгость проверки.' },
+        { id: 'focus', label: 'Концентрация и Фокус', note: 'Режим дзен, фокус на абзаце, пагинация MS Word, звуки клавиш, анимация.' },
+        { id: 'dictionary', label: 'Словарь автозамены', note: 'Настройка автоматического исправления опечаток и правил spellcheck.' },
+        { id: 'review', label: 'Режимы работы и Редактура', note: 'Режим письма, редактора или финализации, экспорт правок.' },
+        { id: 'macros', label: 'Клавиатурные макросы', note: 'Настройка клавиатурных макросов и автозамены.' },
+        { id: 'ai', label: 'AI Ассистент', note: 'Провайдеры искусственного интеллекта, ключи, температура, контекст базы знаний.' },
+        { id: 'data', label: 'Данные и Резервное копирование', note: 'Интервалы автосохранения, Git-версионирование, сквозное шифрование, удаление данных.' },
+        { id: 'export', label: 'Параметры экспорта', note: 'Водяной знак PDF, имя автора.' },
+        { id: 'misc', label: 'Прочее', note: 'Экспериментальный дизайн, очистка, сброс настроек.' }
+      ];
+      const scoredSections = tabsList
+        .map((tab) => ({ tab, score: this.scoreSettingSection(tab, query) }))
+        .filter((res) => res.score > 0)
+        .sort((a, b) => b.score - a.score);
+
+      const registry = this.getSettingsRegistry();
+      const scored = registry
+        .map((item) => {
+          const score = this.scoreSetting(item, query);
+          return { item, score };
+        })
+        .filter((res) => res.score > 0)
+        .sort((a, b) => b.score - a.score);
+
+      if (scored.length === 0 && scoredSections.length === 0) {
+        resultsHtml = `
+          <div class="settings-search-empty">
+            <i class="bx bx-search-alt"></i>
+            <p>Ничего не найдено по запросу «${escapeHtml(this.state.settingsSearchQuery)}»</p>
+          </div>
+        `;
+      } else {
+        const s = this.state.settings;
+        const row = (label, note, control) => `<div class="setting-row"><div class="setting-info"><span>${label}${note ? `<i class="bx bx-info-circle info-icon" tabindex="0" data-tip="${escapeHtml(note)}"></i>` : ''}</span>${note ? `<small>${note}</small>` : ''}</div><div class="setting-control">${control}</div></div>`;
+        const toggle = (key) => `<div class="toggle ${s[key] ? 'on' : ''}" data-setting="${key}" data-kind="toggle"></div>`;
+        const range = (key, min, max, step = 1, suffix = '') => `<div class="range-field" data-range-field><input class="range-control" type="range" min="${min}" max="${max}" step="${step}" value="${s[key]}" data-setting="${key}" data-suffix="${escapeHtml(suffix)}"><span class="range-value">${s[key]}${suffix}</span></div>`;
+        const select = (key, options) => this.renderSettingsSelect(key, options);
+        const input = (key, type = 'text') => `<input class="form-control" type="${type}" value="${escapeHtml(s[key] || '')}" data-setting="${key}">`;
+        
+        let sectionsHtml = scoredSections.map(({ tab }) => `
+          <div class="setting-row tab-link-row" style="background: rgba(var(--accent-rgb, 139, 92, 246), 0.04); border-left: 3px solid var(--accent); padding: 12px; border-radius: 6px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+            <div class="setting-info" style="display: flex; flex-direction: column; gap: 4px;">
+              <span style="font-weight: 600; color: var(--text-color);">Раздел: ${escapeHtml(tab.label)}</span>
+              <small style="color: var(--text-muted); font-size: 12px;">${escapeHtml(tab.note)}</small>
+            </div>
+            <div class="setting-control">
+              <button class="pill-btn" data-settings-tab="${tab.id}"><i class="bx bx-chevron-right"></i> Перейти</button>
+            </div>
+          </div>
+        `).join('');
+
+        let itemsHtml = scored.map(({ item }) => {
+          let control = '';
+          if (item.type === 'toggle') {
+            control = toggle(item.key);
+          } else if (item.type === 'range') {
+            control = range(item.key, item.min, item.max, item.step, item.suffix || '');
+          } else if (item.type === 'select') {
+            control = select(item.key, item.options);
+          } else if (item.type === 'input') {
+            control = input(item.key, item.inputType || 'text');
+          } else if (item.type === 'accent') {
+            control = this.renderAccentColorControl();
+          }
+          return row(item.label, item.note, control);
+        }).join('');
+
+        resultsHtml = itemsHtml + sectionsHtml;
+      }
+    }
+    listEl.innerHTML = resultsHtml;
+    this.updateRangeControls(listEl);
+    this.updateAccentPickerControls(listEl);
   }
 
   exportSettingsContent(row, toggle, input) {
@@ -13471,6 +14299,7 @@ class NocturneWriter {
       }
     }
     if (key === 'aiProvider') this.applyProviderPreset();
+    if (key === 'gitVersioning' || key === 'autosaveMinutes') this.startGitAutosave();
     this.applySettings();
     this.persistSettings();
     if (['fontSize', 'lineHeight', 'letterSpacing', 'paragraphSpacing'].includes(key)) this.repaginateSettingsDebounced();
@@ -13482,7 +14311,7 @@ class NocturneWriter {
       this.updateTypoHighlights();
     }
     if (['writerSyntax', 'showDontTell', 'dialogueLens'].includes(key)) this.renderWorkspace();
-    if (key === 'flexiblePageHeight') this.repaginateSettingsDebounced();
+    if (key === 'autoPaginate') this.repaginateSettingsDebounced();
     if (key === 'showZenButton' && !this.state.settings.showZenButton && this.state.zenActive) this.toggleZen(false, { persist: false });
   }
 
@@ -13623,7 +14452,7 @@ class NocturneWriter {
     shell.classList.toggle('theme-experimental', !!s.experimentalDesign);
     shell.classList.toggle('indent-paragraphs', s.paragraphIndent);
     shell.classList.toggle('baseline-grid', s.baselineGrid);
-    shell.classList.toggle('flexible-pages', s.flexiblePageHeight);
+    shell.classList.toggle('flexible-pages', !s.autoPaginate);
     shell.classList.toggle('hide-zen-button', !s.showZenButton);
     shell.classList.toggle('show-rulers', s.showPageRulers);
     shell.classList.toggle('sentence-focus-on', s.sentenceFocus);
@@ -13669,21 +14498,6 @@ class NocturneWriter {
     `;
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
-    overlay.querySelectorAll('.assoc-card').forEach(card => {
-      card.onclick = (e) => {
-        const roleBtn = e.target.closest('.role-btn');
-        if (roleBtn) {
-          e.stopPropagation();
-          const role = roleBtn.dataset.role;
-          card.querySelector('.assoc-hidden-role').value = role;
-          card.querySelectorAll('.role-btn').forEach(btn => btn.classList.toggle('active', btn === roleBtn));
-          return;
-        }
-        const checkbox = card.querySelector('input[type="checkbox"]');
-        checkbox.checked = !checkbox.checked;
-        card.classList.toggle('active', checkbox.checked);
-      };
-    });
     overlay.querySelector('[data-confirm-reset-settings]').onclick = async () => {
       this.state.settings = { ...defaultSettings };
       await this.persistSettings();
@@ -14823,21 +15637,6 @@ ${raw}`;
     `;
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
-    overlay.querySelectorAll('.assoc-card').forEach(card => {
-      card.onclick = (e) => {
-        const roleBtn = e.target.closest('.role-btn');
-        if (roleBtn) {
-          e.stopPropagation();
-          const role = roleBtn.dataset.role;
-          card.querySelector('.assoc-hidden-role').value = role;
-          card.querySelectorAll('.role-btn').forEach(btn => btn.classList.toggle('active', btn === roleBtn));
-          return;
-        }
-        const checkbox = card.querySelector('input[type="checkbox"]');
-        checkbox.checked = !checkbox.checked;
-        card.classList.toggle('active', checkbox.checked);
-      };
-    });
     overlay.querySelectorAll('[data-restore]').forEach((button) => button.onclick = async () => {
       const snap = snapshots.find((item) => item.id === button.dataset.restore);
       if (!snap) return;
@@ -14988,21 +15787,6 @@ ${raw}`;
       </div>`;
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
-    overlay.querySelectorAll('.assoc-card').forEach(card => {
-      card.onclick = (e) => {
-        const roleBtn = e.target.closest('.role-btn');
-        if (roleBtn) {
-          e.stopPropagation();
-          const role = roleBtn.dataset.role;
-          card.querySelector('.assoc-hidden-role').value = role;
-          card.querySelectorAll('.role-btn').forEach(btn => btn.classList.toggle('active', btn === roleBtn));
-          return;
-        }
-        const checkbox = card.querySelector('input[type="checkbox"]');
-        checkbox.checked = !checkbox.checked;
-        card.classList.toggle('active', checkbox.checked);
-      };
-    });
   }
 
   openProjectImportPreview(dump, filename) {
@@ -15063,6 +15847,7 @@ ${raw}`;
         characters: (payload.lore?.characters || []).map((item, index) => this.normalizeCharacter(item, index)),
         locations: (payload.lore?.locations || []).map((item, index) => this.normalizeLocation(item, index)),
         timeline: (payload.lore?.timeline || []).map((item, index) => this.normalizeTimelineEvent(item, index)),
+        notes: (payload.lore?.notes || []).map((item, index) => this.normalizeNote(item, index)),
       };
       this.state.globalNotes = String(payload.globalNotes || '');
       this.state.floatingNotes = (payload.floatingNotes || []).map((note) => this.sanitizeFloatingNote(note));
@@ -15111,6 +15896,8 @@ ${raw}`;
     const existingLocations = new Set(this.state.lore.locations.map((item) => item.id));
     const existingTimeline = new Set(this.state.lore.timeline.map((item) => item.id));
 
+    const existingNotes = new Set((this.state.lore.notes || []).map((item) => item.id));
+
     const folders = (payload.folders || []).map((folder, index) => {
       const next = { ...folder, id: this.remapId(folder.id, idMap, 'folder', existingFolders, report), order: this.state.folders.length + index };
       return next;
@@ -15131,11 +15918,16 @@ ${raw}`;
       next.subEvents = (item.subEvents || []).map((sub) => ({ ...sub, id: uid('subtime'), documentIds: (sub.documentIds || []).map((id) => idMap.get(id) || id) }));
       return this.normalizeTimelineEvent(next, this.state.lore.timeline.length + index);
     });
+    const notesLore = (payload.lore?.notes || []).map((item, index) => this.normalizeNote({ ...item, id: this.remapId(item.id, idMap, 'note', existingNotes, report) }, (this.state.lore.notes || []).length + index));
+
     this.state.folders.push(...folders);
     this.state.docs.push(...docs);
     this.state.lore.characters.push(...chars);
     this.state.lore.locations.push(...locs);
     this.state.lore.timeline.push(...times);
+    if (!this.state.lore.notes) this.state.lore.notes = [];
+    this.state.lore.notes.push(...notesLore);
+
     const notes = (payload.floatingNotes || []).map((note) => this.sanitizeFloatingNote({ ...note, id: uid('note'), linkedId: idMap.get(note.linkedId) || note.linkedId }));
     const typoRules = (payload.typoRules || []).map((rule) => this.sanitizeTypoRule({ ...rule, id: uid('typo-rule') })).filter(Boolean);
     const marks = (payload.reviewMarks || []).map((mark) => this.sanitizeReviewMark({ ...mark, id: uid('review'), docId: idMap.get(mark.docId) || mark.docId })).filter(Boolean);
@@ -15146,7 +15938,7 @@ ${raw}`;
     await this.saveLore();
     await Promise.all([...notes.map((item) => this.db.put('floatingNotes', item)), ...typoRules.map((item) => this.db.put('typoRules', item)), ...marks.map((item) => this.db.put('reviewMarks', item))]);
     await Promise.all((payload.snapshots || []).map((snap) => this.db.put('snapshots', { ...snap, id: uid('snap'), docId: idMap.get(snap.docId) || snap.docId })));
-    Object.assign(report, { folders: folders.length, docs: docs.length, characters: chars.length, locations: locs.length, timeline: times.length, snapshots: payload.snapshots?.length || 0, reviewMarks: marks.length });
+    Object.assign(report, { folders: folders.length, docs: docs.length, characters: chars.length, locations: locs.length, timeline: times.length, notes: notesLore.length, snapshots: payload.snapshots?.length || 0, reviewMarks: marks.length });
   }
 
   openImportReport(report) {
@@ -15160,6 +15952,7 @@ ${raw}`;
           <span><strong>${report.characters}</strong> персонажей</span>
           <span><strong>${report.locations}</strong> локаций</span>
           <span><strong>${report.timeline}</strong> событий</span>
+          <span><strong>${report.notes || 0}</strong> записей</span>
           <span><strong>${report.snapshots}</strong> снапшотов</span>
           <span><strong>${report.conflicts}</strong> конфликтов ID</span>
         </div>
@@ -15167,21 +15960,6 @@ ${raw}`;
       </div>`;
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
-    overlay.querySelectorAll('.assoc-card').forEach(card => {
-      card.onclick = (e) => {
-        const roleBtn = e.target.closest('.role-btn');
-        if (roleBtn) {
-          e.stopPropagation();
-          const role = roleBtn.dataset.role;
-          card.querySelector('.assoc-hidden-role').value = role;
-          card.querySelectorAll('.role-btn').forEach(btn => btn.classList.toggle('active', btn === roleBtn));
-          return;
-        }
-        const checkbox = card.querySelector('input[type="checkbox"]');
-        checkbox.checked = !checkbox.checked;
-        card.classList.toggle('active', checkbox.checked);
-      };
-    });
   }
 
   exportPrintable() {
@@ -15191,14 +15969,14 @@ ${raw}`;
       return;
     }
     const watermark = this.state.settings.watermark ? `${escapeHtml(this.state.settings.authorName)} · ${new Date().toLocaleDateString()}` : '';
-    const pages = this.paginate(doc.ast).map((page, index) => `<section class="print-page">${watermark ? `<div class="watermark">${watermark}</div>` : ''}${this.renderBlocks(page.blocks)}<footer>${index + 1}</footer></section>`).join('');
+    const pages = this.paginate(doc.ast).map((page, index) => `<section class="print-page">${watermark ? `<div class="watermark"><span>${watermark}</span></div>` : ''}${this.renderBlocks(page.blocks)}<footer>${index + 1}</footer></section>`).join('');
     const win = window.open('', '_blank');
     if (!win) {
       this.toast('Браузер заблокировал окно экспорта. Разрешите всплывающие окна и повторите.');
       return;
     }
     win.document.write(`<!doctype html><html><head><title>${escapeHtml(doc.title)}</title><style>
-      body{margin:0;background:#ddd;font:18px/1.75 Georgia,serif;color:#111}.print-page{position:relative;width:794px;min-height:1123px;margin:24px auto;background:white;padding:96px;box-sizing:border-box;page-break-after:always}.print-page h2{font-size:28px}.print-page footer{position:absolute;bottom:36px;left:0;right:0;text-align:center;color:#777}.watermark{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;transform:rotate(-45deg);font:700 42px sans-serif;color:rgba(0,0,0,.07);pointer-events:none}@media print{body{background:white}.print-page{margin:0;box-shadow:none}}
+      body{margin:0;background:#ddd;font:18px/1.75 Georgia,serif;color:#111}.print-page{position:relative;width:794px;min-height:1123px;margin:24px auto;background:white;padding:96px;box-sizing:border-box;page-break-after:always}.print-page h2{font-size:28px}.print-page footer{position:absolute;bottom:36px;left:0;right:0;text-align:center;color:#777}.watermark{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:1000;pointer-events:none;overflow:hidden}.watermark span{transform:rotate(-45deg);font:700 56px sans-serif;color:rgba(0,0,0,0.05);white-space:nowrap;user-select:none;-webkit-print-color-adjust:exact;print-color-adjust:exact}@media print{body{background:white}.print-page{margin:0;box-shadow:none}}
     </style></head><body>${pages}<script>setTimeout(()=>print(),300)</script></body></html>`);
     win.document.close();
   }
@@ -15236,6 +16014,8 @@ ${raw}`;
       const reviewBlob = new Blob([JSON.stringify(this.buildNocturnedPayload(doc, marks), null, 2)], { type: 'application/json' });
       setTimeout(() => this.downloadBlob(reviewBlob, `${this.safeFileName(doc.title)}.nocturned`), 120);
       this.toast('DOCX и файл редакторских правок экспортированы.');
+    } else if (this.state.exportNocturned) {
+      this.toast('DOCX экспортирован. Файл правок .nocturned не скачан, так как в документе нет правок.');
     } else {
       this.toast('DOCX экспортирован.');
     }
@@ -15508,21 +16288,6 @@ ${raw}`;
       </div>`;
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
-    overlay.querySelectorAll('.assoc-card').forEach(card => {
-      card.onclick = (e) => {
-        const roleBtn = e.target.closest('.role-btn');
-        if (roleBtn) {
-          e.stopPropagation();
-          const role = roleBtn.dataset.role;
-          card.querySelector('.assoc-hidden-role').value = role;
-          card.querySelectorAll('.role-btn').forEach(btn => btn.classList.toggle('active', btn === roleBtn));
-          return;
-        }
-        const checkbox = card.querySelector('input[type="checkbox"]');
-        checkbox.checked = !checkbox.checked;
-        card.classList.toggle('active', checkbox.checked);
-      };
-    });
     overlay.querySelector('[data-confirm-reset-data]').onclick = async () => this.performResetData();
   }
 
@@ -15544,529 +16309,1052 @@ ${raw}`;
     location.reload();
   }
 
-// --- syncActiveDocFromFocusedPane ---
-  syncActiveDocFromFocusedPane() {
-    const doc = this.getFocusedDoc();
-    this.state.activeDocId = doc ? doc.id : null;
-  }
-
-// --- syncFloatingMenuPortalState ---
-  syncFloatingMenuPortalState() {
-    const portal = document.getElementById('floating-menu-portal');
-    if (!portal) return;
-    const hasOpenMenu = ['kb', 'format', 'split', 'notes', 'search', 'review']
-      .some((key) => this.isFloatingMenuOpen(key));
-    portal.setAttribute('aria-hidden', hasOpenMenu ? 'false' : 'true');
-  }
-
-// --- renderMobileSync ---
-  renderMobileSync() {
-    const s = this.state.sync;
-    const preview = s.mergePreview;
-    const remembered = (s.rememberedDevices || []).filter((item) => item.trusted).slice(0, 3);
-    const discovered = s.discoveredDevices || [];
-    const scanProgress = s.discovery.total ? Math.round((s.discovery.checked / s.discovery.total) * 100) : 0;
-    return `
-      ${this.mobilePanelHeader('Связь с компьютером', 'Локальная синхронизация по Wi‑Fi')}
-      <div class="mobile-panel-body mobile-sync-body">
-        <section class="mobile-sync-status ${escapeHtml(s.status)} compact" data-sync-status-card>
-          ${iconSvg('phonePc', 'mobile-sync-icon')}
-          <div>
-            <strong data-sync-status-title>${this.syncStatusLabel(s.status)}</strong>
-            <span data-sync-status-detail>${escapeHtml(s.statusDetail || 'Найдите компьютер в Wi‑Fi или введите адрес вручную.')}</span>
-          </div>
-        </section>
-
-        ${remembered.length ? `<section class="sync-mobile-section"><div class="mobile-section-title">Быстрое подключение</div>${remembered.map((device) => this.renderSyncDeviceCard(device, 'remembered')).join('')}</section>` : ''}
-
-        <section class="sync-mobile-section">
-          <div class="mobile-section-title">Найденные компьютеры</div>
-          <div class="sync-scan-row">
-            <button class="pill-btn ai-btn" data-action="sync-scan">${iconSvg('scan', 'btn-svg')} Искать в Wi‑Fi</button>
-            ${s.discovery.scanning ? `<button class="pill-btn" data-action="sync-scan-cancel"><i class="bx bx-stop"></i> Стоп</button>` : ''}
-          </div>
-          ${s.discovery.scanning ? `<div class="sync-progress"><span style="width:${scanProgress}%"></span></div><small>${s.discovery.checked}/${s.discovery.total} адресов</small>` : `<small>${escapeHtml(s.discovery.message || 'Поиск запускается только вручную и не работает в фоне.')}</small>`}
-          ${discovered.length ? `<div class="sync-device-list">${discovered.map((device) => this.renderSyncDeviceCard(device, 'discovered')).join('')}</div>` : '<p class="form-helper">Если компьютер не найден, используйте ручной ввод ниже.</p>'}
-        </section>
-
-        <section class="sync-mobile-section">
-          <button class="mobile-collapser" data-action="sync-toggle-manual">${iconSvg('server', 'mobile-action-svg')} <span>Ввести вручную</span><i class="bx bx-chevron-down"></i></button>
-          ${s.discovery.manualOpen ? `<div class="mobile-sync-form compact">
-            <label>Имя устройства<input class="form-control" data-sync-field="deviceName" value="${escapeHtml(s.deviceName || '')}" placeholder="Android телефон"></label>
-            <label>IP компьютера<input class="form-control" data-sync-field="host" value="${escapeHtml(s.host || '')}" placeholder="192.168.1.10"></label>
-            <div class="sync-two-cols">
-              <label>Порт<input class="form-control" data-sync-field="port" value="${escapeHtml(s.port || '8787')}" inputmode="numeric"></label>
-              <label>Код подключения<input class="form-control" data-sync-field="token" value="${escapeHtml(s.token || '')}" placeholder="код"></label>
-            </div>
-          </div>` : ''}
-          <div class="mobile-panel-actions">
-            <button class="pill-btn ai-btn" data-action="sync-connect">${iconSvg('sync', 'btn-svg')} Подключиться</button>
-            <button class="pill-btn" data-action="sync-disconnect"><i class="bx bx-link-break"></i> Отключить</button>
-            <button class="pill-btn" data-action="sync-request-merge"><i class="bx bx-transfer"></i> Сравнить базы</button>
-          </div>
-        </section>
-
-        ${preview ? this.renderSyncMergePreview(preview) : '<p class="form-helper">Сервер только передаёт сообщения. Очереди, связи, конфликты и ревизии хранятся на этом устройстве в IndexedDB.</p>'}
-      </div>`;
-  }
-
-// --- renderSyncDeviceCard ---
-  renderSyncDeviceCard(device = {}, mode = 'discovered') {
-    const id = escapeHtml(device.id || device.deviceId || device.publicDeviceId || '');
-    const host = device.host || device.lastKnownIp || '';
-    const port = device.port || device.lastKnownPort || '8787';
-    const last = device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : 'нет данных';
-    const trusted = !!device.trusted;
-    return `<article class="sync-device-card ${trusted ? 'trusted' : ''}">
-      <div class="sync-device-icon">${iconSvg(device.deviceType === 'phone' ? 'phonePc' : 'server', 'sync-card-svg')}</div>
-      <div class="sync-device-main">
-        <strong>${escapeHtml(device.deviceName || 'Nocturne Sync')}</strong>
-        <span>${escapeHtml(host || 'адрес неизвестен')}:${escapeHtml(String(port))} · ${mode === 'remembered' ? 'доверенное' : 'найдено'} · ${escapeHtml(last)}</span>
-      </div>
-      <div class="sync-device-actions">
-        <button class="pill-btn mini" data-action="sync-connect-device" data-sync-device-id="${id}">${trusted ? 'Снова' : 'Подключить'}</button>
-        ${mode === 'remembered' ? `<button class="btn-icon" title="Автоподключение" data-action="sync-toggle-autoreconnect" data-sync-device-id="${id}">${iconSvg(device.autoReconnect ? 'trust' : 'sync', 'icon-btn-svg')}</button><button class="btn-icon" title="Забыть" data-action="sync-forget-device" data-sync-device-id="${id}"><i class="bx bx-trash"></i></button>` : ''}
-      </div>
-    </article>`;
-  }
-
-// --- syncStatusLabel ---
-  syncStatusLabel(status) {
-    return {
-      offline: 'Не подключено',
-      waiting: 'Ожидание',
-      connected: 'Подключено',
-      syncing: 'Синхронизация',
-      error: 'Ошибка',
-      conflict: 'Есть конфликт',
-    }[status] || 'Не подключено';
-  }
-
-// --- renderSyncMergePreview ---
-  renderSyncMergePreview(preview) {
-    const stats = preview.stats || {};
-    const folders = preview.connectFolders || [];
-    return `<section class="sync-preview-card">
-      <h3>Предпросмотр объединения</h3>
-      <div class="dump-summary-grid">
-        <span><strong>${stats.docs || 0}</strong> глав</span>
-        <span><strong>${stats.folders || 0}</strong> папок</span>
-        <span><strong>${stats.characters || 0}</strong> персонажей</span>
-        <span><strong>${stats.locations || 0}</strong> локаций</span>
-        <span><strong>${stats.timeline || 0}</strong> событий</span>
-        <span><strong>${stats.subtimelines || 0}</strong> сабтаймлайнов</span>
-        <span><strong>${stats.notes || 0}</strong> заметок</span>
-        <span><strong>${stats.conflicts || 0}</strong> конфликтов</span>
-      </div>
-      <p class="form-helper">Будут созданы/использованы папки: ${folders.map(escapeHtml).join(', ') || 'нет'}. Настройки не будут перезаписаны.</p>
-      <div class="mobile-panel-actions">
-        <button class="pill-btn ai-btn" data-action="sync-apply-merge"><i class="bx bx-check"></i> Применить объединение</button>
-        <button class="pill-btn" data-action="sync-clear-preview"><i class="bx bx-x"></i> Отмена</button>
-      </div>
-    </section>`;
-  }
-
-// --- renderSyncStatus ---
-  renderSyncStatus() {
-    document.querySelectorAll('[data-sync-status]').forEach((el) => {
-      el.textContent = this.syncStatusLabel(this.state.sync.status);
-      el.className = `sync-status-pill ${this.state.sync.status}`;
-    });
-  }
-
-// --- updateSyncStatusUi ---
-  updateSyncStatusUi() {
-    this.renderSyncStatus();
-    const status = this.state.sync.status;
-    const label = this.syncStatusLabel(status);
-    const detail = this.state.sync.statusDetail || 'Найдите компьютер в Wi-Fi или введите адрес вручную.';
-    document.querySelectorAll('[data-sync-status-card]').forEach((card) => {
-      card.className = `mobile-sync-status compact ${status}`;
-    });
-    document.querySelectorAll('[data-sync-status-title]').forEach((el) => {
-      el.textContent = label;
-    });
-    document.querySelectorAll('[data-sync-status-detail]').forEach((el) => {
-      el.textContent = detail;
-    });
-  }
-
-// --- isLocalSyncDevice ---
-  isLocalSyncDevice(device = {}) {
-    const publicId = device.publicDeviceId || device.id;
-    if (publicId && publicId === this.state.sync.server.publicDeviceId) return true;
-    if (publicId && publicId === this.state.sync.publicDeviceId) return true;
-    const serverIps = new Set([...(this.state.sync.server.lanIps || []), '127.0.0.1', 'localhost']);
-    return serverIps.has(device.host) && String(device.port || '') === String(this.state.sync.server.port || '');
-  }
-
-// --- applySyncServerStatus ---
-  applySyncServerStatus(payload = {}) {
-    const server = this.state.sync.server;
-    server.canControl = !!payload.canControl || server.canControl;
-    server.running = !!payload.running;
-    server.port = String(payload.port || server.port || '8787');
-    server.token = String(payload.token || server.token || '');
-    server.publicDeviceId = String(payload.publicDeviceId || server.publicDeviceId || '');
-    server.lanIps = Array.isArray(payload.lanIps) ? payload.lanIps : [];
-    server.startedAt = payload.startedAt || null;
-    server.output = payload.output || '';
-    if (server.running) {
-      this.state.sync.port = server.port;
-      this.state.sync.token = server.token || this.state.sync.token;
-      this.state.sync.host = this.preferredLanIps(server.lanIps)[0] || this.state.sync.host || '127.0.0.1';
-      safeSetStorageItem(localStorage, 'nocturne-sync-host', this.state.sync.host);
-      safeSetStorageItem(localStorage, 'nocturne-sync-port', this.state.sync.port);
-      safeSetStorageItem(localStorage, 'nocturne-sync-token', this.state.sync.token);
-    }
-  }
-
-// --- candidateSyncHosts ---
-  candidateSyncHosts() {
-    const hosts = new Set();
-    const add = (host) => {
-      const value = String(host || '').trim();
-      if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(value)) return;
-      if (value.startsWith('127.') && this.isAndroidRuntime()) return;
-      hosts.add(value);
-    };
-    add(this.state.sync.host);
-    this.preferredLanIps(this.state.sync.server.lanIps || []).forEach(add);
-    (this.state.sync.rememberedDevices || []).forEach((device) => add(device.lastKnownIp || device.host));
-    const seed = [...hosts].find((host) => this.isPrivateLanIp(host));
-    if (seed && !seed.startsWith('127.')) {
-      const parts = seed.split('.');
-      const prefix = `${parts[0]}.${parts[1]}.${parts[2]}.`;
-      for (let i = 1; i <= 254; i += 1) hosts.add(`${prefix}${i}`);
-    } else {
-      if (!this.isAndroidRuntime()) add('127.0.0.1');
-      ['192.168.0', '192.168.1', '192.168.31', '192.168.50', '192.168.88', '192.168.100', '10.0.0', '10.0.1'].forEach((prefix) => {
-        for (let i = 1; i <= 254; i += 1) hosts.add(`${prefix}.${i}`);
-      });
-    }
-    return [...hosts].slice(0, 900);
-  }
-
-// --- cancelSyncDiscoveryScan ---
-  cancelSyncDiscoveryScan() {
-    if (this.syncScanAbort) this.syncScanAbort.cancelled = true;
-    this.state.sync.discovery.scanning = false;
-    this.state.sync.discovery.message = 'Поиск остановлен.';
-    this.renderSyncSurfaces();
-  }
-
-// --- renderSyncSurfaces ---
-  renderSyncSurfaces() {
-    if (this.isMobileLayout()) this.renderMobileShell();
-    else if (document.getElementById('form-overlay')?.classList.contains('active')) this.renderOpenSyncPanel();
-  }
-
-// --- disconnectLocalSync ---
-  disconnectLocalSync() {
-    this.syncClient.disconnect();
-    this.toast('Локальная связь отключена.');
-  }
-
-// --- buildSyncMergePreview ---
-  buildSyncMergePreview(message) {
-    const payload = message.dump?.payload || {};
-    const lore = payload.lore || {};
-    const timeline = lore.timeline || [];
-    const deviceName = message.deviceName || 'устройство';
-    const folderTitle = this.remoteConnectFolderTitle(message);
-    const stats = {
-      docs: payload.docs?.length || 0,
-      folders: payload.folders?.length || 0,
-      characters: lore.characters?.length || 0,
-      locations: lore.locations?.length || 0,
-      timeline: timeline.length,
-      subtimelines: timeline.reduce((sum, item) => sum + (item.subEvents?.length || 0), 0),
-      notes: payload.floatingNotes?.length || 0,
-      conflicts: (payload.docs || []).filter((doc) => this.state.docs.some((local) => local.id === doc.id)).length,
-    };
-    return {
-      remoteDeviceId: message.from,
-      remoteDeviceName: deviceName,
-      stats,
-      connectFolders: [folderTitle],
-      receivedAt: Date.now(),
-    };
-  }
-
-// --- openSyncPanel ---
-  openSyncPanel() {
-    const overlay = document.getElementById('form-overlay');
-    if (!overlay) return;
-    overlay.innerHTML = this.renderDesktopSyncCenter();
-    overlay.classList.add('active');
-    overlay.querySelectorAll('[data-close-form]').forEach((button) => {
-      button.onclick = () => overlay.classList.remove('active');
-    });
-  }
-
-// --- renderOpenSyncPanel ---
-  renderOpenSyncPanel() {
-    const overlay = document.getElementById('form-overlay');
-    if (!overlay?.classList.contains('active')) return;
-    overlay.innerHTML = this.renderDesktopSyncCenter();
-    overlay.querySelectorAll('[data-close-form]').forEach((button) => {
-      button.onclick = () => overlay.classList.remove('active');
-    });
-  }
-
-// --- renderDesktopSyncCenter ---
-  renderDesktopSyncCenter() {
-    const s = this.state.sync;
-    const server = s.server || {};
-    const discovered = s.discoveredDevices || [];
-    const remembered = s.rememberedDevices || [];
-    const scanProgress = s.discovery.total ? Math.round((s.discovery.checked / s.discovery.total) * 100) : 0;
-    const preferredIps = this.preferredLanIps(server.lanIps || []);
-    const infoRows = [
-      ['Адрес в сети', preferredIps.join(', ') || s.host || 'не найден'],
-      ['Порт', server.port || s.port || '8787'],
-      ['Код подключения', server.token || s.token || 'запустите сервер'],
-    ];
-    return `
-      <div class="form-modal sync-center-modal">
-        <div class="sync-center-head">
-          <div class="sync-center-title">
-            <span class="sync-center-logo">${iconSvg('phonePc', 'sync-center-logo-svg')}</span>
-            <div><h2>Локальная связь</h2><p>Синхронизация телефона и компьютера по Wi‑Fi</p></div>
-          </div>
-          <div class="sync-center-head-actions">
-            <span class="sync-status-pill ${escapeHtml(s.status)}" data-sync-status>${escapeHtml(this.syncStatusLabel(s.status))}</span>
-            <button class="btn-icon" data-close-form><i class="bx bx-x"></i></button>
-          </div>
-        </div>
-
-        <section class="sync-center-hero">
-          <div class="sync-hero-icon">${iconSvg('phonePc', 'sync-center-logo-svg')}</div>
-          <div>
-            <span>${server.running ? 'Компьютер готов к подключению' : 'Сервер ещё не запущен'}</span>
-            <strong>${server.running ? 'Телефон может подключиться по Wi‑Fi' : (server.canControl || this.runtime?.isElectron ? 'Запустите сервер одной кнопкой' : 'Проверьте внешний sync server')}</strong>
-            <p>${escapeHtml(server.message || 'Сервер работает только как локальный брокер. Данные проекта остаются на устройствах.')}</p>
-          </div>
-          <button class="pill-btn ai-btn sync-hero-action" data-action="${server.running ? 'sync-copy-info' : 'sync-server-start'}">${server.running ? iconSvg('copy', 'btn-svg') : iconSvg('server', 'btn-svg')} ${server.running ? 'Скопировать данные' : 'Запустить сервер'}</button>
-        </section>
-
-        <div class="sync-center-grid">
-          <section class="sync-center-card sync-server-card">
-            <div class="sync-card-head">${iconSvg('server', 'sync-card-head-icon')}<div><strong>Сервер на компьютере</strong><span>${server.canControl ? 'Управление доступно из приложения' : 'Браузерный режим: запуск сервера снаружи'}</span></div></div>
-            <div class="sync-server-status ${server.running ? 'online' : 'offline'}">
-              <span>${server.running ? 'Сервер запущен' : 'Сервер не запущен'}</span>
-              <small>${escapeHtml(server.message || (server.canControl ? 'Запуск доступен только по явному нажатию.' : 'Проверьте уже запущенный сервер или скопируйте команду запуска.'))}</small>
-            </div>
-            <div class="sync-info-grid">${infoRows.map(([label, value]) => `<span><small>${label}</small><strong>${escapeHtml(value)}</strong></span>`).join('')}</div>
-            <div class="sync-card-actions">
-              <button class="pill-btn ai-btn" data-action="sync-server-start">${iconSvg('server', 'btn-svg')} Запустить сервер</button>
-              <button class="pill-btn" data-action="sync-server-stop"><i class="bx bx-stop"></i> Остановить</button>
-              <button class="pill-btn" data-action="sync-server-check"><i class="bx bx-refresh"></i> Проверить</button>
-              <button class="pill-btn" data-action="sync-server-refresh-token"><i class="bx bx-key"></i> Новый код</button>
-              <button class="pill-btn" data-action="sync-copy-info">${iconSvg('copy', 'btn-svg')} Скопировать</button>
-            </div>
-          </section>
-
-          <section class="sync-center-card">
-            <div class="sync-card-head">${iconSvg('scan', 'sync-card-head-icon')}<div><strong>Обнаружение в сети</strong><span>Поиск по Wi‑Fi ограничен по времени; ручной ввод остаётся запасным путём.</span></div></div>
-            <div class="sync-card-actions">
-              <button class="pill-btn ai-btn" data-action="sync-scan">${iconSvg('scan', 'btn-svg')} Искать устройства</button>
-              ${s.discovery.scanning ? `<button class="pill-btn" data-action="sync-scan-cancel"><i class="bx bx-stop"></i> Остановить</button>` : ''}
-            </div>
-            ${s.discovery.scanning ? `<div class="sync-progress"><span style="width:${scanProgress}%"></span></div><small>${s.discovery.checked}/${s.discovery.total} адресов проверено</small>` : `<p class="form-helper">${escapeHtml(s.discovery.message || 'Поиск запускается только пользователем, ограничен по времени и не работает в фоне.')}</p>`}
-            <div class="sync-device-list">${discovered.length ? discovered.map((device) => this.renderSyncDeviceCard(device, 'discovered')).join('') : '<p class="form-helper">Пока ничего не найдено.</p>'}</div>
-          </section>
-
-          <section class="sync-center-card">
-            <div class="sync-card-head">${iconSvg('trust', 'sync-card-head-icon')}<div><strong>Доверенные устройства</strong><span>Автоподключение включается только после успешной привязки.</span></div></div>
-            <div class="sync-device-list">${remembered.length ? remembered.map((device) => this.renderSyncDeviceCard(device, 'remembered')).join('') : '<p class="form-helper">Доверенных устройств пока нет.</p>'}</div>
-          </section>
-
-          <section class="sync-center-card">
-            <div class="sync-card-head">${iconSvg('sync', 'sync-card-head-icon')}<div><strong>Подключение и merge</strong><span>Сервер не хранит историю. Очереди, связи и конфликты остаются в IndexedDB клиентов.</span></div></div>
-            <div class="form-grid compact">
-              <label>Имя устройства <input class="form-control" data-sync-field="deviceName" value="${escapeHtml(s.deviceName || '')}"></label>
-              <label>IP компьютера <input class="form-control" data-sync-field="host" value="${escapeHtml(s.host || '127.0.0.1')}" placeholder="192.168.1.10"></label>
-              <label>Порт <input class="form-control" data-sync-field="port" value="${escapeHtml(s.port || '8787')}" inputmode="numeric"></label>
-              <label>Код подключения <input class="form-control" data-sync-field="token" value="${escapeHtml(s.token || '')}"></label>
-            </div>
-            <div class="sync-card-actions">
-              <button class="pill-btn ai-btn" data-action="sync-connect">${iconSvg('sync', 'btn-svg')} Подключиться</button>
-              <button class="pill-btn" data-action="sync-disconnect"><i class="bx bx-link-break"></i> Отключить</button>
-              <button class="pill-btn" data-action="sync-request-merge"><i class="bx bx-transfer"></i> Сравнить базы</button>
-            </div>
-            ${s.mergePreview ? this.renderSyncMergePreview(s.mergePreview) : ''}
-          </section>
-
-          <section class="sync-center-card sync-diagnostics-card">
-            <div class="sync-card-head">${iconSvg('trust', 'sync-card-head-icon')}<div><strong>Диагностика</strong><span>Что сейчас известно приложению.</span></div></div>
-            <div class="sync-diagnostics-list">
-              <span><i class="bx ${this.runtime?.isElectron ? 'bx-check-circle' : 'bx-info-circle'}"></i> Runtime: ${escapeHtml(this.runtime?.platform || 'browser')}</span>
-              <span><i class="bx ${server.canControl ? 'bx-check-circle' : 'bx-error-circle'}"></i> Управление сервером: ${server.canControl ? 'доступно' : 'недоступно'}</span>
-              <span><i class="bx ${server.running ? 'bx-check-circle' : 'bx-radio-circle'}"></i> LAN IP: ${escapeHtml(preferredIps.join(', ') || 'не найден')}</span>
-              <span><i class="bx bx-shield-quarter"></i> Discovery не отдаёт код подключения или данные проекта.</span>
-            </div>
-          </section>
-        </div>
-
-        <details class="sync-help">
-          <summary>Как подключить?</summary>
-          <p>На ПК запустите сервер кнопкой выше или командой <code>npm run sync:server</code>. На телефоне откройте “Связь с компьютером”, найдите ПК в Wi‑Fi или введите IP, порт и код вручную. Поиск не публикует код подключения и не отдаёт данные проекта.</p>
-        </details>
-      </div>`;
-  }
-
-// --- connectLocalSyncFromUi ---
-async connectLocalSyncFromUi() {
-    const { host, port, token, deviceName } = this.state.sync;
-    if (!host || !token) {
-      this.toast('Введите IP компьютера и код подключения.');
-      return;
-    }
-    if (this.isAndroidRuntime() && /^127\./.test(String(host))) {
-      this.state.sync.status = 'error';
-      this.state.sync.statusDetail = '127.0.0.1 на телефоне — это сам телефон, а не компьютер. Введите LAN IP ПК.';
-      this.updateSyncStatusUi();
-      return;
-    }
-    safeSetStorageItem(localStorage, 'nocturne-sync-device-name', deviceName || defaultDeviceName(this.runtime));
-    safeSetStorageItem(localStorage, 'nocturne-sync-host', host);
-    safeSetStorageItem(localStorage, 'nocturne-sync-port', port || '8787');
-    safeSetStorageItem(localStorage, 'nocturne-sync-token', token);
-    this.state.sync.status = 'waiting';
-    this.state.sync.statusDetail = 'Проверяю /discovery на указанном адресе...';
-    this.updateSyncStatusUi();
-    try {
-      const device = await this.probeSyncDiscoveryHost(host, port || '8787', 'manual');
-      if (!device) throw new Error('wrong protocol');
-      this.state.sync.statusDetail = device.pairingRequired ? 'Сервер найден, нужен код подключения.' : 'Сервер найден.';
-      this.updateSyncStatusUi();
-    } catch (error) {
-      this.state.sync.status = 'error';
-      this.state.sync.statusDetail = `Сервер не найден: ${error?.name === 'AbortError' ? 'timeout' : (error?.message || 'host unreachable')}.`;
-      this.updateSyncStatusUi();
-      return;
-    }
-    try {
-      await this.syncClient.connect({ host, port, token, trusted: true });
-    } catch (error) {
-      this.state.sync.status = 'error';
-      this.state.sync.statusDetail = error?.message || 'Подключение не удалось.';
-      this.updateSyncStatusUi();
-    }
-  }
-
-// --- probeSyncDiscoveryHost ---
-async probeSyncDiscoveryHost(host, port = this.state.sync.port || '8787', method = 'manual') {
-    const payload = await this.httpGetJson(`${buildHttpBase(host, port)}/discovery`, 750);
-    return this.normalizeDiscoveredDevice(payload, host, port, method);
-  }
-
-// --- preferredLanIps ---
-  preferredLanIps(ips = []) {
-    const clean = [...new Set((ips || []).filter((ip) => /^\d{1,3}(\.\d{1,3}){3}$/.test(String(ip))))];
-    return [
-      ...clean.filter((ip) => this.isPrivateLanIp(ip) && !ip.startsWith('127.')),
-      ...clean.filter((ip) => !this.isPrivateLanIp(ip) && !ip.startsWith('127.')),
-      ...clean.filter((ip) => ip.startsWith('127.')),
-    ];
-  }
-
-// --- isPrivateLanIp ---
-  isPrivateLanIp(ip = '') {
-    const parts = String(ip).split('.').map((part) => Number(part));
-    if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return false;
-    if (parts[0] === 10) return true;
-    if (parts[0] === 192 && parts[1] === 168) return true;
-    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
-    return false;
-  }
-
-// --- remoteConnectFolderTitle ---
-  remoteConnectFolderTitle(message) {
-    const name = message.deviceName || 'устройство';
-    const source = /android|phone|тел/i.test(name) ? 'С телефона' : 'С компьютера';
-    return `${source} — ${name}`;
-  }
-
-// --- scanForSyncServers ---
-async scanForSyncServers() {
-    if (this.state.sync.discovery.scanning) return;
-    const hosts = this.candidateSyncHosts();
-    const port = this.state.sync.port || '8787';
-    const discovery = this.state.sync.discovery;
-    discovery.scanning = true;
-    discovery.checked = 0;
-    discovery.total = hosts.length;
-    discovery.error = '';
-    discovery.message = 'Идёт поиск в Wi-Fi...';
-    this.state.sync.discoveredDevices = [];
-    const token = { cancelled: false };
-    this.syncScanAbort = token;
-    this.renderSyncSurfaces();
-
-    const found = new Map();
-    const startedAt = Date.now();
-    let index = 0;
-    const concurrency = 12;
-    const maxDuration = 12000;
-    const worker = async () => {
-      while (!token.cancelled && index < hosts.length && Date.now() - startedAt < maxDuration) {
-        const host = hosts[index++];
-        try {
-          const device = await this.probeSyncDiscoveryHost(host, port, 'subnet-scan');
-          if (device && !this.isLocalSyncDevice(device) && !found.has(device.id)) found.set(device.id, device);
-        } catch (error) {
-          if (!discovery.error) discovery.error = error?.name === 'AbortError' ? 'timeout' : (error?.message || 'host unreachable');
-        }
-        discovery.checked += 1;
-        if (discovery.checked % 8 === 0 || found.size) this.renderSyncSurfaces();
-      }
-    };
-    await Promise.all(Array.from({ length: concurrency }, () => worker()));
-    discovery.scanning = false;
-    discovery.message = token.cancelled
-      ? 'Поиск остановлен.'
-      : (found.size ? 'Компьютеры найдены.' : `Компьютеры не найдены${discovery.error ? ` (${discovery.error})` : ''}. Проверьте, что ПК и телефон в одной Wi-Fi сети, сервер запущен и IP не 127.0.0.1.`);
-    this.state.sync.discoveredDevices = [...found.values()];
-    this.syncScanAbort = null;
-    this.renderSyncSurfaces();
-  }
-
-// --- normalizeDiscoveredDevice ---
-  normalizeDiscoveredDevice(payload, host, port, method = 'scan') {
-    if (!payload || payload.service !== 'nocturne-sync') return null;
-    return {
-      id: `${payload.publicDeviceId || host}:${port}`,
-      publicDeviceId: payload.publicDeviceId || '',
-      deviceName: payload.deviceName || 'Nocturne Sync',
-      deviceType: payload.deviceType || 'computer',
-      host,
-      port: String(payload.port || port),
-      discoveryMethod: method,
-      protocolVersion: payload.protocolVersion || SYNC_PROTOCOL_VERSION,
-      pairingRequired: payload.pairingRequired !== false,
-      lastSeenAt: Date.now(),
-    };
-  }
-
-// --- httpGetJson ---
-async httpGetJson(url, timeoutMs = 650) {
-    if (window.Capacitor?.Plugins?.Http?.get) {
-      const result = await window.Capacitor.Plugins.Http.get({ url, connectTimeout: timeoutMs, readTimeout: timeoutMs });
-      return typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
-    }
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return await response.json();
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-
+// --- syncActiveDocFromFocusedPane ---
+
+  syncActiveDocFromFocusedPane() {
+
+    const doc = this.getFocusedDoc();
+
+    this.state.activeDocId = doc ? doc.id : null;
+
+  }
+
+
+
+// --- syncFloatingMenuPortalState ---
+
+  syncFloatingMenuPortalState() {
+
+    const portal = document.getElementById('floating-menu-portal');
+
+    if (!portal) return;
+
+    const hasOpenMenu = ['kb', 'format', 'split', 'notes', 'search', 'review']
+
+      .some((key) => this.isFloatingMenuOpen(key));
+
+    portal.setAttribute('aria-hidden', hasOpenMenu ? 'false' : 'true');
+
+  }
+
+
+
+// --- renderMobileSync ---
+
+  renderMobileSync() {
+
+    const s = this.state.sync;
+
+    const preview = s.mergePreview;
+
+    const remembered = (s.rememberedDevices || []).filter((item) => item.trusted).slice(0, 3);
+
+    const discovered = s.discoveredDevices || [];
+
+    const scanProgress = s.discovery.total ? Math.round((s.discovery.checked / s.discovery.total) * 100) : 0;
+
+    return `
+
+      ${this.mobilePanelHeader('Связь с компьютером', 'Локальная синхронизация по Wi‑Fi')}
+
+      <div class="mobile-panel-body mobile-sync-body">
+
+        <section class="mobile-sync-status ${escapeHtml(s.status)} compact" data-sync-status-card>
+
+          ${iconSvg('phonePc', 'mobile-sync-icon')}
+
+          <div>
+
+            <strong data-sync-status-title>${this.syncStatusLabel(s.status)}</strong>
+
+            <span data-sync-status-detail>${escapeHtml(s.statusDetail || 'Найдите компьютер в Wi‑Fi или введите адрес вручную.')}</span>
+
+          </div>
+
+        </section>
+
+
+
+        ${remembered.length ? `<section class="sync-mobile-section"><div class="mobile-section-title">Быстрое подключение</div>${remembered.map((device) => this.renderSyncDeviceCard(device, 'remembered')).join('')}</section>` : ''}
+
+
+
+        <section class="sync-mobile-section">
+
+          <div class="mobile-section-title">Найденные компьютеры</div>
+
+          <div class="sync-scan-row">
+
+            <button class="pill-btn ai-btn" data-action="sync-scan">${iconSvg('scan', 'btn-svg')} Искать в Wi‑Fi</button>
+
+            ${s.discovery.scanning ? `<button class="pill-btn" data-action="sync-scan-cancel"><i class="bx bx-stop"></i> Стоп</button>` : ''}
+
+          </div>
+
+          ${s.discovery.scanning ? `<div class="sync-progress"><span style="width:${scanProgress}%"></span></div><small>${s.discovery.checked}/${s.discovery.total} адресов</small>` : `<small>${escapeHtml(s.discovery.message || 'Поиск запускается только вручную и не работает в фоне.')}</small>`}
+
+          ${discovered.length ? `<div class="sync-device-list">${discovered.map((device) => this.renderSyncDeviceCard(device, 'discovered')).join('')}</div>` : '<p class="form-helper">Если компьютер не найден, используйте ручной ввод ниже.</p>'}
+
+        </section>
+
+
+
+        <section class="sync-mobile-section">
+
+          <button class="mobile-collapser" data-action="sync-toggle-manual">${iconSvg('server', 'mobile-action-svg')} <span>Ввести вручную</span><i class="bx bx-chevron-down"></i></button>
+
+          ${s.discovery.manualOpen ? `<div class="mobile-sync-form compact">
+
+            <label>Имя устройства<input class="form-control" data-sync-field="deviceName" value="${escapeHtml(s.deviceName || '')}" placeholder="Android телефон"></label>
+
+            <label>IP компьютера<input class="form-control" data-sync-field="host" value="${escapeHtml(s.host || '')}" placeholder="192.168.1.10"></label>
+
+            <div class="sync-two-cols">
+
+              <label>Порт<input class="form-control" data-sync-field="port" value="${escapeHtml(s.port || '8787')}" inputmode="numeric"></label>
+
+              <label>Код подключения<input class="form-control" data-sync-field="token" value="${escapeHtml(s.token || '')}" placeholder="код"></label>
+
+            </div>
+
+          </div>` : ''}
+
+          <div class="mobile-panel-actions">
+
+            <button class="pill-btn ai-btn" data-action="sync-connect">${iconSvg('sync', 'btn-svg')} Подключиться</button>
+
+            <button class="pill-btn" data-action="sync-disconnect"><i class="bx bx-link-break"></i> Отключить</button>
+
+            <button class="pill-btn" data-action="sync-request-merge"><i class="bx bx-transfer"></i> Сравнить базы</button>
+
+          </div>
+
+        </section>
+
+
+
+        ${preview ? this.renderSyncMergePreview(preview) : '<p class="form-helper">Сервер только передаёт сообщения. Очереди, связи, конфликты и ревизии хранятся на этом устройстве в IndexedDB.</p>'}
+
+      </div>`;
+
+  }
+
+
+
+// --- renderSyncDeviceCard ---
+
+  renderSyncDeviceCard(device = {}, mode = 'discovered') {
+
+    const id = escapeHtml(device.id || device.deviceId || device.publicDeviceId || '');
+
+    const host = device.host || device.lastKnownIp || '';
+
+    const port = device.port || device.lastKnownPort || '8787';
+
+    const last = device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : 'нет данных';
+
+    const trusted = !!device.trusted;
+
+    return `<article class="sync-device-card ${trusted ? 'trusted' : ''}">
+
+      <div class="sync-device-icon">${iconSvg(device.deviceType === 'phone' ? 'phonePc' : 'server', 'sync-card-svg')}</div>
+
+      <div class="sync-device-main">
+
+        <strong>${escapeHtml(device.deviceName || 'Nocturne Sync')}</strong>
+
+        <span>${escapeHtml(host || 'адрес неизвестен')}:${escapeHtml(String(port))} · ${mode === 'remembered' ? 'доверенное' : 'найдено'} · ${escapeHtml(last)}</span>
+
+      </div>
+
+      <div class="sync-device-actions">
+
+        <button class="pill-btn mini" data-action="sync-connect-device" data-sync-device-id="${id}">${trusted ? 'Снова' : 'Подключить'}</button>
+
+        ${mode === 'remembered' ? `<button class="btn-icon" title="Автоподключение" data-action="sync-toggle-autoreconnect" data-sync-device-id="${id}">${iconSvg(device.autoReconnect ? 'trust' : 'sync', 'icon-btn-svg')}</button><button class="btn-icon" title="Забыть" data-action="sync-forget-device" data-sync-device-id="${id}"><i class="bx bx-trash"></i></button>` : ''}
+
+      </div>
+
+    </article>`;
+
+  }
+
+
+
+// --- syncStatusLabel ---
+
+  syncStatusLabel(status) {
+
+    return {
+
+      offline: 'Не подключено',
+
+      waiting: 'Ожидание',
+
+      connected: 'Подключено',
+
+      syncing: 'Синхронизация',
+
+      error: 'Ошибка',
+
+      conflict: 'Есть конфликт',
+
+    }[status] || 'Не подключено';
+
+  }
+
+
+
+// --- renderSyncMergePreview ---
+
+  renderSyncMergePreview(preview) {
+
+    const stats = preview.stats || {};
+
+    const folders = preview.connectFolders || [];
+
+    return `<section class="sync-preview-card">
+
+      <h3>Предпросмотр объединения</h3>
+
+      <div class="dump-summary-grid">
+
+        <span><strong>${stats.docs || 0}</strong> глав</span>
+
+        <span><strong>${stats.folders || 0}</strong> папок</span>
+
+        <span><strong>${stats.characters || 0}</strong> персонажей</span>
+
+        <span><strong>${stats.locations || 0}</strong> локаций</span>
+
+        <span><strong>${stats.timeline || 0}</strong> событий</span>
+
+        <span><strong>${stats.subtimelines || 0}</strong> сабтаймлайнов</span>
+
+        <span><strong>${stats.notes || 0}</strong> заметок</span>
+
+        <span><strong>${stats.conflicts || 0}</strong> конфликтов</span>
+
+      </div>
+
+      <p class="form-helper">Будут созданы/использованы папки: ${folders.map(escapeHtml).join(', ') || 'нет'}. Настройки не будут перезаписаны.</p>
+
+      <div class="mobile-panel-actions">
+
+        <button class="pill-btn ai-btn" data-action="sync-apply-merge"><i class="bx bx-check"></i> Применить объединение</button>
+
+        <button class="pill-btn" data-action="sync-clear-preview"><i class="bx bx-x"></i> Отмена</button>
+
+      </div>
+
+    </section>`;
+
+  }
+
+
+
+// --- renderSyncStatus ---
+
+  renderSyncStatus() {
+
+    document.querySelectorAll('[data-sync-status]').forEach((el) => {
+
+      el.textContent = this.syncStatusLabel(this.state.sync.status);
+
+      el.className = `sync-status-pill ${this.state.sync.status}`;
+
+    });
+
+  }
+
+
+
+// --- updateSyncStatusUi ---
+
+  updateSyncStatusUi() {
+
+    this.renderSyncStatus();
+
+    const status = this.state.sync.status;
+
+    const label = this.syncStatusLabel(status);
+
+    const detail = this.state.sync.statusDetail || 'Найдите компьютер в Wi-Fi или введите адрес вручную.';
+
+    document.querySelectorAll('[data-sync-status-card]').forEach((card) => {
+
+      card.className = `mobile-sync-status compact ${status}`;
+
+    });
+
+    document.querySelectorAll('[data-sync-status-title]').forEach((el) => {
+
+      el.textContent = label;
+
+    });
+
+    document.querySelectorAll('[data-sync-status-detail]').forEach((el) => {
+
+      el.textContent = detail;
+
+    });
+
+  }
+
+
+
+// --- isLocalSyncDevice ---
+
+  isLocalSyncDevice(device = {}) {
+
+    const publicId = device.publicDeviceId || device.id;
+
+    if (publicId && publicId === this.state.sync.server.publicDeviceId) return true;
+
+    if (publicId && publicId === this.state.sync.publicDeviceId) return true;
+
+    const serverIps = new Set([...(this.state.sync.server.lanIps || []), '127.0.0.1', 'localhost']);
+
+    return serverIps.has(device.host) && String(device.port || '') === String(this.state.sync.server.port || '');
+
+  }
+
+
+
+// --- applySyncServerStatus ---
+
+  applySyncServerStatus(payload = {}) {
+
+    const server = this.state.sync.server;
+
+    server.canControl = !!payload.canControl || server.canControl;
+
+    server.running = !!payload.running;
+
+    server.port = String(payload.port || server.port || '8787');
+
+    server.token = String(payload.token || server.token || '');
+
+    server.publicDeviceId = String(payload.publicDeviceId || server.publicDeviceId || '');
+
+    server.lanIps = Array.isArray(payload.lanIps) ? payload.lanIps : [];
+
+    server.startedAt = payload.startedAt || null;
+
+    server.output = payload.output || '';
+
+    if (server.running) {
+
+      this.state.sync.port = server.port;
+
+      this.state.sync.token = server.token || this.state.sync.token;
+
+      this.state.sync.host = this.preferredLanIps(server.lanIps)[0] || this.state.sync.host || '127.0.0.1';
+
+      safeSetStorageItem(localStorage, 'nocturne-sync-host', this.state.sync.host);
+
+      safeSetStorageItem(localStorage, 'nocturne-sync-port', this.state.sync.port);
+
+      safeSetStorageItem(localStorage, 'nocturne-sync-token', this.state.sync.token);
+
+    }
+
+  }
+
+
+
+// --- candidateSyncHosts ---
+
+  candidateSyncHosts() {
+
+    const hosts = new Set();
+
+    const add = (host) => {
+
+      const value = String(host || '').trim();
+
+      if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(value)) return;
+
+      if (value.startsWith('127.') && this.isAndroidRuntime()) return;
+
+      hosts.add(value);
+
+    };
+
+    add(this.state.sync.host);
+
+    this.preferredLanIps(this.state.sync.server.lanIps || []).forEach(add);
+
+    (this.state.sync.rememberedDevices || []).forEach((device) => add(device.lastKnownIp || device.host));
+
+    const seed = [...hosts].find((host) => this.isPrivateLanIp(host));
+
+    if (seed && !seed.startsWith('127.')) {
+
+      const parts = seed.split('.');
+
+      const prefix = `${parts[0]}.${parts[1]}.${parts[2]}.`;
+
+      for (let i = 1; i <= 254; i += 1) hosts.add(`${prefix}${i}`);
+
+    } else {
+
+      if (!this.isAndroidRuntime()) add('127.0.0.1');
+
+      ['192.168.0', '192.168.1', '192.168.31', '192.168.50', '192.168.88', '192.168.100', '10.0.0', '10.0.1'].forEach((prefix) => {
+
+        for (let i = 1; i <= 254; i += 1) hosts.add(`${prefix}.${i}`);
+
+      });
+
+    }
+
+    return [...hosts].slice(0, 900);
+
+  }
+
+
+
+// --- cancelSyncDiscoveryScan ---
+
+  cancelSyncDiscoveryScan() {
+
+    if (this.syncScanAbort) this.syncScanAbort.cancelled = true;
+
+    this.state.sync.discovery.scanning = false;
+
+    this.state.sync.discovery.message = 'Поиск остановлен.';
+
+    this.renderSyncSurfaces();
+
+  }
+
+
+
+// --- renderSyncSurfaces ---
+
+  renderSyncSurfaces() {
+
+    if (this.isMobileLayout()) this.renderMobileShell();
+
+    else if (document.getElementById('form-overlay')?.classList.contains('active')) this.renderOpenSyncPanel();
+
+  }
+
+
+
+// --- disconnectLocalSync ---
+
+  disconnectLocalSync() {
+
+    this.syncClient.disconnect();
+
+    this.toast('Локальная связь отключена.');
+
+  }
+
+
+
+// --- buildSyncMergePreview ---
+
+  buildSyncMergePreview(message) {
+
+    const payload = message.dump?.payload || {};
+
+    const lore = payload.lore || {};
+
+    const timeline = lore.timeline || [];
+
+    const deviceName = message.deviceName || 'устройство';
+
+    const folderTitle = this.remoteConnectFolderTitle(message);
+
+    const stats = {
+
+      docs: payload.docs?.length || 0,
+
+      folders: payload.folders?.length || 0,
+
+      characters: lore.characters?.length || 0,
+
+      locations: lore.locations?.length || 0,
+
+      timeline: timeline.length,
+
+      subtimelines: timeline.reduce((sum, item) => sum + (item.subEvents?.length || 0), 0),
+
+      notes: payload.floatingNotes?.length || 0,
+
+      conflicts: (payload.docs || []).filter((doc) => this.state.docs.some((local) => local.id === doc.id)).length,
+
+    };
+
+    return {
+
+      remoteDeviceId: message.from,
+
+      remoteDeviceName: deviceName,
+
+      stats,
+
+      connectFolders: [folderTitle],
+
+      receivedAt: Date.now(),
+
+    };
+
+  }
+
+
+
+// --- openSyncPanel ---
+
+  openSyncPanel() {
+
+    const overlay = document.getElementById('form-overlay');
+
+    if (!overlay) return;
+
+    overlay.innerHTML = this.renderDesktopSyncCenter();
+
+    overlay.classList.add('active');
+
+    overlay.querySelectorAll('[data-close-form]').forEach((button) => {
+
+      button.onclick = () => overlay.classList.remove('active');
+
+    });
+
+  }
+
+
+
+// --- renderOpenSyncPanel ---
+
+  renderOpenSyncPanel() {
+
+    const overlay = document.getElementById('form-overlay');
+
+    if (!overlay?.classList.contains('active')) return;
+
+    overlay.innerHTML = this.renderDesktopSyncCenter();
+
+    overlay.querySelectorAll('[data-close-form]').forEach((button) => {
+
+      button.onclick = () => overlay.classList.remove('active');
+
+    });
+
+  }
+
+
+
+// --- renderDesktopSyncCenter ---
+
+  renderDesktopSyncCenter() {
+
+    const s = this.state.sync;
+
+    const server = s.server || {};
+
+    const discovered = s.discoveredDevices || [];
+
+    const remembered = s.rememberedDevices || [];
+
+    const scanProgress = s.discovery.total ? Math.round((s.discovery.checked / s.discovery.total) * 100) : 0;
+
+    const preferredIps = this.preferredLanIps(server.lanIps || []);
+
+    const infoRows = [
+
+      ['Адрес в сети', preferredIps.join(', ') || s.host || 'не найден'],
+
+      ['Порт', server.port || s.port || '8787'],
+
+      ['Код подключения', server.token || s.token || 'запустите сервер'],
+
+    ];
+
+    return `
+
+      <div class="form-modal sync-center-modal">
+
+        <div class="sync-center-head">
+
+          <div class="sync-center-title">
+
+            <span class="sync-center-logo">${iconSvg('phonePc', 'sync-center-logo-svg')}</span>
+
+            <div><h2>Локальная связь</h2><p>Синхронизация телефона и компьютера по Wi‑Fi</p></div>
+
+          </div>
+
+          <div class="sync-center-head-actions">
+
+            <span class="sync-status-pill ${escapeHtml(s.status)}" data-sync-status>${escapeHtml(this.syncStatusLabel(s.status))}</span>
+
+            <button class="btn-icon" data-close-form><i class="bx bx-x"></i></button>
+
+          </div>
+
+        </div>
+
+
+
+        <section class="sync-center-hero">
+
+          <div class="sync-hero-icon">${iconSvg('phonePc', 'sync-center-logo-svg')}</div>
+
+          <div>
+
+            <span>${server.running ? 'Компьютер готов к подключению' : 'Сервер ещё не запущен'}</span>
+
+            <strong>${server.running ? 'Телефон может подключиться по Wi‑Fi' : (server.canControl || this.runtime?.isElectron ? 'Запустите сервер одной кнопкой' : 'Проверьте внешний sync server')}</strong>
+
+            <p>${escapeHtml(server.message || 'Сервер работает только как локальный брокер. Данные проекта остаются на устройствах.')}</p>
+
+          </div>
+
+          <button class="pill-btn ai-btn sync-hero-action" data-action="${server.running ? 'sync-copy-info' : 'sync-server-start'}">${server.running ? iconSvg('copy', 'btn-svg') : iconSvg('server', 'btn-svg')} ${server.running ? 'Скопировать данные' : 'Запустить сервер'}</button>
+
+        </section>
+
+
+
+        <div class="sync-center-grid">
+
+          <section class="sync-center-card sync-server-card">
+
+            <div class="sync-card-head">${iconSvg('server', 'sync-card-head-icon')}<div><strong>Сервер на компьютере</strong><span>${server.canControl ? 'Управление доступно из приложения' : 'Браузерный режим: запуск сервера снаружи'}</span></div></div>
+
+            <div class="sync-server-status ${server.running ? 'online' : 'offline'}">
+
+              <span>${server.running ? 'Сервер запущен' : 'Сервер не запущен'}</span>
+
+              <small>${escapeHtml(server.message || (server.canControl ? 'Запуск доступен только по явному нажатию.' : 'Проверьте уже запущенный сервер или скопируйте команду запуска.'))}</small>
+
+            </div>
+
+            <div class="sync-info-grid">${infoRows.map(([label, value]) => `<span><small>${label}</small><strong>${escapeHtml(value)}</strong></span>`).join('')}</div>
+
+            <div class="sync-card-actions">
+
+              <button class="pill-btn ai-btn" data-action="sync-server-start">${iconSvg('server', 'btn-svg')} Запустить сервер</button>
+
+              <button class="pill-btn" data-action="sync-server-stop"><i class="bx bx-stop"></i> Остановить</button>
+
+              <button class="pill-btn" data-action="sync-server-check"><i class="bx bx-refresh"></i> Проверить</button>
+
+              <button class="pill-btn" data-action="sync-server-refresh-token"><i class="bx bx-key"></i> Новый код</button>
+
+              <button class="pill-btn" data-action="sync-copy-info">${iconSvg('copy', 'btn-svg')} Скопировать</button>
+
+            </div>
+
+          </section>
+
+
+
+          <section class="sync-center-card">
+
+            <div class="sync-card-head">${iconSvg('scan', 'sync-card-head-icon')}<div><strong>Обнаружение в сети</strong><span>Поиск по Wi‑Fi ограничен по времени; ручной ввод остаётся запасным путём.</span></div></div>
+
+            <div class="sync-card-actions">
+
+              <button class="pill-btn ai-btn" data-action="sync-scan">${iconSvg('scan', 'btn-svg')} Искать устройства</button>
+
+              ${s.discovery.scanning ? `<button class="pill-btn" data-action="sync-scan-cancel"><i class="bx bx-stop"></i> Остановить</button>` : ''}
+
+            </div>
+
+            ${s.discovery.scanning ? `<div class="sync-progress"><span style="width:${scanProgress}%"></span></div><small>${s.discovery.checked}/${s.discovery.total} адресов проверено</small>` : `<p class="form-helper">${escapeHtml(s.discovery.message || 'Поиск запускается только пользователем, ограничен по времени и не работает в фоне.')}</p>`}
+
+            <div class="sync-device-list">${discovered.length ? discovered.map((device) => this.renderSyncDeviceCard(device, 'discovered')).join('') : '<p class="form-helper">Пока ничего не найдено.</p>'}</div>
+
+          </section>
+
+
+
+          <section class="sync-center-card">
+
+            <div class="sync-card-head">${iconSvg('trust', 'sync-card-head-icon')}<div><strong>Доверенные устройства</strong><span>Автоподключение включается только после успешной привязки.</span></div></div>
+
+            <div class="sync-device-list">${remembered.length ? remembered.map((device) => this.renderSyncDeviceCard(device, 'remembered')).join('') : '<p class="form-helper">Доверенных устройств пока нет.</p>'}</div>
+
+          </section>
+
+
+
+          <section class="sync-center-card">
+
+            <div class="sync-card-head">${iconSvg('sync', 'sync-card-head-icon')}<div><strong>Подключение и merge</strong><span>Сервер не хранит историю. Очереди, связи и конфликты остаются в IndexedDB клиентов.</span></div></div>
+
+            <div class="form-grid compact">
+
+              <label>Имя устройства <input class="form-control" data-sync-field="deviceName" value="${escapeHtml(s.deviceName || '')}"></label>
+
+              <label>IP компьютера <input class="form-control" data-sync-field="host" value="${escapeHtml(s.host || '127.0.0.1')}" placeholder="192.168.1.10"></label>
+
+              <label>Порт <input class="form-control" data-sync-field="port" value="${escapeHtml(s.port || '8787')}" inputmode="numeric"></label>
+
+              <label>Код подключения <input class="form-control" data-sync-field="token" value="${escapeHtml(s.token || '')}"></label>
+
+            </div>
+
+            <div class="sync-card-actions">
+
+              <button class="pill-btn ai-btn" data-action="sync-connect">${iconSvg('sync', 'btn-svg')} Подключиться</button>
+
+              <button class="pill-btn" data-action="sync-disconnect"><i class="bx bx-link-break"></i> Отключить</button>
+
+              <button class="pill-btn" data-action="sync-request-merge"><i class="bx bx-transfer"></i> Сравнить базы</button>
+
+            </div>
+
+            ${s.mergePreview ? this.renderSyncMergePreview(s.mergePreview) : ''}
+
+          </section>
+
+
+
+          <section class="sync-center-card sync-diagnostics-card">
+
+            <div class="sync-card-head">${iconSvg('trust', 'sync-card-head-icon')}<div><strong>Диагностика</strong><span>Что сейчас известно приложению.</span></div></div>
+
+            <div class="sync-diagnostics-list">
+
+              <span><i class="bx ${this.runtime?.isElectron ? 'bx-check-circle' : 'bx-info-circle'}"></i> Runtime: ${escapeHtml(this.runtime?.platform || 'browser')}</span>
+
+              <span><i class="bx ${server.canControl ? 'bx-check-circle' : 'bx-error-circle'}"></i> Управление сервером: ${server.canControl ? 'доступно' : 'недоступно'}</span>
+
+              <span><i class="bx ${server.running ? 'bx-check-circle' : 'bx-radio-circle'}"></i> LAN IP: ${escapeHtml(preferredIps.join(', ') || 'не найден')}</span>
+
+              <span><i class="bx bx-shield-quarter"></i> Discovery не отдаёт код подключения или данные проекта.</span>
+
+            </div>
+
+          </section>
+
+        </div>
+
+
+
+        <details class="sync-help">
+
+          <summary>Как подключить?</summary>
+
+          <p>На ПК запустите сервер кнопкой выше или командой <code>npm run sync:server</code>. На телефоне откройте “Связь с компьютером”, найдите ПК в Wi‑Fi или введите IP, порт и код вручную. Поиск не публикует код подключения и не отдаёт данные проекта.</p>
+
+        </details>
+
+      </div>`;
+
+  }
+
+
+
+// --- connectLocalSyncFromUi ---
+
+async connectLocalSyncFromUi() {
+
+    const { host, port, token, deviceName } = this.state.sync;
+
+    if (!host || !token) {
+
+      this.toast('Введите IP компьютера и код подключения.');
+
+      return;
+
+    }
+
+    if (this.isAndroidRuntime() && /^127\./.test(String(host))) {
+
+      this.state.sync.status = 'error';
+
+      this.state.sync.statusDetail = '127.0.0.1 на телефоне — это сам телефон, а не компьютер. Введите LAN IP ПК.';
+
+      this.updateSyncStatusUi();
+
+      return;
+
+    }
+
+    safeSetStorageItem(localStorage, 'nocturne-sync-device-name', deviceName || defaultDeviceName(this.runtime));
+
+    safeSetStorageItem(localStorage, 'nocturne-sync-host', host);
+
+    safeSetStorageItem(localStorage, 'nocturne-sync-port', port || '8787');
+
+    safeSetStorageItem(localStorage, 'nocturne-sync-token', token);
+
+    this.state.sync.status = 'waiting';
+
+    this.state.sync.statusDetail = 'Проверяю /discovery на указанном адресе...';
+
+    this.updateSyncStatusUi();
+
+    try {
+
+      const device = await this.probeSyncDiscoveryHost(host, port || '8787', 'manual');
+
+      if (!device) throw new Error('wrong protocol');
+
+      this.state.sync.statusDetail = device.pairingRequired ? 'Сервер найден, нужен код подключения.' : 'Сервер найден.';
+
+      this.updateSyncStatusUi();
+
+    } catch (error) {
+
+      this.state.sync.status = 'error';
+
+      this.state.sync.statusDetail = `Сервер не найден: ${error?.name === 'AbortError' ? 'timeout' : (error?.message || 'host unreachable')}.`;
+
+      this.updateSyncStatusUi();
+
+      return;
+
+    }
+
+    try {
+
+      await this.syncClient.connect({ host, port, token, trusted: true });
+
+    } catch (error) {
+
+      this.state.sync.status = 'error';
+
+      this.state.sync.statusDetail = error?.message || 'Подключение не удалось.';
+
+      this.updateSyncStatusUi();
+
+    }
+
+  }
+
+
+
+// --- probeSyncDiscoveryHost ---
+
+async probeSyncDiscoveryHost(host, port = this.state.sync.port || '8787', method = 'manual') {
+
+    const payload = await this.httpGetJson(`${buildHttpBase(host, port)}/discovery`, 750);
+
+    return this.normalizeDiscoveredDevice(payload, host, port, method);
+
+  }
+
+
+
+// --- preferredLanIps ---
+
+  preferredLanIps(ips = []) {
+
+    const clean = [...new Set((ips || []).filter((ip) => /^\d{1,3}(\.\d{1,3}){3}$/.test(String(ip))))];
+
+    return [
+
+      ...clean.filter((ip) => this.isPrivateLanIp(ip) && !ip.startsWith('127.')),
+
+      ...clean.filter((ip) => !this.isPrivateLanIp(ip) && !ip.startsWith('127.')),
+
+      ...clean.filter((ip) => ip.startsWith('127.')),
+
+    ];
+
+  }
+
+
+
+// --- isPrivateLanIp ---
+
+  isPrivateLanIp(ip = '') {
+
+    const parts = String(ip).split('.').map((part) => Number(part));
+
+    if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return false;
+
+    if (parts[0] === 10) return true;
+
+    if (parts[0] === 192 && parts[1] === 168) return true;
+
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+
+    return false;
+
+  }
+
+
+
+// --- remoteConnectFolderTitle ---
+
+  remoteConnectFolderTitle(message) {
+
+    const name = message.deviceName || 'устройство';
+
+    const source = /android|phone|тел/i.test(name) ? 'С телефона' : 'С компьютера';
+
+    return `${source} — ${name}`;
+
+  }
+
+
+
+// --- scanForSyncServers ---
+
+async scanForSyncServers() {
+
+    if (this.state.sync.discovery.scanning) return;
+
+    const hosts = this.candidateSyncHosts();
+
+    const port = this.state.sync.port || '8787';
+
+    const discovery = this.state.sync.discovery;
+
+    discovery.scanning = true;
+
+    discovery.checked = 0;
+
+    discovery.total = hosts.length;
+
+    discovery.error = '';
+
+    discovery.message = 'Идёт поиск в Wi-Fi...';
+
+    this.state.sync.discoveredDevices = [];
+
+    const token = { cancelled: false };
+
+    this.syncScanAbort = token;
+
+    this.renderSyncSurfaces();
+
+
+
+    const found = new Map();
+
+    const startedAt = Date.now();
+
+    let index = 0;
+
+    const concurrency = 12;
+
+    const maxDuration = 12000;
+
+    const worker = async () => {
+
+      while (!token.cancelled && index < hosts.length && Date.now() - startedAt < maxDuration) {
+
+        const host = hosts[index++];
+
+        try {
+
+          const device = await this.probeSyncDiscoveryHost(host, port, 'subnet-scan');
+
+          if (device && !this.isLocalSyncDevice(device) && !found.has(device.id)) found.set(device.id, device);
+
+        } catch (error) {
+
+          if (!discovery.error) discovery.error = error?.name === 'AbortError' ? 'timeout' : (error?.message || 'host unreachable');
+
+        }
+
+        discovery.checked += 1;
+
+        if (discovery.checked % 8 === 0 || found.size) this.renderSyncSurfaces();
+
+      }
+
+    };
+
+    await Promise.all(Array.from({ length: concurrency }, () => worker()));
+
+    discovery.scanning = false;
+
+    discovery.message = token.cancelled
+
+      ? 'Поиск остановлен.'
+
+      : (found.size ? 'Компьютеры найдены.' : `Компьютеры не найдены${discovery.error ? ` (${discovery.error})` : ''}. Проверьте, что ПК и телефон в одной Wi-Fi сети, сервер запущен и IP не 127.0.0.1.`);
+
+    this.state.sync.discoveredDevices = [...found.values()];
+
+    this.syncScanAbort = null;
+
+    this.renderSyncSurfaces();
+
+  }
+
+
+
+// --- normalizeDiscoveredDevice ---
+
+  normalizeDiscoveredDevice(payload, host, port, method = 'scan') {
+
+    if (!payload || payload.service !== 'nocturne-sync') return null;
+
+    return {
+
+      id: `${payload.publicDeviceId || host}:${port}`,
+
+      publicDeviceId: payload.publicDeviceId || '',
+
+      deviceName: payload.deviceName || 'Nocturne Sync',
+
+      deviceType: payload.deviceType || 'computer',
+
+      host,
+
+      port: String(payload.port || port),
+
+      discoveryMethod: method,
+
+      protocolVersion: payload.protocolVersion || SYNC_PROTOCOL_VERSION,
+
+      pairingRequired: payload.pairingRequired !== false,
+
+      lastSeenAt: Date.now(),
+
+    };
+
+  }
+
+
+
+// --- httpGetJson ---
+
+async httpGetJson(url, timeoutMs = 650) {
+
+    if (window.Capacitor?.Plugins?.Http?.get) {
+
+      const result = await window.Capacitor.Plugins.Http.get({ url, connectTimeout: timeoutMs, readTimeout: timeoutMs });
+
+      return typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
+
+    }
+
+    const controller = new AbortController();
+
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+
+      const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      return await response.json();
+
+    } finally {
+
+      clearTimeout(timer);
+
+    }
+
+  }
+
+
+
 
 
   toast(message, duration = 2200) {

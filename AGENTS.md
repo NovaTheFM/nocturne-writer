@@ -16,10 +16,10 @@ Targets: Browser (served via Node), Electron desktop, Android (Capacitor).
 ## Architecture at a Glance
 
 ```
-index.html          ← entry point (loads src/styles.css + src/main.js)
+index.html          ← entry point (loads src/css/* + src/main.js)
 src/
   main.js           ← monolithic app entry (~750 KB, all UI logic lives here)
-  styles.css        ← monolithic stylesheet (~200 KB)
+  styles.css        ← legacy monolithic stylesheet (~200 KB)
   core/
     db.js           ← IndexedDB wrapper (all persistence)
     crypto.js       ← E2E encryption helpers (AES-GCM via WebCrypto)
@@ -35,7 +35,7 @@ src/
     runtime.js          ← platform detection (browser / electron / android)
     file-adapter.js     ← file I/O abstraction over platform differences
   vendor/             ← vendored third-party libs (no npm import at runtime)
-  css/                ← split CSS partials (merged into styles.css)
+  css/                ← canonical CSS partials (loaded by index.html)
   assets/             ← static assets
 
 electron/
@@ -60,7 +60,7 @@ capacitor.config.json ← Capacitor / Android config
 |------|--------|
 | **No bundler in dev** | `npm run dev` serves files directly via `server.mjs`. No Vite/Webpack. |
 | **ES Modules** | All source files use `import`/`export` (package.json `"type":"module"`). Electron files use `.cjs` (CommonJS). |
-| **Single monolith files** | `src/main.js` and `src/styles.css` are intentionally large. Do not split them without explicit instruction. |
+| **Single monolith files** | `src/main.js` is intentionally large. Do not split without explicit instruction. CSS has been split. |
 | **Platform abstraction** | Never call `fs`, `electron`, or Capacitor APIs directly from `src/`. Go through `src/platform/file-adapter.js` and `src/platform/runtime.js`. |
 | **Persistence** | All data goes through `src/core/db.js` (IndexedDB). Do not use localStorage for app data. |
 | **Encryption** | Projects can be E2E encrypted. Always route sensitive data through `src/core/crypto.js`. |
@@ -135,7 +135,7 @@ npm run smoke:desktop
 2. **Do not introduce npm dependencies** without explicit instruction — the app is intentionally dependency-light.
 3. **Do not use `localStorage`** for persistent data — only IndexedDB via `db.js`.
 4. **Electron IPC** — any new native feature needs both a handler in `electron/main.cjs` and a bridge in `electron/preload.cjs`.
-5. **CSS partials** in `src/css/` are source fragments. The canonical stylesheet is `src/styles.css`. Edits go to `src/styles.css` unless told otherwise.
+5. **CSS partials** in `src/css/` are the canonical stylesheets. Edits go to `src/css/*`. `src/styles.css` is considered legacy.
 6. **`backup.zip`** is gitignored and is never part of the codebase.
 
 ---

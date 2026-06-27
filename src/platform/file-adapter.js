@@ -108,6 +108,18 @@ export async function getPlatformInfo() {
   return getRuntimeInfo();
 }
 
+export async function saveGitSnapshot(data, projectName) {
+  const runtime = detectRuntime();
+  if (runtime.isElectron && window.nocturneElectron?.saveGitSnapshot) {
+    try {
+      return await window.nocturneElectron.saveGitSnapshot(data, projectName);
+    } catch (err) {
+      console.warn('Failed to save git snapshot:', err);
+    }
+  }
+  return false;
+}
+
 export const platformFiles = {
   exportProjectDump,
   importProjectDump,
@@ -115,4 +127,5 @@ export const platformFiles = {
   openTextFile,
   shareFileOrText,
   getPlatformInfo,
+  saveGitSnapshot,
 };

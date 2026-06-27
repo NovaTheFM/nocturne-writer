@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#08080a" />
+  <title>Nocturne Writer</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%2308080a'/%3E%3Cpath d='M20 46V18h8l16 20V18h6v28h-8L26 26v20z' fill='%238b5cf6'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Merriweather:ital,wght@0,400;0,700;1,400&display=swap" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Merriweather:ital,wght@0,400;0,700;1,400&display=swap"></noscript>
+  <link href="./src/vendor/boxicons/css/boxicons.min.css" rel="stylesheet">
+  <style>
+    /* Critical Preloader styles for instant first paint */
+    #preloader {
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #06060a;
+      transition: opacity 800ms cubic-bezier(0.25, 1, 0.5, 1), visibility 800ms ease;
+      overflow: hidden;
+    }
+    #preloader.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .preloader-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      text-align: center;
+      gap: 16px;
+    }
+    .preloader-logo-wrapper {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+    }
+    .preloader-logo-img {
+      width: 120px;
+      height: 120px;
+      background-color: var(--accent, #c92a3e);
+      -webkit-mask-image: url('./src/assets/in_app_icon.png');
+      mask-image: url('./src/assets/in_app_icon.png');
+      -webkit-mask-size: contain;
+      mask-size: contain;
+      -webkit-mask-repeat: no-repeat;
+      mask-repeat: no-repeat;
+      z-index: 2;
+      animation: preloader-orb-pulse 4s ease-in-out infinite alternate;
+    }
+    .preloader-glow-orb {
+      position: absolute;
+      width: 200px;
+      height: 200px;
+      background: radial-gradient(circle, rgba(201, 42, 62, 0.25) 0%, transparent 70%);
+      filter: blur(25px);
+      animation: preloader-orb-pulse 4s ease-in-out infinite alternate;
+      z-index: 1;
+      pointer-events: none;
+    }
+    .preloader-brand {
+      position: relative;
+      z-index: 2;
+      font-family: 'Lora', Georgia, serif;
+      font-size: clamp(2.4rem, 8vw, 3.8rem);
+      letter-spacing: 0.35em;
+      font-weight: 500;
+      color: #ffffff;
+      margin: 0;
+      padding-left: 0.35em;
+      text-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+      animation: preloader-text-fade 1.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+    .preloader-subtitle {
+      font-family: 'Manrope', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.5em;
+      color: rgba(255, 255, 255, 0.4);
+      padding-left: 0.5em;
+      text-transform: uppercase;
+      opacity: 0;
+      animation: preloader-fade-in 1.2s ease-out 0.6s forwards;
+    }
+    .preloader-progress-track {
+      width: 160px;
+      height: 2px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 2px;
+      overflow: hidden;
+      position: relative;
+      margin-top: 10px;
+      opacity: 0;
+      animation: preloader-fade-in 1s ease-out 0.8s forwards;
+    }
+    .preloader-progress-fill {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent, #c92a3e), var(--accent-glow, #f87171));
+      box-shadow: 0 0 8px var(--accent, #c92a3e);
+      border-radius: 2px;
+    }
+    .preloader-particles {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 2;
+    }
+    .particle {
+      position: absolute;
+      bottom: -20px;
+      border-radius: 50%;
+      background: var(--accent, #c92a3e);
+      box-shadow: 0 0 8px var(--accent, #c92a3e);
+      opacity: 0;
+      animation: preloader-float-up 4s infinite linear;
+    }
+    @keyframes preloader-orb-pulse {
+      0% { transform: scale(0.9); opacity: 0.7; }
+      100% { transform: scale(1.1); opacity: 1; }
+    }
+    @keyframes preloader-text-fade {
+      0% { opacity: 0; transform: translateY(10px); filter: blur(5px); }
+      100% { opacity: 1; transform: translateY(0); filter: blur(0); }
+    }
+    @keyframes preloader-fade-in {
+      0% { opacity: 0; transform: translateY(5px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes preloader-float-up {
+      0% { transform: translateY(0) scale(1); opacity: 0; }
+      10% { opacity: 0.4; }
+      80% { opacity: 0.4; }
+      100% { transform: translateY(-105vh) scale(0.5); opacity: 0; }
+    }
+  </style>
+  <link rel="stylesheet" href="./src/css/variables.css" />
+  <link rel="stylesheet" href="./src/css/animations.css" />
+  <link rel="stylesheet" href="./src/css/ui.css" />
+  <link rel="stylesheet" href="./src/css/experimental.css" />
+  <script>
+    try {
+      const s = localStorage.getItem('nocturne_settings');
+      if (s) {
+        const settings = JSON.parse(s);
+        if (settings.experimentalDesign) {
+          document.documentElement.classList.add('theme-experimental-boot');
+        }
+        if (settings.accent) {
+          document.documentElement.style.setProperty('--accent', settings.accent);
+          const hex = settings.accent.replace('#', '');
+          const r = parseInt(hex.substring(0,2), 16);
+          const g = parseInt(hex.substring(2,4), 16);
+          const b = parseInt(hex.substring(4,6), 16);
+          document.documentElement.style.setProperty('--accent-rgb', `${r}, ${g}, ${b}`);
+        }
+      }
+    } catch(e) {}
+  </script>
+</head>
+<body>
+  <div id="preloader">
+    <div class="preloader-particles" id="particles-container"></div>
+    <div class="preloader-content">
+      <div class="preloader-logo-wrapper">
+        <div class="preloader-glow-orb"></div>
+        <div class="preloader-logo-img"></div>
+        <div class="preloader-brand">NOCTURNE</div>
+      </div>
+      <div class="preloader-subtitle">FOCUS & INSPIRATION</div>
+      <div class="preloader-progress-track">
+        <div class="preloader-progress-fill"></div>
+      </div>
+    </div>
+  </div>
+  <script>
+    // Set initial preloader progress to show startup animation instantly
+    setTimeout(() => {
+      const fill = document.querySelector('.preloader-progress-fill');
+      if (fill) {
+        fill.style.transition = 'width 1.5s cubic-bezier(0.22, 1, 0.36, 1)';
+        fill.style.width = '35%';
+      }
+    }, 50);
+  </script>
+  <div id="app"></div>
+  <script src="./src/vendor/jszip/jszip.min.js"></script>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

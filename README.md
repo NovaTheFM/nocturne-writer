@@ -11,7 +11,7 @@ npm run dev
 
 Open `http://localhost:5173`.
 
-The production entrypoint remains `index.html`, loading `src/styles.css` and `src/main.js`.
+The production entrypoint remains `index.html`, loading `src/css/*` and `src/main.js`.
 
 ## Command Palette
 

@@ -5,7 +5,8 @@ const DEFAULT_PAGE_HEIGHT = 1123;
 const DEFAULT_VERTICAL_PADDING = 96;
 
 export function updateActivePageHighlight(editor, pageShell) {
-  const view = editor?.view;
+  let view;
+  try { view = editor?.view; } catch (e) { return; }
   if (!view?.dom || !pageShell) return;
 
   const bgContainer = pageShell.querySelector('.page-sheets-bg');
@@ -43,7 +44,8 @@ export function updateActivePageHighlight(editor, pageShell) {
 }
 
 export function calculateVisualPages({ editor, pageShell, overlay, flexible = false }) {
-  const view = editor?.view;
+  let view;
+  try { view = editor?.view; } catch (e) { return []; }
   if (!view?.dom || !pageShell) return [];
 
   const pageStyle = window.getComputedStyle(pageShell);
@@ -52,8 +54,14 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
   const paddingTop = parseFloat(pageStyle.paddingTop) || DEFAULT_VERTICAL_PADDING;
   const paddingBottom = parseFloat(pageStyle.paddingBottom) || DEFAULT_VERTICAL_PADDING;
   const gap = 60; // margin gap between pages
+  
+  const fontSize = parseFloat(pageStyle.fontSize) || 16;
+  const lineHeightStr = pageStyle.lineHeight;
+  const lineHeight = lineHeightStr === 'normal' ? 1.5 : parseFloat(lineHeightStr);
+  const gridStepPixels = isNaN(lineHeight) ? fontSize * 1.5 : (lineHeightStr.includes('px') ? lineHeight : fontSize * lineHeight);
+  
   const contentPageHeight = Math.max(120, pageHeight - paddingTop - paddingBottom);
-  const H_spacer = paddingBottom + gap + paddingTop;
+  const H_spacer = Math.ceil((paddingBottom + gap + paddingTop) / gridStepPixels) * gridStepPixels;
 
   const editorDom = view.dom;
   const editorRect = editorDom.getBoundingClientRect();
@@ -130,7 +138,7 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
     });
 
     const cleanTop = blockTop - totalSpacersBefore;
-    const cleanBottom = blockBottom - totalSpacersBefore - totalSpacersInside;
+    const cleanBottom = blockBottom - totalSpacersBefore;
     const height = cleanBottom - cleanTop;
 
     blocksData.push({
@@ -155,20 +163,19 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
     return pIdx * (pageHeight + gap) + pageHeight - paddingBottom;
   }
 
-  function findSplitPos(startPos, endPos, contentBottom) {
+  function findSplitPos(startPos, endPos, contentBottom, blockIndex) {
     let left = startPos;
     let right = endPos;
     let best = -1;
     while (left <= right) {
       const mid = Math.floor((left + right) / 2);
-      let coords;
+      let charY;
       try {
-        coords = view.coordsAtPos(mid);
+        charY = view.coordsAtPos(mid).bottom - editorRect.top;
       } catch (e) {
-        right = mid - 1;
-        continue;
+        charY = contentBottom + 1; // force left search if measurement fails
       }
-      const charY = coords.bottom - editorRect.top;
+
       if (charY <= contentBottom) {
         best = mid;
         left = mid + 1;
@@ -209,9 +216,10 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
           y = blockBottom;
         } else {
           const spacerHeight = nextPageStart - y;
+          const snappedSpacer = Math.ceil(spacerHeight / gridStepPixels) * gridStepPixels;
           pageBreaks.push({
             pos: block.pos,
-            height: spacerHeight,
+            height: snappedSpacer,
             type: 'block',
             index: block.index,
             pageIndex,
@@ -229,7 +237,7 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
           const endPos = block.pos + blockNode.nodeSize - 1;
 
           while (currentBlockY + remainingHeight > contentBottom) {
-            const splitPos = findSplitPos(currentStartPos, endPos, contentBottom);
+            const splitPos = findSplitPos(currentStartPos, endPos, contentBottom, block.index);
             if (splitPos > currentStartPos && splitPos < endPos) {
               pageBreaks.push({
                 pos: splitPos,
@@ -262,9 +270,10 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
                   remainingHeight = 0;
                 } else {
                   const spacerHeight = nextPageStart - currentBlockY;
+                  const snappedSpacer = Math.ceil(spacerHeight / gridStepPixels) * gridStepPixels;
                   pageBreaks.push({
                     pos: block.pos,
-                    height: spacerHeight,
+                    height: snappedSpacer,
                     type: 'block',
                     index: block.index,
                     pageIndex,
@@ -273,9 +282,11 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
                   currentBlockY = nextPageStart;
                 }
               } else {
+                const inlineSpacerHeight = nextPageStart - currentBlockY;
+                const snappedInlineSpacer = Math.ceil(inlineSpacerHeight / gridStepPixels) * gridStepPixels;
                 pageBreaks.push({
                   pos: currentStartPos,
-                  height: nextPageStart - currentBlockY,
+                  height: snappedInlineSpacer,
                   type: 'inline',
                   index: block.index,
                   pageIndex,
@@ -295,9 +306,10 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
             y = blockBottom;
           } else {
             const spacerHeight = nextPageStart - y;
+            const snappedSpacer = Math.ceil(spacerHeight / gridStepPixels) * gridStepPixels;
             pageBreaks.push({
               pos: block.pos,
-              height: spacerHeight,
+              height: snappedSpacer,
               type: 'block',
               index: block.index,
               pageIndex,
@@ -317,45 +329,49 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
 
   if (!isSame) {
     const decorations = [];
-    pageBreaks.forEach((brk) => {
-      const spacer = Decoration.widget(brk.pos, () => {
-        const el = document.createElement('span');
-        el.className = 'pm-page-break';
-        el.setAttribute('contenteditable', 'false');
-        el.style.display = 'block';
-        el.style.height = `${brk.height}px`;
-        el.style.marginLeft = `-${pageStyle.paddingLeft}`;
-        el.style.marginRight = `-${pageStyle.paddingRight}`;
-        el.style.pointerEvents = 'none';
-        el.style.userSelect = 'none';
-        el.style.boxSizing = 'border-box';
+    const blockBreaks = new Map();
+    pageBreaks.forEach(brk => {
+      if (!blockBreaks.has(brk.index)) blockBreaks.set(brk.index, []);
+      blockBreaks.get(brk.index).push(brk);
+    });
 
-        // Calculate dynamic gradient values
-        const spacerY = brk.y;
-        const pIdx = brk.pageIndex;
-        const sheetEnd = (pIdx + 1) * (pageHeight + gap) - gap;
-        const gapStart = Math.max(0, sheetEnd - spacerY);
-        const gapEnd = Math.min(brk.height, gapStart + gap);
+    blockBreaks.forEach((breaks, blockIndex) => {
+      const blockData = blocksData.find(b => b.index === blockIndex);
+      if (!blockData) return;
 
-        el.style.background = `linear-gradient(to bottom, 
-          var(--bg-page) ${gapStart}px, 
-          var(--border) ${gapStart}px, 
-          var(--border) ${gapStart + 1}px, 
-          var(--bg-deep) ${gapStart + 1}px, 
-          var(--bg-deep) ${gapEnd - 1}px, 
-          var(--border) ${gapEnd - 1}px, 
-          var(--border) ${gapEnd}px, 
-          var(--bg-page) ${gapEnd}px
-        )`;
-        return el;
-      }, {
-        key: `break-${brk.pos}`,
-        side: -1,
-        ignoreSelection: true,
-        stopEvent: (event) => true
-      });
+      let totalMarginBottom = 0;
+      let accumulatedTop = 0;
+      breaks.sort((a, b) => a.pos - b.pos);
 
-      decorations.push(spacer);
+      for (let i = 0; i < breaks.length; i++) {
+        const brk = breaks[i];
+        if (brk.type === 'block') {
+           decorations.push(Decoration.node(blockData.pos, blockData.pos + blockData.node.nodeSize, {
+             style: `margin-top: ${brk.height}px;`
+           }));
+        } else {
+           accumulatedTop += brk.height;
+           totalMarginBottom += brk.height;
+           const startPos = brk.pos;
+           const endPos = (i + 1 < breaks.length && breaks[i+1].type === 'inline') 
+              ? breaks[i+1].pos 
+              : blockData.pos + blockData.node.nodeSize - 1;
+
+           if (startPos < endPos) {
+             const spacer = document.createElement('span');
+             spacer.className = 'pm-page-break-widget';
+             spacer.contentEditable = 'false';
+             spacer.style.setProperty('--spacer-height', `${accumulatedTop}px`);
+             decorations.push(Decoration.widget(startPos, spacer, { key: `inline-${brk.index}-${startPos}`, side: -1 }));
+           }
+        }
+      }
+
+      if (totalMarginBottom > 0) {
+        decorations.push(Decoration.node(blockData.pos, blockData.pos + blockData.node.nodeSize, {
+          style: `margin-bottom: ${totalMarginBottom}px;`
+        }));
+      }
     });
 
     view.dispatch(view.state.tr.setMeta(paginationPluginKey, {

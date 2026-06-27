@@ -1,6 +1,7 @@
 import { Editor, Extension, StarterKit, TextAlign, Underline, Placeholder, Plugin, PluginKey, Decoration, DecorationSet } from '../vendor/tiptap/nocturne-tiptap.bundle.js';
 import { ensureTiptapBlockIds, legacyAstToHtml, tiptapJsonToLegacyAst } from './document-adapter.js';
 import { calculateVisualPages, updateActivePageHighlight } from './visual-pagination.js';
+import { normalizeTypoToken } from '../core/typos.js';
 
 export const paginationPluginKey = new PluginKey('nocturnePagination');
 
@@ -50,7 +51,6 @@ const NocturnePagination = Extension.create({
                 const activeBlockDeco = Decoration.node(start, end, { class: 'active-block' });
                 decos = decos.add(state.doc, [activeBlockDeco]);
               } catch (e) {
-                // ignore decoration errors if out of bounds
               }
             }
             return decos;
@@ -86,13 +86,111 @@ const BlockIdentity = Extension.create({
   },
 });
 
+function isEntityBoundary(char) {
+  return !char || !/[\p{L}\p{N}_]/u.test(char);
+}
+
+function findEntityMatches(text, index) {
+  const normalizedText = normalizeTypoToken(text);
+  const matches = [];
+  let pos = 0;
+  while (pos < text.length) {
+    const entry = index.find((candidate) => (
+      normalizedText.startsWith(candidate.normalized, pos)
+      && isEntityBoundary(text[pos - 1])
+      && isEntityBoundary(text[pos + candidate.mention.length])
+    ));
+    if (entry) {
+      matches.push({ ...entry, start: pos, end: pos + entry.mention.length });
+      pos += entry.mention.length;
+    } else {
+      pos += 1;
+    }
+  }
+  return matches;
+}
+
+const NocturneEntityMentions = Extension.create({
+  name: 'nocturneEntityMentions',
+  addOptions() {
+    return {
+      getMentionIndex: () => [],
+    };
+  },
+  addProseMirrorPlugins() {
+    const extension = this;
+    const key = new PluginKey('nocturneEntityMentions');
+    
+    const buildDecos = (doc, index) => {
+      const decos = [];
+      if (!index || !index.length) return DecorationSet.empty;
+      
+      doc.descendants((node, pos) => {
+        if (node.isText) {
+          const text = node.text || '';
+          const matches = findEntityMatches(text, index);
+          matches.forEach((match) => {
+            const from = pos + match.start;
+            const to = pos + match.end;
+            
+            const attrs = {
+              class: match.type === 'family-group' ? 'entity-link entity-family-link' : 'entity-link',
+              tabindex: '0',
+            };
+            
+            if (match.type === 'family-group') {
+              attrs['data-entity-kind'] = 'family';
+              attrs['data-family-name'] = match.familyName;
+              attrs['data-entity-label'] = `Семья ${match.familyName}`;
+              attrs['aria-label'] = `Семья ${match.familyName}`;
+            } else {
+              attrs['data-entity-kind'] = match.kind;
+              attrs['data-entity-id'] = match.entity.id;
+              attrs['data-entity-label'] = match.entity.displayName || match.entity.name;
+              attrs['aria-label'] = match.entity.displayName || match.entity.name;
+            }
+            
+            decos.push(Decoration.inline(from, to, attrs));
+          });
+        }
+      });
+      
+      return DecorationSet.create(doc, decos);
+    };
+
+    return [
+      new Plugin({
+        key,
+        state: {
+          init(config, instance) {
+            return buildDecos(instance.doc, extension.options.getMentionIndex());
+          },
+          apply(tr, value, oldState, newState) {
+            const forced = tr.getMeta('nocturneEntityMentionsForceUpdate');
+            if (tr.docChanged || forced) {
+              return buildDecos(newState.doc, extension.options.getMentionIndex());
+            }
+            return value.map(tr.mapping, tr.doc);
+          },
+        },
+        props: {
+          decorations(state) {
+            return key.getState(state);
+          },
+        },
+      }),
+    ];
+  },
+});
+
 export class NocturneEditorBridge {
-  constructor({ onChange, onFocus, onSelectionUpdate, getSettings }) {
+  constructor({ onChange, onFocus, onSelectionUpdate, getSettings, getMentionIndex }) {
     this.instances = new Map();
     this.onChange = onChange;
     this.onFocus = onFocus;
     this.onSelectionUpdate = onSelectionUpdate;
     this.getSettings = getSettings;
+    this.getMentionIndex = getMentionIndex;
     this.visualPageRaf = new Map();
   }
 
@@ -114,6 +212,9 @@ export class NocturneEditorBridge {
         Placeholder.configure({ placeholder: '' }),
         BlockIdentity,
         NocturnePagination.configure({ bridge: this }),
+        NocturneEntityMentions.configure({
+          getMentionIndex: () => this.getMentionIndex?.() || [],
+        }),
       ],
       editorProps: {
         attributes: {
@@ -123,6 +224,15 @@ export class NocturneEditorBridge {
           'data-doc-id': doc.id,
         },
         handleDOMEvents: {
+          keydown: (view, event) => {
+            console.log("KEYDOWN FIRED", event.key);
+            const settings = this.getSettings?.() || {};
+            if (settings.typewriterSound && !event.ctrlKey && !event.altKey && !event.metaKey) {
+              console.log("PLAYING SOUND");
+              this.playTypewriterSound();
+            }
+            return false;
+          },
           focus: () => {
             this.onFocus?.(paneId);
             return false;
@@ -142,11 +252,24 @@ export class NocturneEditorBridge {
         doc.ast = tiptapJsonToLegacyAst(doc.pmJson);
         this.onChange?.({ paneId, doc, transaction });
         this.scheduleVisualPages(paneId);
+        
+        const settings = this.getSettings?.() || {};
+        if (settings.typewriterMode) {
+          const instance = [...this.instances.values()].find((inst) => inst.editor === updatedEditor);
+          if (instance) this.applyTypewriterScroll(updatedEditor, instance);
+        }
       },
       onSelectionUpdate: ({ editor: selectionEditor }) => {
         const instance = [...this.instances.values()].find((inst) => inst.editor === selectionEditor);
         if (instance) {
           updateActivePageHighlight(selectionEditor, instance.pageShell);
+          const settings = this.getSettings?.() || {};
+          if (settings.typewriterMode) {
+            instance.pageShell.style.paddingBottom = '50vh';
+            // Scroll logic removed from here so it only triggers when actually typing!
+          } else {
+            instance.pageShell.style.paddingBottom = '';
+          }
         }
         this.onSelectionUpdate?.({ paneId, editor: selectionEditor });
       },
@@ -155,6 +278,101 @@ export class NocturneEditorBridge {
     const instance = { paneId, docId: doc.id, editor, host, pageShell, overlay };
     this.instances.set(paneId, instance);
     return instance;
+  }
+
+  applyTypewriterScroll(editor, instance) {
+    if (!editor.view.state.selection.empty) return;
+
+    requestAnimationFrame(() => {
+      const { view } = editor;
+      const coords = view.coordsAtPos(view.state.selection.head);
+      const scrollContainer = instance.pageShell.closest('.editor-scroll-area') || instance.pageShell.parentElement;
+      
+      if (scrollContainer && coords) {
+        const scRect = scrollContainer.getBoundingClientRect();
+        const targetCenterY = scRect.top + (scRect.height / 2) - 20;
+        
+        const currentScroll = scrollContainer._twFloatScrollTop ?? scrollContainer.scrollTop;
+        const targetScrollTop = Math.round(currentScroll + coords.top - targetCenterY);
+        
+        if (!scrollContainer._twAnim && Math.abs(currentScroll - targetScrollTop) < 15) {
+          return;
+        }
+        
+        scrollContainer._twTargetScrollTop = targetScrollTop;
+        
+        if (scrollContainer._twAnim) {
+          return;
+        }
+        
+        if (scrollContainer.style.scrollBehavior !== 'auto') {
+          scrollContainer._twOriginalScrollBehavior = scrollContainer.style.scrollBehavior;
+          scrollContainer.style.scrollBehavior = 'auto';
+        }
+        
+        scrollContainer._twFloatScrollTop = currentScroll;
+        let lastTime = performance.now();
+        
+        const animate = (time) => {
+          const dt = Math.min(0.05, (time - lastTime) / 1000);
+          lastTime = time;
+          
+          const current = scrollContainer._twFloatScrollTop;
+          const target = scrollContainer._twTargetScrollTop;
+          const diff = target - current;
+          const absDiff = Math.abs(diff);
+          
+          if (absDiff < 0.5) {
+            scrollContainer.scrollTop = target;
+            if (scrollContainer._twOriginalScrollBehavior !== undefined) {
+              scrollContainer.style.scrollBehavior = scrollContainer._twOriginalScrollBehavior;
+              delete scrollContainer._twOriginalScrollBehavior;
+            }
+            scrollContainer._twFloatScrollTop = null;
+            scrollContainer._twAnim = null;
+            return;
+          }
+          
+          const lambda = 12 + Math.min(8, Math.max(0, (absDiff - 50) / 150) * 8);
+          const factor = 1 - Math.exp(-dt * lambda);
+          
+          const next = current + diff * factor;
+          scrollContainer._twFloatScrollTop = next;
+          scrollContainer.scrollTop = Math.round(next);
+          
+          scrollContainer._twAnim = requestAnimationFrame(animate);
+        };
+        
+        scrollContainer._twAnim = requestAnimationFrame(animate);
+      }
+    });
+  }
+
+  playTypewriterSound() {
+    if (!this.audioCtx) {
+      this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    const ctx = this.audioCtx;
+    if (ctx.state === 'suspended') ctx.resume();
+    
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    
+    // Soft, rounded click sound (low pitch)
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(300, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.04);
+    
+    // Attack phase (5ms) to prevent speaker popping/cracking, then soft decay
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
+    
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.06);
   }
 
   setEditable(paneId, editable) {
@@ -204,7 +422,7 @@ export class NocturneEditorBridge {
         editor: instance.editor,
         pageShell: instance.pageShell,
         overlay: instance.overlay,
-        flexible: !!settings.flexiblePageHeight,
+        flexible: !settings.autoPaginate,
       });
     });
     this.visualPageRaf.set(paneId, raf);

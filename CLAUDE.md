@@ -12,7 +12,7 @@ npm run check                # syntax validation (no execution)
 
 ## Critical Rules
 
-- **`src/main.js`** (~750 KB) and **`src/styles.css`** (~200 KB) are intentional monoliths — make **targeted edits only**, never rewrite wholesale.
+- **`src/main.js`** (~750 KB) is an intentional monolith — make **targeted edits only**, never rewrite wholesale. CSS has been split.
 - All persistence goes through **`src/core/db.js`** (IndexedDB). Never use `localStorage` for app data.
 - Platform-specific APIs (file dialogs, native share) must go through **`src/platform/file-adapter.js`** and **`src/platform/runtime.js`**.
 - Do **not** add npm dependencies without explicit request.
@@ -21,7 +21,7 @@ npm run check                # syntax validation (no execution)
 ## Architecture Summary
 
 ```
-index.html → src/main.js + src/styles.css
+index.html → src/main.js + src/css/*
 src/core/       db, crypto, utils, defaults, typos
 src/features/   command-palette, ai-context
 src/platform/   runtime detection, file I/O abstraction

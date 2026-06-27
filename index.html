@@ -50,7 +50,7 @@
     .preloader-logo-img {
       width: 120px;
       height: 120px;
-      background-color: var(--accent, #c92a3e);
+      background-color: var(--accent, #8b5cf6);
       -webkit-mask-image: url('./src/assets/in_app_icon.png');
       mask-image: url('./src/assets/in_app_icon.png');
       -webkit-mask-size: contain;
@@ -64,7 +64,7 @@
       position: absolute;
       width: 200px;
       height: 200px;
-      background: radial-gradient(circle, rgba(201, 42, 62, 0.25) 0%, transparent 70%);
+      background: radial-gradient(circle, rgba(var(--accent-rgb, 139, 92, 246), 0.25) 0%, transparent 70%);
       filter: blur(25px);
       animation: preloader-orb-pulse 4s ease-in-out infinite alternate;
       z-index: 1;
@@ -111,8 +111,8 @@
       left: 0;
       height: 100%;
       width: 0%;
-      background: linear-gradient(90deg, var(--accent, #c92a3e), var(--accent-glow, #f87171));
-      box-shadow: 0 0 8px var(--accent, #c92a3e);
+      background: linear-gradient(90deg, var(--accent, #8b5cf6), var(--accent-hover, #a78bfa));
+      box-shadow: 0 0 8px var(--accent, #8b5cf6);
       border-radius: 2px;
     }
     .preloader-particles {
@@ -125,8 +125,8 @@
       position: absolute;
       bottom: -20px;
       border-radius: 50%;
-      background: var(--accent, #c92a3e);
-      box-shadow: 0 0 8px var(--accent, #c92a3e);
+      background: var(--accent, #8b5cf6);
+      box-shadow: 0 0 8px var(--accent, #8b5cf6);
       opacity: 0;
       animation: preloader-float-up 4s infinite linear;
     }
@@ -149,10 +149,10 @@
       100% { transform: translateY(-105vh) scale(0.5); opacity: 0; }
     }
   </style>
-  <link rel="stylesheet" href="./src/css/variables.css" />
-  <link rel="stylesheet" href="./src/css/animations.css" />
-  <link rel="stylesheet" href="./src/css/ui.css" />
-  <link rel="stylesheet" href="./src/css/experimental.css" />
+  <link rel="stylesheet" href="./src/css/variables.css?v=1.0.1" />
+  <link rel="stylesheet" href="./src/css/animations.css?v=1.0.1" />
+  <link rel="stylesheet" href="./src/css/ui.css?v=1.0.1" />
+  <link rel="stylesheet" href="./src/css/experimental.css?v=1.0.1" />
   <script>
     try {
       const s = localStorage.getItem('nocturne_settings');
@@ -200,6 +200,6 @@
   </script>
   <div id="app"></div>
   <script src="./src/vendor/jszip/jszip.min.js"></script>
-  <script type="module" src="./src/main.js"></script>
+  <script type="module" src="./src/main.js?v=1.0.1"></script>
 </body>
 </html>

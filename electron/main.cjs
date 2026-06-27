@@ -6,9 +6,49 @@ const { createServer } = require('node:http');
 const { networkInterfaces, hostname } = require('node:os');
 const { createHash, randomBytes } = require('node:crypto');
 const { WebSocketServer } = require('ws');
+const { simpleGit } = require('simple-git');
 
 const root = path.resolve(__dirname, '..');
 const devUrl = process.env.NOCTURNE_DEV_URL || process.env.ELECTRON_DEV_URL || '';
+
+ipcMain.handle('nocturne:git-commit', async (_event, dataStr, projectName) => {
+  if (typeof dataStr !== 'string') return false;
+  try {
+    const gitDir = path.join(app.getPath('userData'), 'git-backups');
+    if (!existsSync(gitDir)) await fs.mkdir(gitDir, { recursive: true });
+    
+    const git = simpleGit(gitDir);
+    const isRepo = await git.checkIsRepo();
+    if (!isRepo) {
+      await git.init();
+      // Configure dummy user for commits
+      await git.addConfig('user.name', 'Nocturne Writer');
+      await git.addConfig('user.email', 'autosave@nocturne.local');
+    }
+    
+    const safeName = String(projectName || 'project').replace(/[\\/:*?"<>|]+/g, '_');
+    const dumpPath = path.join(gitDir, `${safeName}.nocturnedump.json`);
+    
+    // Attempt to pretty print if it's valid JSON
+    let content = dataStr;
+    try {
+      const parsed = JSON.parse(dataStr);
+      content = JSON.stringify(parsed, null, 2);
+    } catch (e) {} // If not JSON, leave as is
+    
+    await fs.writeFile(dumpPath, content, 'utf8');
+    
+    await git.add(dumpPath);
+    const status = await git.status();
+    if (status.staged.length > 0) {
+      await git.commit(`Autosave: ${new Date().toISOString()}`);
+    }
+    return true;
+  } catch (err) {
+    console.error('Git versioning error:', err);
+    return false;
+  }
+});
 const SYNC_PROTOCOL_VERSION = 1;
 let syncHttpServer = null;
 let syncWss = null;
@@ -234,12 +274,16 @@ function refreshSyncToken() {
 
 function createWindow() {
   Menu.setApplicationMenu(null);
+  const iconPath = existsSync(path.join(__dirname, '..', 'app_src', 'src', 'assets', 'icon.png'))
+    ? path.join(__dirname, '..', 'app_src', 'src', 'assets', 'icon.png')
+    : path.join(__dirname, '..', 'src', 'assets', 'icon.png');
   const win = new BrowserWindow({
     width: 1280,
     height: 860,
     minWidth: 960,
     minHeight: 620,
     title: 'Nocturne Writer',
+    icon: iconPath,
     backgroundColor: '#08080a',
     autoHideMenuBar: true,
     webPreferences: {

@@ -106,7 +106,7 @@ export class Database {
     const folders = await requestToPromise(this.store('folders').getAll());
     if (!folders.length) await Promise.all(seedFolders.map((folder) => this.put('folders', folder)));
     const lore = await requestToPromise(this.store('lore').get('world'));
-    if (!lore) await this.put('lore', { id: 'world', characters: [], locations: [], timeline: [] });
+    if (!lore) await this.put('lore', { id: 'world', characters: [], locations: [], timeline: [], notes: [] });
     const today = new Date().toISOString().slice(0, 10);
     const stats = await requestToPromise(this.store('stats').get(today));
     if (!stats) await this.put('stats', { id: today, words: 0, completed: false });

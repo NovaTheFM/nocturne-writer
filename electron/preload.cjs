@@ -22,4 +22,8 @@ contextBridge.exposeInMainWorld('nocturneElectron', {
     if (typeof filePath !== 'string' || filePath.length > 4096) return Promise.resolve(false);
     return ipcRenderer.invoke('nocturne:show-item-in-folder', filePath);
   },
+  saveGitSnapshot: (data, projectName) => {
+    if (typeof data !== 'string') return Promise.resolve(false);
+    return ipcRenderer.invoke('nocturne:git-commit', data, safeSuggestedName(projectName));
+  },
 });

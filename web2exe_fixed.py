@@ -52,11 +52,12 @@ def write_package(app_name):
         "author": "Nocturne Writer",
         "main": "electron/main.cjs",
         "scripts": {
-            "build": "electron-builder --win portable"
+            "build": "electron-builder --win nsis"
         },
         "dependencies": {
             "bonjour-service": "^1.4.0",
-            "ws": "^8.21.0"
+            "ws": "^8.21.0",
+            "simple-git": "^3.36.0"
         },
         "devDependencies": {
             "electron": "^42.2.0",
@@ -70,47 +71,52 @@ def write_package(app_name):
                 {
                     "ext": "nocturnedump",
                     "name": "Nocturne Project Backup",
-                    "icon": "app_src/src/assets/icon.ico"
+                    "icon": "app_src/src/assets/in_app_icon.ico"
                 },
                 {
                     "ext": "nocturnmemory",
                     "name": "Nocturne Knowledge Base",
-                    "icon": "app_src/src/assets/icon.ico"
+                    "icon": "app_src/src/assets/in_app_icon.ico"
                 },
                 {
                     "ext": "nocturnecharacters",
                     "name": "Nocturne Characters Export",
-                    "icon": "app_src/src/assets/icon.ico"
+                    "icon": "app_src/src/assets/in_app_icon.ico"
                 },
                 {
                     "ext": "nocturneplaces",
                     "name": "Nocturne Locations Export",
-                    "icon": "app_src/src/assets/icon.ico"
+                    "icon": "app_src/src/assets/in_app_icon.ico"
                 },
                 {
                     "ext": "nocturnetimelines",
                     "name": "Nocturne Timelines Export",
-                    "icon": "app_src/src/assets/icon.ico"
+                    "icon": "app_src/src/assets/in_app_icon.ico"
                 },
                 {
                     "ext": "nocturnechar",
                     "name": "Nocturne Character Card",
-                    "icon": "app_src/src/assets/icon.ico"
+                    "icon": "app_src/src/assets/in_app_icon.ico"
                 },
                 {
                     "ext": "nocturneplace",
                     "name": "Nocturne Location Card",
-                    "icon": "app_src/src/assets/icon.ico"
+                    "icon": "app_src/src/assets/in_app_icon.ico"
                 },
                 {
                     "ext": "nocturnetime",
                     "name": "Nocturne Timeline Event",
-                    "icon": "app_src/src/assets/icon.ico"
+                    "icon": "app_src/src/assets/in_app_icon.ico"
+                },
+                {
+                    "ext": "nocturnenote",
+                    "name": "Nocturne Note Card",
+                    "icon": "app_src/src/assets/in_app_icon.ico"
                 },
                 {
                     "ext": "nocturned",
                     "name": "Nocturne Review Document",
-                    "icon": "app_src/src/assets/icon.ico"
+                    "icon": "app_src/src/assets/in_app_icon.ico"
                 }
             ],
             "files": [
@@ -160,12 +166,24 @@ def write_package(app_name):
                 "node_modules/math-intrinsics/**/*",
                 "node_modules/which-boxed-primitive/**/*",
                 "node_modules/which-collection/**/*",
-                "node_modules/which-typed-array/**/*"
+                "node_modules/which-typed-array/**/*",
+                "node_modules/simple-git/**/*",
+                "node_modules/@kwsites/**/*",
+                "node_modules/@simple-git/**/*",
+                "node_modules/debug/**/*",
+                "node_modules/ms/**/*"
             ],
             "win": {
-                "target": "portable",
+                "target": "nsis",
                 "icon": "app_src/src/assets/icon.ico",
-                "signAndEditExecutable": False
+                "signExecutable": False
+            },
+            "nsis": {
+                "oneClick": False,
+                "allowToChangeInstallationDirectory": True,
+                "installerIcon": "app_src/src/assets/icon.ico",
+                "uninstallerIcon": "app_src/src/assets/icon.ico",
+                "shortcutName": app_name
             }
         }
     }

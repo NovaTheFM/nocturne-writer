@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 # Summary is intentionally limited to the production web app:
-# index.html -> ./src/styles.css + ./src/main.js and related ./src modules.
+# index.html -> ./src/css/* + ./src/main.js and related ./src modules.
 PROJECT_ROOT = Path(__file__).resolve().parent
 OUTPUT_FILE = PROJECT_ROOT / "project_code_summary.txt"
 

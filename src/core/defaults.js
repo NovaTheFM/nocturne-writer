@@ -51,15 +51,13 @@ export const defaultSettings = {
   watermark: true,
   authorName: 'Автор',
   liveSave: true,
-  autoPaginate: true,
-  flexiblePageHeight: false,
+  autoPaginate: false,
   showPageRulers: false,
   showZenButton: true,
   writingAnimation: 'ripple',
   notesAutosave: true,
   toolbarSticky: true,
   reduceMobileAnimations: false,
-    keepCaretCentered: false,
     macros: [
       { keys: 'Ctrl+[', value: '«' },
       { keys: 'Ctrl+]', value: '»' }
