@@ -13,6 +13,7 @@ npm run check                # syntax validation (no execution)
 ## Critical Rules
 
 - **`src/main.js`** (~750 KB) is an intentional monolith — make **targeted edits only**, never rewrite wholesale. CSS has been split.
+- **ALWAYS MAKE A GIT COMMIT BEFORE STARTING WORK** — immediately commit the current state before executing any tasks or editing any files.
 - All persistence goes through **`src/core/db.js`** (IndexedDB). Never use `localStorage` for app data.
 - Platform-specific APIs (file dialogs, native share) must go through **`src/platform/file-adapter.js`** and **`src/platform/runtime.js`**.
 - Do **not** add npm dependencies without explicit request.
