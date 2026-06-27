@@ -525,6 +525,15 @@ class NocturneWriter {
     doc.order = Number.isFinite(Number(doc.order)) ? Number(doc.order) : 0;
     doc.createdAt = Number(doc.createdAt || now);
     doc.updatedAt = Number(doc.updatedAt || now);
+    
+    doc.docType = ['document', 'book-chapter'].includes(doc.docType) ? doc.docType : 'document';
+    if (doc.docType === 'book-chapter') {
+      doc.workTitle = String(doc.workTitle || '');
+      doc.volume = String(doc.volume || '');
+      doc.chapterNumber = String(doc.chapterNumber || '');
+      doc.bookStatus = ['Не редактировано', 'На редакции', 'Вычитка', 'Чистовая версия', 'Закончено'].includes(doc.bookStatus) ? doc.bookStatus : 'Не редактировано';
+    }
+
     if (!isPlainObject(doc.ast)) doc.ast = { type: 'doc', blocks: [] };
     if (!Array.isArray(doc.ast.blocks)) doc.ast.blocks = [];
     doc.ast.blocks = doc.ast.blocks.map((block) => {
@@ -1761,12 +1770,20 @@ class NocturneWriter {
   mobileDocCard(doc) {
     const words = countWords(docText(doc.ast));
     const updated = doc.updatedAt ? new Date(doc.updatedAt).toLocaleDateString() : '';
+    const isBook = doc.docType === 'book-chapter';
     return `
-      <article class="doc-item mobile-doc-card ${doc.id === this.state.activeDocId ? 'active' : ''}" data-doc-id="${escapeHtml(doc.id)}">
+      <article class="doc-item mobile-doc-card ${isBook ? 'book-chapter-card' : ''} ${doc.id === this.state.activeDocId ? 'active' : ''}" data-doc-id="${escapeHtml(doc.id)}">
         <div>
-          <h3><i class="bx ${doc.pinned ? 'bx-pin' : doc.locked ? 'bx-lock' : 'bx-file'}"></i>${escapeHtml(doc.title || 'Без названия')}</h3>
+          <h3><i class="bx ${isBook ? 'bx-book-open' : (doc.pinned ? 'bx-pin' : doc.locked ? 'bx-lock' : 'bx-file')}"></i>${escapeHtml(doc.title || 'Без названия')}</h3>
           <p>${escapeHtml(doc.description || doc.summary || 'Без описания')}</p>
           <small>${words} слов${updated ? ` · ${updated}` : ''}</small>
+          ${isBook ? `
+          <div class="book-chapter-meta">
+            ${doc.workTitle || doc.volume ? `<span class="book-meta-label">${escapeHtml(doc.workTitle || '')}${doc.volume && doc.workTitle ? ' / ' : ''}${escapeHtml(doc.volume || '')}</span>` : ''}
+            ${doc.chapterNumber ? `<span class="book-meta-chapter">${escapeHtml(doc.chapterNumber)}</span>` : ''}
+            <span class="book-status-badge status-${this.statusSlug(doc.bookStatus)}">${escapeHtml(doc.bookStatus || 'Не редактировано')}</span>
+          </div>
+          ` : ''}
         </div>
         <button class="mobile-card-menu doc-menu-btn" data-doc-menu="${escapeHtml(doc.id)}" aria-label="Меню главы"><i class="bx bx-dots-vertical-rounded"></i></button>
       </article>`;
@@ -6484,7 +6501,13 @@ class NocturneWriter {
       if (q) {
         const byTitle = docs.filter((d) => d.title.toLowerCase().includes(q));
         const byDesc = docs.filter((d) => !byTitle.includes(d) && (d.description || d.summary || '').toLowerCase().includes(q));
-        docs = [...byTitle, ...byDesc];
+        const byMeta = docs.filter((d) => !byTitle.includes(d) && !byDesc.includes(d) && d.docType === 'book-chapter' && (
+          (d.workTitle || '').toLowerCase().includes(q) ||
+          (d.volume || '').toLowerCase().includes(q) ||
+          (d.chapterNumber || '').toLowerCase().includes(q) ||
+          (d.bookStatus || '').toLowerCase().includes(q)
+        ));
+        docs = [...byTitle, ...byDesc, ...byMeta];
       }
       return `
         <div class="section-title" data-folder-id="${folder.id}">
@@ -6499,13 +6522,22 @@ class NocturneWriter {
           </div>
         </div>
         <div class="folder-docs ${collapsed ? 'collapsed' : ''}">
-        ${docs.length ? docs.map((doc) => `
-          <div class="doc-item ${doc.id === this.state.activeDocId ? 'active' : ''} ${doc.pinned ? 'pinned' : ''}" data-doc-id="${doc.id}">
-            <div class="doc-title"><i class="bx ${doc.pinned ? 'bx-pin' : doc.locked ? 'bx-lock' : 'bx-file'}"></i> ${escapeHtml(doc.title)}</div>
+        ${docs.length ? docs.map((doc) => {
+          const isBook = doc.docType === 'book-chapter';
+          return `
+          <div class="doc-item ${isBook ? 'book-chapter-card' : ''} ${doc.id === this.state.activeDocId ? 'active' : ''} ${doc.pinned ? 'pinned' : ''}" data-doc-id="${doc.id}">
+            <div class="doc-title"><i class="bx ${isBook ? 'bx-book-open' : (doc.pinned ? 'bx-pin' : (doc.locked ? 'bx-lock' : 'bx-file'))}"></i> ${escapeHtml(doc.title)}</div>
             <button class="doc-menu-btn" data-doc-menu="${doc.id}" title="Меню"><i class="bx bx-dots-vertical-rounded"></i></button>
             <div class="doc-desc">${escapeHtml(doc.description || doc.summary || 'Без описания')}</div>
+            ${isBook ? `
+            <div class="book-chapter-meta">
+              ${doc.workTitle || doc.volume ? `<span class="book-meta-label">${escapeHtml(doc.workTitle || '')}${doc.volume && doc.workTitle ? ' / ' : ''}${escapeHtml(doc.volume || '')}</span>` : ''}
+              ${doc.chapterNumber ? `<span class="book-meta-chapter">${escapeHtml(doc.chapterNumber)}</span>` : ''}
+              <span class="book-status-badge status-${this.statusSlug(doc.bookStatus)}">${escapeHtml(doc.bookStatus || 'Не редактировано')}</span>
+            </div>
+            ` : ''}
           </div>
-        `).join('') : this.folderEmptyState(folder.id, q)}
+        `}).join('') : this.folderEmptyState(folder.id, q)}
         </div>
       `;
     }).join('')}
@@ -6537,6 +6569,17 @@ class NocturneWriter {
 
   defaultFolderId() {
     return this.state.folders.find((folder) => folder.id === 'manuscript')?.id || this.state.folders[0]?.id || 'manuscript';
+  }
+
+  statusSlug(status) {
+    const map = {
+      'Не редактировано': 'unread',
+      'На редакции': 'editing',
+      'Вычитка': 'proofreading',
+      'Чистовая версия': 'clean',
+      'Закончено': 'done'
+    };
+    return map[status] || 'unread';
   }
 
   normalizeFolderOrders() {
@@ -6662,10 +6705,32 @@ class NocturneWriter {
     overlay.innerHTML = `
       <form class="form-modal doc-form" id="doc-form">
         <h2>Новый документ</h2>
+        
+        <div class="doc-type-switcher">
+          <label class="doc-type-radio"><input type="radio" name="docType" value="document" checked> <span><i class="bx bx-file"></i> Обычный документ</span></label>
+          <label class="doc-type-radio"><input type="radio" name="docType" value="book-chapter"> <span><i class="bx bx-book-open"></i> Глава книги</span></label>
+        </div>
+
         <div class="form-grid">
           <label>Название <input class="form-control" name="title" value="Новая глава" required></label>
           <label>Описание документа <textarea class="form-control" name="description" placeholder="Кратко: что происходит в этой главе, зачем она нужна, какой тон сцены."></textarea></label>
         </div>
+
+        <div class="form-grid book-chapter-fields" style="display: none;">
+          <label>Произведение <input class="form-control" name="workTitle" placeholder="Название книги/цикла"></label>
+          <label>Том <input class="form-control" name="volume" placeholder="Например: Том 1"></label>
+          <label>Глава <input class="form-control" name="chapterNumber" placeholder="Например: Глава 1: Пробуждение"></label>
+          <label>Статус
+            <select class="form-control" name="bookStatus">
+              <option value="Не редактировано">Не редактировано</option>
+              <option value="На редакции">На редакции</option>
+              <option value="Вычитка">Вычитка</option>
+              <option value="Чистовая версия">Чистовая версия</option>
+              <option value="Закончено">Закончено</option>
+            </select>
+          </label>
+        </div>
+
         <div class="form-actions">
           <button class="pill-btn" type="button" data-close-form>Отмена</button>
           <button class="pill-btn ai-btn" type="submit"><i class="bx bx-plus"></i> Создать</button>
@@ -6673,6 +6738,19 @@ class NocturneWriter {
       </form>
     `;
     overlay.classList.add('active');
+    
+    const typeRadios = overlay.querySelectorAll('input[name="docType"]');
+    const bookFields = overlay.querySelector('.book-chapter-fields');
+    typeRadios.forEach(radio => {
+      radio.addEventListener('change', () => {
+        if (radio.value === 'book-chapter') {
+          bookFields.style.display = 'grid';
+        } else {
+          bookFields.style.display = 'none';
+        }
+      });
+    });
+
     overlay.querySelector('[name="imageFile"]')?.addEventListener('change', (event) => {
       const nameEl = overlay.querySelector('[data-file-name]');
       if (nameEl) nameEl.textContent = event.target.files?.[0]?.name || 'Файл не выбран';
@@ -6694,27 +6772,39 @@ class NocturneWriter {
         descField?.focus();
         return;
       }
-      await this.createDoc(targetFolderId, data.title.trim(), data.description.trim());
+      await this.createDoc(targetFolderId, data);
       overlay.classList.remove('active');
     };
   }
 
-  async createDoc(folderId, title, description) {
+  async createDoc(folderId, payload) {
+    const title = (payload.title || '').trim();
     if (!title) return;
     if (!this.state.folders.some((folder) => folder.id === folderId)) folderId = this.defaultFolderId();
     const order = this.state.docs.filter((doc) => doc.folderId === folderId).length;
-    const doc = {
+    
+    let doc = {
       id: uid('doc'),
       folderId,
       title,
-      description,
+      description: (payload.description || '').trim(),
       order,
       notes: '',
-      summary: description || 'Пустая глава.',
+      summary: payload.description?.trim() || 'Пустая глава.',
       createdAt: Date.now(),
       updatedAt: Date.now(),
       ast: { type: 'doc', blocks: [{ id: uid('block'), type: 'heading', html: escapeHtml(title) }, { id: uid('block'), type: 'paragraph', html: '<br>' }] },
+      docType: payload.docType || 'document'
     };
+
+    if (doc.docType === 'book-chapter') {
+      doc.workTitle = payload.workTitle?.trim() || '';
+      doc.volume = payload.volume?.trim() || '';
+      doc.chapterNumber = payload.chapterNumber?.trim() || '';
+      doc.bookStatus = payload.bookStatus || 'Не редактировано';
+    }
+
+    doc = this.sanitizeDoc(doc);
     this.state.docs.push(doc);
     this.docWordBaselines.set(doc.id, countWords(docText(doc.ast)));
     this.state.activeDocId = doc.id;
@@ -7181,13 +7271,36 @@ class NocturneWriter {
     if (!doc) return;
     this.closeAllFloatingMenus();
     const overlay = document.getElementById('form-overlay');
+    const isBook = doc.docType === 'book-chapter';
     overlay.innerHTML = `
       <form class="form-modal doc-form" id="edit-doc-form">
         <h2>Редактировать документ</h2>
+        
+        <div class="doc-type-switcher">
+          <label class="doc-type-radio"><input type="radio" name="docType" value="document" ${!isBook ? 'checked' : ''}> <span><i class="bx bx-file"></i> Обычный документ</span></label>
+          <label class="doc-type-radio"><input type="radio" name="docType" value="book-chapter" ${isBook ? 'checked' : ''}> <span><i class="bx bx-book-open"></i> Глава книги</span></label>
+        </div>
+
         <div class="form-grid">
           <label>Название <input class="form-control" name="title" value="${escapeHtml(doc.title)}" required></label>
           <label>Описание <textarea class="form-control" name="description">${escapeHtml(doc.description || '')}</textarea></label>
         </div>
+
+        <div class="form-grid book-chapter-fields" style="display: ${isBook ? 'grid' : 'none'};">
+          <label>Произведение <input class="form-control" name="workTitle" value="${escapeHtml(doc.workTitle || '')}" placeholder="Название книги/цикла"></label>
+          <label>Том <input class="form-control" name="volume" value="${escapeHtml(doc.volume || '')}" placeholder="Например: Том 1"></label>
+          <label>Глава <input class="form-control" name="chapterNumber" value="${escapeHtml(doc.chapterNumber || '')}" placeholder="Например: Глава 1: Пробуждение"></label>
+          <label>Статус
+            <select class="form-control" name="bookStatus">
+              <option value="Не редактировано" ${doc.bookStatus === 'Не редактировано' ? 'selected' : ''}>Не редактировано</option>
+              <option value="На редакции" ${doc.bookStatus === 'На редакции' ? 'selected' : ''}>На редакции</option>
+              <option value="Вычитка" ${doc.bookStatus === 'Вычитка' ? 'selected' : ''}>Вычитка</option>
+              <option value="Чистовая версия" ${doc.bookStatus === 'Чистовая версия' ? 'selected' : ''}>Чистовая версия</option>
+              <option value="Закончено" ${doc.bookStatus === 'Закончено' ? 'selected' : ''}>Закончено</option>
+            </select>
+          </label>
+        </div>
+
         <div class="form-actions">
           <button class="pill-btn" type="button" data-close-form>Отмена</button>
           <button class="pill-btn ai-btn" type="submit">Сохранить</button>
@@ -7195,12 +7308,43 @@ class NocturneWriter {
       </form>
     `;
     overlay.classList.add('active');
+    
+    const typeRadios = overlay.querySelectorAll('input[name="docType"]');
+    const bookFields = overlay.querySelector('.book-chapter-fields');
+    typeRadios.forEach(radio => {
+      radio.addEventListener('change', () => {
+        if (radio.value === 'book-chapter') {
+          bookFields.style.display = 'grid';
+        } else {
+          bookFields.style.display = 'none';
+        }
+      });
+    });
+
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('form').onsubmit = async (e) => {
       e.preventDefault();
       const data = Object.fromEntries(new FormData(e.target));
+      
+      doc.docType = data.docType || 'document';
       doc.title = data.title.trim() || doc.title;
       doc.description = data.description.trim();
+      
+      if (doc.docType === 'book-chapter') {
+        doc.workTitle = data.workTitle?.trim() || '';
+        doc.volume = data.volume?.trim() || '';
+        doc.chapterNumber = data.chapterNumber?.trim() || '';
+        doc.bookStatus = data.bookStatus || 'Не редактировано';
+      } else {
+        delete doc.workTitle;
+        delete doc.volume;
+        delete doc.chapterNumber;
+        delete doc.bookStatus;
+      }
+      
+      const copy = this.sanitizeDoc(doc);
+      Object.assign(doc, copy); // preserve reference in memory
+      
       doc.updatedAt = Date.now();
       await this.db.put('docs', doc);
       overlay.classList.remove('active');
@@ -9201,8 +9345,17 @@ class NocturneWriter {
   }
 
   collectDocMatches(doc, query, options = {}) {
-    if (!doc?.ast?.blocks?.length || !String(query || '').trim()) return [];
+    if (!String(query || '').trim()) return [];
     const matches = [];
+    if (doc.docType === 'book-chapter') {
+      const metaText = [doc.workTitle, doc.volume, doc.chapterNumber, doc.bookStatus].filter(Boolean).join(' ');
+      if (metaText) {
+        this.searchTextMatches(metaText, query, options).forEach((match) => {
+          matches.push({ ...match, docId: doc.id, docTitle: doc.title, blockId: 'meta', blockIndex: -1, query });
+        });
+      }
+    }
+    if (!doc?.ast?.blocks?.length) return matches;
     doc.ast.blocks.forEach((block, blockIndex) => {
       const text = blockText(block);
       this.searchTextMatches(text, query, options).forEach((match) => {
@@ -9272,6 +9425,12 @@ class NocturneWriter {
   }
 
   snippetForMatch(doc, match, radius = 48) {
+    if (match.blockId === 'meta') {
+      const text = [doc.workTitle, doc.volume, doc.chapterNumber, doc.bookStatus].filter(Boolean).join(' ');
+      const from = Math.max(0, match.start - radius);
+      const to = Math.min(text.length, match.end + radius);
+      return `<i class="bx bx-book-open"></i> Метаданные: ${from > 0 ? '...' : ''}${escapeHtml(text.slice(from, match.start))}<mark>${escapeHtml(text.slice(match.start, match.end))}</mark>${escapeHtml(text.slice(match.end, to))}${to < text.length ? '...' : ''}`;
+    }
     const block = doc.ast.blocks.find((item) => item.id === match.blockId) || doc.ast.blocks[match.blockIndex];
     const text = blockText(block);
     const from = Math.max(0, match.start - radius);
@@ -9350,6 +9509,9 @@ class NocturneWriter {
     setTimeout(() => {
       const matches = this.collectDocMatches(doc, dataset.query || '', this.globalSearchState);
       const index = Math.max(0, matches.findIndex((match) => match.blockId === dataset.blockId && Number(match.start) === Number(dataset.matchStart)));
+      if (dataset.blockId === 'meta') {
+        return; // Just open the document, no inline highlights needed
+      }
       this.openDocumentSearch({ query: dataset.query || '', caseSensitive: this.globalSearchState.caseSensitive, wholeWords: this.globalSearchState.wholeWords, activeIndex: index });
       this.scrollToActiveSearchHit();
     }, 120);
