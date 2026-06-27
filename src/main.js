@@ -6721,7 +6721,7 @@ class NocturneWriter {
           <label>Том <input class="form-control" name="volume" placeholder="Например: Том 1"></label>
           <label>Глава <input class="form-control" name="chapterNumber" placeholder="Например: Глава 1: Пробуждение"></label>
           <label>Статус
-            <select class="form-control" name="bookStatus">
+            <select class="modal-select" name="bookStatus">
               <option value="Не редактировано">Не редактировано</option>
               <option value="На редакции">На редакции</option>
               <option value="Вычитка">Вычитка</option>
@@ -7291,7 +7291,7 @@ class NocturneWriter {
           <label>Том <input class="form-control" name="volume" value="${escapeHtml(doc.volume || '')}" placeholder="Например: Том 1"></label>
           <label>Глава <input class="form-control" name="chapterNumber" value="${escapeHtml(doc.chapterNumber || '')}" placeholder="Например: Глава 1: Пробуждение"></label>
           <label>Статус
-            <select class="form-control" name="bookStatus">
+            <select class="modal-select" name="bookStatus">
               <option value="Не редактировано" ${doc.bookStatus === 'Не редактировано' ? 'selected' : ''}>Не редактировано</option>
               <option value="На редакции" ${doc.bookStatus === 'На редакции' ? 'selected' : ''}>На редакции</option>
               <option value="Вычитка" ${doc.bookStatus === 'Вычитка' ? 'selected' : ''}>Вычитка</option>

@@ -8408,6 +8408,201 @@ body.theme-paper .accent-preset.active {
   color: rgba(245, 158, 11, 0.7);
 }
 .association-badge.note-badge:hover {
+  transition: all 180ms ease;
+}
+.assoc-card:hover {
+  border-color: rgba(var(--accent-rgb, 139, 92, 246), 0.35);
+  background: rgba(255, 255, 255, 0.04);
+}
+.assoc-card.active {
+  border-color: rgba(var(--accent-rgb, 139, 92, 246), 0.6);
+  background: rgba(var(--accent-rgb, 139, 92, 246), 0.07);
+}
+.assoc-card-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.assoc-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+}
+.assoc-card.active .assoc-card-icon {
+  background: rgba(var(--accent-rgb, 139, 92, 246), 0.15);
+  color: #ddd6fe;
+}
+.assoc-card-details {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.assoc-card-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.assoc-card-role-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.assoc-card-role-selector {
+  display: flex;
+  gap: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  padding-top: 6px;
+  margin-top: 2px;
+}
+.assoc-card.active .assoc-card-role-selector {
+  border-top-color: rgba(var(--accent-rgb, 139, 92, 246), 0.15);
+}
+.role-btn {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: center;
+  transition: all 180ms ease;
+}
+.role-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: #3e3e4d;
+  color: var(--text-main);
+}
+.role-btn.active {
+  background: rgba(var(--accent-rgb, 139, 92, 246), 0.12);
+  border-color: rgba(var(--accent-rgb, 139, 92, 246), 0.5);
+  color: #ddd6fe;
+  box-shadow: 0 0 8px rgba(var(--accent-rgb, 139, 92, 246), 0.2);
+}
+.empty-state-text {
+  grid-column: 1 / -1;
+  padding: 24px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.timeline-event-associations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.05);
+}
+.association-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-muted);
+  font: 500 11px var(--font-ui);
+  cursor: pointer;
+  user-select: none;
+  transition: all 180ms ease;
+}
+.association-badge i {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.association-badge:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: #3e3e4d;
+  color: var(--text-main);
+  transform: translateY(-1px);
+}
+
+.association-badge.char-badge.role-regular {
+  border-color: rgba(var(--accent-rgb, 139, 92, 246), 0.2);
+  background: rgba(var(--accent-rgb, 139, 92, 246), 0.02);
+}
+.association-badge.char-badge.role-regular i {
+  color: rgba(var(--accent-rgb, 139, 92, 246), 0.7);
+}
+.association-badge.char-badge.role-regular:hover {
+  border-color: rgba(var(--accent-rgb, 139, 92, 246), 0.4);
+  background: rgba(var(--accent-rgb, 139, 92, 246), 0.06);
+}
+
+.association-badge.char-badge.role-first-appearance {
+  border-color: rgba(234, 179, 8, 0.25);
+  background: rgba(234, 179, 8, 0.03);
+  color: #fef08a;
+}
+.association-badge.char-badge.role-first-appearance i {
+  color: #eab308;
+}
+.association-badge.char-badge.role-first-appearance:hover {
+  border-color: rgba(234, 179, 8, 0.5);
+  background: rgba(234, 179, 8, 0.08);
+}
+
+.association-badge.char-badge.role-death {
+  border-color: rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.03);
+  color: #fecaca;
+}
+.association-badge.char-badge.role-death i {
+  color: #ef4444;
+}
+.association-badge.char-badge.role-death:hover {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.association-badge.loc-badge {
+  border-color: rgba(59, 130, 246, 0.2);
+  background: rgba(59, 130, 246, 0.02);
+}
+.association-badge.loc-badge i {
+  color: rgba(59, 130, 246, 0.7);
+}
+.association-badge.loc-badge:hover {
+  border-color: rgba(59, 130, 246, 0.45);
+  background: rgba(59, 130, 246, 0.06);
+  color: var(--text-main);
+}
+
+.association-badge.doc-badge {
+  border-color: rgba(16, 185, 129, 0.2);
+  background: rgba(16, 185, 129, 0.02);
+}
+.association-badge.doc-badge i {
+  color: rgba(16, 185, 129, 0.7);
+}
+.association-badge.doc-badge:hover {
+  border-color: rgba(16, 185, 129, 0.45);
+  background: rgba(16, 185, 129, 0.06);
+  color: var(--text-main);
+}
+
+.association-badge.note-badge {
+  border-color: rgba(245, 158, 11, 0.2);
+  background: rgba(245, 158, 11, 0.02);
+}
+.association-badge.note-badge i {
+  color: rgba(245, 158, 11, 0.7);
+}
+.association-badge.note-badge:hover {
   border-color: rgba(245, 158, 11, 0.45);
   background: rgba(245, 158, 11, 0.06);
   color: var(--text-main);
@@ -8416,13 +8611,12 @@ body.theme-paper .accent-preset.active {
 /* Book Chapter Feature Styles */
 .doc-type-switcher {
   display: flex;
-  gap: 0.5rem;
+  gap: 8px;
   margin-bottom: 1rem;
 }
 .doc-type-radio {
   flex: 1;
   position: relative;
-  cursor: pointer;
 }
 .doc-type-radio input {
   position: absolute;
@@ -8433,18 +8627,23 @@ body.theme-paper .accent-preset.active {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  background: var(--surface-bg);
+  padding: 8px 10px;
+  background: rgba(255,255,255,.025);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
   color: var(--text-muted);
-  transition: all 0.2s ease;
+  transition: 160ms ease;
+}
+.doc-type-radio:hover span {
+  color: white;
+  background: rgba(255,255,255,.04);
 }
 .doc-type-radio input:checked + span {
-  background: var(--button-bg);
-  color: var(--button-text);
-  border-color: var(--button-bg);
+  color: white;
+  border-color: rgba(var(--accent-rgb, 139, 92, 246),.35);
+  background: rgba(var(--accent-rgb, 139, 92, 246),.12);
+  box-shadow: 0 0 18px rgba(var(--accent-rgb, 139, 92, 246),.16);
 }
 .book-chapter-card {
   padding-bottom: 0.75rem;
@@ -8457,42 +8656,34 @@ body.theme-paper .accent-preset.active {
   align-items: center;
 }
 .book-meta-label {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  background: var(--surface-bg);
-  padding: 0.15rem 0.4rem;
-  border-radius: var(--radius-sm);
+  display: inline-flex;
+  padding: 3px 7px;
+  border-radius: 999px;
   border: 1px solid var(--border);
+  color: var(--text-muted);
+  background: rgba(255,255,255,.035);
+  font-size: 11px;
 }
 .book-meta-chapter {
-  font-size: var(--text-xs);
-  font-weight: 500;
-  color: var(--text-primary);
-  background: rgba(var(--primary-rgb), 0.1);
-  padding: 0.15rem 0.4rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid rgba(var(--primary-rgb), 0.2);
+  display: inline-flex;
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--accent-rgb, 139, 92, 246),.28);
+  color: #c4b5fd;
+  background: rgba(var(--accent-rgb, 139, 92, 246),.12);
+  font-size: 11px;
+  font-weight: 700;
 }
 .book-status-badge {
-  font-size: 10px;
+  display: inline-flex;
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  padding: 0.15rem 0.4rem;
-  border-radius: var(--radius-round);
-  color: #fff;
 }
-.book-status-badge.status-unread {
-  background: #9ca3af; /* Gray */
-}
-.book-status-badge.status-editing {
-  background: #f59e0b; /* Amber */
-}
-.book-status-badge.status-proofreading {
-  background: #3b82f6; /* Blue */
-}
-.book-status-badge.status-clean {
-  background: #8b5cf6; /* Purple */
-}
-.book-status-badge.status-done {
-  background: #10b981; /* Green */
-}
+.book-status-badge.status-unread { border-color: rgba(255,255,255,.16); color: var(--text-muted); }
+.book-status-badge.status-editing { border-color: rgba(245,158,11,.45); color: #fcd34d; background: rgba(245,158,11,.08); }
+.book-status-badge.status-proofreading { border-color: rgba(96,165,250,.45); color: #bfdbfe; background: rgba(96,165,250,.08); }
+.book-status-badge.status-clean { border-color: rgba(168,85,247,.45); color: #ddd6fe; background: rgba(168,85,247,.08); }
+.book-status-badge.status-done { border-color: rgba(45,212,191,.45); color: #99f6e4; background: rgba(45,212,191,.08); }
