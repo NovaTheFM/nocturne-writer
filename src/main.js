@@ -6670,23 +6670,23 @@ class NocturneWriter {
     // Add GPU-accelerated shake
     element.classList.add('delete-shake');
     
-    // Start capturing the element's actual visual representation immediately
-    let capturedCanvas = null;
-    if (window.html2canvas) {
+    // Run html2canvas capture and shake timer concurrently
+    const capturePromise = window.html2canvas ? 
       window.html2canvas(element, {
         backgroundColor: null,
         logging: false,
         useCORS: true,
         scale: window.devicePixelRatio || 1
-      }).then(canvas => {
-        capturedCanvas = canvas;
       }).catch(err => {
         console.warn('html2canvas failed:', err);
-      });
-    }
+        return null;
+      }) : Promise.resolve(null);
 
-    setTimeout(() => {
+    const shakePromise = new Promise(resolve => setTimeout(resolve, 280));
+
+    Promise.all([capturePromise, shakePromise]).then(([canvas]) => {
       element.classList.remove('delete-shake');
+      const capturedCanvas = canvas;
       
       const rect = element.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) {
@@ -6716,7 +6716,7 @@ class NocturneWriter {
         return;
       }
 
-      // Extract colors for fallback if html2canvas was slow/failed
+      // Extract colors for fallback if html2canvas failed
       const style = window.getComputedStyle(element);
       const accent = window.getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#8b5cf6';
       const textColor = style.color || '#ffffff';
@@ -6729,31 +6729,31 @@ class NocturneWriter {
         fallbackColors.push('#1e1b4b');
       }
 
-      // Generate a grid of points with random offsets to define triangular shards
+      // Generate a grid of points with heavy random offsets to define organic shards
       const w = rect.width;
       const h = rect.height;
       const points = [];
-      const nx = 4; // cols
-      const ny = 3; // rows
+      const nx = 7; // cols
+      const ny = 5; // rows
 
       for (let r = 0; r <= ny; r++) {
         const row = [];
         for (let c = 0; c <= nx; c++) {
           let px = (c / nx) * w;
           let py = (r / ny) * h;
-          // Apply random offsets to inner vertices
+          // Apply heavy random offsets to inner vertices for organic shapes
           if (c > 0 && c < nx) {
-            px += (Math.random() - 0.5) * (w / nx) * 0.6;
+            px += (Math.random() - 0.5) * (w / nx) * 0.9;
           }
           if (r > 0 && r < ny) {
-            py += (Math.random() - 0.5) * (h / ny) * 0.6;
+            py += (Math.random() - 0.5) * (h / ny) * 0.9;
           }
           row.push({ x: px, y: py });
         }
         points.push(row);
       }
 
-      // Assemble triangles from the vertices grid
+      // Assemble triangles from the vertices grid with randomized diagonals
       const shards = [];
       const elemCenterX = w / 2;
       const elemCenterY = h / 2;
@@ -6765,10 +6765,14 @@ class NocturneWriter {
           const p2 = points[r + 1][c];
           const p3 = points[r + 1][c + 1];
 
-          // Triangulate each quad cell
-          const cells = [
+          // Randomize diagonal direction to create non-identical triangles
+          const swap = Math.random() > 0.5;
+          const cells = swap ? [
             [p0, p1, p2],
             [p1, p3, p2]
+          ] : [
+            [p0, p1, p3],
+            [p0, p3, p2]
           ];
 
           cells.forEach(tri => {
@@ -6787,8 +6791,8 @@ class NocturneWriter {
             const dirY = cy - elemCenterY;
             const dist = Math.sqrt(dirX * dirX + dirY * dirY) || 1;
 
-            const vx = (dirX / dist) * (Math.random() * 2 + 1) + (Math.random() - 0.5) * 1.5;
-            const vy = (dirY / dist) * (Math.random() * 1.5) - 3 - Math.random() * 3.5;
+            const vx = (dirX / dist) * (Math.random() * 3 + 1.5) + (Math.random() - 0.5) * 1.5;
+            const vy = (dirY / dist) * (Math.random() * 2) - 4 - Math.random() * 4.5;
 
             shards.push({
               relPoints,
@@ -6799,10 +6803,10 @@ class NocturneWriter {
               vx,
               vy,
               r: 0,
-              vr: (Math.random() - 0.5) * 0.15, // spin
+              vr: (Math.random() - 0.5) * 0.25, // spin
               alpha: 1,
-              decay: 0.015 + Math.random() * 0.012,
-              gravity: 0.22 + Math.random() * 0.08,
+              decay: 0.012 + Math.random() * 0.015,
+              gravity: 0.24 + Math.random() * 0.09,
               color: fallbackColors[Math.floor(Math.random() * fallbackColors.length)]
             });
           });
@@ -6864,7 +6868,7 @@ class NocturneWriter {
       };
 
       animate();
-    }, 280);
+    });
   }
 
   openFolderForm(folderId = null) {
