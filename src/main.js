@@ -16965,9 +16965,56 @@ ${raw}`;
     };
   }
 
+  async animateProjectImportProgress(dump, mode) {
+    let overlay = document.getElementById('kb-import-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'kb-import-overlay';
+      overlay.className = 'kb-import-overlay';
+      document.body.appendChild(overlay);
+    }
+    
+    overlay.innerHTML = `
+      <div class="kb-import-card">
+        <div class="kb-import-spinner">
+          <div class="spinner-ring"></div>
+          <i class="bx bx-cloud-download"></i>
+        </div>
+        <h3>Импортируем проект...</h3>
+        <div class="kb-import-progress-list"></div>
+      </div>
+    `;
+    overlay.classList.add('active');
+    await new Promise(r => setTimeout(r, 600));
+    
+    const listEl = overlay.querySelector('.kb-import-progress-list');
+    const steps = [];
+    if (mode === 'replace') {
+      steps.push('Очистка текущей базы...');
+    }
+    steps.push('Импорт настроек и папок...');
+    steps.push('Импорт документов...');
+    steps.push('Импорт базы знаний...');
+    steps.push('Импорт снапшотов и заметок...');
+    steps.push('Импорт завершен!');
+    
+    for (let i = 0; i < steps.length; i++) {
+      const step = document.createElement('div');
+      step.className = 'kb-import-step success';
+      step.style.animationDelay = `${i * 150}ms`;
+      step.innerHTML = `<span>${steps[i]}</span><i class="bx bx-check-circle"></i>`;
+      listEl.appendChild(step);
+      await new Promise(r => setTimeout(r, 350));
+    }
+    
+    await new Promise(r => setTimeout(r, 800));
+    overlay.classList.remove('active');
+  }
+
   async importProjectDump(dump, { mode = 'merge' } = {}) {
     const payload = dump.payload || {};
     const report = { mode, docs: 0, folders: 0, characters: 0, locations: 0, timeline: 0, snapshots: 0, reviewMarks: 0, conflicts: 0 };
+    await this.animateProjectImportProgress(dump, mode);
     if (mode === 'replace') {
       await Promise.all(['settings', 'folders', 'docs', 'lore', 'snapshots', 'stats', 'floatingNotes', 'typoRules', 'reviewMarks'].map((store) => this.db.clear(store)));
       this.state.settings = this.validateSettings(payload.settings || {});
@@ -17300,7 +17347,92 @@ ${raw}`;
     return (crc ^ -1) >>> 0;
   }
 
-  downloadBlob(blob, filename) {
+  async animateGenericExport(filename) {
+    let overlay = document.getElementById('kb-import-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'kb-import-overlay';
+      overlay.className = 'kb-import-overlay';
+      document.body.appendChild(overlay);
+    }
+    
+    // Choose icon based on file extension
+    const ext = filename.split('.').pop().toLowerCase();
+    let iconClass = 'bx-cloud-upload';
+    if (ext === 'docx') iconClass = 'bx-file';
+    else if (ext === 'txt' || ext === 'md') iconClass = 'bx-align-left';
+    else if (ext === 'html') iconClass = 'bx-code-alt';
+    
+    // Formulate steps
+    let steps = [];
+    if (ext === 'docx') {
+      steps = [
+        'Анализ структуры данных...',
+        'Генерация разметки DOCX...',
+        'Упаковка контента...',
+        'Экспорт готов!'
+      ];
+    } else if (ext === 'txt' || ext === 'md') {
+      steps = [
+        'Сбор текстовых блоков...',
+        'Кодирование в UTF-8...',
+        'Экспорт готов!'
+      ];
+    } else if (ext === 'html') {
+      steps = [
+        'Сборка разметки HTML...',
+        'Интеграция стилей...',
+        'Экспорт готов!'
+      ];
+    } else if (ext.startsWith('nocturne') || ext.startsWith('nocturn')) {
+      steps = [
+        'Подготовка структуры JSON...',
+        'Валидация чексуммы...',
+        'Экспорт готов!'
+      ];
+    } else {
+      steps = [
+        'Подготовка данных...',
+        'Экспорт готов!'
+      ];
+    }
+    
+    overlay.innerHTML = `
+      <div class="kb-import-card">
+        <div class="kb-import-spinner">
+          <div class="spinner-ring"></div>
+          <i class="bx ${iconClass}"></i>
+        </div>
+        <h3>Экспортируем файл...</h3>
+        <div class="kb-import-progress-list"></div>
+      </div>
+    `;
+    
+    overlay.classList.add('active');
+    await new Promise(r => setTimeout(r, 450));
+    
+    const listEl = overlay.querySelector('.kb-import-progress-list');
+    for (let i = 0; i < steps.length; i++) {
+      const step = document.createElement('div');
+      step.className = 'kb-import-step success';
+      step.style.animationDelay = `${i * 100}ms`;
+      step.innerHTML = `<span>${steps[i]}</span><i class="bx bx-check-circle"></i>`;
+      listEl.appendChild(step);
+      await new Promise(r => setTimeout(r, 200));
+    }
+    
+    await new Promise(r => setTimeout(r, 600));
+    overlay.classList.remove('active');
+  }
+
+  async downloadBlob(blob, filename) {
+    // If an export/import animation overlay is active, wait for it to finish
+    while (document.getElementById('kb-import-overlay')?.classList.contains('active')) {
+      await new Promise(r => setTimeout(r, 100));
+    }
+
+    await this.animateGenericExport(filename);
+
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
