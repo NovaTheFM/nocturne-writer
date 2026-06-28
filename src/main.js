@@ -1777,15 +1777,19 @@ class NocturneWriter {
           ${isBook ? `
           <div class="book-chapter-header">
             <span class="book-work-info"><i class="bx bx-library"></i> <span>${escapeHtml(doc.workTitle || 'Книга')}${doc.volume ? ` · ${escapeHtml(doc.volume)}` : ''}</span></span>
-            <span class="book-status-inline status-${this.statusSlug(doc.bookStatus)}">
-              <span class="status-dot"></span>
-              <span class="status-name">${escapeHtml(doc.bookStatus || 'Не редактировано')}</span>
-            </span>
           </div>
           ` : ''}
           <h3><i class="bx ${isBook ? 'bx-book-open' : (doc.pinned ? 'bx-pin' : doc.locked ? 'bx-lock' : 'bx-file')}"></i><span>${isBook && doc.chapterNumber ? `<span class="chapter-number">${escapeHtml(doc.chapterNumber)}</span>: ` : ''}${escapeHtml(doc.title || 'Без названия')}</span></h3>
           <p>${escapeHtml(doc.description || doc.summary || 'Без описания')}</p>
-          <small>${words} слов${updated ? ` · ${updated}` : ''}</small>
+          <div class="book-card-footer">
+            <small>${words} слов${updated ? ` · ${updated}` : ''}</small>
+            ${isBook ? `
+            <span class="book-status-inline status-${this.statusSlug(doc.bookStatus)}">
+              <span class="status-dot"></span>
+              <span class="status-name">${escapeHtml(this.statusShortName(doc.bookStatus))}</span>
+            </span>
+            ` : ''}
+          </div>
         </div>
         <button class="mobile-card-menu doc-menu-btn" data-doc-menu="${escapeHtml(doc.id)}" aria-label="Меню главы"><i class="bx bx-dots-vertical-rounded"></i></button>
       </article>`;
@@ -6531,15 +6535,19 @@ class NocturneWriter {
             ${isBook ? `
             <div class="book-chapter-header">
               <span class="book-work-info"><i class="bx bx-library"></i> <span>${escapeHtml(doc.workTitle || 'Книга')}${doc.volume ? ` · ${escapeHtml(doc.volume)}` : ''}</span></span>
-              <span class="book-status-inline status-${this.statusSlug(doc.bookStatus)}">
-                <span class="status-dot"></span>
-                <span class="status-name">${escapeHtml(doc.bookStatus || 'Не редактировано')}</span>
-              </span>
             </div>
             ` : ''}
             <div class="doc-title"><i class="bx ${isBook ? 'bx-book-open' : (doc.pinned ? 'bx-pin' : (doc.locked ? 'bx-lock' : 'bx-file'))}"></i> <span>${isBook && doc.chapterNumber ? `<span class="chapter-number">${escapeHtml(doc.chapterNumber)}</span>: ` : ''}${escapeHtml(doc.title)}</span></div>
             <button class="doc-menu-btn" data-doc-menu="${doc.id}" title="Меню"><i class="bx bx-dots-vertical-rounded"></i></button>
             <div class="doc-desc">${escapeHtml(doc.description || doc.summary || 'Без описания')}</div>
+            ${isBook ? `
+            <div class="book-card-footer">
+              <span class="book-status-inline status-${this.statusSlug(doc.bookStatus)}">
+                <span class="status-dot"></span>
+                <span class="status-name">${escapeHtml(this.statusShortName(doc.bookStatus))}</span>
+              </span>
+            </div>
+            ` : ''}
           </div>
         `}).join('') : this.folderEmptyState(folder.id, q)}
         </div>
@@ -6584,6 +6592,17 @@ class NocturneWriter {
       'Закончено': 'done'
     };
     return map[status] || 'unread';
+  }
+
+  statusShortName(status) {
+    const map = {
+      'Не редактировано': 'Не-ред.',
+      'На редакции': 'Редакт.',
+      'Вычитка': 'Вычитка',
+      'Чистовая версия': 'Чистовик',
+      'Закончено': 'Готово'
+    };
+    return map[status] || status || 'Не-ред.';
   }
 
   normalizeFolderOrders() {
