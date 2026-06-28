@@ -16926,8 +16926,36 @@ ${raw}`;
     }
   }
 
+  updateModalContent(contentEl, newHtml) {
+    const modal = contentEl.closest('.cleaner-modal');
+    if (!modal) {
+      contentEl.innerHTML = newHtml;
+      return;
+    }
+    
+    const prevHeight = modal.offsetHeight;
+    modal.style.height = `${prevHeight}px`;
+    
+    contentEl.innerHTML = newHtml;
+    
+    modal.style.height = '';
+    const targetHeight = modal.offsetHeight;
+    
+    modal.style.height = `${prevHeight}px`;
+    
+    requestAnimationFrame(() => {
+      modal.style.transition = 'height 300ms cubic-bezier(0.16, 1, 0.3, 1)';
+      modal.style.height = `${targetHeight}px`;
+      
+      setTimeout(() => {
+        modal.style.height = '';
+        modal.style.transition = '';
+      }, 300);
+    });
+  }
+
   async transitionReaperImage(imgEl, nextState, options = {}) {
-    const { blur = false, fade = true, duration = 200 } = options;
+    const { duration = 250 } = options;
     const wrapper = imgEl.closest('.cleaner-reaper-wrapper');
     const tint = wrapper ? wrapper.querySelector('.cleaner-reaper-tint') : null;
     const glowImg = wrapper ? wrapper.querySelector('#cleaner-reaper-glow-img') : null;
@@ -16935,45 +16963,42 @@ ${raw}`;
     
     if (nextState === 'found') {
       if (glowImg && glowTint) {
-        glowImg.style.transition = 'opacity 500ms ease';
-        glowTint.style.transition = 'opacity 500ms ease';
+        glowImg.src = '/reaper_photo/reaper_found.png';
+        glowTint.style.webkitMaskImage = 'url(/reaper_photo/reaper_found.png)';
+        glowTint.style.maskImage = 'url(/reaper_photo/reaper_found.png)';
+        glowImg.style.transition = `opacity ${duration}ms ease`;
+        glowTint.style.transition = `opacity ${duration}ms ease`;
         glowImg.style.opacity = '1';
         glowTint.style.opacity = '1';
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, duration));
         return;
       }
     }
     
     if (glowImg && glowTint) {
-      glowImg.style.transition = 'opacity 150ms ease';
-      glowTint.style.transition = 'opacity 150ms ease';
+      const src = `/reaper_photo/reaper_${nextState}.png`;
+      glowImg.src = src;
+      glowTint.style.webkitMaskImage = `url(${src})`;
+      glowTint.style.maskImage = `url(${src})`;
+      
+      glowImg.style.transition = `opacity ${duration}ms ease`;
+      glowTint.style.transition = `opacity ${duration}ms ease`;
+      glowImg.style.opacity = '1';
+      glowTint.style.opacity = '1';
+      
+      await new Promise(r => setTimeout(r, duration));
+      
+      this.setReaperImage(imgEl, nextState);
+      
+      glowImg.style.transition = 'none';
+      glowTint.style.transition = 'none';
       glowImg.style.opacity = '0';
       glowTint.style.opacity = '0';
+      glowImg.offsetHeight; // force reflow
+      return;
     }
     
-    if (fade) {
-      imgEl.style.transition = `opacity ${duration / 2}ms ease, filter ${duration / 2}ms ease`;
-      if (tint) tint.style.transition = `opacity ${duration / 2}ms ease`;
-      
-      imgEl.style.opacity = '0';
-      if (tint) tint.style.opacity = '0';
-      if (blur) {
-        imgEl.style.filter = 'blur(4px)';
-      }
-      
-      await new Promise(r => setTimeout(r, duration / 2));
-      this.setReaperImage(imgEl, nextState);
-      
-      imgEl.style.opacity = '1';
-      if (tint) tint.style.opacity = '1';
-      if (blur) {
-        imgEl.style.filter = 'drop-shadow(0 0 20px rgba(var(--accent-rgb, 139, 92, 246), 0.25))';
-      }
-      
-      await new Promise(r => setTimeout(r, duration / 2));
-    } else {
-      this.setReaperImage(imgEl, nextState);
-    }
+    this.setReaperImage(imgEl, nextState);
   }
 
   async transitionReaperToDelete(imgEl) {
@@ -16987,21 +17012,31 @@ ${raw}`;
       wrapper.classList.add('shaking');
     }
     
-    imgEl.style.transition = 'opacity 100ms ease';
-    if (tint) tint.style.transition = 'opacity 100ms ease';
+    if (glowImg && glowTint) {
+      const src = '/reaper_photo/reaper_delete.png';
+      glowImg.src = src;
+      glowTint.style.webkitMaskImage = `url(${src})`;
+      glowTint.style.maskImage = `url(${src})`;
+      
+      glowImg.style.transition = 'opacity 150ms ease';
+      glowTint.style.transition = 'opacity 150ms ease';
+      glowImg.style.opacity = '1';
+      glowTint.style.opacity = '1';
+      
+      await new Promise(r => setTimeout(r, 150));
+      
+      this.setReaperImage(imgEl, 'delete');
+      
+      glowImg.style.transition = 'none';
+      glowTint.style.transition = 'none';
+      glowImg.style.opacity = '0';
+      glowTint.style.opacity = '0';
+      glowImg.offsetHeight;
+    } else {
+      this.setReaperImage(imgEl, 'delete');
+    }
     
-    imgEl.style.opacity = '0';
-    if (tint) tint.style.opacity = '0';
-    if (glowImg) glowImg.style.opacity = '0';
-    if (glowTint) glowTint.style.opacity = '0';
-    
-    await new Promise(r => setTimeout(r, 100));
-    this.setReaperImage(imgEl, 'delete');
-    
-    imgEl.style.opacity = '1';
-    if (tint) tint.style.opacity = '1';
-    
-    await new Promise(r => setTimeout(r, 600));
+    await new Promise(r => setTimeout(r, 550));
     if (wrapper) {
       wrapper.classList.remove('shaking');
       wrapper.classList.add('floating');
@@ -17070,7 +17105,7 @@ ${raw}`;
 
     overlay.querySelector('#start-scan-btn').onclick = async () => {
       const contentEl = overlay.querySelector('#cleaner-content');
-      contentEl.innerHTML = `
+      this.updateModalContent(contentEl, `
         <h2>Сканирование...</h2>
         <p>Ищем остатки переписок из Telegram (ПК и мобильной версии)...</p>
         <div class="kb-import-spinner" style="margin-bottom: 20px;">
@@ -17078,7 +17113,7 @@ ${raw}`;
           <i class="bx bx-scan" style="animation: pulse 1s infinite alternate;"></i>
         </div>
         <div class="cleaner-progress-text" style="font-size: 11px; color: var(--text-muted);">Инициализация...</div>
-      `;
+      `);
       
       const progressText = contentEl.querySelector('.cleaner-progress-text');
       
@@ -17124,8 +17159,8 @@ ${raw}`;
     const reaperImg = overlay.querySelector('#cleaner-reaper-img');
     
     if (matches.length === 0) {
-      this.transitionReaperImage(reaperImg, 'success', { blur: false, fade: true, duration: 250 }).then(() => {
-        contentEl.innerHTML = `
+      this.transitionReaperImage(reaperImg, 'success', { duration: 250 }).then(() => {
+        this.updateModalContent(contentEl, `
           <h2>Текст чист, мастер</h2>
           <p style="color: var(--text-muted); font-size: 13px; line-height: 1.6; margin-bottom: 24px;">
             ${noteId ? 'В выбранной заметке' : `В проверенных заметках (${totalNotesScanned})`} не обнаружено артефактов копирования Telegram.
@@ -17133,7 +17168,7 @@ ${raw}`;
           <div class="form-actions" style="justify-content: center; margin-top: 24px;">
             <button class="pill-btn ai-btn" data-action="close-cleaner" style="min-width: 120px;">Закрыть</button>
           </div>
-        `;
+        `);
         overlay.querySelector('[data-action="close-cleaner"]').onclick = () => {
           overlay.classList.remove('active');
         };
@@ -17149,7 +17184,7 @@ ${raw}`;
       </div>`;
     }).join('');
     
-    contentEl.innerHTML = `
+    this.updateModalContent(contentEl, `
       <h2>Найденные совпадения</h2>
       <p>«Чистильщик™» обнаружил <strong>${matches.length}</strong> совпадений в тексте. Посмотрите список ниже перед удалением.</p>
       
@@ -17161,7 +17196,7 @@ ${raw}`;
         <button class="cut-btn-nocturne" id="cut-btn"><i class="bx bx-cut"></i> ВЫРЕЗАТЬ</button>
         <button class="pill-btn danger-btn" data-action="close-cleaner" style="width: 100%;">Отмена</button>
       </div>
-    `;
+    `);
     
     overlay.querySelector('[data-action="close-cleaner"]').onclick = () => {
       overlay.classList.remove('active');
@@ -17170,7 +17205,7 @@ ${raw}`;
     overlay.querySelector('#cut-btn').onclick = async () => {
       await this.transitionReaperToDelete(reaperImg);
       
-      contentEl.innerHTML = `
+      this.updateModalContent(contentEl, `
         <h2>Очистка текста...</h2>
         <p>«Чистильщик™» вырезает метаданные и форматирует строки...</p>
         <div class="kb-import-spinner" style="margin-bottom: 20px;">
@@ -17178,7 +17213,7 @@ ${raw}`;
           <i class="bx bx-eraser" style="animation: pulse 1s infinite alternate;"></i>
         </div>
         <div class="cleaner-progress-text" style="font-size: 11px; color: var(--text-muted);">Инициализация очистки...</div>
-      `;
+      `);
       
       const progressText = contentEl.querySelector('.cleaner-progress-text');
       
@@ -17218,21 +17253,21 @@ ${raw}`;
       await new Promise(r => setTimeout(r, 500));
       
       if (errorOccurred) {
-        await this.transitionReaperImage(reaperImg, 'error', { blur: false, fade: true, duration: 250 });
-        contentEl.innerHTML = `
+        await this.transitionReaperImage(reaperImg, 'error', { duration: 250 });
+        this.updateModalContent(contentEl, `
           <h2>Произошла ошибка</h2>
           <p>«Чистильщик™» столкнулся с непредвиденной ошибкой при изменении базы данных.</p>
           <div class="form-actions" style="justify-content: center; margin-top: 24px;">
             <button class="pill-btn danger-btn" data-action="close-cleaner" style="min-width: 120px;">Закрыть</button>
           </div>
-        `;
+        `);
         overlay.querySelector('[data-action="close-cleaner"]').onclick = () => {
           overlay.classList.remove('active');
         };
       } else {
-        await this.transitionReaperImage(reaperImg, 'success', { blur: false, fade: true, duration: 250 });
+        await this.transitionReaperImage(reaperImg, 'success', { duration: 250 });
         
-        contentEl.innerHTML = `
+        this.updateModalContent(contentEl, `
           <h2>Очистка завершена, мастер</h2>
           <p style="color: var(--text-muted); font-size: 13px; line-height: 1.6; margin-bottom: 24px;">
             Все артефакты копирования сообщений Telegram были успешно удалены из заметок.
@@ -17240,7 +17275,7 @@ ${raw}`;
           <div class="form-actions" style="justify-content: center; margin-top: 24px;">
             <button class="pill-btn ai-btn" id="close-success-btn" style="min-width: 120px;">Закрыть</button>
           </div>
-        `;
+        `);
         
         overlay.querySelector('#close-success-btn').onclick = () => {
           overlay.classList.remove('active');

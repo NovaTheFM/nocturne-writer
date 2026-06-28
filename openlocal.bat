@@ -1,12 +1,10 @@
 @echo off
 cd /d "%~dp0"
 
-set PORT=8887
+set PORT=8812
 
 echo Очищаю порт %PORT% от предыдущих запусков...
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr :%PORT% ^| findstr LISTENING') do (
-    taskkill /f /pid %%a >nul 2>&1
-)
+powershell -Command "Get-NetTCPConnection -LocalPort %PORT% -ErrorAction SilentlyContinue | Foreach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }" >nul 2>&1
 
 echo.
 echo Запускаю локальный сервер в:
