@@ -9025,3 +9025,19 @@ input:-webkit-autofill:active {
   animation: new-item-entrance-anim 0.45s cubic-bezier(0.16, 1, 0.3, 1) both !important;
   will-change: transform, opacity;
 }
+
+/* Empty State fade-in slide-up animation */
+.empty-card, .doc-folder-empty {
+  animation: empty-state-fade-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: opacity, transform;
+}
+@keyframes empty-state-fade-in {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

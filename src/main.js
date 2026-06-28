@@ -6661,6 +6661,59 @@ class NocturneWriter {
     return isValid;
   }
 
+  animateLayoutTransition(container, mutateDOM) {
+    if (!container) {
+      mutateDOM();
+      return;
+    }
+    
+    // 1. Record current positions of all children
+    const children = Array.from(container.children);
+    const oldRects = children.map(child => ({
+      element: child,
+      rect: child.getBoundingClientRect()
+    }));
+
+    // 2. Perform DOM mutation
+    mutateDOM();
+
+    // 3. Record new positions of remaining children
+    requestAnimationFrame(() => {
+      const newRects = oldRects.map(item => {
+        if (!item.element.parentNode) return null;
+        const newRect = item.element.getBoundingClientRect();
+        const dx = item.rect.left - newRect.left;
+        const dy = item.rect.top - newRect.top;
+        return {
+          element: item.element,
+          dx,
+          dy
+        };
+      }).filter(Boolean);
+
+      // 4. Invert (apply translate back to old position instantly)
+      newRects.forEach(item => {
+        if (item.dx === 0 && item.dy === 0) return;
+        item.element.style.transition = 'none';
+        item.element.style.transform = `translate(${item.dx}px, ${item.dy}px)`;
+      });
+
+      // 5. Play (transition to 0,0)
+      requestAnimationFrame(() => {
+        newRects.forEach(item => {
+          if (item.dx === 0 && item.dy === 0) return;
+          item.element.style.transition = 'transform 0.45s cubic-bezier(0.16, 1, 0.3, 1)';
+          item.element.style.transform = 'translate(0, 0)';
+          
+          setTimeout(() => {
+            item.element.style.transition = '';
+            item.element.style.transform = '';
+          }, 450);
+        });
+      });
+    });
+  }
+
   animateShatter(element, callback) {
     if (!element) {
       if (callback) callback();
@@ -6688,7 +6741,6 @@ class NocturneWriter {
 
     Promise.all([capturePromise, shakePromise]).then(([canvas]) => {
       element.classList.remove('delete-shake');
-      const capturedCanvas = canvas;
       
       const rect = element.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) {
@@ -6696,11 +6748,11 @@ class NocturneWriter {
         return;
       }
 
-      // Hide the element instantly so it appears to shatter into pieces
+      // Hide the element instantly so it appears to dissolve into dust
       element.style.visibility = 'hidden';
       element.style.pointerEvents = 'none';
 
-      // Create a fullscreen overlay canvas to prevent shards from clipping
+      // Create a fullscreen overlay canvas to prevent particles from clipping
       const overlayCanvas = document.createElement('canvas');
       overlayCanvas.width = window.innerWidth;
       overlayCanvas.height = window.innerHeight;
@@ -6718,117 +6770,95 @@ class NocturneWriter {
         return;
       }
 
-      // Extract colors for fallback if html2canvas failed
-      const style = window.getComputedStyle(element);
-      const accent = window.getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#8b5cf6';
-      const textColor = style.color || '#ffffff';
-      const bgColor = style.backgroundColor || 'transparent';
-
-      const fallbackColors = [accent, textColor];
-      if (bgColor && bgColor !== 'rgba(0, 0, 0, 0)' && bgColor !== 'transparent') {
-        fallbackColors.push(bgColor);
-      } else {
-        fallbackColors.push('#1e1b4b');
-      }
-
-      // Generate non-uniform grid lines to produce a natural mix of large, medium, and small shards
       const w = rect.width;
       const h = rect.height;
-      const numCols = 4;
-      const numRows = 3;
+      const particles = [];
 
-      const colPoints = [0];
-      for (let i = 0; i < numCols - 1; i++) {
-        colPoints.push(Math.random() * w);
-      }
-      colPoints.push(w);
-      colPoints.sort((a, b) => a - b);
+      if (canvas) {
+        // Draw captured element to a temporary offscreen canvas to sample pixel colors
+        const offscreen = document.createElement('canvas');
+        offscreen.width = canvas.width;
+        offscreen.height = canvas.height;
+        const offCtx = offscreen.getContext('2d');
+        if (offCtx) {
+          offCtx.drawImage(canvas, 0, 0);
+          const imgData = offCtx.getImageData(0, 0, canvas.width, canvas.height);
+          const data = imgData.data;
+          const canvasW = canvas.width;
+          const canvasH = canvas.height;
+          const scaleX = canvasW / w;
+          const scaleY = canvasH / h;
 
-      const rowPoints = [0];
-      for (let i = 0; i < numRows - 1; i++) {
-        rowPoints.push(Math.random() * h);
-      }
-      rowPoints.push(h);
-      rowPoints.sort((a, b) => a - b);
+          const elemCenterX = w / 2;
+          const elemCenterY = h / 2;
 
-      const points = [];
-      for (let r = 0; r <= numRows; r++) {
-        const row = [];
-        for (let c = 0; c <= numCols; c++) {
-          let px = colPoints[c];
-          let py = rowPoints[r];
-          // Jitter internal intersection points to add jaggedness
-          if (c > 0 && c < numCols) {
-            const minX = colPoints[c - 1];
-            const maxX = colPoints[c + 1];
-            px += (Math.random() - 0.5) * (maxX - minX) * 0.45;
+          // Sample pixels at regular intervals to create a beautiful cloud of tiny circular particles (Xiaomi style)
+          const step = 5; // Sample every 5px
+          for (let y = 0; y < h; y += step) {
+            for (let x = 0; x < w; x += step) {
+              const cx = Math.floor(x * scaleX);
+              const cy = Math.floor(y * scaleY);
+              if (cx >= canvasW || cy >= canvasH) continue;
+
+              const idx = (cy * canvasW + cx) * 4;
+              const r = data[idx];
+              const g = data[idx + 1];
+              const b = data[idx + 2];
+              const a = data[idx + 3];
+
+              // Skip completely transparent pixels
+              if (a < 35) continue;
+
+              const color = `rgba(${r},${g},${b},${a / 255})`;
+              
+              // Radial direction from center of the card
+              const dirX = x - elemCenterX;
+              const dirY = y - elemCenterY;
+              const dist = Math.sqrt(dirX * dirX + dirY * dirY) || 1;
+
+              // Xiaomi style radial expansion: outer particles blast faster, with upward lift
+              const radialSpeed = (dist / Math.max(w, h)) * 4.5 + Math.random() * 2.5 + 0.8;
+              const vx = (dirX / dist) * radialSpeed + (Math.random() - 0.5) * 1.5;
+              const vy = (dirY / dist) * radialSpeed - 2.5 - Math.random() * 3.5;
+
+              particles.push({
+                x: rect.left + x,
+                y: rect.top + y,
+                vx,
+                vy,
+                color,
+                size: Math.random() * 1.6 + 1.2, // Tiny circular particles
+                alpha: 1,
+                decay: 0.012 + Math.random() * 0.016,
+                gravity: 0.16 + Math.random() * 0.1
+              });
+            }
           }
-          if (r > 0 && r < numRows) {
-            const minY = rowPoints[r - 1];
-            const maxY = rowPoints[r + 1];
-            py += (Math.random() - 0.5) * (maxY - minY) * 0.45;
-          }
-          row.push({ x: px, y: py });
         }
-        points.push(row);
       }
 
-      // Assemble triangles from the vertices grid with randomized diagonals
-      const shards = [];
-      const elemCenterX = w / 2;
-      const elemCenterY = h / 2;
-
-      for (let r = 0; r < numRows; r++) {
-        for (let c = 0; c < numCols; c++) {
-          const p0 = points[r][c];
-          const p1 = points[r][c + 1];
-          const p2 = points[r + 1][c];
-          const p3 = points[r + 1][c + 1];
-
-          // Randomize diagonal direction to create non-identical triangles
-          const swap = Math.random() > 0.5;
-          const cells = swap ? [
-            [p0, p1, p2],
-            [p1, p3, p2]
-          ] : [
-            [p0, p1, p3],
-            [p0, p3, p2]
-          ];
-
-          cells.forEach(tri => {
-            // Compute center of mass
-            const cx = (tri[0].x + tri[1].x + tri[2].x) / 3;
-            const cy = (tri[0].y + tri[1].y + tri[2].y) / 3;
-
-            // Generate points relative to center of mass for rotation/translation
-            const relPoints = tri.map(pt => ({
-              x: pt.x - cx,
-              y: pt.y - cy
-            }));
-
-            // Initial blast outwards + upward jump
-            const dirX = cx - elemCenterX;
-            const dirY = cy - elemCenterY;
-            const dist = Math.sqrt(dirX * dirX + dirY * dirY) || 1;
-
-            const vx = (dirX / dist) * (Math.random() * 2 + 1) + (Math.random() - 0.5) * 1.2;
-            const vy = (dirY / dist) * (Math.random() * 1.5) - 2.5 - Math.random() * 3.5;
-
-            shards.push({
-              relPoints,
-              cx,
-              cy,
-              x: rect.left + cx,
-              y: rect.top + cy,
-              vx,
-              vy,
-              r: 0,
-              vr: (Math.random() - 0.5) * 0.22, // spin
-              alpha: 1,
-              decay: 0.012 + Math.random() * 0.014,
-              gravity: 0.22 + Math.random() * 0.08,
-              color: fallbackColors[Math.floor(Math.random() * fallbackColors.length)]
-            });
+      // If html2canvas failed or yielded no particles, populate beautiful accent-colored particles
+      if (particles.length === 0) {
+        const accent = window.getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#8b5cf6';
+        const numFallback = 150;
+        for (let i = 0; i < numFallback; i++) {
+          const rx = Math.random() * w;
+          const ry = Math.random() * h;
+          const dirX = rx - w / 2;
+          const dirY = ry - h / 2;
+          const dist = Math.sqrt(dirX * dirX + dirY * dirY) || 1;
+          const vx = (dirX / dist) * (Math.random() * 3 + 1.5);
+          const vy = (dirY / dist) * (Math.random() * 2) - 2 - Math.random() * 3;
+          particles.push({
+            x: rect.left + rx,
+            y: rect.top + ry,
+            vx,
+            vy,
+            color: accent,
+            size: Math.random() * 2 + 1.5,
+            alpha: 1,
+            decay: 0.015 + Math.random() * 0.015,
+            gravity: 0.2
           });
         }
       }
@@ -6836,49 +6866,28 @@ class NocturneWriter {
       let animationFrameId;
       const animate = () => {
         ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-        let activeShards = 0;
+        let activeParticles = 0;
 
-        for (let i = 0; i < shards.length; i++) {
-          const s = shards[i];
-          if (s.alpha <= 0) continue;
-          activeShards++;
+        for (let i = 0; i < particles.length; i++) {
+          const p = particles[i];
+          if (p.alpha <= 0) continue;
+          activeParticles++;
 
-          s.x += s.vx;
-          s.y += s.vy;
-          s.vy += s.gravity;
-          s.r += s.vr;
-          s.alpha -= s.decay;
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vy += p.gravity;
+          p.alpha -= p.decay;
 
-          if (s.alpha > 0) {
-            ctx.save();
-            ctx.globalAlpha = s.alpha;
-            
-            // Translate to the center of mass in screen space and apply rotation
-            ctx.translate(s.x, s.y);
-            ctx.rotate(s.r);
-
-            // Set clip path to draw this specific triangular shard
+          if (p.alpha > 0) {
             ctx.beginPath();
-            ctx.moveTo(s.relPoints[0].x, s.relPoints[0].y);
-            ctx.lineTo(s.relPoints[1].x, s.relPoints[1].y);
-            ctx.lineTo(s.relPoints[2].x, s.relPoints[2].y);
-            ctx.closePath();
-            ctx.clip();
-
-            if (capturedCanvas) {
-              // Draw the captured screenshot correctly aligned with the shard center
-              ctx.drawImage(capturedCanvas, -s.cx, -s.cy, w, h);
-            } else {
-              // Draw fallback colored shard
-              ctx.fillStyle = s.color;
-              ctx.fill();
-            }
-
-            ctx.restore();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = p.alpha;
+            ctx.fill();
           }
         }
 
-        if (activeShards > 0) {
+        if (activeParticles > 0) {
           animationFrameId = requestAnimationFrame(animate);
         } else {
           cancelAnimationFrame(animationFrameId);
@@ -6982,8 +6991,13 @@ class NocturneWriter {
       const folderEl = document.querySelector(`.section-title[data-folder-id="${folder.id}"]`);
       const folderDocsEl = document.querySelector(`.section-title[data-folder-id="${folder.id}"] + .folder-docs`);
       this.animateShatter(folderEl, async () => {
-        if (folderEl) folderEl.remove();
-        if (folderDocsEl) folderDocsEl.remove();
+        if (folderEl) {
+          const parentGrid = folderEl.parentElement;
+          this.animateLayoutTransition(parentGrid, () => {
+            folderEl.remove();
+            if (folderDocsEl) folderDocsEl.remove();
+          });
+        }
         await this.deleteFolder(folder.id, true);
       });
     };
@@ -7706,11 +7720,12 @@ class NocturneWriter {
         if (docEl) {
           const parentGrid = docEl.parentElement;
           const folderId = doc.folderId;
-          docEl.remove();
-          
-          if (parentGrid && parentGrid.children.length === 0) {
-            parentGrid.innerHTML = this.folderEmptyState(folderId);
-          }
+          this.animateLayoutTransition(parentGrid, () => {
+            docEl.remove();
+            if (parentGrid && parentGrid.children.length === 0) {
+              parentGrid.innerHTML = this.folderEmptyState(folderId);
+            }
+          });
         }
         await this.deleteDoc(doc.id, true);
       });
@@ -14353,19 +14368,21 @@ class NocturneWriter {
       this.animateShatter(shatterEl, async () => {
         if (cardEl) {
           const parentGrid = cardEl.parentElement;
-          cardEl.remove();
-          if (parentGrid && parentGrid.children.length === 0) {
-            const typeClassMap = {
-              characters: { icon: 'bx-user-pin', title: 'Персонажей пока нет.', desc: 'Создайте первый профиль, чтобы Nocturne начал узнавать имена в тексте.', action: 'new-lore', btnText: 'Создать профиль', attr: 'data-lore-type="characters"' },
-              locations: { icon: 'bx-map-alt', title: 'Локации пока нет.', desc: 'Добавьте первое место мира или сцены.', action: 'new-lore', btnText: 'Добавить место', attr: 'data-lore-type="locations"' },
-              notes: { icon: 'bx-note', title: 'Записей пока нет.', desc: 'Добавьте первую свободную запись или заметку к миру.', action: 'new-lore', btnText: 'Создать запись', attr: 'data-lore-type="notes"' },
-              timeline: { icon: 'bx-git-commit', title: 'Хронология пока пуста.', desc: 'Добавьте первое событие, чтобы выстроить историю.', action: 'new-lore', btnText: 'Добавить событие', attr: 'data-lore-type="timeline"' }
-            };
-            const config = typeClassMap[type];
-            if (config) {
-              parentGrid.innerHTML = this.emptyStateMarkup(config.icon, config.title, config.desc, config.action, config.btnText, config.attr);
+          this.animateLayoutTransition(parentGrid, () => {
+            cardEl.remove();
+            if (parentGrid && parentGrid.children.length === 0) {
+              const typeClassMap = {
+                characters: { icon: 'bx-user-pin', title: 'Персонажей пока нет.', desc: 'Создайте первый профиль, чтобы Nocturne начал узнавать имена в тексте.', action: 'new-lore', btnText: 'Создать профиль', attr: 'data-lore-type="characters"' },
+                locations: { icon: 'bx-map-alt', title: 'Локации пока нет.', desc: 'Добавьте первое место мира или сцены.', action: 'new-lore', btnText: 'Добавить место', attr: 'data-lore-type="locations"' },
+                notes: { icon: 'bx-note', title: 'Записей пока нет.', desc: 'Добавьте первую свободную запись или заметку к миру.', action: 'new-lore', btnText: 'Создать запись', attr: 'data-lore-type="notes"' },
+                timeline: { icon: 'bx-git-commit', title: 'Хронология пока пуста.', desc: 'Добавьте первое событие, чтобы выстроить историю.', action: 'new-lore', btnText: 'Добавить событие', attr: 'data-lore-type="timeline"' }
+              };
+              const config = typeClassMap[type];
+              if (config) {
+                parentGrid.innerHTML = this.emptyStateMarkup(config.icon, config.title, config.desc, config.action, config.btnText, config.attr);
+              }
             }
-          }
+          });
         }
         await this.deleteLore(type, id, parentEvent?.id, true);
       });
