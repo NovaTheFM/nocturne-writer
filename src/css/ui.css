@@ -8676,14 +8676,20 @@ body.theme-paper .accent-preset.active {
 
 /* Document List Card for Book Chapters */
 .book-chapter-card {
-  padding: 16px 42px 14px 12px !important;
+  padding: 16px 12px 14px !important;
   display: flex;
   flex-direction: column;
-  gap: 8px !important;
+  gap: 6px !important;
 }
 .book-chapter-card .doc-desc {
-  -webkit-line-clamp: 4 !important;
+  -webkit-line-clamp: 2 !important;
   word-break: break-word;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+.book-chapter-card .doc-title {
+  margin-bottom: 0;
+  padding-right: 20px; /* safety margin */
 }
 .book-chapter-header {
   display: flex;
