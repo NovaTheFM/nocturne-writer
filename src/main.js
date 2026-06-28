@@ -16927,9 +16927,29 @@ ${raw}`;
   }
 
   async transitionReaperImage(imgEl, nextState, options = {}) {
-    const { blur = false, duration = 300 } = options;
+    const { blur = false, duration = 250 } = options;
     const wrapper = imgEl.closest('.cleaner-reaper-wrapper');
     const tint = wrapper ? wrapper.querySelector('.cleaner-reaper-tint') : null;
+    const glowImg = wrapper ? wrapper.querySelector('#cleaner-reaper-glow-img') : null;
+    const glowTint = wrapper ? wrapper.querySelector('.cleaner-reaper-glow-tint') : null;
+    
+    if (nextState === 'found') {
+      if (glowImg && glowTint) {
+        glowImg.style.transition = 'opacity 500ms ease';
+        glowTint.style.transition = 'opacity 500ms ease';
+        glowImg.style.opacity = '1';
+        glowTint.style.opacity = '1';
+        await new Promise(r => setTimeout(r, 500));
+        return;
+      }
+    }
+    
+    if (glowImg && glowTint) {
+      glowImg.style.transition = 'opacity 150ms ease';
+      glowTint.style.transition = 'opacity 150ms ease';
+      glowImg.style.opacity = '0';
+      glowTint.style.opacity = '0';
+    }
     
     if (blur) {
       imgEl.classList.add('blur-transition');
@@ -16949,26 +16969,29 @@ ${raw}`;
   async transitionReaperToDelete(imgEl) {
     const wrapper = imgEl.closest('.cleaner-reaper-wrapper');
     const tint = wrapper ? wrapper.querySelector('.cleaner-reaper-tint') : null;
+    const glowImg = wrapper ? wrapper.querySelector('#cleaner-reaper-glow-img') : null;
+    const glowTint = wrapper ? wrapper.querySelector('.cleaner-reaper-glow-tint') : null;
     
-    imgEl.classList.add('shaking');
-    imgEl.classList.add('blur-transition');
-    if (tint) {
-      tint.classList.add('shaking');
-      tint.classList.add('blur-transition');
+    if (wrapper) {
+      wrapper.classList.remove('floating');
+      wrapper.classList.add('shaking');
     }
     
-    await new Promise(r => setTimeout(r, 150));
+    imgEl.classList.add('blur-transition');
+    if (tint) tint.classList.add('blur-transition');
+    if (glowImg) glowImg.style.opacity = '0';
+    if (glowTint) glowTint.style.opacity = '0';
+    
+    await new Promise(r => setTimeout(r, 120));
     this.setReaperImage(imgEl, 'delete');
     
     imgEl.classList.remove('blur-transition');
     if (tint) tint.classList.remove('blur-transition');
     
-    await new Promise(r => setTimeout(r, 500));
-    imgEl.classList.remove('shaking');
-    imgEl.classList.add('floating');
-    if (tint) {
-      tint.classList.remove('shaking');
-      tint.classList.add('floating');
+    await new Promise(r => setTimeout(r, 600));
+    if (wrapper) {
+      wrapper.classList.remove('shaking');
+      wrapper.classList.add('floating');
     }
   }
 
@@ -16982,17 +17005,24 @@ ${raw}`;
     }
     
     overlay.innerHTML = `
-      <div class="cleaner-modal">
+      <div class="cleaner-modal-container">
         <div class="cleaner-reaper-wrapper">
+          <!-- Base layers -->
           <img src="/reaper_photo/reaper_start.png" id="cleaner-reaper-img" class="cleaner-reaper-img" alt="Reaper">
           <div class="cleaner-reaper-tint" style="-webkit-mask-image: url(/reaper_photo/reaper_start.png); mask-image: url(/reaper_photo/reaper_start.png);"></div>
+          
+          <!-- Glow overlay (reaper_found.png) -->
+          <img src="/reaper_photo/reaper_found.png" id="cleaner-reaper-glow-img" class="cleaner-reaper-img" style="opacity: 0; z-index: 10;" alt="Reaper Glow">
+          <div class="cleaner-reaper-glow-tint" style="-webkit-mask-image: url(/reaper_photo/reaper_found.png); mask-image: url(/reaper_photo/reaper_found.png); opacity: 0; z-index: 11;"></div>
         </div>
-        <div class="cleaner-content" id="cleaner-content">
-          <h2>«Чистильщик™»</h2>
-          <p>Интеллектуальный помощник для удаления артефактов Telegram (авторских заголовков, дат и ников) из текстов заметок.</p>
-          <div class="form-actions" style="justify-content: center; gap: 12px; margin-top: 24px;">
-            <button class="pill-btn danger-btn" data-action="close-cleaner" style="min-width: 100px;">Отмена</button>
-            <button class="pill-btn ai-btn" id="start-scan-btn" style="min-width: 160px;"><i class="bx bx-search-alt"></i> Запустить поиск</button>
+        <div class="cleaner-modal">
+          <div class="cleaner-content" id="cleaner-content">
+            <h2>«Чистильщик™»</h2>
+            <p>Интеллектуальный помощник для удаления артефактов Telegram (авторских заголовков, дат и ников) из текстов заметок.</p>
+            <div class="form-actions" style="justify-content: center; gap: 12px; margin-top: 24px;">
+              <button class="pill-btn danger-btn" data-action="close-cleaner" style="min-width: 100px;">Отмена</button>
+              <button class="pill-btn ai-btn" id="start-scan-btn" style="min-width: 160px;"><i class="bx bx-search-alt"></i> Запустить поиск</button>
+            </div>
           </div>
         </div>
       </div>
@@ -17002,6 +17032,8 @@ ${raw}`;
     
     const reaperImg = overlay.querySelector('#cleaner-reaper-img');
     const reaperTint = overlay.querySelector('.cleaner-reaper-tint');
+    const reaperWrapper = overlay.querySelector('.cleaner-reaper-wrapper');
+    
     [reaperImg, reaperTint].forEach(el => {
       if (!el) return;
       el.style.opacity = '0';
@@ -17015,7 +17047,7 @@ ${raw}`;
         el.style.transform = 'translateY(0)';
       });
       setTimeout(() => {
-        [reaperImg, reaperTint].forEach(el => el?.classList.add('floating'));
+        if (reaperWrapper) reaperWrapper.classList.add('floating');
       }, 500);
     }, 200);
 
@@ -17076,20 +17108,16 @@ ${raw}`;
     
     if (matches.length === 0) {
       this.transitionReaperImage(reaperImg, 'success', { blur: true, duration: 250 }).then(() => {
-        overlay.innerHTML = `
-          <div class="success-full-overlay">
-            <div class="cleaner-reaper-wrapper" style="position: static; transform: none; margin-bottom: 20px; width: 260px; height: 260px;">
-              <img src="/reaper_photo/reaper_success.png" class="cleaner-reaper-img floating" alt="Reaper">
-              <div class="cleaner-reaper-tint" style="-webkit-mask-image: url(/reaper_photo/reaper_success.png); mask-image: url(/reaper_photo/reaper_success.png);"></div>
-            </div>
-            <h1>Текст чист, мастер</h1>
-            <p style="color: var(--text-muted); font-size: 14px; text-align: center; margin-bottom: 24px; max-width: 400px;">
-              ${noteId ? 'В выбранной заметке' : `В ${totalNotesScanned} проверенных заметках`} не обнаружено артефактов копирования Telegram.
-            </p>
-            <button class="pill-btn ai-btn" id="close-success-btn" style="padding: 10px 24px; min-width: 160px;">Закрыть</button>
+        contentEl.innerHTML = `
+          <h2>Текст чист, мастер</h2>
+          <p style="color: var(--text-muted); font-size: 13px; line-height: 1.6; margin-bottom: 24px;">
+            ${noteId ? 'В выбранной заметке' : `В проверенных заметках (${totalNotesScanned})`} не обнаружено артефактов копирования Telegram.
+          </p>
+          <div class="form-actions" style="justify-content: center; margin-top: 24px;">
+            <button class="pill-btn ai-btn" data-action="close-cleaner" style="min-width: 120px;">Закрыть</button>
           </div>
         `;
-        overlay.querySelector('#close-success-btn').onclick = () => {
+        overlay.querySelector('[data-action="close-cleaner"]').onclick = () => {
           overlay.classList.remove('active');
         };
       });
@@ -17187,17 +17215,13 @@ ${raw}`;
       } else {
         await this.transitionReaperImage(reaperImg, 'success', { blur: true, duration: 250 });
         
-        overlay.innerHTML = `
-          <div class="success-full-overlay">
-            <div class="cleaner-reaper-wrapper" style="position: static; transform: none; margin-bottom: 20px; width: 260px; height: 260px;">
-              <img src="/reaper_photo/reaper_success.png" class="cleaner-reaper-img floating" alt="Reaper">
-              <div class="cleaner-reaper-tint" style="-webkit-mask-image: url(/reaper_photo/reaper_success.png); mask-image: url(/reaper_photo/reaper_success.png);"></div>
-            </div>
-            <h1>Очистка завершена, мастер</h1>
-            <p style="color: var(--text-muted); font-size: 14px; text-align: center; margin-bottom: 24px; max-width: 400px;">
-              Все артефакты копирования сообщений Telegram были успешно удалены из заметок.
-            </p>
-            <button class="pill-btn ai-btn" id="close-success-btn" style="padding: 10px 24px; min-width: 160px;">Закрыть</button>
+        contentEl.innerHTML = `
+          <h2>Очистка завершена, мастер</h2>
+          <p style="color: var(--text-muted); font-size: 13px; line-height: 1.6; margin-bottom: 24px;">
+            Все артефакты копирования сообщений Telegram были успешно удалены из заметок.
+          </p>
+          <div class="form-actions" style="justify-content: center; margin-top: 24px;">
+            <button class="pill-btn ai-btn" id="close-success-btn" style="min-width: 120px;">Закрыть</button>
           </div>
         `;
         

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 const root = process.cwd();
 const pngPath = join(root, 'reaper_photo', 'reaper_icon.png');
+const smallPngPath = join(root, 'reaper_photo', 'reaper_icon_small.png');
 const icoPath = join(root, 'reaper_photo', 'reaper_icon.ico');
 
 try {
@@ -34,6 +35,11 @@ try {
   
   const resizedPngData = Buffer.from(resizedBase64, 'base64');
   
+  // Write small PNG
+  await writeFile(smallPngPath, resizedPngData);
+  console.log('Successfully created resized 32x32 reaper_icon_small.png');
+  
+  // Pack into ICO
   const header = Buffer.alloc(22);
   header.writeUInt16LE(0, 0);       // Reserved
   header.writeUInt16LE(1, 2);       // Type (1 = ICO)

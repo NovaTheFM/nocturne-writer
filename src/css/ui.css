@@ -9063,25 +9063,25 @@ body.sortable-active .doc-item {
 /* Cleaner button icon */
 .reaper-icon {
   display: inline-block;
-  width: 16px;
-  height: 16px;
-  background-image: url('/reaper_photo/reaper_icon.ico');
-  background-size: contain;
-  background-repeat: no-repeat;
-  background-position: center;
+  width: 18px;
+  height: 18px;
+  background-color: currentColor;
+  -webkit-mask-image: url('/reaper_photo/reaper_icon_small.png');
+  mask-image: url('/reaper_photo/reaper_icon_small.png');
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
   vertical-align: middle;
-  filter: saturate(0.2) opacity(0.6);
-  transition: filter 0.2s, opacity 0.2s;
-}
-.cleaner-btn:hover .reaper-icon,
-.pill-btn.cleaner-btn .reaper-icon {
-  filter: url(#reaper-recolor-filter) opacity(1);
 }
 .pill-btn.cleaner-btn .reaper-icon {
   margin-right: 6px;
 }
 .lore-card-actions button.cleaner-btn {
   color: var(--text-muted);
+}
+.lore-card-actions button.cleaner-btn:hover {
+  color: var(--accent);
 }
 
 /* «Чистильщик™» modal styles */
@@ -9105,6 +9105,10 @@ body.sortable-active .doc-item {
   opacity: 1;
   pointer-events: auto;
 }
+.cleaner-modal-container {
+  position: relative;
+  margin-top: 240px; /* Shifted down to accommodate the raised reaper */
+}
 .cleaner-modal {
   position: relative;
   background: var(--bg-deep);
@@ -9115,7 +9119,6 @@ body.sortable-active .doc-item {
   box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6), 0 0 40px rgba(var(--accent-rgb, 139, 92, 246), 0.15);
   transform: translateY(40px) scale(0.95);
   transition: transform 400ms cubic-bezier(0.16, 1, 0.3, 1);
-  margin-top: 180px;
   z-index: 101; /* Renders ON TOP of the reaper (under modal border) */
 }
 .cleaner-overlay.active .cleaner-modal {
@@ -9123,13 +9126,19 @@ body.sortable-active .doc-item {
 }
 .cleaner-reaper-wrapper {
   position: absolute;
-  top: -210px; /* Raised slightly */
+  top: -270px; /* Raised significantly under the menu */
   left: 50%;
   transform: translateX(-50%);
-  width: 320px; /* Larger size */
+  width: 320px;
   height: 320px;
   pointer-events: none;
   z-index: 100; /* Behind/under the modal container */
+}
+.cleaner-reaper-wrapper.shaking {
+  animation: reaper-shake-anim 0.35s ease-in-out infinite;
+}
+.cleaner-reaper-wrapper.floating {
+  animation: reaper-float-anim 3s ease-in-out infinite;
 }
 .cleaner-reaper-img, .cleaner-reaper-tint {
   position: absolute;
@@ -9148,33 +9157,27 @@ body.sortable-active .doc-item {
   mix-blend-mode: color;
   pointer-events: none;
 }
-.cleaner-reaper-img.shaking, .cleaner-reaper-tint.shaking {
-  animation: reaper-shake-anim 0.35s ease-in-out infinite;
-}
 .cleaner-reaper-img.blur-transition, .cleaner-reaper-tint.blur-transition {
   filter: blur(4px) drop-shadow(0 0 20px rgba(var(--accent-rgb, 139, 92, 246), 0.25)) !important;
   opacity: 0.1;
 }
-.cleaner-reaper-img.floating, .cleaner-reaper-tint.floating {
-  animation: reaper-float-anim 3s ease-in-out infinite;
-}
 
 @keyframes reaper-shake-anim {
-  0%, 100% { transform: translate(0, 0); }
-  10% { transform: translate(-12px, -2px); }
-  20% { transform: translate(10px, 3px); }
-  30% { transform: translate(-8px, -4px); }
-  40% { transform: translate(8px, 2px); }
-  50% { transform: translate(-6px, 4px); }
-  60% { transform: translate(5px, -2px); }
-  70% { transform: translate(-3px, 3px); }
-  80% { transform: translate(2px, -1px); }
-  90% { transform: translate(-1px, 1px); }
+  0%, 100% { transform: translate(-50%, 0); }
+  10% { transform: translate(calc(-50% - 12px), -2px); }
+  20% { transform: translate(calc(-50% + 10px), 3px); }
+  30% { transform: translate(calc(-50% - 8px), -4px); }
+  40% { transform: translate(calc(-50% + 8px), 2px); }
+  50% { transform: translate(calc(-50% - 6px), 4px); }
+  60% { transform: translate(calc(-50% + 5px), -2px); }
+  70% { transform: translate(calc(-50% - 3px), 3px); }
+  80% { transform: translate(calc(-50% + 2px), -1px); }
+  90% { transform: translate(calc(-50% - 1px), 1px); }
 }
 
 @keyframes reaper-float-anim {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-12px); }
+  0%, 100% { transform: translateY(0) translateX(-50%); }
+  50% { transform: translateY(-12px) translateX(-50%); }
 }
 
 .cleaner-content {
