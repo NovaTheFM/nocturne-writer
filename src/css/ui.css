@@ -8660,6 +8660,7 @@ body.theme-paper .accent-preset.active {
   grid-template-rows: 1fr;
   opacity: 1;
   margin-top: 16px;
+  overflow: visible; /* allow custom select dropdown to pop out */
 }
 .book-chapter-fields {
   min-height: 0;
@@ -8686,6 +8687,7 @@ body.theme-paper .accent-preset.active {
   align-items: center;
   margin-bottom: 2px;
   font-size: 11px;
+  padding-right: 24px; /* leave space for the three-dots button */
 }
 .book-work-info {
   color: var(--text-muted);

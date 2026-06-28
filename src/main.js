@@ -6716,15 +6716,15 @@ class NocturneWriter {
         </div>
 
         <div class="form-grid">
-          <label>Название <input class="form-control" name="title" value="Новая глава" required></label>
+          <label><span class="doc-title-label">Название</span> <input class="form-control" name="title" value="Новый документ" required></label>
           <label>Описание документа <textarea class="form-control" name="description" placeholder="Кратко: что происходит в этой главе, зачем она нужна, какой тон сцены."></textarea></label>
         </div>
 
         <div class="book-chapter-fields-wrapper">
           <div class="form-grid book-chapter-fields">
-            <label>Произведение <input class="form-control" name="workTitle" placeholder="Название книги/цикла"></label>
+            <label>Произведение <input class="form-control" name="workTitle" placeholder="Название произведения"></label>
             <label>Том <input class="form-control" name="volume" placeholder="Например: Том 1"></label>
-            <label>Глава <input class="form-control" name="chapterNumber" placeholder="Например: Глава 1: Пробуждение"></label>
+            <label>Глава <input class="form-control" name="chapterNumber" placeholder="Например: 1 или Глава 1"></label>
             <label>Статус
               <div class="nocturne-select" id="book-status-select" style="width: 100%;">
                 <input type="hidden" name="bookStatus" value="Не редактировано">
@@ -6771,10 +6771,20 @@ class NocturneWriter {
     const bookFieldsWrapper = overlay.querySelector('.book-chapter-fields-wrapper');
     typeRadios.forEach(radio => {
       radio.addEventListener('change', () => {
+        const titleLabel = overlay.querySelector('.doc-title-label');
+        const titleInput = overlay.querySelector('input[name="title"]');
         if (radio.value === 'book-chapter') {
           bookFieldsWrapper.classList.add('open');
+          if (titleLabel) titleLabel.textContent = 'Название главы';
+          if (titleInput && titleInput.value === 'Новый документ') {
+            titleInput.value = 'Новая глава';
+          }
         } else {
           bookFieldsWrapper.classList.remove('open');
+          if (titleLabel) titleLabel.textContent = 'Название';
+          if (titleInput && titleInput.value === 'Новая глава') {
+            titleInput.value = 'Новый документ';
+          }
         }
       });
     });
@@ -7330,15 +7340,15 @@ class NocturneWriter {
         </div>
 
         <div class="form-grid">
-          <label>Название <input class="form-control" name="title" value="${escapeHtml(doc.title)}" required></label>
+          <label><span class="doc-title-label">${isBook ? 'Название главы' : 'Название'}</span> <input class="form-control" name="title" value="${escapeHtml(doc.title)}" required></label>
           <label>Описание <textarea class="form-control" name="description">${escapeHtml(doc.description || '')}</textarea></label>
         </div>
 
         <div class="book-chapter-fields-wrapper ${isBook ? 'open' : ''}">
           <div class="form-grid book-chapter-fields">
-            <label>Произведение <input class="form-control" name="workTitle" value="${escapeHtml(doc.workTitle || '')}" placeholder="Название книги/цикла"></label>
+            <label>Произведение <input class="form-control" name="workTitle" value="${escapeHtml(doc.workTitle || '')}" placeholder="Название произведения"></label>
             <label>Том <input class="form-control" name="volume" value="${escapeHtml(doc.volume || '')}" placeholder="Например: Том 1"></label>
-            <label>Глава <input class="form-control" name="chapterNumber" value="${escapeHtml(doc.chapterNumber || '')}" placeholder="Например: Глава 1: Пробуждение"></label>
+            <label>Глава <input class="form-control" name="chapterNumber" value="${escapeHtml(doc.chapterNumber || '')}" placeholder="Например: 1 или Глава 1"></label>
             <label>Статус
               <div class="nocturne-select" id="book-status-select" style="width: 100%;">
                 <input type="hidden" name="bookStatus" value="${escapeHtml(doc.bookStatus || 'Не редактировано')}">
@@ -7371,10 +7381,13 @@ class NocturneWriter {
     const bookFieldsWrapper = overlay.querySelector('.book-chapter-fields-wrapper');
     typeRadios.forEach(radio => {
       radio.addEventListener('change', () => {
+        const titleLabel = overlay.querySelector('.doc-title-label');
         if (radio.value === 'book-chapter') {
           bookFieldsWrapper.classList.add('open');
+          if (titleLabel) titleLabel.textContent = 'Название главы';
         } else {
           bookFieldsWrapper.classList.remove('open');
+          if (titleLabel) titleLabel.textContent = 'Название';
         }
       });
     });
