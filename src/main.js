@@ -6667,10 +6667,7 @@ class NocturneWriter {
       return;
     }
     
-    // Add GPU-accelerated shake
-    element.classList.add('delete-shake');
-    
-    // Run html2canvas capture and shake timer concurrently
+    // 1. Start html2canvas capture immediately on the pristine element (before adding red shake borders)
     const capturePromise = window.html2canvas ? 
       window.html2canvas(element, {
         backgroundColor: null,
@@ -6681,6 +6678,11 @@ class NocturneWriter {
         console.warn('html2canvas failed:', err);
         return null;
       }) : Promise.resolve(null);
+
+    // 2. Add the GPU-accelerated shake animation on the next frame
+    requestAnimationFrame(() => {
+      element.classList.add('delete-shake');
+    });
 
     const shakePromise = new Promise(resolve => setTimeout(resolve, 280));
 
@@ -6729,24 +6731,42 @@ class NocturneWriter {
         fallbackColors.push('#1e1b4b');
       }
 
-      // Generate a grid of points with heavy random offsets to define organic shards
+      // Generate non-uniform grid lines to produce a natural mix of large, medium, and small shards
       const w = rect.width;
       const h = rect.height;
-      const points = [];
-      const nx = 7; // cols
-      const ny = 5; // rows
+      const numCols = 4;
+      const numRows = 3;
 
-      for (let r = 0; r <= ny; r++) {
+      const colPoints = [0];
+      for (let i = 0; i < numCols - 1; i++) {
+        colPoints.push(Math.random() * w);
+      }
+      colPoints.push(w);
+      colPoints.sort((a, b) => a - b);
+
+      const rowPoints = [0];
+      for (let i = 0; i < numRows - 1; i++) {
+        rowPoints.push(Math.random() * h);
+      }
+      rowPoints.push(h);
+      rowPoints.sort((a, b) => a - b);
+
+      const points = [];
+      for (let r = 0; r <= numRows; r++) {
         const row = [];
-        for (let c = 0; c <= nx; c++) {
-          let px = (c / nx) * w;
-          let py = (r / ny) * h;
-          // Apply heavy random offsets to inner vertices for organic shapes
-          if (c > 0 && c < nx) {
-            px += (Math.random() - 0.5) * (w / nx) * 0.9;
+        for (let c = 0; c <= numCols; c++) {
+          let px = colPoints[c];
+          let py = rowPoints[r];
+          // Jitter internal intersection points to add jaggedness
+          if (c > 0 && c < numCols) {
+            const minX = colPoints[c - 1];
+            const maxX = colPoints[c + 1];
+            px += (Math.random() - 0.5) * (maxX - minX) * 0.45;
           }
-          if (r > 0 && r < ny) {
-            py += (Math.random() - 0.5) * (h / ny) * 0.9;
+          if (r > 0 && r < numRows) {
+            const minY = rowPoints[r - 1];
+            const maxY = rowPoints[r + 1];
+            py += (Math.random() - 0.5) * (maxY - minY) * 0.45;
           }
           row.push({ x: px, y: py });
         }
@@ -6758,8 +6778,8 @@ class NocturneWriter {
       const elemCenterX = w / 2;
       const elemCenterY = h / 2;
 
-      for (let r = 0; r < ny; r++) {
-        for (let c = 0; c < nx; c++) {
+      for (let r = 0; r < numRows; r++) {
+        for (let c = 0; c < numCols; c++) {
           const p0 = points[r][c];
           const p1 = points[r][c + 1];
           const p2 = points[r + 1][c];
@@ -6791,8 +6811,8 @@ class NocturneWriter {
             const dirY = cy - elemCenterY;
             const dist = Math.sqrt(dirX * dirX + dirY * dirY) || 1;
 
-            const vx = (dirX / dist) * (Math.random() * 3 + 1.5) + (Math.random() - 0.5) * 1.5;
-            const vy = (dirY / dist) * (Math.random() * 2) - 4 - Math.random() * 4.5;
+            const vx = (dirX / dist) * (Math.random() * 2 + 1) + (Math.random() - 0.5) * 1.2;
+            const vy = (dirY / dist) * (Math.random() * 1.5) - 2.5 - Math.random() * 3.5;
 
             shards.push({
               relPoints,
@@ -6803,10 +6823,10 @@ class NocturneWriter {
               vx,
               vy,
               r: 0,
-              vr: (Math.random() - 0.5) * 0.25, // spin
+              vr: (Math.random() - 0.5) * 0.22, // spin
               alpha: 1,
-              decay: 0.012 + Math.random() * 0.015,
-              gravity: 0.24 + Math.random() * 0.09,
+              decay: 0.012 + Math.random() * 0.014,
+              gravity: 0.22 + Math.random() * 0.08,
               color: fallbackColors[Math.floor(Math.random() * fallbackColors.length)]
             });
           });
