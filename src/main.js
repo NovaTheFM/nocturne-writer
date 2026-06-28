@@ -16981,6 +16981,15 @@ ${raw}`;
       glowTint.style.webkitMaskImage = `url(${src})`;
       glowTint.style.maskImage = `url(${src})`;
       
+      // Wait for next image to load completely
+      await new Promise((resolve) => {
+        if (glowImg.complete) resolve();
+        else {
+          glowImg.onload = resolve;
+          glowImg.onerror = resolve;
+        }
+      });
+      
       // Coordinated cross-fade: fade base layer out while fading overlay layer in
       imgEl.style.transition = `opacity ${duration}ms ease`;
       if (tint) tint.style.transition = `opacity ${duration}ms ease`;
@@ -16995,6 +17004,15 @@ ${raw}`;
       await new Promise(r => setTimeout(r, duration));
       
       this.setReaperImage(imgEl, nextState);
+      
+      // Wait for base image to swap and load
+      await new Promise((resolve) => {
+        if (imgEl.complete) resolve();
+        else {
+          imgEl.onload = resolve;
+          imgEl.onerror = resolve;
+        }
+      });
       
       imgEl.style.transition = 'none';
       if (tint) tint.style.transition = 'none';
@@ -17029,6 +17047,15 @@ ${raw}`;
       glowTint.style.webkitMaskImage = `url(${src})`;
       glowTint.style.maskImage = `url(${src})`;
       
+      // Wait for delete image to load completely
+      await new Promise((resolve) => {
+        if (glowImg.complete) resolve();
+        else {
+          glowImg.onload = resolve;
+          glowImg.onerror = resolve;
+        }
+      });
+      
       imgEl.style.transition = 'opacity 150ms ease';
       if (tint) tint.style.transition = 'opacity 150ms ease';
       glowImg.style.transition = 'opacity 150ms ease';
@@ -17042,6 +17069,16 @@ ${raw}`;
       await new Promise(r => setTimeout(r, 150));
       
       this.setReaperImage(imgEl, 'delete');
+      
+      // Wait for base image to swap and load
+      await new Promise((resolve) => {
+        if (imgEl.complete) resolve();
+        else {
+          imgEl.onload = resolve;
+          imgEl.onerror = resolve;
+        }
+      });
+      
       imgEl.style.transition = 'none';
       if (tint) tint.style.transition = 'none';
       imgEl.style.opacity = '1';
