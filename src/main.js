@@ -1776,7 +1776,7 @@ class NocturneWriter {
         <div>
           ${isBook ? `
           <div class="book-chapter-header">
-            <span class="book-work-info"><i class="bx bx-library"></i> ${escapeHtml(doc.workTitle || 'Книга')}${doc.volume ? ` · ${escapeHtml(doc.volume)}` : ''}</span>
+            <span class="book-work-info"><i class="bx bx-library"></i> <span>${escapeHtml(doc.workTitle || 'Книга')}${doc.volume ? ` · ${escapeHtml(doc.volume)}` : ''}</span></span>
             <span class="book-status-inline status-${this.statusSlug(doc.bookStatus)}">
               <span class="status-dot"></span>
               <span class="status-name">${escapeHtml(doc.bookStatus || 'Не редактировано')}</span>
@@ -6530,7 +6530,7 @@ class NocturneWriter {
           <div class="doc-item ${isBook ? 'book-chapter-card' : ''} ${doc.id === this.state.activeDocId ? 'active' : ''} ${doc.pinned ? 'pinned' : ''}" data-doc-id="${doc.id}">
             ${isBook ? `
             <div class="book-chapter-header">
-              <span class="book-work-info"><i class="bx bx-library"></i> ${escapeHtml(doc.workTitle || 'Книга')}${doc.volume ? ` · ${escapeHtml(doc.volume)}` : ''}</span>
+              <span class="book-work-info"><i class="bx bx-library"></i> <span>${escapeHtml(doc.workTitle || 'Книга')}${doc.volume ? ` · ${escapeHtml(doc.volume)}` : ''}</span></span>
               <span class="book-status-inline status-${this.statusSlug(doc.bookStatus)}">
                 <span class="status-dot"></span>
                 <span class="status-name">${escapeHtml(doc.bookStatus || 'Не редактировано')}</span>

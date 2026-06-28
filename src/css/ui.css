@@ -8676,41 +8676,46 @@ body.theme-paper .accent-preset.active {
 
 /* Document List Card for Book Chapters */
 .book-chapter-card {
-  padding: 14px 12px 12px !important;
+  padding: 16px 12px 14px !important;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px !important;
 }
 .book-chapter-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 2px;
   font-size: 11px;
-  padding-right: 24px; /* leave space for the three-dots button */
+  padding-right: 28px; /* leave space for the three-dots button */
+  gap: 12px;
 }
 .book-work-info {
   color: var(--text-muted);
   font-weight: 500;
   display: flex;
   align-items: center;
-  gap: 4px;
-  max-width: 70%;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.book-work-info span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .book-work-info i {
   font-size: 13px;
+  flex-shrink: 0;
 }
 .book-status-inline {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-weight: 700;
-  text-transform: uppercase;
-  font-size: 9px;
-  letter-spacing: 0.5px;
+  font-weight: 500;
+  font-size: 11px;
+  color: var(--text-muted) !important;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .book-status-inline .status-dot {
   width: 6px;
@@ -8718,22 +8723,14 @@ body.theme-paper .accent-preset.active {
   border-radius: 50%;
   flex-shrink: 0;
 }
-.book-status-inline.status-unread { color: var(--text-muted); }
-.book-status-inline.status-unread .status-dot { background: #9ca3af; }
-
-.book-status-inline.status-editing { color: #f59e0b; }
-.book-status-inline.status-editing .status-dot { background: #f59e0b; box-shadow: 0 0 8px rgba(245, 158, 11, 0.4); }
-
-.book-status-inline.status-proofreading { color: #3b82f6; }
-.book-status-inline.status-proofreading .status-dot { background: #3b82f6; box-shadow: 0 0 8px rgba(59, 130, 246, 0.4); }
-
-.book-status-inline.status-clean { color: #8b5cf6; }
-.book-status-inline.status-clean .status-dot { background: #8b5cf6; box-shadow: 0 0 8px rgba(139, 92, 246, 0.4); }
-
-.book-status-inline.status-done { color: #10b981; }
-.book-status-inline.status-done .status-dot { background: #10b981; box-shadow: 0 0 8px rgba(16, 185, 129, 0.4); }
+.book-status-inline.status-unread .status-dot { background: #64748b; }
+.book-status-inline.status-editing .status-dot { background: #d97706; }
+.book-status-inline.status-proofreading .status-dot { background: #2563eb; }
+.book-status-inline.status-clean .status-dot { background: #7c3aed; }
+.book-status-inline.status-done .status-dot { background: #059669; }
 
 .chapter-number {
-  color: var(--accent-hover);
-  font-weight: 700;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-right: 4px;
 }
