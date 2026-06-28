@@ -6663,10 +6663,27 @@ class NocturneWriter {
 
   animateShatter(element, callback) {
     if (!element) {
-      callback();
+      if (callback) callback();
       return;
     }
+    
+    // Add GPU-accelerated shake
     element.classList.add('delete-shake');
+    
+    // Start capturing the element's actual visual representation immediately
+    let capturedCanvas = null;
+    if (window.html2canvas) {
+      window.html2canvas(element, {
+        backgroundColor: null,
+        logging: false,
+        useCORS: true,
+        scale: window.devicePixelRatio || 1
+      }).then(canvas => {
+        capturedCanvas = canvas;
+      }).catch(err => {
+        console.warn('html2canvas failed:', err);
+      });
+    }
 
     setTimeout(() => {
       element.classList.remove('delete-shake');
@@ -6677,129 +6694,151 @@ class NocturneWriter {
         return;
       }
 
-      element.style.opacity = '0';
+      // Hide the element so it appears to dissolve
+      element.style.visibility = 'hidden';
       element.style.pointerEvents = 'none';
 
-      const canvas = document.createElement('canvas');
-      canvas.width = rect.width;
-      canvas.height = rect.height;
-      canvas.style.position = 'fixed';
-      canvas.style.left = rect.left + 'px';
-      canvas.style.top = rect.top + 'px';
-      canvas.style.zIndex = '99999';
-      canvas.style.pointerEvents = 'none';
-      document.body.appendChild(canvas);
+      // Create overlay canvas positioned exactly over the hidden element
+      const overlayCanvas = document.createElement('canvas');
+      overlayCanvas.width = rect.width;
+      overlayCanvas.height = rect.height;
+      overlayCanvas.style.position = 'fixed';
+      overlayCanvas.style.left = rect.left + 'px';
+      overlayCanvas.style.top = rect.top + 'px';
+      overlayCanvas.style.zIndex = '99999';
+      overlayCanvas.style.pointerEvents = 'none';
+      document.body.appendChild(overlayCanvas);
 
-      const ctx = canvas.getContext('2d');
+      const ctx = overlayCanvas.getContext('2d');
       if (!ctx) {
-        canvas.remove();
+        overlayCanvas.remove();
         callback();
         return;
       }
 
+      // Extract styles to have fallback colors if html2canvas was slow/failed
       const style = window.getComputedStyle(element);
       const accent = window.getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#8b5cf6';
       const textColor = style.color || '#ffffff';
-      
-      const colors = [
-        accent,
-        textColor,
-        'rgba(var(--accent-rgb, 139, 92, 246), 0.7)',
-        '#ffffff',
-        '#a78bfa'
-      ];
-      
-      const bg = style.backgroundColor;
-      if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
-        colors.push(bg);
+      const bgColor = style.backgroundColor || 'transparent';
+
+      const fallbackColors = [accent, textColor];
+      if (bgColor && bgColor !== 'rgba(0, 0, 0, 0)' && bgColor !== 'transparent') {
+        fallbackColors.push(bgColor);
       } else {
-        colors.push('#1e1b4b');
+        fallbackColors.push('#1e1b4b');
       }
 
       const particles = [];
-      const particleCount = Math.min(120, Math.max(60, Math.floor((rect.width * rect.height) / 400)));
+      
+      if (capturedCanvas) {
+        const srcCtx = capturedCanvas.getContext('2d');
+        const imgData = srcCtx.getImageData(0, 0, capturedCanvas.width, capturedCanvas.height);
+        const data = imgData.data;
+        
+        // Sample pixels on a grid (step 6 for perfect balance of density and speed)
+        const step = 6;
+        for (let y = 0; y < capturedCanvas.height; y += step) {
+          for (let x = 0; x < capturedCanvas.width; x += step) {
+            const idx = (y * capturedCanvas.width + x) * 4;
+            const alpha = data[idx + 3];
+            if (alpha > 30) {
+              const r = data[idx];
+              const g = data[idx + 1];
+              const b = data[idx + 2];
+              
+              const scale = capturedCanvas.width / rect.width;
+              const px = x / scale;
+              const py = y / scale;
+              
+              // Initial burst velocity away from the center of the element
+              const centerX = rect.width / 2;
+              const centerY = rect.height / 2;
+              const dirX = px - centerX;
+              const dirY = py - centerY;
+              const dist = Math.sqrt(dirX * dirX + dirY * dirY) || 1;
 
-      for (let i = 0; i < particleCount; i++) {
-        const x = Math.random() * rect.width;
-        const y = Math.random() * rect.height;
-        
-        const centerX = rect.width / 2;
-        const centerY = rect.height / 2;
-        const angle = Math.atan2(y - centerY, x - centerX) + (Math.random() - 0.5) * 0.5;
-        const speed = 1.5 + Math.random() * 4.5;
-        
-        particles.push({
-          x,
-          y,
-          vx: Math.cos(angle) * speed + (Math.random() - 0.5) * 1.5,
-          vy: Math.sin(angle) * speed - 2.5 - Math.random() * 3,
-          w: 2 + Math.random() * 6,
-          h: 2 + Math.random() * 6,
-          color: colors[Math.floor(Math.random() * colors.length)],
-          alpha: 1,
-          decay: 0.01 + Math.random() * 0.02,
-          rotation: Math.random() * Math.PI * 2,
-          vRotation: (Math.random() - 0.5) * 0.3,
-          gravity: 0.18 + Math.random() * 0.12
-        });
+              const vx = (dirX / dist) * (Math.random() * 2 + 0.5) + (Math.random() - 0.5) * 1.5;
+              const vy = (dirY / dist) * (Math.random() * 2) - 2.5 - Math.random() * 3;
+
+              particles.push({
+                x: px,
+                y: py,
+                vx,
+                vy,
+                size: Math.random() * 2.5 + 1.5,
+                color: `rgba(${r},${g},${b},${alpha / 255})`,
+                alpha: 1,
+                decay: 0.012 + Math.random() * 0.018,
+                gravity: 0.16 + Math.random() * 0.06
+              });
+            }
+          }
+        }
+      } else {
+        const cols = Math.ceil(rect.width / 8);
+        const rows = Math.ceil(rect.height / 8);
+        for (let c = 0; c < cols; c++) {
+          for (let r = 0; r < rows; r++) {
+            const px = c * 8 + Math.random() * 4;
+            const py = r * 8 + Math.random() * 4;
+            
+            const centerX = rect.width / 2;
+            const centerY = rect.height / 2;
+            const dirX = px - centerX;
+            const dirY = py - centerY;
+            const dist = Math.sqrt(dirX * dirX + dirY * dirY) || 1;
+
+            const vx = (dirX / dist) * (Math.random() * 2) + (Math.random() - 0.5) * 1.5;
+            const vy = -Math.random() * 3.5 - 2;
+
+            particles.push({
+              x: px,
+              y: py,
+              vx,
+              vy,
+              size: Math.random() * 3 + 2,
+              color: fallbackColors[Math.floor(Math.random() * fallbackColors.length)],
+              alpha: 1,
+              decay: 0.015 + Math.random() * 0.015,
+              gravity: 0.18 + Math.random() * 0.05
+            });
+          }
+        }
       }
 
       let animationFrameId;
-      const startTime = Date.now();
-      const duration = 1000;
-
-      const update = () => {
-        const elapsed = Date.now() - startTime;
-        if (elapsed >= duration) {
-          cancelAnimationFrame(animationFrameId);
-          canvas.remove();
-          callback();
-          return;
-        }
-
+      const animate = () => {
         ctx.clearRect(0, 0, rect.width, rect.height);
         let activeParticles = 0;
 
-        particles.forEach(p => {
-          if (p.alpha <= 0) return;
+        for (let i = 0; i < particles.length; i++) {
+          const p = particles[i];
+          if (p.alpha <= 0) continue;
           activeParticles++;
 
           p.x += p.vx;
           p.y += p.vy;
           p.vy += p.gravity;
-          p.rotation += p.vRotation;
           p.alpha -= p.decay;
 
           if (p.alpha > 0) {
-            ctx.save();
-            ctx.translate(p.x, p.y);
-            ctx.rotate(p.rotation);
             ctx.fillStyle = p.color;
             ctx.globalAlpha = p.alpha;
-            if (Math.random() > 0.5) {
-              ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
-            } else {
-              ctx.beginPath();
-              ctx.moveTo(0, -p.h / 2);
-              ctx.lineTo(p.w / 2, p.h / 2);
-              ctx.lineTo(-p.w / 2, p.h / 2);
-              ctx.closePath();
-              ctx.fill();
-            }
-            ctx.restore();
+            ctx.fillRect(p.x, p.y, p.size, p.size);
           }
-        });
+        }
 
-        if (activeParticles === 0) {
-          cancelAnimationFrame(animationFrameId);
-          canvas.remove();
-          callback();
+        if (activeParticles > 0) {
+          animationFrameId = requestAnimationFrame(animate);
         } else {
-          animationFrameId = requestAnimationFrame(update);
+          cancelAnimationFrame(animationFrameId);
+          overlayCanvas.remove();
+          callback();
         }
       };
 
-      update();
+      animate();
     }, 280);
   }
 
@@ -6892,13 +6931,16 @@ class NocturneWriter {
     overlay.querySelector('[data-confirm-folder-delete]').onclick = async () => {
       overlay.classList.remove('active');
       const folderEl = document.querySelector(`.section-title[data-folder-id="${folder.id}"]`);
+      const folderDocsEl = document.querySelector(`.section-title[data-folder-id="${folder.id}"] + .folder-docs`);
       this.animateShatter(folderEl, async () => {
-        await this.deleteFolder(folder.id);
+        if (folderEl) folderEl.remove();
+        if (folderDocsEl) folderDocsEl.remove();
+        await this.deleteFolder(folder.id, true);
       });
     };
   }
 
-  async deleteFolder(folderId) {
+  async deleteFolder(folderId, localOnly = false) {
     const folder = this.state.folders.find((item) => item.id === folderId);
     if (!folder) return;
     if (this.state.folders.length <= 1) {
@@ -6915,7 +6957,9 @@ class NocturneWriter {
     safeSetStorageItem(localStorage, 'nocturne-collapsed-folders', JSON.stringify(this.state.collapsedFolders));
     await this.db.delete('folders', folderId);
     await Promise.all(this.state.folders.map((item) => this.db.put('folders', item)));
-    this.renderDocs();
+    if (!localOnly) {
+      this.renderDocs();
+    }
     this.toast('Папка удалена.');
   }
 
@@ -7125,7 +7169,57 @@ class NocturneWriter {
     this.persistWorkspaceState();
     await this.db.put('docs', doc);
     this.state.newlyCreatedId = doc.id;
-    this.renderAll();
+
+    const folderDocsEl = document.querySelector(`.section-title[data-folder-id="${folderId}"] + .folder-docs`);
+    if (folderDocsEl && !this.isMobileLayout()) {
+      const emptyState = folderDocsEl.querySelector('.doc-folder-empty');
+      if (emptyState) emptyState.remove();
+
+      const isBook = doc.docType === 'book-chapter';
+      const docHtml = `
+      <div class="doc-item ${isBook ? 'book-chapter-card' : ''} active new-doc-entrance" data-doc-id="${doc.id}">
+        ${isBook ? `
+        <div class="book-chapter-header">
+          <span class="book-work-info"><i class="bx bx-library"></i> <span>${escapeHtml(doc.workTitle || 'Книга')}${doc.volume ? ` · ${escapeHtml(doc.volume)}` : ''}</span></span>
+        </div>
+        ` : ''}
+        <div class="doc-title"><i class="bx ${isBook ? 'bx-book-open' : (doc.pinned ? 'bx-pin' : (doc.locked ? 'bx-lock' : 'bx-file'))}"></i> <span>${isBook && doc.chapterNumber ? `<span class="chapter-number">${escapeHtml(doc.chapterNumber)}</span>: ` : ''}${escapeHtml(doc.title)}</span></div>
+        <button class="doc-menu-btn" data-doc-menu="${doc.id}" title="Меню"><i class="bx bx-dots-vertical-rounded"></i></button>
+        <div class="doc-desc">${escapeHtml(doc.description || doc.summary || 'Без описания')}</div>
+        ${isBook ? `
+        <div class="book-card-footer">
+          <span class="book-status-inline status-${this.statusSlug(doc.bookStatus)}">${escapeHtml(doc.bookStatus)}</span>
+        </div>
+        ` : ''}
+      </div>
+      `;
+
+      document.querySelectorAll('.doc-item.active').forEach(el => el.classList.remove('active'));
+
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = docHtml.trim();
+      const cardElement = tempDiv.firstChild;
+      if (cardElement) {
+        folderDocsEl.appendChild(cardElement);
+        setTimeout(() => {
+          cardElement.classList.remove('new-doc-entrance');
+          if (this.state.newlyCreatedId === doc.id) {
+            this.state.newlyCreatedId = null;
+          }
+        }, 1000);
+      }
+      
+      this.setupDocSortables();
+      
+      this.renderWorkspace();
+      this.renderNotes();
+      this.renderFloatingNotes();
+      this.renderFloatingNoteMenu();
+      this.renderFloatingNotesModal();
+      this.renderSaveIndicator();
+    } else {
+      this.renderAll();
+    }
   }
 
   uniqueCopyTitle(baseTitle) {
@@ -7560,12 +7654,21 @@ class NocturneWriter {
       overlay.classList.remove('active');
       const docEl = document.querySelector(`.doc-item[data-doc-id="${doc.id}"]`);
       this.animateShatter(docEl, async () => {
-        await this.deleteDoc(doc.id);
+        if (docEl) {
+          const parentGrid = docEl.parentElement;
+          const folderId = doc.folderId;
+          docEl.remove();
+          
+          if (parentGrid && parentGrid.children.length === 0) {
+            parentGrid.innerHTML = this.folderEmptyState(folderId);
+          }
+        }
+        await this.deleteDoc(doc.id, true);
       });
     };
   }
 
-  async deleteDoc(id) {
+  async deleteDoc(id, localOnly = false) {
     const doc = this.state.docs.find((item) => item.id === id);
     if (!doc) return;
     await this.db.delete('docs', doc.id);
@@ -7574,20 +7677,33 @@ class NocturneWriter {
     await Promise.all(docMarks.map((mark) => this.db.delete('reviewMarks', mark.id)));
     this.state.reviewMarks = this.state.reviewMarks.filter((mark) => mark.docId !== doc.id);
     this.state.docs = this.state.docs.filter((item) => item.id !== doc.id);
+    
+    let activeChanged = false;
     if (this.state.activeDocId === id) {
       this.state.activeDocId = this.state.docs[0]?.id || null;
+      activeChanged = true;
     }
     if (this.state.suggestion?.docId === id) this.clearSuggestion();
     safeRemoveStorageItem(localStorage, `${LIVE_PREFIX}${doc.id}`);
     const snapshots = (await this.db.getAll('snapshots')).filter((snap) => snap.docId === doc.id);
     await Promise.all(snapshots.map((snap) => this.db.delete('snapshots', snap.id)));
+    
+    let openedInPane = false;
     Object.values(this.state.workspace?.panes || {}).forEach((pane) => {
       if (pane.type === 'document' && pane.docId === id) {
         Object.assign(pane, this.emptyPaneDescriptor(pane.id));
+        openedInPane = true;
       }
     });
-        this.persistWorkspaceState();
-    this.renderAll();
+    this.persistWorkspaceState();
+    
+    if (localOnly) {
+      if (openedInPane || activeChanged) {
+        this.renderAll();
+      }
+    } else {
+      this.renderAll();
+    }
   }
 
   async deleteFloatingNotesForLink(scope, linkedId) {
@@ -13980,7 +14096,23 @@ class NocturneWriter {
       overlay.classList.remove('active');
       const cardEl = document.querySelector(`[data-lore-id="${id}"]`);
       this.animateShatter(cardEl, async () => {
-        await this.deleteLore(type, id, parentEvent?.id);
+        if (cardEl) {
+          const parentGrid = cardEl.parentElement;
+          cardEl.remove();
+          if (parentGrid && parentGrid.children.length === 0) {
+            const typeClassMap = {
+              characters: { icon: 'bx-user-pin', title: 'Персонажей пока нет.', desc: 'Создайте первый профиль, чтобы Nocturne начал узнавать имена в тексте.', action: 'new-lore', btnText: 'Создать профиль', attr: 'data-lore-type="characters"' },
+              locations: { icon: 'bx-map-alt', title: 'Локации пока нет.', desc: 'Добавьте первое место мира или сцены.', action: 'new-lore', btnText: 'Добавить место', attr: 'data-lore-type="locations"' },
+              notes: { icon: 'bx-note', title: 'Записей пока нет.', desc: 'Добавьте первую свободную запись или заметку к миру.', action: 'new-lore', btnText: 'Создать запись', attr: 'data-lore-type="notes"' },
+              timeline: { icon: 'bx-git-commit', title: 'Хронология пока пуста.', desc: 'Добавьте первое событие, чтобы выстроить историю.', action: 'new-lore', btnText: 'Добавить событие', attr: 'data-lore-type="timeline"' }
+            };
+            const config = typeClassMap[type];
+            if (config) {
+              parentGrid.innerHTML = this.emptyStateMarkup(config.icon, config.title, config.desc, config.action, config.btnText, config.attr);
+            }
+          }
+        }
+        await this.deleteLore(type, id, parentEvent?.id, true);
       });
     });
     overlay.querySelector('form').onsubmit = async (event) => {
@@ -14087,8 +14219,52 @@ class NocturneWriter {
       overlay.classList.remove('active');
       setTimeout(async () => {
         await this.saveLore();
-        this.renderKb();
         this.refreshVisibleEntityLinks();
+        
+        const modal = document.getElementById('kb-modal');
+        const isModalOpen = modal && modal.classList.contains('active');
+        const isDetailView = this.state.activeLoreDetail !== null;
+
+        if (!id && isModalOpen && !isDetailView && this.state.activeKbTab === type) {
+          let gridSelector = '';
+          if (type === 'characters') gridSelector = '.character-grid[data-dnd-zone="characters"]';
+          if (type === 'locations') gridSelector = '.locations-grid[data-dnd-zone="locations"]';
+          if (type === 'notes') gridSelector = '.character-grid[data-dnd-zone="notes"]';
+          if (type === 'timeline') gridSelector = '.timeline-container[data-dnd-zone="timeline"]';
+
+          const grid = document.querySelector(gridSelector);
+          if (grid) {
+            const hasEmptyState = grid.querySelector('.kb-empty-state') || grid.querySelector('.empty-card') || grid.innerHTML.includes('пока нет');
+            if (hasEmptyState) {
+              grid.innerHTML = '';
+            }
+
+            let cardHtml = '';
+            if (type === 'characters') cardHtml = this.characterCard(next, true);
+            if (type === 'locations') cardHtml = this.locationCard(next, true);
+            if (type === 'notes') cardHtml = this.noteCard(next, true);
+            if (type === 'timeline') cardHtml = this.timelineCard(next, { isLast: true, draggable: true });
+
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = cardHtml.trim();
+            const cardElement = tempDiv.firstChild;
+            if (cardElement) {
+              cardElement.classList.add('new-card-entrance');
+              grid.appendChild(cardElement);
+              
+              setTimeout(() => {
+                cardElement.classList.remove('new-card-entrance');
+                if (this.state.newlyCreatedId === next.id) {
+                  this.state.newlyCreatedId = null;
+                }
+              }, 1000);
+            }
+          } else {
+            this.renderKb();
+          }
+        } else {
+          this.renderKb();
+        }
       }, 100);
     };
   }
@@ -14118,12 +14294,28 @@ class NocturneWriter {
       overlay.classList.remove('active');
       const cardEl = document.querySelector(`[data-lore-id="${id}"]`);
       this.animateShatter(cardEl, async () => {
-        await this.deleteLore(type, id, parentEvent?.id);
+        if (cardEl) {
+          const parentGrid = cardEl.parentElement;
+          cardEl.remove();
+          if (parentGrid && parentGrid.children.length === 0) {
+            const typeClassMap = {
+              characters: { icon: 'bx-user-pin', title: 'Персонажей пока нет.', desc: 'Создайте первый профиль, чтобы Nocturne начал узнавать имена в тексте.', action: 'new-lore', btnText: 'Создать профиль', attr: 'data-lore-type="characters"' },
+              locations: { icon: 'bx-map-alt', title: 'Локации пока нет.', desc: 'Добавьте первое место мира или сцены.', action: 'new-lore', btnText: 'Добавить место', attr: 'data-lore-type="locations"' },
+              notes: { icon: 'bx-note', title: 'Записей пока нет.', desc: 'Добавьте первую свободную запись или заметку к миру.', action: 'new-lore', btnText: 'Создать запись', attr: 'data-lore-type="notes"' },
+              timeline: { icon: 'bx-git-commit', title: 'Хронология пока пуста.', desc: 'Добавьте первое событие, чтобы выстроить историю.', action: 'new-lore', btnText: 'Добавить событие', attr: 'data-lore-type="timeline"' }
+            };
+            const config = typeClassMap[type];
+            if (config) {
+              parentGrid.innerHTML = this.emptyStateMarkup(config.icon, config.title, config.desc, config.action, config.btnText, config.attr);
+            }
+          }
+        }
+        await this.deleteLore(type, id, parentEvent?.id, true);
       });
     };
   }
 
-  async deleteLore(type, id, parentId = null) {
+  async deleteLore(type, id, parentId = null, localOnly = false) {
     if (type === 'subtimeline') {
       const parentEvent = this.timelineEvent(parentId || this.state.activeSubtimelineId);
       if (!parentEvent?.subEvents) return;
@@ -14153,9 +14345,15 @@ class NocturneWriter {
         if (pane.subtimelineParentId === id) pane.subtimelineParentId = null;
       });
     }
-    if (this.state.activeLoreDetail?.id === id) this.state.activeLoreDetail = null;
+    let detailActive = false;
+    if (this.state.activeLoreDetail?.id === id) {
+      this.state.activeLoreDetail = null;
+      detailActive = true;
+    }
     await this.saveLore();
-    this.renderKb();
+    if (!localOnly || detailActive) {
+      this.renderKb();
+    }
     this.refreshVisibleEntityLinks();
   }
 
