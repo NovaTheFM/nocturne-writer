@@ -8986,20 +8986,39 @@ input:-webkit-autofill:active {
 @keyframes new-item-entrance-anim {
   0% {
     opacity: 0;
-    transform: scale(0.85) translateY(10px);
-    filter: blur(8px);
-    box-shadow: 0 0 0 0 transparent;
-  }
-  50% {
-    box-shadow: 0 0 15px rgba(var(--accent-rgb, 139, 92, 246), 0.4);
+    transform: translateY(6px) scale(0.97);
   }
   100% {
     opacity: 1;
-    transform: scale(1) translateY(0);
-    filter: blur(0);
-    box-shadow: none;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes new-item-glow-anim {
+  0% {
+    border-color: rgba(var(--accent-rgb, 139, 92, 246), 0.8) !important;
+    box-shadow: 0 0 12px rgba(var(--accent-rgb, 139, 92, 246), 0.3) !important;
+  }
+  100% {
+    border-color: var(--card-border-color, rgba(255, 255, 255, 0.08)) !important;
+    box-shadow: none !important;
   }
 }
 .new-doc-entrance, .new-card-entrance {
+  animation: new-item-entrance-anim 0.45s cubic-bezier(0.16, 1, 0.3, 1) both,
+             new-item-glow-anim 1.2s cubic-bezier(0.16, 1, 0.3, 1) both !important;
+  will-change: transform, opacity, border-color, box-shadow;
+}
+
+/* Timeline specific entrance optimizations to avoid track jumping */
+.timeline-item.new-card-entrance {
+  animation: none !important;
+}
+.timeline-item.new-card-entrance .timeline-content-wrapper {
+  animation: new-item-entrance-anim 0.45s cubic-bezier(0.16, 1, 0.3, 1) both,
+             new-item-glow-anim 1.2s cubic-bezier(0.16, 1, 0.3, 1) both !important;
+  will-change: transform, opacity, border-color, box-shadow;
+}
+.timeline-item.new-card-entrance .timeline-dot {
   animation: new-item-entrance-anim 0.45s cubic-bezier(0.16, 1, 0.3, 1) both !important;
+  will-change: transform, opacity;
 }

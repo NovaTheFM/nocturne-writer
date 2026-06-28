@@ -6694,18 +6694,18 @@ class NocturneWriter {
         return;
       }
 
-      // Hide the element so it appears to dissolve
+      // Hide the element instantly so it appears to shatter into pieces
       element.style.visibility = 'hidden';
       element.style.pointerEvents = 'none';
 
-      // Create overlay canvas positioned exactly over the hidden element
+      // Create a fullscreen overlay canvas to prevent shards from clipping
       const overlayCanvas = document.createElement('canvas');
-      overlayCanvas.width = rect.width;
-      overlayCanvas.height = rect.height;
+      overlayCanvas.width = window.innerWidth;
+      overlayCanvas.height = window.innerHeight;
       overlayCanvas.style.position = 'fixed';
-      overlayCanvas.style.left = rect.left + 'px';
-      overlayCanvas.style.top = rect.top + 'px';
-      overlayCanvas.style.zIndex = '99999';
+      overlayCanvas.style.left = '0px';
+      overlayCanvas.style.top = '0px';
+      overlayCanvas.style.zIndex = '999999';
       overlayCanvas.style.pointerEvents = 'none';
       document.body.appendChild(overlayCanvas);
 
@@ -6716,7 +6716,7 @@ class NocturneWriter {
         return;
       }
 
-      // Extract styles to have fallback colors if html2canvas was slow/failed
+      // Extract colors for fallback if html2canvas was slow/failed
       const style = window.getComputedStyle(element);
       const accent = window.getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#8b5cf6';
       const textColor = style.color || '#ffffff';
@@ -6729,107 +6729,132 @@ class NocturneWriter {
         fallbackColors.push('#1e1b4b');
       }
 
-      const particles = [];
-      
-      if (capturedCanvas) {
-        const srcCtx = capturedCanvas.getContext('2d');
-        const imgData = srcCtx.getImageData(0, 0, capturedCanvas.width, capturedCanvas.height);
-        const data = imgData.data;
-        
-        // Sample pixels on a grid (step 6 for perfect balance of density and speed)
-        const step = 6;
-        for (let y = 0; y < capturedCanvas.height; y += step) {
-          for (let x = 0; x < capturedCanvas.width; x += step) {
-            const idx = (y * capturedCanvas.width + x) * 4;
-            const alpha = data[idx + 3];
-            if (alpha > 30) {
-              const r = data[idx];
-              const g = data[idx + 1];
-              const b = data[idx + 2];
-              
-              const scale = capturedCanvas.width / rect.width;
-              const px = x / scale;
-              const py = y / scale;
-              
-              // Initial burst velocity away from the center of the element
-              const centerX = rect.width / 2;
-              const centerY = rect.height / 2;
-              const dirX = px - centerX;
-              const dirY = py - centerY;
-              const dist = Math.sqrt(dirX * dirX + dirY * dirY) || 1;
+      // Generate a grid of points with random offsets to define triangular shards
+      const w = rect.width;
+      const h = rect.height;
+      const points = [];
+      const nx = 4; // cols
+      const ny = 3; // rows
 
-              const vx = (dirX / dist) * (Math.random() * 2 + 0.5) + (Math.random() - 0.5) * 1.5;
-              const vy = (dirY / dist) * (Math.random() * 2) - 2.5 - Math.random() * 3;
-
-              particles.push({
-                x: px,
-                y: py,
-                vx,
-                vy,
-                size: Math.random() * 2.5 + 1.5,
-                color: `rgba(${r},${g},${b},${alpha / 255})`,
-                alpha: 1,
-                decay: 0.012 + Math.random() * 0.018,
-                gravity: 0.16 + Math.random() * 0.06
-              });
-            }
+      for (let r = 0; r <= ny; r++) {
+        const row = [];
+        for (let c = 0; c <= nx; c++) {
+          let px = (c / nx) * w;
+          let py = (r / ny) * h;
+          // Apply random offsets to inner vertices
+          if (c > 0 && c < nx) {
+            px += (Math.random() - 0.5) * (w / nx) * 0.6;
           }
+          if (r > 0 && r < ny) {
+            py += (Math.random() - 0.5) * (h / ny) * 0.6;
+          }
+          row.push({ x: px, y: py });
         }
-      } else {
-        const cols = Math.ceil(rect.width / 8);
-        const rows = Math.ceil(rect.height / 8);
-        for (let c = 0; c < cols; c++) {
-          for (let r = 0; r < rows; r++) {
-            const px = c * 8 + Math.random() * 4;
-            const py = r * 8 + Math.random() * 4;
-            
-            const centerX = rect.width / 2;
-            const centerY = rect.height / 2;
-            const dirX = px - centerX;
-            const dirY = py - centerY;
+        points.push(row);
+      }
+
+      // Assemble triangles from the vertices grid
+      const shards = [];
+      const elemCenterX = w / 2;
+      const elemCenterY = h / 2;
+
+      for (let r = 0; r < ny; r++) {
+        for (let c = 0; c < nx; c++) {
+          const p0 = points[r][c];
+          const p1 = points[r][c + 1];
+          const p2 = points[r + 1][c];
+          const p3 = points[r + 1][c + 1];
+
+          // Triangulate each quad cell
+          const cells = [
+            [p0, p1, p2],
+            [p1, p3, p2]
+          ];
+
+          cells.forEach(tri => {
+            // Compute center of mass
+            const cx = (tri[0].x + tri[1].x + tri[2].x) / 3;
+            const cy = (tri[0].y + tri[1].y + tri[2].y) / 3;
+
+            // Generate points relative to center of mass for rotation/translation
+            const relPoints = tri.map(pt => ({
+              x: pt.x - cx,
+              y: pt.y - cy
+            }));
+
+            // Initial blast outwards + upward jump
+            const dirX = cx - elemCenterX;
+            const dirY = cy - elemCenterY;
             const dist = Math.sqrt(dirX * dirX + dirY * dirY) || 1;
 
-            const vx = (dirX / dist) * (Math.random() * 2) + (Math.random() - 0.5) * 1.5;
-            const vy = -Math.random() * 3.5 - 2;
+            const vx = (dirX / dist) * (Math.random() * 2 + 1) + (Math.random() - 0.5) * 1.5;
+            const vy = (dirY / dist) * (Math.random() * 1.5) - 3 - Math.random() * 3.5;
 
-            particles.push({
-              x: px,
-              y: py,
+            shards.push({
+              relPoints,
+              cx,
+              cy,
+              x: rect.left + cx,
+              y: rect.top + cy,
               vx,
               vy,
-              size: Math.random() * 3 + 2,
-              color: fallbackColors[Math.floor(Math.random() * fallbackColors.length)],
+              r: 0,
+              vr: (Math.random() - 0.5) * 0.15, // spin
               alpha: 1,
-              decay: 0.015 + Math.random() * 0.015,
-              gravity: 0.18 + Math.random() * 0.05
+              decay: 0.015 + Math.random() * 0.012,
+              gravity: 0.22 + Math.random() * 0.08,
+              color: fallbackColors[Math.floor(Math.random() * fallbackColors.length)]
             });
-          }
+          });
         }
       }
 
       let animationFrameId;
       const animate = () => {
-        ctx.clearRect(0, 0, rect.width, rect.height);
-        let activeParticles = 0;
+        ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+        let activeShards = 0;
 
-        for (let i = 0; i < particles.length; i++) {
-          const p = particles[i];
-          if (p.alpha <= 0) continue;
-          activeParticles++;
+        for (let i = 0; i < shards.length; i++) {
+          const s = shards[i];
+          if (s.alpha <= 0) continue;
+          activeShards++;
 
-          p.x += p.vx;
-          p.y += p.vy;
-          p.vy += p.gravity;
-          p.alpha -= p.decay;
+          s.x += s.vx;
+          s.y += s.vy;
+          s.vy += s.gravity;
+          s.r += s.vr;
+          s.alpha -= s.decay;
 
-          if (p.alpha > 0) {
-            ctx.fillStyle = p.color;
-            ctx.globalAlpha = p.alpha;
-            ctx.fillRect(p.x, p.y, p.size, p.size);
+          if (s.alpha > 0) {
+            ctx.save();
+            ctx.globalAlpha = s.alpha;
+            
+            // Translate to the center of mass in screen space and apply rotation
+            ctx.translate(s.x, s.y);
+            ctx.rotate(s.r);
+
+            // Set clip path to draw this specific triangular shard
+            ctx.beginPath();
+            ctx.moveTo(s.relPoints[0].x, s.relPoints[0].y);
+            ctx.lineTo(s.relPoints[1].x, s.relPoints[1].y);
+            ctx.lineTo(s.relPoints[2].x, s.relPoints[2].y);
+            ctx.closePath();
+            ctx.clip();
+
+            if (capturedCanvas) {
+              // Draw the captured screenshot correctly aligned with the shard center
+              ctx.drawImage(capturedCanvas, -s.cx, -s.cy, w, h);
+            } else {
+              // Draw fallback colored shard
+              ctx.fillStyle = s.color;
+              ctx.fill();
+            }
+
+            ctx.restore();
           }
         }
 
-        if (activeParticles > 0) {
+        if (activeShards > 0) {
           animationFrameId = requestAnimationFrame(animate);
         } else {
           cancelAnimationFrame(animationFrameId);
@@ -14095,7 +14120,11 @@ class NocturneWriter {
     overlay.querySelector('[data-delete-lore]')?.addEventListener('click', async () => {
       overlay.classList.remove('active');
       const cardEl = document.querySelector(`[data-lore-id="${id}"]`);
-      this.animateShatter(cardEl, async () => {
+      let shatterEl = cardEl;
+      if ((type === 'timeline' || type === 'subtimeline') && cardEl) {
+        shatterEl = cardEl.querySelector('.timeline-content') || cardEl;
+      }
+      this.animateShatter(shatterEl, async () => {
         if (cardEl) {
           const parentGrid = cardEl.parentElement;
           cardEl.remove();
@@ -14293,7 +14322,11 @@ class NocturneWriter {
     overlay.querySelector('[data-confirm-delete-lore]').onclick = async () => {
       overlay.classList.remove('active');
       const cardEl = document.querySelector(`[data-lore-id="${id}"]`);
-      this.animateShatter(cardEl, async () => {
+      let shatterEl = cardEl;
+      if ((type === 'timeline' || type === 'subtimeline') && cardEl) {
+        shatterEl = cardEl.querySelector('.timeline-content') || cardEl;
+      }
+      this.animateShatter(shatterEl, async () => {
         if (cardEl) {
           const parentGrid = cardEl.parentElement;
           cardEl.remove();
