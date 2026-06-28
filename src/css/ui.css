@@ -9041,3 +9041,21 @@ input:-webkit-autofill:active {
     transform: translateY(0);
   }
 }
+
+/* Disable transitions on currently dragged/ghost elements for instant cursor tracking */
+.sortable-drag,
+.sortable-fallback-drag,
+.sortable-ghost,
+.sortable-chosen {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* Disable general hover transitions during drag-and-drop to prevent lag, while letting SortableJS animate inline */
+body.sortable-active .char-card,
+body.sortable-active .loc-card,
+body.sortable-active .timeline-content,
+body.sortable-active .timeline-item,
+body.sortable-active .doc-item {
+  transition: none;
+}
