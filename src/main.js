@@ -12471,7 +12471,7 @@ class NocturneWriter {
           <div class="kb-header">
             <h1>Записи и Заметки</h1>
             <div class="kb-header-actions">
-              <button class="pill-btn cleaner-btn" data-action="clean-all-notes" title="«Чистильщик™»"><i class="reaper-icon"></i> «Чистильщик™»</button>
+              <button class="pill-btn cleaner-btn" data-action="clean-all-notes" title="«Чистильщик™»"><i class="reaper-icon"></i>«Чистильщик™»</button>
               <button class="pill-btn" data-action="dump-kb-notes" title="Экспорт записей"><i class="bx bx-download"></i> Дамп записей</button>
               <button class="pill-btn ai-btn" data-action="new-lore" data-lore-type="notes"><i class="bx bx-plus"></i> Новая запись</button>
               <i class="bx bx-x kb-close-btn" data-action="close-kb"></i>
@@ -16927,7 +16927,7 @@ ${raw}`;
   }
 
   async transitionReaperImage(imgEl, nextState, options = {}) {
-    const { blur = false, duration = 250 } = options;
+    const { blur = false, fade = true, duration = 200 } = options;
     const wrapper = imgEl.closest('.cleaner-reaper-wrapper');
     const tint = wrapper ? wrapper.querySelector('.cleaner-reaper-tint') : null;
     const glowImg = wrapper ? wrapper.querySelector('#cleaner-reaper-glow-img') : null;
@@ -16951,18 +16951,28 @@ ${raw}`;
       glowTint.style.opacity = '0';
     }
     
-    if (blur) {
-      imgEl.classList.add('blur-transition');
-      if (tint) tint.classList.add('blur-transition');
+    if (fade) {
+      imgEl.style.transition = `opacity ${duration / 2}ms ease, filter ${duration / 2}ms ease`;
+      if (tint) tint.style.transition = `opacity ${duration / 2}ms ease`;
+      
+      imgEl.style.opacity = '0';
+      if (tint) tint.style.opacity = '0';
+      if (blur) {
+        imgEl.style.filter = 'blur(4px)';
+      }
+      
       await new Promise(r => setTimeout(r, duration / 2));
-    }
-    
-    this.setReaperImage(imgEl, nextState);
-    
-    if (blur) {
+      this.setReaperImage(imgEl, nextState);
+      
+      imgEl.style.opacity = '1';
+      if (tint) tint.style.opacity = '1';
+      if (blur) {
+        imgEl.style.filter = 'drop-shadow(0 0 20px rgba(var(--accent-rgb, 139, 92, 246), 0.25))';
+      }
+      
       await new Promise(r => setTimeout(r, duration / 2));
-      imgEl.classList.remove('blur-transition');
-      if (tint) tint.classList.remove('blur-transition');
+    } else {
+      this.setReaperImage(imgEl, nextState);
     }
   }
 
@@ -16977,16 +16987,19 @@ ${raw}`;
       wrapper.classList.add('shaking');
     }
     
-    imgEl.classList.add('blur-transition');
-    if (tint) tint.classList.add('blur-transition');
+    imgEl.style.transition = 'opacity 100ms ease';
+    if (tint) tint.style.transition = 'opacity 100ms ease';
+    
+    imgEl.style.opacity = '0';
+    if (tint) tint.style.opacity = '0';
     if (glowImg) glowImg.style.opacity = '0';
     if (glowTint) glowTint.style.opacity = '0';
     
-    await new Promise(r => setTimeout(r, 120));
+    await new Promise(r => setTimeout(r, 100));
     this.setReaperImage(imgEl, 'delete');
     
-    imgEl.classList.remove('blur-transition');
-    if (tint) tint.classList.remove('blur-transition');
+    imgEl.style.opacity = '1';
+    if (tint) tint.style.opacity = '1';
     
     await new Promise(r => setTimeout(r, 600));
     if (wrapper) {
@@ -17097,8 +17110,12 @@ ${raw}`;
         totalNotesScanned = notes.length;
       }
       
-      await this.transitionReaperImage(reaperImg, 'found', { blur: false });
-      this.showCleanerMatchesState(overlay, matches, noteId, totalNotesScanned);
+      if (matches.length === 0) {
+        this.showCleanerMatchesState(overlay, matches, noteId, totalNotesScanned);
+      } else {
+        await this.transitionReaperImage(reaperImg, 'found', { blur: false });
+        this.showCleanerMatchesState(overlay, matches, noteId, totalNotesScanned);
+      }
     };
   }
 
@@ -17107,7 +17124,7 @@ ${raw}`;
     const reaperImg = overlay.querySelector('#cleaner-reaper-img');
     
     if (matches.length === 0) {
-      this.transitionReaperImage(reaperImg, 'success', { blur: true, duration: 250 }).then(() => {
+      this.transitionReaperImage(reaperImg, 'success', { blur: false, fade: true, duration: 250 }).then(() => {
         contentEl.innerHTML = `
           <h2>Текст чист, мастер</h2>
           <p style="color: var(--text-muted); font-size: 13px; line-height: 1.6; margin-bottom: 24px;">
@@ -17201,7 +17218,7 @@ ${raw}`;
       await new Promise(r => setTimeout(r, 500));
       
       if (errorOccurred) {
-        await this.transitionReaperImage(reaperImg, 'error', { blur: true, duration: 250 });
+        await this.transitionReaperImage(reaperImg, 'error', { blur: false, fade: true, duration: 250 });
         contentEl.innerHTML = `
           <h2>Произошла ошибка</h2>
           <p>«Чистильщик™» столкнулся с непредвиденной ошибкой при изменении базы данных.</p>
@@ -17213,7 +17230,7 @@ ${raw}`;
           overlay.classList.remove('active');
         };
       } else {
-        await this.transitionReaperImage(reaperImg, 'success', { blur: true, duration: 250 });
+        await this.transitionReaperImage(reaperImg, 'success', { blur: false, fade: true, duration: 250 });
         
         contentEl.innerHTML = `
           <h2>Очистка завершена, мастер</h2>
