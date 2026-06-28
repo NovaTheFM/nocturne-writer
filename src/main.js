@@ -362,6 +362,20 @@ class NocturneWriter {
     const settings = await this.db.get('settings', 'app');
     this.state.settings = this.validateSettings(settings?.value || {});
     this.injectCustomFonts();
+    if (!document.getElementById('reaper-recolor-filter')) {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', '0');
+      svg.setAttribute('height', '0');
+      svg.style.position = 'absolute';
+      svg.style.pointerEvents = 'none';
+      svg.innerHTML = `
+        <filter id="reaper-recolor-filter">
+          <feFlood flood-color="var(--accent)" result="flood" />
+          <feComposite in="flood" in2="SourceAlpha" operator="atop" />
+        </filter>
+      `;
+      document.body.appendChild(svg);
+    }
     this.state.sessionPassword = safeGetStorageItem(sessionStorage, 'nocturne-master-password', '');
                 if (!safeGetStorageItem(localStorage, 'nocturne-writing-animation-choice', '') && this.state.settings.writingAnimation === 'off') {
       this.state.settings.writingAnimation = defaultSettings.writingAnimation;
@@ -16991,14 +17005,14 @@ ${raw}`;
     [reaperImg, reaperTint].forEach(el => {
       if (!el) return;
       el.style.opacity = '0';
-      el.style.transform = 'translateY(20px) translateX(-50%)';
+      el.style.transform = 'translateY(20px)';
     });
     setTimeout(() => {
       [reaperImg, reaperTint].forEach(el => {
         if (!el) return;
         el.style.transition = 'opacity 500ms ease, transform 500ms ease';
         el.style.opacity = '1';
-        el.style.transform = 'translateY(0) translateX(-50%)';
+        el.style.transform = 'translateY(0)';
       });
       setTimeout(() => {
         [reaperImg, reaperTint].forEach(el => el?.classList.add('floating'));
@@ -17051,7 +17065,7 @@ ${raw}`;
         totalNotesScanned = notes.length;
       }
       
-      await this.transitionReaperImage(reaperImg, 'found', { blur: true, duration: 400 });
+      await this.transitionReaperImage(reaperImg, 'found', { blur: false });
       this.showCleanerMatchesState(overlay, matches, noteId, totalNotesScanned);
     };
   }
@@ -17061,16 +17075,24 @@ ${raw}`;
     const reaperImg = overlay.querySelector('#cleaner-reaper-img');
     
     if (matches.length === 0) {
-      contentEl.innerHTML = `
-        <h2>Совпадений не найдено</h2>
-        <p>${noteId ? 'В тексте выбранной заметки' : `В ${totalNotesScanned} проверенных заметках`} не обнаружено артефактов копирования сообщений Telegram.</p>
-        <div class="form-actions" style="justify-content: center; margin-top: 24px;">
-          <button class="pill-btn ai-btn" data-action="close-cleaner" style="min-width: 120px;">Готово</button>
-        </div>
-      `;
-      overlay.querySelector('[data-action="close-cleaner"]').onclick = () => {
-        overlay.classList.remove('active');
-      };
+      this.transitionReaperImage(reaperImg, 'success', { blur: true, duration: 250 }).then(() => {
+        overlay.innerHTML = `
+          <div class="success-full-overlay">
+            <div class="cleaner-reaper-wrapper" style="position: static; transform: none; margin-bottom: 20px; width: 260px; height: 260px;">
+              <img src="/reaper_photo/reaper_success.png" class="cleaner-reaper-img floating" alt="Reaper">
+              <div class="cleaner-reaper-tint" style="-webkit-mask-image: url(/reaper_photo/reaper_success.png); mask-image: url(/reaper_photo/reaper_success.png);"></div>
+            </div>
+            <h1>Текст чист, мастер</h1>
+            <p style="color: var(--text-muted); font-size: 14px; text-align: center; margin-bottom: 24px; max-width: 400px;">
+              ${noteId ? 'В выбранной заметке' : `В ${totalNotesScanned} проверенных заметках`} не обнаружено артефактов копирования Telegram.
+            </p>
+            <button class="pill-btn ai-btn" id="close-success-btn" style="padding: 10px 24px; min-width: 160px;">Закрыть</button>
+          </div>
+        `;
+        overlay.querySelector('#close-success-btn').onclick = () => {
+          overlay.classList.remove('active');
+        };
+      });
       return;
     }
     
@@ -17151,7 +17173,7 @@ ${raw}`;
       await new Promise(r => setTimeout(r, 500));
       
       if (errorOccurred) {
-        await this.transitionReaperImage(reaperImg, 'error', { blur: true, duration: 400 });
+        await this.transitionReaperImage(reaperImg, 'error', { blur: true, duration: 250 });
         contentEl.innerHTML = `
           <h2>Произошла ошибка</h2>
           <p>«Чистильщик™» столкнулся с непредвиденной ошибкой при изменении базы данных.</p>
@@ -17163,18 +17185,19 @@ ${raw}`;
           overlay.classList.remove('active');
         };
       } else {
-        await this.transitionReaperImage(reaperImg, 'success', { blur: true, duration: 400 });
+        await this.transitionReaperImage(reaperImg, 'success', { blur: true, duration: 250 });
         
         overlay.innerHTML = `
           <div class="success-full-overlay">
-            <div class="cleaner-reaper-wrapper" style="position: static; transform: none; margin-bottom: 20px; width: 200px; height: 200px;">
+            <div class="cleaner-reaper-wrapper" style="position: static; transform: none; margin-bottom: 20px; width: 260px; height: 260px;">
               <img src="/reaper_photo/reaper_success.png" class="cleaner-reaper-img floating" alt="Reaper">
+              <div class="cleaner-reaper-tint" style="-webkit-mask-image: url(/reaper_photo/reaper_success.png); mask-image: url(/reaper_photo/reaper_success.png);"></div>
             </div>
             <h1>Очистка завершена, мастер</h1>
             <p style="color: var(--text-muted); font-size: 14px; text-align: center; margin-bottom: 24px; max-width: 400px;">
               Все артефакты копирования сообщений Telegram были успешно удалены из заметок.
             </p>
-            <button class="pill-btn ai-btn" id="close-success-btn" style="padding: 10px 24px; min-width: 160px;">Служить дальше</button>
+            <button class="pill-btn ai-btn" id="close-success-btn" style="padding: 10px 24px; min-width: 160px;">Закрыть</button>
           </div>
         `;
         
