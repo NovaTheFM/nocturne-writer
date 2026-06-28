@@ -1774,16 +1774,18 @@ class NocturneWriter {
     return `
       <article class="doc-item mobile-doc-card ${isBook ? 'book-chapter-card' : ''} ${doc.id === this.state.activeDocId ? 'active' : ''}" data-doc-id="${escapeHtml(doc.id)}">
         <div>
-          <h3><i class="bx ${isBook ? 'bx-book-open' : (doc.pinned ? 'bx-pin' : doc.locked ? 'bx-lock' : 'bx-file')}"></i>${escapeHtml(doc.title || 'Без названия')}</h3>
-          <p>${escapeHtml(doc.description || doc.summary || 'Без описания')}</p>
-          <small>${words} слов${updated ? ` · ${updated}` : ''}</small>
           ${isBook ? `
-          <div class="book-chapter-meta">
-            ${doc.workTitle || doc.volume ? `<span class="book-meta-label">${escapeHtml(doc.workTitle || '')}${doc.volume && doc.workTitle ? ' / ' : ''}${escapeHtml(doc.volume || '')}</span>` : ''}
-            ${doc.chapterNumber ? `<span class="book-meta-chapter">${escapeHtml(doc.chapterNumber)}</span>` : ''}
-            <span class="book-status-badge status-${this.statusSlug(doc.bookStatus)}">${escapeHtml(doc.bookStatus || 'Не редактировано')}</span>
+          <div class="book-chapter-header">
+            <span class="book-work-info"><i class="bx bx-library"></i> ${escapeHtml(doc.workTitle || 'Книга')}${doc.volume ? ` · ${escapeHtml(doc.volume)}` : ''}</span>
+            <span class="book-status-inline status-${this.statusSlug(doc.bookStatus)}">
+              <span class="status-dot"></span>
+              <span class="status-name">${escapeHtml(doc.bookStatus || 'Не редактировано')}</span>
+            </span>
           </div>
           ` : ''}
+          <h3><i class="bx ${isBook ? 'bx-book-open' : (doc.pinned ? 'bx-pin' : doc.locked ? 'bx-lock' : 'bx-file')}"></i><span>${isBook && doc.chapterNumber ? `<span class="chapter-number">${escapeHtml(doc.chapterNumber)}</span>: ` : ''}${escapeHtml(doc.title || 'Без названия')}</span></h3>
+          <p>${escapeHtml(doc.description || doc.summary || 'Без описания')}</p>
+          <small>${words} слов${updated ? ` · ${updated}` : ''}</small>
         </div>
         <button class="mobile-card-menu doc-menu-btn" data-doc-menu="${escapeHtml(doc.id)}" aria-label="Меню главы"><i class="bx bx-dots-vertical-rounded"></i></button>
       </article>`;
@@ -6526,16 +6528,18 @@ class NocturneWriter {
           const isBook = doc.docType === 'book-chapter';
           return `
           <div class="doc-item ${isBook ? 'book-chapter-card' : ''} ${doc.id === this.state.activeDocId ? 'active' : ''} ${doc.pinned ? 'pinned' : ''}" data-doc-id="${doc.id}">
-            <div class="doc-title"><i class="bx ${isBook ? 'bx-book-open' : (doc.pinned ? 'bx-pin' : (doc.locked ? 'bx-lock' : 'bx-file'))}"></i> ${escapeHtml(doc.title)}</div>
-            <button class="doc-menu-btn" data-doc-menu="${doc.id}" title="Меню"><i class="bx bx-dots-vertical-rounded"></i></button>
-            <div class="doc-desc">${escapeHtml(doc.description || doc.summary || 'Без описания')}</div>
             ${isBook ? `
-            <div class="book-chapter-meta">
-              ${doc.workTitle || doc.volume ? `<span class="book-meta-label">${escapeHtml(doc.workTitle || '')}${doc.volume && doc.workTitle ? ' / ' : ''}${escapeHtml(doc.volume || '')}</span>` : ''}
-              ${doc.chapterNumber ? `<span class="book-meta-chapter">${escapeHtml(doc.chapterNumber)}</span>` : ''}
-              <span class="book-status-badge status-${this.statusSlug(doc.bookStatus)}">${escapeHtml(doc.bookStatus || 'Не редактировано')}</span>
+            <div class="book-chapter-header">
+              <span class="book-work-info"><i class="bx bx-library"></i> ${escapeHtml(doc.workTitle || 'Книга')}${doc.volume ? ` · ${escapeHtml(doc.volume)}` : ''}</span>
+              <span class="book-status-inline status-${this.statusSlug(doc.bookStatus)}">
+                <span class="status-dot"></span>
+                <span class="status-name">${escapeHtml(doc.bookStatus || 'Не редактировано')}</span>
+              </span>
             </div>
             ` : ''}
+            <div class="doc-title"><i class="bx ${isBook ? 'bx-book-open' : (doc.pinned ? 'bx-pin' : (doc.locked ? 'bx-lock' : 'bx-file'))}"></i> <span>${isBook && doc.chapterNumber ? `<span class="chapter-number">${escapeHtml(doc.chapterNumber)}</span>: ` : ''}${escapeHtml(doc.title)}</span></div>
+            <button class="doc-menu-btn" data-doc-menu="${doc.id}" title="Меню"><i class="bx bx-dots-vertical-rounded"></i></button>
+            <div class="doc-desc">${escapeHtml(doc.description || doc.summary || 'Без описания')}</div>
           </div>
         `}).join('') : this.folderEmptyState(folder.id, q)}
         </div>
@@ -6716,19 +6720,43 @@ class NocturneWriter {
           <label>Описание документа <textarea class="form-control" name="description" placeholder="Кратко: что происходит в этой главе, зачем она нужна, какой тон сцены."></textarea></label>
         </div>
 
-        <div class="form-grid book-chapter-fields" style="display: none;">
-          <label>Произведение <input class="form-control" name="workTitle" placeholder="Название книги/цикла"></label>
-          <label>Том <input class="form-control" name="volume" placeholder="Например: Том 1"></label>
-          <label>Глава <input class="form-control" name="chapterNumber" placeholder="Например: Глава 1: Пробуждение"></label>
-          <label>Статус
-            <select class="modal-select" name="bookStatus">
-              <option value="Не редактировано">Не редактировано</option>
-              <option value="На редакции">На редакции</option>
-              <option value="Вычитка">Вычитка</option>
-              <option value="Чистовая версия">Чистовая версия</option>
-              <option value="Закончено">Закончено</option>
-            </select>
-          </label>
+        <div class="book-chapter-fields-wrapper">
+          <div class="form-grid book-chapter-fields">
+            <label>Произведение <input class="form-control" name="workTitle" placeholder="Название книги/цикла"></label>
+            <label>Том <input class="form-control" name="volume" placeholder="Например: Том 1"></label>
+            <label>Глава <input class="form-control" name="chapterNumber" placeholder="Например: Глава 1: Пробуждение"></label>
+            <label>Статус
+              <div class="nocturne-select" id="book-status-select" style="width: 100%;">
+                <input type="hidden" name="bookStatus" value="Не редактировано">
+                <button type="button" class="nocturne-select-trigger" data-setting-select-toggle style="width: 100%;">
+                  <span>Не редактировано</span>
+                  <i class="bx bx-chevron-down"></i>
+                </button>
+                <div class="nocturne-select-menu popover-surface" role="listbox" aria-hidden="true" style="width: 100%; min-width: 100%;">
+                  <button type="button" class="nocturne-select-option selected" role="option" data-book-status-option data-value="Не редактировано">
+                    <span>Не редактировано</span>
+                    <i class="bx bx-check"></i>
+                  </button>
+                  <button type="button" class="nocturne-select-option" role="option" data-book-status-option data-value="На редакции">
+                    <span>На редакции</span>
+                    <i class="bx bx-check"></i>
+                  </button>
+                  <button type="button" class="nocturne-select-option" role="option" data-book-status-option data-value="Вычитка">
+                    <span>Вычитка</span>
+                    <i class="bx bx-check"></i>
+                  </button>
+                  <button type="button" class="nocturne-select-option" role="option" data-book-status-option data-value="Чистовая версия">
+                    <span>Чистовая версия</span>
+                    <i class="bx bx-check"></i>
+                  </button>
+                  <button type="button" class="nocturne-select-option" role="option" data-book-status-option data-value="Закончено">
+                    <span>Закончено</span>
+                    <i class="bx bx-check"></i>
+                  </button>
+                </div>
+              </div>
+            </label>
+          </div>
         </div>
 
         <div class="form-actions">
@@ -6740,16 +6768,36 @@ class NocturneWriter {
     overlay.classList.add('active');
     
     const typeRadios = overlay.querySelectorAll('input[name="docType"]');
-    const bookFields = overlay.querySelector('.book-chapter-fields');
+    const bookFieldsWrapper = overlay.querySelector('.book-chapter-fields-wrapper');
     typeRadios.forEach(radio => {
       radio.addEventListener('change', () => {
         if (radio.value === 'book-chapter') {
-          bookFields.style.display = 'grid';
+          bookFieldsWrapper.classList.add('open');
         } else {
-          bookFields.style.display = 'none';
+          bookFieldsWrapper.classList.remove('open');
         }
       });
     });
+
+    const setupCustomStatusSelect = (formEl) => {
+      const selectEl = formEl.querySelector('#book-status-select');
+      if (!selectEl) return;
+      const trigger = selectEl.querySelector('[data-setting-select-toggle]');
+      const hiddenInput = selectEl.querySelector('input[name="bookStatus"]');
+      const options = selectEl.querySelectorAll('[data-book-status-option]');
+      
+      options.forEach(opt => {
+        opt.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const val = opt.dataset.value;
+          hiddenInput.value = val;
+          trigger.querySelector('span').textContent = val;
+          options.forEach(o => o.classList.toggle('selected', o === opt));
+          this.closeSettingsSelects();
+        });
+      });
+    };
+    setupCustomStatusSelect(overlay);
 
     overlay.querySelector('[name="imageFile"]')?.addEventListener('change', (event) => {
       const nameEl = overlay.querySelector('[data-file-name]');
@@ -7286,19 +7334,29 @@ class NocturneWriter {
           <label>Описание <textarea class="form-control" name="description">${escapeHtml(doc.description || '')}</textarea></label>
         </div>
 
-        <div class="form-grid book-chapter-fields" style="display: ${isBook ? 'grid' : 'none'};">
-          <label>Произведение <input class="form-control" name="workTitle" value="${escapeHtml(doc.workTitle || '')}" placeholder="Название книги/цикла"></label>
-          <label>Том <input class="form-control" name="volume" value="${escapeHtml(doc.volume || '')}" placeholder="Например: Том 1"></label>
-          <label>Глава <input class="form-control" name="chapterNumber" value="${escapeHtml(doc.chapterNumber || '')}" placeholder="Например: Глава 1: Пробуждение"></label>
-          <label>Статус
-            <select class="modal-select" name="bookStatus">
-              <option value="Не редактировано" ${doc.bookStatus === 'Не редактировано' ? 'selected' : ''}>Не редактировано</option>
-              <option value="На редакции" ${doc.bookStatus === 'На редакции' ? 'selected' : ''}>На редакции</option>
-              <option value="Вычитка" ${doc.bookStatus === 'Вычитка' ? 'selected' : ''}>Вычитка</option>
-              <option value="Чистовая версия" ${doc.bookStatus === 'Чистовая версия' ? 'selected' : ''}>Чистовая версия</option>
-              <option value="Закончено" ${doc.bookStatus === 'Закончено' ? 'selected' : ''}>Закончено</option>
-            </select>
-          </label>
+        <div class="book-chapter-fields-wrapper ${isBook ? 'open' : ''}">
+          <div class="form-grid book-chapter-fields">
+            <label>Произведение <input class="form-control" name="workTitle" value="${escapeHtml(doc.workTitle || '')}" placeholder="Название книги/цикла"></label>
+            <label>Том <input class="form-control" name="volume" value="${escapeHtml(doc.volume || '')}" placeholder="Например: Том 1"></label>
+            <label>Глава <input class="form-control" name="chapterNumber" value="${escapeHtml(doc.chapterNumber || '')}" placeholder="Например: Глава 1: Пробуждение"></label>
+            <label>Статус
+              <div class="nocturne-select" id="book-status-select" style="width: 100%;">
+                <input type="hidden" name="bookStatus" value="${escapeHtml(doc.bookStatus || 'Не редактировано')}">
+                <button type="button" class="nocturne-select-trigger" data-setting-select-toggle style="width: 100%;">
+                  <span>${escapeHtml(doc.bookStatus || 'Не редактировано')}</span>
+                  <i class="bx bx-chevron-down"></i>
+                </button>
+                <div class="nocturne-select-menu popover-surface" role="listbox" aria-hidden="true" style="width: 100%; min-width: 100%;">
+                  ${['Не редактировано', 'На редакции', 'Вычитка', 'Чистовая версия', 'Закончено'].map(status => `
+                    <button type="button" class="nocturne-select-option ${doc.bookStatus === status ? 'selected' : (!doc.bookStatus && status === 'Не редактировано' ? 'selected' : '')}" role="option" data-book-status-option data-value="${escapeHtml(status)}">
+                      <span>${escapeHtml(status)}</span>
+                      <i class="bx bx-check"></i>
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+            </label>
+          </div>
         </div>
 
         <div class="form-actions">
@@ -7310,16 +7368,36 @@ class NocturneWriter {
     overlay.classList.add('active');
     
     const typeRadios = overlay.querySelectorAll('input[name="docType"]');
-    const bookFields = overlay.querySelector('.book-chapter-fields');
+    const bookFieldsWrapper = overlay.querySelector('.book-chapter-fields-wrapper');
     typeRadios.forEach(radio => {
       radio.addEventListener('change', () => {
         if (radio.value === 'book-chapter') {
-          bookFields.style.display = 'grid';
+          bookFieldsWrapper.classList.add('open');
         } else {
-          bookFields.style.display = 'none';
+          bookFieldsWrapper.classList.remove('open');
         }
       });
     });
+
+    const setupCustomStatusSelect = (formEl) => {
+      const selectEl = formEl.querySelector('#book-status-select');
+      if (!selectEl) return;
+      const trigger = selectEl.querySelector('[data-setting-select-toggle]');
+      const hiddenInput = selectEl.querySelector('input[name="bookStatus"]');
+      const options = selectEl.querySelectorAll('[data-book-status-option]');
+      
+      options.forEach(opt => {
+        opt.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const val = opt.dataset.value;
+          hiddenInput.value = val;
+          trigger.querySelector('span').textContent = val;
+          options.forEach(o => o.classList.toggle('selected', o === opt));
+          this.closeSettingsSelects();
+        });
+      });
+    };
+    setupCustomStatusSelect(overlay);
 
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('form').onsubmit = async (e) => {

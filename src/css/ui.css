@@ -8617,6 +8617,7 @@ body.theme-paper .accent-preset.active {
 .doc-type-radio {
   flex: 1;
   position: relative;
+  cursor: pointer;
 }
 .doc-type-radio input {
   position: absolute;
@@ -8645,45 +8646,92 @@ body.theme-paper .accent-preset.active {
   background: rgba(var(--accent-rgb, 139, 92, 246),.12);
   box-shadow: 0 0 18px rgba(var(--accent-rgb, 139, 92, 246),.16);
 }
+
+/* Modal Switcher Animated Wrapper */
+.book-chapter-fields-wrapper {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 280ms cubic-bezier(0.16, 1, 0.3, 1), opacity 200ms ease, margin-top 280ms ease;
+  opacity: 0;
+  overflow: hidden;
+  margin-top: 0;
+}
+.book-chapter-fields-wrapper.open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  margin-top: 16px;
+}
+.book-chapter-fields {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+@media (max-width: 480px) {
+  .book-chapter-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Document List Card for Book Chapters */
 .book-chapter-card {
-  padding-bottom: 0.75rem;
-}
-.book-chapter-meta {
-  margin-top: 0.5rem;
+  padding: 14px 12px 12px !important;
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
+  flex-direction: column;
+  gap: 4px;
+}
+.book-chapter-header {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
+  margin-bottom: 2px;
+  font-size: 11px;
 }
-.book-meta-label {
-  display: inline-flex;
-  padding: 3px 7px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
+.book-work-info {
   color: var(--text-muted);
-  background: rgba(255,255,255,.035);
-  font-size: 11px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 70%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.book-meta-chapter {
-  display: inline-flex;
-  padding: 3px 7px;
-  border-radius: 999px;
-  border: 1px solid rgba(var(--accent-rgb, 139, 92, 246),.28);
-  color: #c4b5fd;
-  background: rgba(var(--accent-rgb, 139, 92, 246),.12);
-  font-size: 11px;
+.book-work-info i {
+  font-size: 13px;
+}
+.book-status-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 9px;
+  letter-spacing: 0.5px;
+}
+.book-status-inline .status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.book-status-inline.status-unread { color: var(--text-muted); }
+.book-status-inline.status-unread .status-dot { background: #9ca3af; }
+
+.book-status-inline.status-editing { color: #f59e0b; }
+.book-status-inline.status-editing .status-dot { background: #f59e0b; box-shadow: 0 0 8px rgba(245, 158, 11, 0.4); }
+
+.book-status-inline.status-proofreading { color: #3b82f6; }
+.book-status-inline.status-proofreading .status-dot { background: #3b82f6; box-shadow: 0 0 8px rgba(59, 130, 246, 0.4); }
+
+.book-status-inline.status-clean { color: #8b5cf6; }
+.book-status-inline.status-clean .status-dot { background: #8b5cf6; box-shadow: 0 0 8px rgba(139, 92, 246, 0.4); }
+
+.book-status-inline.status-done { color: #10b981; }
+.book-status-inline.status-done .status-dot { background: #10b981; box-shadow: 0 0 8px rgba(16, 185, 129, 0.4); }
+
+.chapter-number {
+  color: var(--accent-hover);
   font-weight: 700;
 }
-.book-status-badge {
-  display: inline-flex;
-  padding: 3px 7px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  font-size: 11px;
-  font-weight: 600;
-}
-.book-status-badge.status-unread { border-color: rgba(255,255,255,.16); color: var(--text-muted); }
-.book-status-badge.status-editing { border-color: rgba(245,158,11,.45); color: #fcd34d; background: rgba(245,158,11,.08); }
-.book-status-badge.status-proofreading { border-color: rgba(96,165,250,.45); color: #bfdbfe; background: rgba(96,165,250,.08); }
-.book-status-badge.status-clean { border-color: rgba(168,85,247,.45); color: #ddd6fe; background: rgba(168,85,247,.08); }
-.book-status-badge.status-done { border-color: rgba(45,212,191,.45); color: #99f6e4; background: rgba(45,212,191,.08); }

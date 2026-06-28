@@ -1,7 +1,7 @@
 @echo off
 cd /d "%~dp0"
 
-set PORT=8000
+set PORT=8100
 
 echo Запускаю локальный сервер в:
 echo %cd%
