@@ -14,31 +14,26 @@ try {
   const pngBuffer = await readFile(pngPath);
   const base64Png = pngBuffer.toString('base64');
   
-  // Create a clean solid black silhouette for the mask image
+  // Resize to 128x128 and keep the smooth alpha channel for perfect anti-aliased rendering
   const resizedBase64 = await page.evaluate(async (base64) => {
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        canvas.width = 32;
-        canvas.height = 32;
+        canvas.width = 128;
+        canvas.height = 128;
         const ctx = canvas.getContext('2d');
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(img, 0, 0, 32, 32);
+        ctx.drawImage(img, 0, 0, 128, 128);
         
-        const imgData = ctx.getImageData(0, 0, 32, 32);
+        const imgData = ctx.getImageData(0, 0, 128, 128);
         const data = imgData.data;
         for (let i = 0; i < data.length; i += 4) {
-          const alpha = data[i + 3];
-          if (alpha > 40) {
-            data[i] = 0;       // R
-            data[i + 1] = 0;   // G
-            data[i + 2] = 0;   // B
-            data[i + 3] = 255; // 100% solid
-          } else {
-            data[i + 3] = 0;   // 100% transparent
-          }
+          // Preserve the original alpha value, but make color black
+          data[i] = 0;     // R
+          data[i + 1] = 0; // G
+          data[i + 2] = 0; // B
         }
         ctx.putImageData(imgData, 0, 0);
         resolve(canvas.toDataURL('image/png').split(',')[1]);
@@ -53,7 +48,7 @@ try {
   
   // Write small PNG
   await writeFile(smallPngPath, resizedPngData);
-  console.log('Successfully created solid silhouette 32x32 reaper_icon_small.png');
+  console.log('Successfully created high-fidelity 128x128 reaper_icon_small.png');
   
   // Pack into ICO
   const header = Buffer.alloc(22);
@@ -61,8 +56,8 @@ try {
   header.writeUInt16LE(1, 2);       // Type (1 = ICO)
   header.writeUInt16LE(1, 4);       // Count (1 image)
   
-  header.writeUInt8(32, 6);         // Width (32)
-  header.writeUInt8(32, 7);         // Height (32)
+  header.writeUInt8(128, 6);         // Width (128)
+  header.writeUInt8(128, 7);         // Height (128)
   header.writeUInt8(0, 8);          // Color count (0)
   header.writeUInt8(0, 9);          // Reserved (0)
   header.writeUInt16LE(1, 10);      // Color planes (1)
@@ -72,7 +67,7 @@ try {
   
   const icoData = Buffer.concat([header, resizedPngData]);
   await writeFile(icoPath, icoData);
-  console.log('Successfully created resized 32x32 reaper_icon.ico');
+  console.log('Successfully created resized 128x128 reaper_icon.ico');
 } catch (e) {
   console.error('Error:', e);
 }

@@ -16981,14 +16981,8 @@ ${raw}`;
       glowTint.style.webkitMaskImage = `url(${src})`;
       glowTint.style.maskImage = `url(${src})`;
       
-      // Wait for next image to load completely
-      await new Promise((resolve) => {
-        if (glowImg.complete) resolve();
-        else {
-          glowImg.onload = resolve;
-          glowImg.onerror = resolve;
-        }
-      });
+      // Decode image on GPU before transition
+      await glowImg.decode().catch(() => {});
       
       // Coordinated cross-fade: fade base layer out while fading overlay layer in
       imgEl.style.transition = `opacity ${duration}ms ease`;
@@ -17005,14 +16999,12 @@ ${raw}`;
       
       this.setReaperImage(imgEl, nextState);
       
-      // Wait for base image to swap and load
-      await new Promise((resolve) => {
-        if (imgEl.complete) resolve();
-        else {
-          imgEl.onload = resolve;
-          imgEl.onerror = resolve;
-        }
-      });
+      // Decode base image on GPU
+      await imgEl.decode().catch(() => {});
+      
+      // Wait two rendering frames to ensure the browser has painted the base layer
+      await new Promise(r => requestAnimationFrame(r));
+      await new Promise(r => requestAnimationFrame(r));
       
       imgEl.style.transition = 'none';
       if (tint) tint.style.transition = 'none';
@@ -17047,14 +17039,7 @@ ${raw}`;
       glowTint.style.webkitMaskImage = `url(${src})`;
       glowTint.style.maskImage = `url(${src})`;
       
-      // Wait for delete image to load completely
-      await new Promise((resolve) => {
-        if (glowImg.complete) resolve();
-        else {
-          glowImg.onload = resolve;
-          glowImg.onerror = resolve;
-        }
-      });
+      await glowImg.decode().catch(() => {});
       
       imgEl.style.transition = 'opacity 150ms ease';
       if (tint) tint.style.transition = 'opacity 150ms ease';
@@ -17069,15 +17054,10 @@ ${raw}`;
       await new Promise(r => setTimeout(r, 150));
       
       this.setReaperImage(imgEl, 'delete');
+      await imgEl.decode().catch(() => {});
       
-      // Wait for base image to swap and load
-      await new Promise((resolve) => {
-        if (imgEl.complete) resolve();
-        else {
-          imgEl.onload = resolve;
-          imgEl.onerror = resolve;
-        }
-      });
+      await new Promise(r => requestAnimationFrame(r));
+      await new Promise(r => requestAnimationFrame(r));
       
       imgEl.style.transition = 'none';
       if (tint) tint.style.transition = 'none';

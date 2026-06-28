@@ -9066,8 +9066,8 @@ body.sortable-active .doc-item {
   width: 20px; /* Larger size for note card actions */
   height: 20px;
   background-color: currentColor;
-  -webkit-mask-image: url('/reaper_photo/reaper_icon_small.png');
-  mask-image: url('/reaper_photo/reaper_icon_small.png');
+  -webkit-mask-image: url('/reaper_photo/reaper_icon_small.png?v=2');
+  mask-image: url('/reaper_photo/reaper_icon_small.png?v=2');
   -webkit-mask-size: contain;
   mask-size: contain;
   -webkit-mask-repeat: no-repeat;
