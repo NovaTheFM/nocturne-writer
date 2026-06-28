@@ -1,7 +1,7 @@
 @echo off
 cd /d "%~dp0"
 
-set PORT=8813
+set PORT=8814
 
 echo Очищаю порт %PORT% от предыдущих запусков...
 powershell -Command "Get-NetTCPConnection -LocalPort %PORT% -ErrorAction SilentlyContinue | Foreach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }" >nul 2>&1

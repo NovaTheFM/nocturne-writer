@@ -9063,11 +9063,11 @@ body.sortable-active .doc-item {
 /* Cleaner button icon */
 .reaper-icon {
   display: inline-block;
-  width: 20px; /* Larger size for note card actions */
-  height: 20px;
+  width: 22px; /* Larger size for note card actions */
+  height: 22px;
   background-color: currentColor;
-  -webkit-mask-image: url('/reaper_photo/reaper_icon_small.png?v=2');
-  mask-image: url('/reaper_photo/reaper_icon_small.png?v=2');
+  -webkit-mask-image: url('/reaper_photo/reaper_icon_small.png?v=3');
+  mask-image: url('/reaper_photo/reaper_icon_small.png?v=3');
   -webkit-mask-size: contain;
   mask-size: contain;
   -webkit-mask-repeat: no-repeat;
@@ -9075,8 +9075,8 @@ body.sortable-active .doc-item {
   vertical-align: middle;
 }
 .pill-btn.cleaner-btn .reaper-icon {
-  width: 16px; /* Smaller size for pill button */
-  height: 16px;
+  width: 18px; /* Larger size for pill button */
+  height: 18px;
   margin-right: 0 !important; /* Use default pill-btn gap */
 }
 
