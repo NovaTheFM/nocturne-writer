@@ -8693,15 +8693,12 @@ body.theme-paper .accent-preset.active {
   color: var(--text-muted);
   font-weight: 500;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
-  flex: 1;
-  min-width: 0;
+  line-height: 1.4;
 }
 .book-work-info span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 .book-work-info i {
   font-size: 13px;
@@ -8734,3 +8731,30 @@ body.theme-paper .accent-preset.active {
   font-weight: 500;
   margin-right: 4px;
 }
+
+/* Card Footer */
+.book-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+  min-height: 16px;
+}
+.book-chapter-card .book-card-footer {
+  justify-content: flex-end;
+}
+.mobile-doc-card .book-card-footer {
+  justify-content: space-between;
+}
+
+/* Autofill chrome styling fix */
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus, 
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--text-main) !important;
+  box-shadow: 0 0 0px 1000px var(--bg-panel) inset !important;
+  -webkit-box-shadow: 0 0 0px 1000px var(--bg-panel) inset !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
