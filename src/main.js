@@ -13361,7 +13361,7 @@ class NocturneWriter {
       if (totalImported.characters > 0) categories.push({ name: 'characters', label: 'Персонажи', count: totalImported.characters });
       if (totalImported.locations > 0) categories.push({ name: 'locations', label: 'Локации', count: totalImported.locations });
       if (totalImported.timeline > 0) categories.push({ name: 'timeline', label: 'Таймлайн', count: totalImported.timeline });
-      if (totalImported.notes > 0) categories.push({ name: 'notes', label: 'Записки', count: totalImported.notes });
+      if (totalImported.notes > 0) categories.push({ name: 'notes', label: 'Записи', count: totalImported.notes });
       
       await this.animateKbImport(categories, failCount);
     } else if (failCount > 0) {
@@ -16793,10 +16793,63 @@ ${raw}`;
     overlay.querySelectorAll('[data-close-form]').forEach((button) => { button.onclick = () => overlay.classList.remove('active'); });
   }
 
+  async animateProjectExport(dump) {
+    let overlay = document.getElementById('kb-import-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'kb-import-overlay';
+      overlay.className = 'kb-import-overlay';
+      document.body.appendChild(overlay);
+    }
+    
+    overlay.innerHTML = `
+      <div class="kb-import-card">
+        <div class="kb-import-spinner">
+          <div class="spinner-ring"></div>
+          <i class="bx bx-cloud-upload"></i>
+        </div>
+        <h3>Экспортируем проект...</h3>
+        <div class="kb-import-progress-list"></div>
+      </div>
+    `;
+    
+    overlay.classList.add('active');
+    await new Promise(r => setTimeout(r, 600));
+    
+    const listEl = overlay.querySelector('.kb-import-progress-list');
+    const payload = dump.payload || {};
+    const lore = payload.lore || {};
+    
+    const categories = [];
+    if (payload.folders?.length > 0) categories.push({ label: 'Папки', count: payload.folders.length });
+    if (payload.docs?.length > 0) categories.push({ label: 'Документы', count: payload.docs.length });
+    if (lore.characters?.length > 0) categories.push({ label: 'Персонажи', count: lore.characters.length });
+    if (lore.locations?.length > 0) categories.push({ label: 'Локации', count: lore.locations.length });
+    if (lore.timeline?.length > 0) categories.push({ label: 'Таймлайн', count: lore.timeline.length });
+    if (payload.floatingNotes?.length > 0 || payload.globalNotes) {
+      const count = (payload.floatingNotes?.length || 0) + (payload.globalNotes ? 1 : 0);
+      categories.push({ label: 'Записи', count });
+    }
+    
+    for (let i = 0; i < categories.length; i++) {
+      const cat = categories[i];
+      const step = document.createElement('div');
+      step.className = 'kb-import-step success';
+      step.style.animationDelay = `${i * 150}ms`;
+      step.innerHTML = `<span>Упаковано: ${cat.label} (${cat.count})</span><i class="bx bx-check-circle"></i>`;
+      listEl.appendChild(step);
+      await new Promise(r => setTimeout(r, 350));
+    }
+    
+    await new Promise(r => setTimeout(r, 1000));
+    overlay.classList.remove('active');
+  }
+
   async exportProjectDump(options = {}) {
     const dump = await this.buildNocturneDump(options);
     const data = JSON.stringify(dump, null, 2);
     const name = `nocturne-${new Date().toISOString().slice(0, 10)}.nocturnedump`;
+    await this.animateProjectExport(dump);
     await platformFiles.exportProjectDump(data, { suggestedName: name });
     this.toast('Dump проекта экспортирован.');
     return dump;
