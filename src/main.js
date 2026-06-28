@@ -12856,18 +12856,28 @@ class NocturneWriter {
     let successCount = 0;
     let failCount = 0;
     
+    let totalImported = {
+      characters: 0,
+      locations: 0,
+      timeline: 0,
+      notes: 0
+    };
+    
+    const validExtensions = [
+      '.nocturnmemory',
+      '.nocturnecharacters',
+      '.nocturneplaces',
+      '.nocturnetimelines',
+      '.nocturnechar',
+      '.nocturneplace',
+      '.nocturnetime',
+      '.nocturnenote',
+      '.nocturnenotes'
+    ];
+    
     for (const file of files) {
       const name = file.name;
       const extension = name.substring(name.lastIndexOf('.')).toLowerCase();
-      const validExtensions = [
-        '.nocturnmemory',
-        '.nocturnecharacters',
-        '.nocturneplaces',
-        '.nocturnetimelines',
-        '.nocturnechar',
-        '.nocturneplace',
-        '.nocturnetime'
-      ];
       
       if (!validExtensions.includes(extension)) {
         failCount++;
@@ -12886,6 +12896,10 @@ class NocturneWriter {
         const imported = await this.processImportedKbData(data);
         if (imported) {
           successCount++;
+          totalImported.characters += imported.characters;
+          totalImported.locations += imported.locations;
+          totalImported.timeline += imported.timeline;
+          totalImported.notes += imported.notes;
         } else {
           failCount++;
         }
@@ -12896,75 +12910,167 @@ class NocturneWriter {
     
     if (successCount > 0) {
       await this.saveLore();
-      this.renderKb();
       this.refreshVisibleEntityLinks();
-      this.toast(`Успешно импортировано файлов: ${successCount}. Ошибок: ${failCount}`);
+      
+      let categories = [];
+      if (totalImported.characters > 0) categories.push({ name: 'characters', label: 'Персонажи', count: totalImported.characters });
+      if (totalImported.locations > 0) categories.push({ name: 'locations', label: 'Локации', count: totalImported.locations });
+      if (totalImported.timeline > 0) categories.push({ name: 'timeline', label: 'Таймлайн', count: totalImported.timeline });
+      if (totalImported.notes > 0) categories.push({ name: 'notes', label: 'Записки', count: totalImported.notes });
+      
+      await this.animateKbImport(categories, failCount);
     } else if (failCount > 0) {
       this.toast(`Не удалось импортировать файлы (${failCount} ошибок). Проверьте формат файлов.`);
     }
   }
 
+  async animateKbImport(categories, failCount) {
+    let overlay = document.getElementById('kb-import-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'kb-import-overlay';
+      overlay.className = 'kb-import-overlay';
+      document.body.appendChild(overlay);
+    }
+    
+    overlay.innerHTML = `
+      <div class="kb-import-card">
+        <div class="kb-import-spinner">
+          <div class="spinner-ring"></div>
+          <i class="bx bx-cloud-download"></i>
+        </div>
+        <h3>Импортируем данные...</h3>
+        <div class="kb-import-progress-list"></div>
+      </div>
+    `;
+    
+    overlay.classList.add('active');
+    await new Promise(r => setTimeout(r, 400));
+    
+    const listEl = overlay.querySelector('.kb-import-progress-list');
+    
+    for (let i = 0; i < categories.length; i++) {
+      const cat = categories[i];
+      const step = document.createElement('div');
+      step.className = 'kb-import-step success';
+      step.style.animationDelay = `${i * 150}ms`;
+      step.innerHTML = `<span>Импорт: ${cat.label} (${cat.count})</span><i class="bx bx-check-circle"></i>`;
+      listEl.appendChild(step);
+      await new Promise(r => setTimeout(r, 200));
+    }
+    
+    if (failCount > 0) {
+      const step = document.createElement('div');
+      step.className = 'kb-import-step fail';
+      step.style.animationDelay = `${categories.length * 150}ms`;
+      step.innerHTML = `<span>Пропущено/ошибок: ${failCount}</span><i class="bx bx-x-circle"></i>`;
+      listEl.appendChild(step);
+      await new Promise(r => setTimeout(r, 200));
+    }
+    
+    if (categories.length === 1) {
+      const singleCat = categories[0];
+      this.state.activeKbTab = singleCat.name;
+      if (this.isMobileLayout()) {
+        this.state.mobile.kbTab = singleCat.name;
+      }
+      this.state.activeLoreDetail = null;
+      if (singleCat.name !== 'timeline') this.state.activeSubtimelineId = null;
+    }
+    
+    this.renderKb();
+    
+    await new Promise(r => setTimeout(r, 700));
+    overlay.classList.remove('active');
+    
+    if (categories.length === 1) {
+      const singleCat = categories[0];
+      this.toast(`Импортировано в раздел "${singleCat.label}": ${singleCat.count} записей.`);
+    } else {
+      const desc = categories.map(c => `${c.label}: ${c.count}`).join(', ');
+      this.toast(`Импорт завершен. Загружено: ${desc}`);
+    }
+  }
+
   async processImportedKbData(data) {
-    if (!data || typeof data !== 'object') return false;
+    if (!data || typeof data !== 'object') return null;
     const type = data.type;
+    let result = { characters: 0, locations: 0, timeline: 0, notes: 0 };
     
     if (type === 'nocturnmemory') {
       if (data.lore) {
-        if (Array.isArray(data.lore.characters)) data.lore.characters.forEach(c => this.upsertCharacter(c));
-        if (Array.isArray(data.lore.locations)) data.lore.locations.forEach(l => this.upsertLocation(l));
-        if (Array.isArray(data.lore.timeline)) data.lore.timeline.forEach(t => this.upsertTimelineEvent(t));
-        return true;
+        if (Array.isArray(data.lore.characters)) {
+          data.lore.characters.forEach(c => this.upsertCharacter(c));
+          result.characters += data.lore.characters.length;
+        }
+        if (Array.isArray(data.lore.locations)) {
+          data.lore.locations.forEach(l => this.upsertLocation(l));
+          result.locations += data.lore.locations.length;
+        }
+        if (Array.isArray(data.lore.timeline)) {
+          data.lore.timeline.forEach(t => this.upsertTimelineEvent(t));
+          result.timeline += data.lore.timeline.length;
+        }
+        return result;
       }
     }
     if (type === 'nocturnecharacters') {
       if (Array.isArray(data.characters)) {
         data.characters.forEach(c => this.upsertCharacter(c));
-        return true;
+        result.characters += data.characters.length;
+        return result;
       }
     }
     if (type === 'nocturneplaces') {
       if (Array.isArray(data.locations)) {
         data.locations.forEach(l => this.upsertLocation(l));
-        return true;
+        result.locations += data.locations.length;
+        return result;
       }
     }
     if (type === 'nocturnetimelines') {
       if (Array.isArray(data.timeline)) {
         data.timeline.forEach(t => this.upsertTimelineEvent(t));
-        return true;
+        result.timeline += data.timeline.length;
+        return result;
       }
     }
     if (type === 'nocturnechar') {
       if (data.character) {
         this.upsertCharacter(data.character);
-        return true;
+        result.characters += 1;
+        return result;
       }
     }
     if (type === 'nocturneplace') {
       if (data.location) {
         this.upsertLocation(data.location);
-        return true;
+        result.locations += 1;
+        return result;
       }
     }
     if (type === 'nocturnetime') {
       if (data.event) {
         this.upsertTimelineEvent(data.event);
-        return true;
+        result.timeline += 1;
+        return result;
       }
     }
     if (type === 'nocturnenotes') {
       if (Array.isArray(data.notes)) {
         data.notes.forEach(n => this.upsertNote(n));
-        return true;
+        result.notes += data.notes.length;
+        return result;
       }
     }
     if (type === 'nocturnenote') {
       if (data.note) {
         this.upsertNote(data.note);
-        return true;
+        result.notes += 1;
+        return result;
       }
     }
-    return false;
+    return null;
   }
 
   upsertNote(note) {
