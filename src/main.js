@@ -6949,6 +6949,27 @@ class NocturneWriter {
   async importDocuments(fileList) {
     const files = [...fileList];
     if (!files.length) return;
+    
+    // Show spinner/overlay early if we have files to process
+    let overlay = document.getElementById('kb-import-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'kb-import-overlay';
+      overlay.className = 'kb-import-overlay';
+      document.body.appendChild(overlay);
+    }
+    overlay.innerHTML = `
+      <div class="kb-import-card">
+        <div class="kb-import-spinner">
+          <div class="spinner-ring"></div>
+          <i class="bx bx-file-import"></i>
+        </div>
+        <h3>Импортируем документы...</h3>
+        <div class="kb-import-progress-list"></div>
+      </div>
+    `;
+    overlay.classList.add('active');
+    
     const dumpFiles = files.filter((file) => /\.nocturnedump$/i.test(file.name));
     for (const dumpFile of dumpFiles) {
       await this.handleProjectDumpText(await dumpFile.text(), dumpFile.name);
@@ -6957,10 +6978,14 @@ class NocturneWriter {
     const docFiles = files.filter((file) => !/\.(nocturned|nocturnedump)$/i.test(file.name));
     if (dumpFiles.length && !reviewFiles.length && !docFiles.length) {
       document.getElementById('import-input').value = '';
+      overlay.classList.remove('active');
       return;
     }
+    
     const importedDocs = [];
+    let failCount = 0;
     const importFolderId = this.defaultFolderId();
+    
     for (const file of docFiles) {
       try {
         const title = file.name.replace(/\.[^.]+$/, '');
@@ -6995,16 +7020,21 @@ class NocturneWriter {
         importedDocs.push({ doc, file });
       } catch (err) {
         console.error('File import error:', err);
-        this.toast(`Ошибка при импорте ${file.name}: ${err.message || err}`);
+        failCount++;
       }
     }
+    
     for (const reviewFile of reviewFiles) {
       const payload = await this.readNocturnedFile(reviewFile);
-      if (!payload) continue;
+      if (!payload) {
+        failCount++;
+        continue;
+      }
       const target = this.findNocturnedTargetDoc(payload, importedDocs);
       if (target) await this.importNocturnedIntoDoc(payload, target);
       else this.queueNocturnedImportModal(payload, reviewFile.name);
     }
+    
     if (importedDocs.length) {
       const lastDoc = importedDocs.at(-1).doc;
       const paneId = this.state.workspace?.mode === 'split' ? this.state.workspace.focusedPaneId : 'primary';
@@ -7014,8 +7044,8 @@ class NocturneWriter {
       this.persistWorkspaceState();
     }
     document.getElementById('import-input').value = '';
-    this.renderAll();
-    this.toast(reviewFiles.length && docFiles.length ? 'Документ и редакторские правки импортированы.' : `Импортировано документов: ${importedDocs.length}`);
+    
+    await this.animateDocImport(importedDocs, reviewFiles.length, failCount);
   }
 
   async extractTextFromPdf(file) {
@@ -12820,11 +12850,8 @@ class NocturneWriter {
     const overlay = document.getElementById('kb-dnd-overlay');
     if (!overlay) return;
     
-    let dragCounter = 0;
-    
     kbModal.ondragenter = (e) => {
       e.preventDefault();
-      dragCounter++;
       overlay.classList.add('active');
     };
     
@@ -12834,15 +12861,13 @@ class NocturneWriter {
     
     kbModal.ondragleave = (e) => {
       e.preventDefault();
-      dragCounter--;
-      if (dragCounter === 0) {
+      if (!kbModal.contains(e.relatedTarget)) {
         overlay.classList.remove('active');
       }
     };
     
     kbModal.ondrop = async (e) => {
       e.preventDefault();
-      dragCounter = 0;
       overlay.classList.remove('active');
       
       const files = e.dataTransfer?.files;
@@ -12945,7 +12970,8 @@ class NocturneWriter {
     `;
     
     overlay.classList.add('active');
-    await new Promise(r => setTimeout(r, 400));
+    // More generous initial delay (600ms) for high-end organic feel
+    await new Promise(r => setTimeout(r, 600));
     
     const listEl = overlay.querySelector('.kb-import-progress-list');
     
@@ -12956,7 +12982,8 @@ class NocturneWriter {
       step.style.animationDelay = `${i * 150}ms`;
       step.innerHTML = `<span>Импорт: ${cat.label} (${cat.count})</span><i class="bx bx-check-circle"></i>`;
       listEl.appendChild(step);
-      await new Promise(r => setTimeout(r, 200));
+      // Wait 350ms per step to let the user appreciate the checkmarks
+      await new Promise(r => setTimeout(r, 350));
     }
     
     if (failCount > 0) {
@@ -12965,7 +12992,7 @@ class NocturneWriter {
       step.style.animationDelay = `${categories.length * 150}ms`;
       step.innerHTML = `<span>Пропущено/ошибок: ${failCount}</span><i class="bx bx-x-circle"></i>`;
       listEl.appendChild(step);
-      await new Promise(r => setTimeout(r, 200));
+      await new Promise(r => setTimeout(r, 350));
     }
     
     if (categories.length === 1) {
@@ -12980,7 +13007,8 @@ class NocturneWriter {
     
     this.renderKb();
     
-    await new Promise(r => setTimeout(r, 700));
+    // Hold success state for 1 full second
+    await new Promise(r => setTimeout(r, 1000));
     overlay.classList.remove('active');
     
     if (categories.length === 1) {
@@ -12990,6 +13018,67 @@ class NocturneWriter {
       const desc = categories.map(c => `${c.label}: ${c.count}`).join(', ');
       this.toast(`Импорт завершен. Загружено: ${desc}`);
     }
+  }
+
+  async animateDocImport(importedDocs, reviewFilesCount, failCount) {
+    let overlay = document.getElementById('kb-import-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'kb-import-overlay';
+      overlay.className = 'kb-import-overlay';
+      document.body.appendChild(overlay);
+    }
+    
+    overlay.innerHTML = `
+      <div class="kb-import-card">
+        <div class="kb-import-spinner">
+          <div class="spinner-ring"></div>
+          <i class="bx bx-file-import"></i>
+        </div>
+        <h3>Импортируем документы...</h3>
+        <div class="kb-import-progress-list"></div>
+      </div>
+    `;
+    
+    overlay.classList.add('active');
+    await new Promise(r => setTimeout(r, 600));
+    
+    const listEl = overlay.querySelector('.kb-import-progress-list');
+    
+    for (let i = 0; i < importedDocs.length; i++) {
+      const item = importedDocs[i];
+      const step = document.createElement('div');
+      step.className = 'kb-import-step success';
+      step.style.animationDelay = `${i * 150}ms`;
+      step.innerHTML = `<span>Импорт: ${item.file.name}</span><i class="bx bx-check-circle"></i>`;
+      listEl.appendChild(step);
+      await new Promise(r => setTimeout(r, 350));
+    }
+    
+    if (reviewFilesCount > 0) {
+      const step = document.createElement('div');
+      step.className = 'kb-import-step success';
+      step.style.animationDelay = `${importedDocs.length * 150}ms`;
+      step.innerHTML = `<span>Редакторские правки (${reviewFilesCount})</span><i class="bx bx-check-circle"></i>`;
+      listEl.appendChild(step);
+      await new Promise(r => setTimeout(r, 350));
+    }
+    
+    if (failCount > 0) {
+      const step = document.createElement('div');
+      step.className = 'kb-import-step fail';
+      step.style.animationDelay = `${(importedDocs.length + 1) * 150}ms`;
+      step.innerHTML = `<span>Ошибок при импорте: ${failCount}</span><i class="bx bx-x-circle"></i>`;
+      listEl.appendChild(step);
+      await new Promise(r => setTimeout(r, 350));
+    }
+    
+    this.renderAll();
+    
+    await new Promise(r => setTimeout(r, 1000));
+    overlay.classList.remove('active');
+    
+    this.toast(reviewFilesCount && importedDocs.length ? 'Документ и редакторские правки импортированы.' : `Импортировано документов: ${importedDocs.length}`);
   }
 
   async processImportedKbData(data) {
