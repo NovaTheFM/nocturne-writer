@@ -6670,23 +6670,8 @@ class NocturneWriter {
     // Add GPU-accelerated shake
     element.classList.add('delete-shake');
     
-    // Run html2canvas capture and shake timer concurrently
-    const capturePromise = window.html2canvas ? 
-      window.html2canvas(element, {
-        backgroundColor: null,
-        logging: false,
-        useCORS: true,
-        scale: window.devicePixelRatio || 1
-      }).catch(err => {
-        console.warn('html2canvas failed:', err);
-        return null;
-      }) : Promise.resolve(null);
-
-    const shakePromise = new Promise(resolve => setTimeout(resolve, 280));
-
-    Promise.all([capturePromise, shakePromise]).then(([canvas]) => {
+    setTimeout(() => {
       element.classList.remove('delete-shake');
-      const capturedCanvas = canvas;
       
       const rect = element.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) {
@@ -6694,59 +6679,40 @@ class NocturneWriter {
         return;
       }
 
-      // Hide the element instantly so it appears to shatter into pieces
+      // Create a fullscreen absolute container for shards to avoid clipping
+      const shardContainer = document.createElement('div');
+      shardContainer.style.position = 'fixed';
+      shardContainer.style.left = rect.left + 'px';
+      shardContainer.style.top = rect.top + 'px';
+      shardContainer.style.width = rect.width + 'px';
+      shardContainer.style.height = rect.height + 'px';
+      shardContainer.style.zIndex = '999999';
+      shardContainer.style.pointerEvents = 'none';
+      shardContainer.style.overflow = 'visible';
+      document.body.appendChild(shardContainer);
+
+      // Hide the original element instantly so it appears to shatter
       element.style.visibility = 'hidden';
       element.style.pointerEvents = 'none';
-
-      // Create a fullscreen overlay canvas to prevent shards from clipping
-      const overlayCanvas = document.createElement('canvas');
-      overlayCanvas.width = window.innerWidth;
-      overlayCanvas.height = window.innerHeight;
-      overlayCanvas.style.position = 'fixed';
-      overlayCanvas.style.left = '0px';
-      overlayCanvas.style.top = '0px';
-      overlayCanvas.style.zIndex = '999999';
-      overlayCanvas.style.pointerEvents = 'none';
-      document.body.appendChild(overlayCanvas);
-
-      const ctx = overlayCanvas.getContext('2d');
-      if (!ctx) {
-        overlayCanvas.remove();
-        callback();
-        return;
-      }
-
-      // Extract colors for fallback if html2canvas failed
-      const style = window.getComputedStyle(element);
-      const accent = window.getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#8b5cf6';
-      const textColor = style.color || '#ffffff';
-      const bgColor = style.backgroundColor || 'transparent';
-
-      const fallbackColors = [accent, textColor];
-      if (bgColor && bgColor !== 'rgba(0, 0, 0, 0)' && bgColor !== 'transparent') {
-        fallbackColors.push(bgColor);
-      } else {
-        fallbackColors.push('#1e1b4b');
-      }
 
       // Generate a grid of points with heavy random offsets to define organic shards
       const w = rect.width;
       const h = rect.height;
       const points = [];
-      const nx = 7; // cols
-      const ny = 5; // rows
+      const nx = 4; // cols
+      const ny = 3; // rows
 
       for (let r = 0; r <= ny; r++) {
         const row = [];
         for (let c = 0; c <= nx; c++) {
           let px = (c / nx) * w;
           let py = (r / ny) * h;
-          // Apply heavy random offsets to inner vertices for organic shapes
+          // Apply heavy random offsets to inner vertices for organic jagged shapes
           if (c > 0 && c < nx) {
-            px += (Math.random() - 0.5) * (w / nx) * 0.9;
+            px += (Math.random() - 0.5) * (w / nx) * 0.8;
           }
           if (r > 0 && r < ny) {
-            py += (Math.random() - 0.5) * (h / ny) * 0.9;
+            py += (Math.random() - 0.5) * (h / ny) * 0.8;
           }
           row.push({ x: px, y: py });
         }
@@ -6776,38 +6742,50 @@ class NocturneWriter {
           ];
 
           cells.forEach(tri => {
-            // Compute center of mass
+            // Compute center of mass of the shard
             const cx = (tri[0].x + tri[1].x + tri[2].x) / 3;
             const cy = (tri[0].y + tri[1].y + tri[2].y) / 3;
 
-            // Generate points relative to center of mass for rotation/translation
-            const relPoints = tri.map(pt => ({
-              x: pt.x - cx,
-              y: pt.y - cy
-            }));
+            // Clone the actual DOM element
+            const clone = element.cloneNode(true);
+            clone.classList.remove('delete-shake');
+            clone.style.position = 'absolute';
+            clone.style.left = '0px';
+            clone.style.top = '0px';
+            clone.style.width = w + 'px';
+            clone.style.height = h + 'px';
+            clone.style.margin = '0px';
+            clone.style.transition = 'none';
+            clone.style.animation = 'none';
+            clone.style.pointerEvents = 'none';
+            clone.style.transformOrigin = `${cx}px ${cy}px`;
+            clone.style.clipPath = `polygon(${tri[0].x}px ${tri[0].y}px, ${tri[1].x}px ${tri[1].y}px, ${tri[2].x}px ${tri[2].y}px)`;
+            
+            // Clean up IDs to prevent duplicate query selection issues
+            clone.removeAttribute('id');
+            clone.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
+
+            shardContainer.appendChild(clone);
 
             // Initial blast outwards + upward jump
             const dirX = cx - elemCenterX;
             const dirY = cy - elemCenterY;
             const dist = Math.sqrt(dirX * dirX + dirY * dirY) || 1;
 
-            const vx = (dirX / dist) * (Math.random() * 3 + 1.5) + (Math.random() - 0.5) * 1.5;
-            const vy = (dirY / dist) * (Math.random() * 2) - 4 - Math.random() * 4.5;
+            const vx = (dirX / dist) * (Math.random() * 4 + 2) + (Math.random() - 0.5) * 2.5;
+            const vy = (dirY / dist) * (Math.random() * 2) - 4 - Math.random() * 5;
 
             shards.push({
-              relPoints,
-              cx,
-              cy,
-              x: rect.left + cx,
-              y: rect.top + cy,
+              dom: clone,
+              x: 0,
+              y: 0,
               vx,
               vy,
               r: 0,
-              vr: (Math.random() - 0.5) * 0.25, // spin
+              vr: (Math.random() - 0.5) * 160, // degrees of spin
               alpha: 1,
-              decay: 0.012 + Math.random() * 0.015,
-              gravity: 0.24 + Math.random() * 0.09,
-              color: fallbackColors[Math.floor(Math.random() * fallbackColors.length)]
+              decay: 0.015 + Math.random() * 0.015,
+              gravity: 0.28 + Math.random() * 0.12
             });
           });
         }
@@ -6815,7 +6793,6 @@ class NocturneWriter {
 
       let animationFrameId;
       const animate = () => {
-        ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
         let activeShards = 0;
 
         for (let i = 0; i < shards.length; i++) {
@@ -6826,35 +6803,14 @@ class NocturneWriter {
           s.x += s.vx;
           s.y += s.vy;
           s.vy += s.gravity;
-          s.r += s.vr;
+          s.r += s.vr * 0.05;
           s.alpha -= s.decay;
 
           if (s.alpha > 0) {
-            ctx.save();
-            ctx.globalAlpha = s.alpha;
-            
-            // Translate to the center of mass in screen space and apply rotation
-            ctx.translate(s.x, s.y);
-            ctx.rotate(s.r);
-
-            // Set clip path to draw this specific triangular shard
-            ctx.beginPath();
-            ctx.moveTo(s.relPoints[0].x, s.relPoints[0].y);
-            ctx.lineTo(s.relPoints[1].x, s.relPoints[1].y);
-            ctx.lineTo(s.relPoints[2].x, s.relPoints[2].y);
-            ctx.closePath();
-            ctx.clip();
-
-            if (capturedCanvas) {
-              // Draw the captured screenshot correctly aligned with the shard center
-              ctx.drawImage(capturedCanvas, -s.cx, -s.cy, w, h);
-            } else {
-              // Draw fallback colored shard
-              ctx.fillStyle = s.color;
-              ctx.fill();
-            }
-
-            ctx.restore();
+            s.dom.style.transform = `translate(${s.x}px, ${s.y}px) rotate(${s.r}deg)`;
+            s.dom.style.opacity = s.alpha;
+          } else {
+            s.dom.remove();
           }
         }
 
@@ -6862,13 +6818,13 @@ class NocturneWriter {
           animationFrameId = requestAnimationFrame(animate);
         } else {
           cancelAnimationFrame(animationFrameId);
-          overlayCanvas.remove();
+          shardContainer.remove();
           callback();
         }
       };
 
       animate();
-    });
+    }, 280);
   }
 
   openFolderForm(folderId = null) {
