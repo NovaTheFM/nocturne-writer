@@ -6677,28 +6677,28 @@ class NocturneWriter {
     // 2. Perform DOM mutation
     mutateDOM();
 
-    // 3. Record new positions of remaining children
+    // 3. Immediately measure new positions synchronously (before painting)
+    const newRects = oldRects.map(item => {
+      if (!item.element.parentNode) return null;
+      const newRect = item.element.getBoundingClientRect();
+      const dx = item.rect.left - newRect.left;
+      const dy = item.rect.top - newRect.top;
+      return {
+        element: item.element,
+        dx,
+        dy
+      };
+    }).filter(Boolean);
+
+    // 4. Immediately invert synchronously to keep layout position visually unchanged
+    newRects.forEach(item => {
+      if (item.dx === 0 && item.dy === 0) return;
+      item.element.style.transition = 'none';
+      item.element.style.transform = `translate(${item.dx}px, ${item.dy}px)`;
+    });
+
+    // 5. Play (transition to 0,0)
     requestAnimationFrame(() => {
-      const newRects = oldRects.map(item => {
-        if (!item.element.parentNode) return null;
-        const newRect = item.element.getBoundingClientRect();
-        const dx = item.rect.left - newRect.left;
-        const dy = item.rect.top - newRect.top;
-        return {
-          element: item.element,
-          dx,
-          dy
-        };
-      }).filter(Boolean);
-
-      // 4. Invert (apply translate back to old position instantly)
-      newRects.forEach(item => {
-        if (item.dx === 0 && item.dy === 0) return;
-        item.element.style.transition = 'none';
-        item.element.style.transform = `translate(${item.dx}px, ${item.dy}px)`;
-      });
-
-      // 5. Play (transition to 0,0)
       requestAnimationFrame(() => {
         newRects.forEach(item => {
           if (item.dx === 0 && item.dy === 0) return;
@@ -13268,11 +13268,13 @@ class NocturneWriter {
     if (!overlay) return;
     
     kbModal.ondragenter = (e) => {
+      if (e.dataTransfer && e.dataTransfer.types && !e.dataTransfer.types.includes('Files')) return;
       e.preventDefault();
       overlay.classList.add('active');
     };
     
     kbModal.ondragover = (e) => {
+      if (e.dataTransfer && e.dataTransfer.types && !e.dataTransfer.types.includes('Files')) return;
       e.preventDefault();
     };
     
@@ -13284,6 +13286,7 @@ class NocturneWriter {
     };
     
     kbModal.ondrop = async (e) => {
+      if (e.dataTransfer && e.dataTransfer.types && !e.dataTransfer.types.includes('Files')) return;
       e.preventDefault();
       overlay.classList.remove('active');
       
@@ -14319,6 +14322,9 @@ class NocturneWriter {
             if (cardElement) {
               cardElement.classList.add('new-card-entrance');
               grid.appendChild(cardElement);
+              
+              // Re-initialize SortableJS to register the new item
+              this.setupKbDragDrop();
               
               setTimeout(() => {
                 cardElement.classList.remove('new-card-entrance');
