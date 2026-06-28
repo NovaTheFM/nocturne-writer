@@ -22,6 +22,7 @@ const types = {
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.webp': 'image/webp',
+  '.ico': 'image/x-icon',
 };
 
 let syncProcess = null;

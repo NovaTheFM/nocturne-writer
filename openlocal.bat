@@ -1,7 +1,7 @@
 @echo off
 cd /d "%~dp0"
 
-set PORT=8883
+set PORT=8884
 
 echo Очищаю порт %PORT% от предыдущих запусков...
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr :%PORT% ^| findstr LISTENING') do (

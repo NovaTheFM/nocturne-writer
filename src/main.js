@@ -6295,6 +6295,16 @@ class NocturneWriter {
       'new-lore': () => this.editLore(event.target.closest('[data-lore-type]')?.dataset.loreType),
       'accept-ai': () => this.acceptSuggestion(),
       'reject-ai': () => this.rejectSuggestion(),
+      'clean-note': () => {
+        const id = event.target.closest('[data-lore-id]')?.dataset.loreId;
+        if (id) this.openCleanerModal(id);
+      },
+      'clean-all-notes': () => {
+        this.openCleanerModal();
+      },
+      'close-cleaner': () => {
+        document.getElementById('cleaner-overlay')?.classList.remove('active');
+      },
       'manual-snapshot': () => this.createSnapshot(true),
       'export-html': () => this.exportPrintable(),
       'export-docx': () => this.exportDocx(),
@@ -12447,6 +12457,7 @@ class NocturneWriter {
           <div class="kb-header">
             <h1>Записи и Заметки</h1>
             <div class="kb-header-actions">
+              <button class="pill-btn cleaner-btn" data-action="clean-all-notes" title="«Чистильщик™»"><i class="reaper-icon"></i> «Чистильщик™»</button>
               <button class="pill-btn" data-action="dump-kb-notes" title="Экспорт записей"><i class="bx bx-download"></i> Дамп записей</button>
               <button class="pill-btn ai-btn" data-action="new-lore" data-lore-type="notes"><i class="bx bx-plus"></i> Новая запись</button>
               <i class="bx bx-x kb-close-btn" data-action="close-kb"></i>
@@ -13840,7 +13851,11 @@ class NocturneWriter {
   }
 
   loreCardActions(type, id) {
+    const cleanerButton = type === 'notes'
+      ? `<button type="button" data-action="clean-note" data-lore-id="${id}" class="cleaner-btn" title="«Чистильщик™»"><i class="reaper-icon"></i></button>`
+      : '';
     return `<div class="lore-card-actions">
+      ${cleanerButton}
       <button type="button" data-action="dump-single-entity" data-lore-type="${type}" data-lore-id="${id}" title="Дамп карточки"><i class="bx bx-download"></i></button>
       <button type="button" data-action="edit-lore" data-lore-type="${type}" data-lore-id="${id}" title="Редактировать"><i class="bx bx-edit"></i></button>
       <button type="button" data-action="delete-lore" data-lore-type="${type}" data-lore-id="${id}" title="Удалить"><i class="bx bx-trash"></i></button>
@@ -16843,6 +16858,333 @@ ${raw}`;
     
     await new Promise(r => setTimeout(r, 1000));
     overlay.classList.remove('active');
+  }
+
+  findTelegramArtifacts(text) {
+    const matches = [];
+    const pcRegex = /(^|\r?\n)(\[\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2}\]\s+([^:\n\s][a-zA-Z0-9_а-яА-ЯёЁ\s\-]{1,30}):\s*)/g;
+    const mobileRegex = /(^|\r?\n)(([^:\n\s\.\?!,][a-zA-Z0-9_а-яА-ЯёЁ\s\-]{1,30}):\s*)(?=\r?\n)/g;
+    
+    let match;
+    pcRegex.lastIndex = 0;
+    while ((match = pcRegex.exec(text)) !== null) {
+      matches.push({
+        type: 'pc',
+        raw: match[2],
+        index: match.index
+      });
+    }
+    
+    mobileRegex.lastIndex = 0;
+    while ((match = mobileRegex.exec(text)) !== null) {
+      matches.push({
+        type: 'mobile',
+        raw: match[2],
+        index: match.index
+      });
+    }
+    
+    return matches;
+  }
+
+  cleanTelegramArtifacts(text) {
+    let cleaned = text.replace(/(^|\r?\n)\[\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2}\]\s+([^:\n\s][a-zA-Z0-9_а-яА-ЯёЁ\s\-]{1,30}):\s*/g, (match, p1) => {
+      return p1;
+    });
+    
+    cleaned = cleaned.replace(/(^|\r?\n)([^:\n\s\.\?!,][a-zA-Z0-9_а-яА-ЯёЁ\s\-]{1,30}):\s*(?=\r?\n)/g, (match, p1) => {
+      return p1;
+    });
+    
+    return cleaned;
+  }
+
+  setReaperImage(imgEl, stateName) {
+    const src = `/reaper_photo/reaper_${stateName}.png`;
+    imgEl.src = src;
+    const wrapper = imgEl.closest('.cleaner-reaper-wrapper');
+    if (wrapper) {
+      const tint = wrapper.querySelector('.cleaner-reaper-tint');
+      if (tint) {
+        tint.style.webkitMaskImage = `url(${src})`;
+        tint.style.maskImage = `url(${src})`;
+      }
+    }
+  }
+
+  async transitionReaperImage(imgEl, nextState, options = {}) {
+    const { blur = false, duration = 300 } = options;
+    const wrapper = imgEl.closest('.cleaner-reaper-wrapper');
+    const tint = wrapper ? wrapper.querySelector('.cleaner-reaper-tint') : null;
+    
+    if (blur) {
+      imgEl.classList.add('blur-transition');
+      if (tint) tint.classList.add('blur-transition');
+      await new Promise(r => setTimeout(r, duration / 2));
+    }
+    
+    this.setReaperImage(imgEl, nextState);
+    
+    if (blur) {
+      await new Promise(r => setTimeout(r, duration / 2));
+      imgEl.classList.remove('blur-transition');
+      if (tint) tint.classList.remove('blur-transition');
+    }
+  }
+
+  async transitionReaperToDelete(imgEl) {
+    const wrapper = imgEl.closest('.cleaner-reaper-wrapper');
+    const tint = wrapper ? wrapper.querySelector('.cleaner-reaper-tint') : null;
+    
+    imgEl.classList.add('shaking');
+    imgEl.classList.add('blur-transition');
+    if (tint) {
+      tint.classList.add('shaking');
+      tint.classList.add('blur-transition');
+    }
+    
+    await new Promise(r => setTimeout(r, 150));
+    this.setReaperImage(imgEl, 'delete');
+    
+    imgEl.classList.remove('blur-transition');
+    if (tint) tint.classList.remove('blur-transition');
+    
+    await new Promise(r => setTimeout(r, 500));
+    imgEl.classList.remove('shaking');
+    imgEl.classList.add('floating');
+    if (tint) {
+      tint.classList.remove('shaking');
+      tint.classList.add('floating');
+    }
+  }
+
+  openCleanerModal(noteId = null) {
+    let overlay = document.getElementById('cleaner-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'cleaner-overlay';
+      overlay.className = 'cleaner-overlay';
+      document.body.appendChild(overlay);
+    }
+    
+    overlay.innerHTML = `
+      <div class="cleaner-modal">
+        <div class="cleaner-reaper-wrapper">
+          <img src="/reaper_photo/reaper_start.png" id="cleaner-reaper-img" class="cleaner-reaper-img" alt="Reaper">
+          <div class="cleaner-reaper-tint" style="-webkit-mask-image: url(/reaper_photo/reaper_start.png); mask-image: url(/reaper_photo/reaper_start.png);"></div>
+        </div>
+        <div class="cleaner-content" id="cleaner-content">
+          <h2>«Чистильщик™»</h2>
+          <p>Интеллектуальный помощник для удаления артефактов Telegram (авторских заголовков, дат и ников) из текстов заметок.</p>
+          <div class="form-actions" style="justify-content: center; gap: 12px; margin-top: 24px;">
+            <button class="pill-btn danger-btn" data-action="close-cleaner" style="min-width: 100px;">Отмена</button>
+            <button class="pill-btn ai-btn" id="start-scan-btn" style="min-width: 160px;"><i class="bx bx-search-alt"></i> Запустить поиск</button>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    overlay.classList.add('active');
+    
+    const reaperImg = overlay.querySelector('#cleaner-reaper-img');
+    const reaperTint = overlay.querySelector('.cleaner-reaper-tint');
+    [reaperImg, reaperTint].forEach(el => {
+      if (!el) return;
+      el.style.opacity = '0';
+      el.style.transform = 'translateY(20px) translateX(-50%)';
+    });
+    setTimeout(() => {
+      [reaperImg, reaperTint].forEach(el => {
+        if (!el) return;
+        el.style.transition = 'opacity 500ms ease, transform 500ms ease';
+        el.style.opacity = '1';
+        el.style.transform = 'translateY(0) translateX(-50%)';
+      });
+      setTimeout(() => {
+        [reaperImg, reaperTint].forEach(el => el?.classList.add('floating'));
+      }, 500);
+    }, 200);
+
+    overlay.querySelector('[data-action="close-cleaner"]').onclick = () => {
+      overlay.classList.remove('active');
+    };
+
+    overlay.querySelector('#start-scan-btn').onclick = async () => {
+      const contentEl = overlay.querySelector('#cleaner-content');
+      contentEl.innerHTML = `
+        <h2>Сканирование...</h2>
+        <p>Ищем остатки переписок из Telegram (ПК и мобильной версии)...</p>
+        <div class="kb-import-spinner" style="margin-bottom: 20px;">
+          <div class="spinner-ring"></div>
+          <i class="bx bx-scan" style="animation: pulse 1s infinite alternate;"></i>
+        </div>
+        <div class="cleaner-progress-text" style="font-size: 11px; color: var(--text-muted);">Инициализация...</div>
+      `;
+      
+      const progressText = contentEl.querySelector('.cleaner-progress-text');
+      
+      await new Promise(r => setTimeout(r, 600));
+      progressText.textContent = noteId ? 'Анализ текста выбранной заметки...' : 'Загрузка списка всех заметок...';
+      
+      await new Promise(r => setTimeout(r, 650));
+      progressText.textContent = 'Поиск ПК-версий логов Telegram...';
+      
+      await new Promise(r => setTimeout(r, 650));
+      progressText.textContent = 'Поиск мобильных версий логов Telegram...';
+      
+      let matches = [];
+      let totalNotesScanned = 0;
+      if (noteId) {
+        const note = this.state.lore.notes.find(n => n.id === noteId);
+        if (note) {
+          matches = this.findTelegramArtifacts(note.body || '');
+          totalNotesScanned = 1;
+        }
+      } else {
+        const notes = this.state.lore.notes || [];
+        notes.forEach(note => {
+          const noteMatches = this.findTelegramArtifacts(note.body || '');
+          if (noteMatches.length) {
+            matches.push(...noteMatches.map(m => ({ ...m, noteId: note.id, noteTitle: note.title })));
+          }
+        });
+        totalNotesScanned = notes.length;
+      }
+      
+      await this.transitionReaperImage(reaperImg, 'found', { blur: true, duration: 400 });
+      this.showCleanerMatchesState(overlay, matches, noteId, totalNotesScanned);
+    };
+  }
+
+  showCleanerMatchesState(overlay, matches, noteId, totalNotesScanned) {
+    const contentEl = overlay.querySelector('#cleaner-content');
+    const reaperImg = overlay.querySelector('#cleaner-reaper-img');
+    
+    if (matches.length === 0) {
+      contentEl.innerHTML = `
+        <h2>Совпадений не найдено</h2>
+        <p>${noteId ? 'В тексте выбранной заметки' : `В ${totalNotesScanned} проверенных заметках`} не обнаружено артефактов копирования сообщений Telegram.</p>
+        <div class="form-actions" style="justify-content: center; margin-top: 24px;">
+          <button class="pill-btn ai-btn" data-action="close-cleaner" style="min-width: 120px;">Готово</button>
+        </div>
+      `;
+      overlay.querySelector('[data-action="close-cleaner"]').onclick = () => {
+        overlay.classList.remove('active');
+      };
+      return;
+    }
+    
+    const matchesHtml = matches.map(m => {
+      const badge = m.type === 'pc' ? '<span class="cleaner-match-badge pc">ПК</span>' : '<span class="cleaner-match-badge mobile">Моб</span>';
+      const noteTitle = m.noteTitle ? `<span style="color: var(--accent); font-weight: bold;">[${escapeHtml(m.noteTitle)}]</span> ` : '';
+      return `<div class="cleaner-match-item">
+        ${badge} ${noteTitle} <span class="cleaner-match-text">${escapeHtml(m.raw.trim())}</span>
+      </div>`;
+    }).join('');
+    
+    contentEl.innerHTML = `
+      <h2>Найденные совпадения</h2>
+      <p>«Чистильщик™» обнаружил <strong>${matches.length}</strong> совпадений в тексте. Посмотрите список ниже перед удалением.</p>
+      
+      <div class="cleaner-matches-container">
+        ${matchesHtml}
+      </div>
+      
+      <div class="form-actions" style="flex-direction: column; gap: 12px; margin-top: 20px;">
+        <button class="cut-btn-nocturne" id="cut-btn"><i class="bx bx-cut"></i> ВЫРЕЗАТЬ</button>
+        <button class="pill-btn danger-btn" data-action="close-cleaner" style="width: 100%;">Отмена</button>
+      </div>
+    `;
+    
+    overlay.querySelector('[data-action="close-cleaner"]').onclick = () => {
+      overlay.classList.remove('active');
+    };
+    
+    overlay.querySelector('#cut-btn').onclick = async () => {
+      await this.transitionReaperToDelete(reaperImg);
+      
+      contentEl.innerHTML = `
+        <h2>Очистка текста...</h2>
+        <p>«Чистильщик™» вырезает метаданные и форматирует строки...</p>
+        <div class="kb-import-spinner" style="margin-bottom: 20px;">
+          <div class="spinner-ring"></div>
+          <i class="bx bx-eraser" style="animation: pulse 1s infinite alternate;"></i>
+        </div>
+        <div class="cleaner-progress-text" style="font-size: 11px; color: var(--text-muted);">Инициализация очистки...</div>
+      `;
+      
+      const progressText = contentEl.querySelector('.cleaner-progress-text');
+      
+      await new Promise(r => setTimeout(r, 700));
+      progressText.textContent = 'Удаление временных меток и юзернеймов...';
+      
+      let errorOccurred = false;
+      try {
+        if (noteId) {
+          const noteIndex = this.state.lore.notes.findIndex(n => n.id === noteId);
+          if (noteIndex !== -1) {
+            const note = this.state.lore.notes[noteIndex];
+            note.body = this.cleanTelegramArtifacts(note.body || '');
+            note.updatedAt = Date.now();
+            await this.saveLore();
+          }
+        } else {
+          const notes = this.state.lore.notes || [];
+          for (let i = 0; i < notes.length; i++) {
+            const note = notes[i];
+            note.body = this.cleanTelegramArtifacts(note.body || '');
+            note.updatedAt = Date.now();
+          }
+          await this.saveLore();
+        }
+      } catch (err) {
+        console.error('Cleaner error:', err);
+        errorOccurred = true;
+      }
+      
+      await new Promise(r => setTimeout(r, 700));
+      progressText.textContent = 'Восстановление абзацев и отступов...';
+      
+      await new Promise(r => setTimeout(r, 700));
+      progressText.textContent = 'Запись изменений в базу данных...';
+      
+      await new Promise(r => setTimeout(r, 500));
+      
+      if (errorOccurred) {
+        await this.transitionReaperImage(reaperImg, 'error', { blur: true, duration: 400 });
+        contentEl.innerHTML = `
+          <h2>Произошла ошибка</h2>
+          <p>«Чистильщик™» столкнулся с непредвиденной ошибкой при изменении базы данных.</p>
+          <div class="form-actions" style="justify-content: center; margin-top: 24px;">
+            <button class="pill-btn danger-btn" data-action="close-cleaner" style="min-width: 120px;">Закрыть</button>
+          </div>
+        `;
+        overlay.querySelector('[data-action="close-cleaner"]').onclick = () => {
+          overlay.classList.remove('active');
+        };
+      } else {
+        await this.transitionReaperImage(reaperImg, 'success', { blur: true, duration: 400 });
+        
+        overlay.innerHTML = `
+          <div class="success-full-overlay">
+            <div class="cleaner-reaper-wrapper" style="position: static; transform: none; margin-bottom: 20px; width: 200px; height: 200px;">
+              <img src="/reaper_photo/reaper_success.png" class="cleaner-reaper-img floating" alt="Reaper">
+            </div>
+            <h1>Очистка завершена, мастер</h1>
+            <p style="color: var(--text-muted); font-size: 14px; text-align: center; margin-bottom: 24px; max-width: 400px;">
+              Все артефакты копирования сообщений Telegram были успешно удалены из заметок.
+            </p>
+            <button class="pill-btn ai-btn" id="close-success-btn" style="padding: 10px 24px; min-width: 160px;">Служить дальше</button>
+          </div>
+        `;
+        
+        overlay.querySelector('#close-success-btn').onclick = () => {
+          overlay.classList.remove('active');
+          this.renderKb();
+          this.renderNotes();
+        };
+      }
+    };
   }
 
   async exportProjectDump(options = {}) {
