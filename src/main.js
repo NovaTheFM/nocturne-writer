@@ -6530,8 +6530,10 @@ class NocturneWriter {
         <div class="folder-docs ${collapsed ? 'collapsed' : ''}">
         ${docs.length ? docs.map((doc) => {
           const isBook = doc.docType === 'book-chapter';
+          const isNew = this.state.newlyCreatedId === doc.id;
+          const entranceClass = isNew ? ' new-doc-entrance' : '';
           return `
-          <div class="doc-item ${isBook ? 'book-chapter-card' : ''} ${doc.id === this.state.activeDocId ? 'active' : ''} ${doc.pinned ? 'pinned' : ''}" data-doc-id="${doc.id}">
+          <div class="doc-item ${isBook ? 'book-chapter-card' : ''} ${doc.id === this.state.activeDocId ? 'active' : ''} ${doc.pinned ? 'pinned' : ''}${entranceClass}" data-doc-id="${doc.id}">
             ${isBook ? `
             <div class="book-chapter-header">
               <span class="book-work-info"><i class="bx bx-library"></i> <span>${escapeHtml(doc.workTitle || 'Книга')}${doc.volume ? ` · ${escapeHtml(doc.volume)}` : ''}</span></span>
@@ -6568,6 +6570,18 @@ class NocturneWriter {
           searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
         }, 0);
       }
+    }
+
+    if (this.state.newlyCreatedId) {
+      const targetId = this.state.newlyCreatedId;
+      setTimeout(() => {
+        if (this.state.newlyCreatedId === targetId) {
+          document.querySelectorAll('.new-doc-entrance, .new-card-entrance').forEach(el => {
+            el.classList.remove('new-doc-entrance', 'new-card-entrance');
+          });
+          this.state.newlyCreatedId = null;
+        }
+      }, 1000);
     }
   }
 
@@ -6645,6 +6659,148 @@ class NocturneWriter {
       }
     }
     return isValid;
+  }
+
+  animateShatter(element, callback) {
+    if (!element) {
+      callback();
+      return;
+    }
+    element.classList.add('delete-shake');
+
+    setTimeout(() => {
+      element.classList.remove('delete-shake');
+      
+      const rect = element.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) {
+        callback();
+        return;
+      }
+
+      element.style.opacity = '0';
+      element.style.pointerEvents = 'none';
+
+      const canvas = document.createElement('canvas');
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+      canvas.style.position = 'fixed';
+      canvas.style.left = rect.left + 'px';
+      canvas.style.top = rect.top + 'px';
+      canvas.style.zIndex = '99999';
+      canvas.style.pointerEvents = 'none';
+      document.body.appendChild(canvas);
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        canvas.remove();
+        callback();
+        return;
+      }
+
+      const style = window.getComputedStyle(element);
+      const accent = window.getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#8b5cf6';
+      const textColor = style.color || '#ffffff';
+      
+      const colors = [
+        accent,
+        textColor,
+        'rgba(var(--accent-rgb, 139, 92, 246), 0.7)',
+        '#ffffff',
+        '#a78bfa'
+      ];
+      
+      const bg = style.backgroundColor;
+      if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
+        colors.push(bg);
+      } else {
+        colors.push('#1e1b4b');
+      }
+
+      const particles = [];
+      const particleCount = Math.min(120, Math.max(60, Math.floor((rect.width * rect.height) / 400)));
+
+      for (let i = 0; i < particleCount; i++) {
+        const x = Math.random() * rect.width;
+        const y = Math.random() * rect.height;
+        
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+        const angle = Math.atan2(y - centerY, x - centerX) + (Math.random() - 0.5) * 0.5;
+        const speed = 1.5 + Math.random() * 4.5;
+        
+        particles.push({
+          x,
+          y,
+          vx: Math.cos(angle) * speed + (Math.random() - 0.5) * 1.5,
+          vy: Math.sin(angle) * speed - 2.5 - Math.random() * 3,
+          w: 2 + Math.random() * 6,
+          h: 2 + Math.random() * 6,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          alpha: 1,
+          decay: 0.01 + Math.random() * 0.02,
+          rotation: Math.random() * Math.PI * 2,
+          vRotation: (Math.random() - 0.5) * 0.3,
+          gravity: 0.18 + Math.random() * 0.12
+        });
+      }
+
+      let animationFrameId;
+      const startTime = Date.now();
+      const duration = 1000;
+
+      const update = () => {
+        const elapsed = Date.now() - startTime;
+        if (elapsed >= duration) {
+          cancelAnimationFrame(animationFrameId);
+          canvas.remove();
+          callback();
+          return;
+        }
+
+        ctx.clearRect(0, 0, rect.width, rect.height);
+        let activeParticles = 0;
+
+        particles.forEach(p => {
+          if (p.alpha <= 0) return;
+          activeParticles++;
+
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vy += p.gravity;
+          p.rotation += p.vRotation;
+          p.alpha -= p.decay;
+
+          if (p.alpha > 0) {
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.rotate(p.rotation);
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = p.alpha;
+            if (Math.random() > 0.5) {
+              ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+            } else {
+              ctx.beginPath();
+              ctx.moveTo(0, -p.h / 2);
+              ctx.lineTo(p.w / 2, p.h / 2);
+              ctx.lineTo(-p.w / 2, p.h / 2);
+              ctx.closePath();
+              ctx.fill();
+            }
+            ctx.restore();
+          }
+        });
+
+        if (activeParticles === 0) {
+          cancelAnimationFrame(animationFrameId);
+          canvas.remove();
+          callback();
+        } else {
+          animationFrameId = requestAnimationFrame(update);
+        }
+      };
+
+      update();
+    }, 280);
   }
 
   openFolderForm(folderId = null) {
@@ -6735,9 +6891,10 @@ class NocturneWriter {
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('[data-confirm-folder-delete]').onclick = async () => {
       overlay.classList.remove('active');
-      setTimeout(async () => {
+      const folderEl = document.querySelector(`.section-title[data-folder-id="${folder.id}"]`);
+      this.animateShatter(folderEl, async () => {
         await this.deleteFolder(folder.id);
-      }, 100);
+      });
     };
   }
 
@@ -6967,6 +7124,7 @@ class NocturneWriter {
     }
     this.persistWorkspaceState();
     await this.db.put('docs', doc);
+    this.state.newlyCreatedId = doc.id;
     this.renderAll();
   }
 
@@ -7400,9 +7558,10 @@ class NocturneWriter {
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('[data-confirm-delete]').onclick = async () => {
       overlay.classList.remove('active');
-      setTimeout(async () => {
+      const docEl = document.querySelector(`.doc-item[data-doc-id="${doc.id}"]`);
+      this.animateShatter(docEl, async () => {
         await this.deleteDoc(doc.id);
-      }, 100);
+      });
     };
   }
 
@@ -13398,16 +13557,22 @@ class NocturneWriter {
 
   characterCard(item, draggable = false) {
     const visual = item.image ? `<img src="${item.image}" alt="">` : `<i class="bx ${item.icon || 'bx-user'}"></i>`;
-    return `<div class="char-card" data-lore-type="characters" data-lore-id="${item.id}" ${draggable ? 'draggable="true"' : ''}>${this.loreCardActions('characters', item.id)}<div class="char-img">${visual}</div><div class="char-info"><h3>${escapeHtml(this.entityDisplayName(item))}</h3><p>${escapeHtml(item.role || item.body)}</p></div></div>`;
+    const isNew = this.state.newlyCreatedId === item.id;
+    const entranceClass = isNew ? ' new-card-entrance' : '';
+    return `<div class="char-card${entranceClass}" data-lore-type="characters" data-lore-id="${item.id}" ${draggable ? 'draggable="true"' : ''}>${this.loreCardActions('characters', item.id)}<div class="char-img">${visual}</div><div class="char-info"><h3>${escapeHtml(this.entityDisplayName(item))}</h3><p>${escapeHtml(item.role || item.body)}</p></div></div>`;
   }
 
   locationCard(item, draggable = false) {
     const visual = item.image ? `<img src="${escapeHtml(item.image)}" alt="">` : `<i class="bx ${escapeHtml(item.icon || 'bx-buildings')}"></i>`;
-    return `<div class="loc-card" data-lore-type="locations" data-lore-id="${item.id}" ${draggable ? 'draggable="true"' : ''}>${this.loreCardActions('locations', item.id)}<div class="loc-img">${visual}</div><div class="loc-info"><h3>${escapeHtml(this.entityDisplayName(item))}</h3><p>${escapeHtml(item.role || item.body)}</p></div></div>`;
+    const isNew = this.state.newlyCreatedId === item.id;
+    const entranceClass = isNew ? ' new-card-entrance' : '';
+    return `<div class="loc-card${entranceClass}" data-lore-type="locations" data-lore-id="${item.id}" ${draggable ? 'draggable="true"' : ''}>${this.loreCardActions('locations', item.id)}<div class="loc-img">${visual}</div><div class="loc-info"><h3>${escapeHtml(this.entityDisplayName(item))}</h3><p>${escapeHtml(item.role || item.body)}</p></div></div>`;
   }
 
   noteCard(item, draggable = false) {
-    return `<div class="char-card note-card" data-lore-type="notes" data-lore-id="${item.id}" ${draggable ? 'draggable="true"' : ''}>${this.loreCardActions('notes', item.id)}<div class="char-img"><i class="bx bx-note"></i></div><div class="char-info"><h3>${escapeHtml(item.title || 'Без названия')}</h3><p>${escapeHtml(item.body || 'Пустая запись')}</p></div></div>`;
+    const isNew = this.state.newlyCreatedId === item.id;
+    const entranceClass = isNew ? ' new-card-entrance' : '';
+    return `<div class="char-card note-card${entranceClass}" data-lore-type="notes" data-lore-id="${item.id}" ${draggable ? 'draggable="true"' : ''}>${this.loreCardActions('notes', item.id)}<div class="char-img"><i class="bx bx-note"></i></div><div class="char-info"><h3>${escapeHtml(item.title || 'Без названия')}</h3><p>${escapeHtml(item.body || 'Пустая запись')}</p></div></div>`;
   }
 
   timelineCard(item, options = {}) {
@@ -13462,7 +13627,10 @@ class NocturneWriter {
       </div>
     ` : '';
 
-    return `<div class="timeline-item ${isLast ? 'last' : ''}" data-lore-type="${type}" data-lore-id="${item.id}"${parentAttr} ${draggable ? 'draggable="true"' : ''}>
+    const isNew = this.state.newlyCreatedId === item.id;
+    const entranceClass = isNew ? ' new-card-entrance' : '';
+
+    return `<div class="timeline-item ${isLast ? 'last' : ''}${entranceClass}" data-lore-type="${type}" data-lore-id="${item.id}"${parentAttr} ${draggable ? 'draggable="true"' : ''}>
       <div class="timeline-track"><div class="timeline-dot"></div><div class="timeline-line"></div></div>
       <div class="timeline-content-wrapper">
         <div class="timeline-date">${escapeHtml(item.date)}</div>
@@ -13809,8 +13977,11 @@ class NocturneWriter {
       });
     });
     overlay.querySelector('[data-delete-lore]')?.addEventListener('click', async () => {
-      await this.deleteLore(type, id, parentEvent?.id);
       overlay.classList.remove('active');
+      const cardEl = document.querySelector(`[data-lore-id="${id}"]`);
+      this.animateShatter(cardEl, async () => {
+        await this.deleteLore(type, id, parentEvent?.id);
+      });
     });
     overlay.querySelector('form').onsubmit = async (event) => {
       event.preventDefault();
@@ -13911,6 +14082,7 @@ class NocturneWriter {
       else {
         collection.push(next);
         this.state.kbSearch = '';
+        this.state.newlyCreatedId = next.id;
       }
       overlay.classList.remove('active');
       setTimeout(async () => {
@@ -13944,9 +14116,10 @@ class NocturneWriter {
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('[data-confirm-delete-lore]').onclick = async () => {
       overlay.classList.remove('active');
-      setTimeout(async () => {
+      const cardEl = document.querySelector(`[data-lore-id="${id}"]`);
+      this.animateShatter(cardEl, async () => {
         await this.deleteLore(type, id, parentEvent?.id);
-      }, 100);
+      });
     };
   }
 

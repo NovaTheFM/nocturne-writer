@@ -8965,5 +8965,41 @@ input:-webkit-autofill:active {
     margin-bottom: 4px;
   }
 }
-
-
+@keyframes delete-shake-anim {
+  0% { transform: translate(0, 0) rotate(0deg); }
+  10% { transform: translate(-2px, 1px) rotate(-0.5deg); }
+  20% { transform: translate(2px, -1px) rotate(1deg); }
+  30% { transform: translate(-1px, 2px) rotate(0deg); }
+  40% { transform: translate(2px, 1px) rotate(0.5deg); }
+  50% { transform: translate(-2px, -1px) rotate(-1deg); }
+  60% { transform: translate(1px, 2px) rotate(0deg); }
+  70% { transform: translate(-2px, 1px) rotate(0.5deg); }
+  80% { transform: translate(2px, -1px) rotate(-0.5deg); }
+  90% { transform: translate(-1px, 2px) rotate(1deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+.delete-shake {
+  animation: delete-shake-anim 0.28s linear !important;
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.4) !important;
+  border-color: rgba(239, 68, 68, 0.5) !important;
+}
+@keyframes new-item-entrance-anim {
+  0% {
+    opacity: 0;
+    transform: scale(0.85) translateY(10px);
+    filter: blur(8px);
+    box-shadow: 0 0 0 0 transparent;
+  }
+  50% {
+    box-shadow: 0 0 15px rgba(var(--accent-rgb, 139, 92, 246), 0.4);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    filter: blur(0);
+    box-shadow: none;
+  }
+}
+.new-doc-entrance, .new-card-entrance {
+  animation: new-item-entrance-anim 0.45s cubic-bezier(0.16, 1, 0.3, 1) both !important;
+}
