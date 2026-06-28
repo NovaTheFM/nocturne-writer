@@ -16981,14 +16981,25 @@ ${raw}`;
       glowTint.style.webkitMaskImage = `url(${src})`;
       glowTint.style.maskImage = `url(${src})`;
       
+      // Coordinated cross-fade: fade base layer out while fading overlay layer in
+      imgEl.style.transition = `opacity ${duration}ms ease`;
+      if (tint) tint.style.transition = `opacity ${duration}ms ease`;
       glowImg.style.transition = `opacity ${duration}ms ease`;
       glowTint.style.transition = `opacity ${duration}ms ease`;
+      
+      imgEl.style.opacity = '0';
+      if (tint) tint.style.opacity = '0';
       glowImg.style.opacity = '1';
       glowTint.style.opacity = '1';
       
       await new Promise(r => setTimeout(r, duration));
       
       this.setReaperImage(imgEl, nextState);
+      
+      imgEl.style.transition = 'none';
+      if (tint) tint.style.transition = 'none';
+      imgEl.style.opacity = '1';
+      if (tint) tint.style.opacity = '1';
       
       glowImg.style.transition = 'none';
       glowTint.style.transition = 'none';
@@ -17018,14 +17029,23 @@ ${raw}`;
       glowTint.style.webkitMaskImage = `url(${src})`;
       glowTint.style.maskImage = `url(${src})`;
       
+      imgEl.style.transition = 'opacity 150ms ease';
+      if (tint) tint.style.transition = 'opacity 150ms ease';
       glowImg.style.transition = 'opacity 150ms ease';
       glowTint.style.transition = 'opacity 150ms ease';
+      
+      imgEl.style.opacity = '0';
+      if (tint) tint.style.opacity = '0';
       glowImg.style.opacity = '1';
       glowTint.style.opacity = '1';
       
       await new Promise(r => setTimeout(r, 150));
       
       this.setReaperImage(imgEl, 'delete');
+      imgEl.style.transition = 'none';
+      if (tint) tint.style.transition = 'none';
+      imgEl.style.opacity = '1';
+      if (tint) tint.style.opacity = '1';
       
       glowImg.style.transition = 'none';
       glowTint.style.transition = 'none';

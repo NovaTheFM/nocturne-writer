@@ -9063,8 +9063,8 @@ body.sortable-active .doc-item {
 /* Cleaner button icon */
 .reaper-icon {
   display: inline-block;
-  width: 18px;
-  height: 18px;
+  width: 20px; /* Larger size for note card actions */
+  height: 20px;
   background-color: currentColor;
   -webkit-mask-image: url('/reaper_photo/reaper_icon_small.png');
   mask-image: url('/reaper_photo/reaper_icon_small.png');
@@ -9075,13 +9075,9 @@ body.sortable-active .doc-item {
   vertical-align: middle;
 }
 .pill-btn.cleaner-btn .reaper-icon {
-  margin-right: 6px;
-}
-.lore-card-actions button.cleaner-btn {
-  color: var(--text-muted);
-}
-.lore-card-actions button.cleaner-btn:hover {
-  color: var(--accent);
+  width: 16px; /* Smaller size for pill button */
+  height: 16px;
+  margin-right: 0 !important; /* Use default pill-btn gap */
 }
 
 /* «Чистильщик™» modal styles */

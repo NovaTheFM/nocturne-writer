@@ -14,6 +14,7 @@ try {
   const pngBuffer = await readFile(pngPath);
   const base64Png = pngBuffer.toString('base64');
   
+  // Create a clean solid black silhouette for the mask image
   const resizedBase64 = await page.evaluate(async (base64) => {
     return new Promise((resolve) => {
       const img = new Image();
@@ -25,6 +26,21 @@ try {
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, 32, 32);
+        
+        const imgData = ctx.getImageData(0, 0, 32, 32);
+        const data = imgData.data;
+        for (let i = 0; i < data.length; i += 4) {
+          const alpha = data[i + 3];
+          if (alpha > 40) {
+            data[i] = 0;       // R
+            data[i + 1] = 0;   // G
+            data[i + 2] = 0;   // B
+            data[i + 3] = 255; // 100% solid
+          } else {
+            data[i + 3] = 0;   // 100% transparent
+          }
+        }
+        ctx.putImageData(imgData, 0, 0);
         resolve(canvas.toDataURL('image/png').split(',')[1]);
       };
       img.src = 'data:image/png;base64,' + base64;
@@ -37,7 +53,7 @@ try {
   
   // Write small PNG
   await writeFile(smallPngPath, resizedPngData);
-  console.log('Successfully created resized 32x32 reaper_icon_small.png');
+  console.log('Successfully created solid silhouette 32x32 reaper_icon_small.png');
   
   // Pack into ICO
   const header = Buffer.alloc(22);
