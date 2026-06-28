@@ -6610,13 +6610,50 @@ class NocturneWriter {
     this.state.folders.forEach((folder, order) => { folder.order = order; });
   }
 
+  validateForm(form) {
+    let isValid = true;
+    const inputs = form.querySelectorAll('[required]');
+    inputs.forEach(input => {
+      const val = input.value.trim();
+      if (!val) {
+        isValid = false;
+        input.classList.add('invalid');
+        if (!input.dataset.hasValidationListener) {
+          input.dataset.hasValidationListener = 'true';
+          const clearInvalid = () => {
+            if (input.value.trim()) {
+              input.classList.remove('invalid');
+              input.removeEventListener('input', clearInvalid);
+              input.removeEventListener('change', clearInvalid);
+              delete input.dataset.hasValidationListener;
+            }
+          };
+          input.addEventListener('input', clearInvalid);
+          input.addEventListener('change', clearInvalid);
+        }
+      } else {
+        input.classList.remove('invalid');
+      }
+    });
+    if (!isValid) {
+      const firstInvalid = form.querySelector('.invalid');
+      if (firstInvalid) {
+        firstInvalid.focus();
+        firstInvalid.select?.();
+        firstInvalid.classList.add('shake');
+        setTimeout(() => firstInvalid.classList.remove('shake'), 400);
+      }
+    }
+    return isValid;
+  }
+
   openFolderForm(folderId = null) {
     const folder = folderId ? this.state.folders.find((item) => item.id === folderId) : null;
     if (folderId && !folder) return;
     this.closeAllFloatingMenus();
     const overlay = document.getElementById('form-overlay');
     overlay.innerHTML = `
-      <form class="form-modal folder-form" id="folder-form">
+      <form class="form-modal folder-form" id="folder-form" novalidate>
         <h2>${folder ? 'Переименовать папку' : 'Новая папка'}</h2>
         <div class="form-grid">
           <label>Название <input class="form-control" name="title" maxlength="80" value="${escapeHtml(folder?.title || '')}" required></label>
@@ -6636,34 +6673,36 @@ class NocturneWriter {
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('form').onsubmit = async (event) => {
       event.preventDefault();
+      if (!this.validateForm(event.target)) return;
       const title = String(new FormData(event.target).get('title') || '').trim().replace(/\s+/g, ' ');
       if (!title) {
-        this.toast('Введите название папки.');
         return;
       }
-      if (folder) {
-        folder.title = title.slice(0, 80);
-        folder.updatedAt = Date.now();
-        await this.db.put('folders', folder);
-        this.toast('Папка переименована.');
-      } else {
-        const now = Date.now();
-        const next = {
-          id: uid('folder'),
-          title: title.slice(0, 80),
-          order: this.state.folders.length,
-          createdAt: now,
-          updatedAt: now,
-        };
-        this.state.folders.push(next);
-        this.state.collapsedFolders = this.state.collapsedFolders.filter((id) => id !== next.id);
-        safeSetStorageItem(localStorage, 'nocturne-collapsed-folders', JSON.stringify(this.state.collapsedFolders));
-        await this.db.put('folders', next);
-        this.toast('Папка создана.');
-      }
-      this.normalizeFolderOrders();
       overlay.classList.remove('active');
-      this.renderDocs();
+      setTimeout(async () => {
+        if (folder) {
+          folder.title = title.slice(0, 80);
+          folder.updatedAt = Date.now();
+          await this.db.put('folders', folder);
+          this.toast('Папка переименована.');
+        } else {
+          const now = Date.now();
+          const next = {
+            id: uid('folder'),
+            title: title.slice(0, 80),
+            order: this.state.folders.length,
+            createdAt: now,
+            updatedAt: now,
+          };
+          this.state.folders.push(next);
+          this.state.collapsedFolders = this.state.collapsedFolders.filter((id) => id !== next.id);
+          safeSetStorageItem(localStorage, 'nocturne-collapsed-folders', JSON.stringify(this.state.collapsedFolders));
+          await this.db.put('folders', next);
+          this.toast('Папка создана.');
+        }
+        this.normalizeFolderOrders();
+        this.renderDocs();
+      }, 100);
     };
   }
 
@@ -6695,8 +6734,10 @@ class NocturneWriter {
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('[data-confirm-folder-delete]').onclick = async () => {
-      await this.deleteFolder(folder.id);
       overlay.classList.remove('active');
+      setTimeout(async () => {
+        await this.deleteFolder(folder.id);
+      }, 100);
     };
   }
 
@@ -6726,7 +6767,7 @@ class NocturneWriter {
     this.closeAllFloatingMenus();
     const overlay = document.getElementById('form-overlay');
     overlay.innerHTML = `
-      <form class="form-modal doc-form" id="doc-form">
+      <form class="form-modal doc-form" id="doc-form" novalidate>
         <h2>Новый документ</h2>
         
         <div class="doc-type-switcher">
@@ -6835,10 +6876,13 @@ class NocturneWriter {
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('form').onsubmit = async (event) => {
       event.preventDefault();
+      if (!this.validateForm(event.target)) return;
       const data = Object.fromEntries(new FormData(event.target));
       const descField = event.target.elements.description;
       if (!data.description?.trim()) {
-        descField?.classList.add('has-error');
+        descField?.classList.add('invalid');
+        descField?.classList.add('shake');
+        setTimeout(() => descField?.classList.remove('shake'), 400);
         let errEl = event.target.querySelector('.field-error-msg');
         if (!errEl) {
           errEl = document.createElement('div');
@@ -6846,16 +6890,45 @@ class NocturneWriter {
           errEl.textContent = 'Опишите кратко содержание главы — это помогает AI лучше понять контекст.';
           descField?.after(errEl);
         }
+        descField?.addEventListener('input', function clearDescErr() {
+          if (descField.value.trim()) {
+            descField.classList.remove('invalid');
+            event.target.querySelector('.field-error-msg')?.remove();
+            descField.removeEventListener('input', clearDescErr);
+          }
+        });
         descField?.focus();
         return;
       }
-      await this.createDoc(targetFolderId, data);
       overlay.classList.remove('active');
+      setTimeout(async () => {
+        await this.createDoc(targetFolderId, data);
+      }, 100);
     };
   }
 
-  async createDoc(folderId, payload) {
-    const title = (payload.title || '').trim();
+  async createDoc(folderId, payload, legacyDescription = '') {
+    let title = '';
+    let description = '';
+    let docType = 'document';
+    let workTitle = '';
+    let volume = '';
+    let chapterNumber = '';
+    let bookStatus = 'Не редактировано';
+
+    if (typeof payload === 'string') {
+      title = payload.trim();
+      description = legacyDescription.trim();
+    } else if (payload && typeof payload === 'object') {
+      title = (payload.title || '').trim();
+      description = (payload.description || '').trim();
+      docType = payload.docType || 'document';
+      workTitle = payload.workTitle?.trim() || '';
+      volume = payload.volume?.trim() || '';
+      chapterNumber = payload.chapterNumber?.trim() || '';
+      bookStatus = payload.bookStatus || 'Не редактировано';
+    }
+
     if (!title) return;
     if (!this.state.folders.some((folder) => folder.id === folderId)) folderId = this.defaultFolderId();
     const order = this.state.docs.filter((doc) => doc.folderId === folderId).length;
@@ -6864,21 +6937,21 @@ class NocturneWriter {
       id: uid('doc'),
       folderId,
       title,
-      description: (payload.description || '').trim(),
+      description,
       order,
       notes: '',
-      summary: payload.description?.trim() || 'Пустая глава.',
+      summary: description || 'Пустая глава.',
       createdAt: Date.now(),
       updatedAt: Date.now(),
       ast: { type: 'doc', blocks: [{ id: uid('block'), type: 'heading', html: escapeHtml(title) }, { id: uid('block'), type: 'paragraph', html: '<br>' }] },
-      docType: payload.docType || 'document'
+      docType
     };
 
     if (doc.docType === 'book-chapter') {
-      doc.workTitle = payload.workTitle?.trim() || '';
-      doc.volume = payload.volume?.trim() || '';
-      doc.chapterNumber = payload.chapterNumber?.trim() || '';
-      doc.bookStatus = payload.bookStatus || 'Не редактировано';
+      doc.workTitle = workTitle;
+      doc.volume = volume;
+      doc.chapterNumber = chapterNumber;
+      doc.bookStatus = bookStatus;
     }
 
     doc = this.sanitizeDoc(doc);
@@ -7326,8 +7399,10 @@ class NocturneWriter {
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('[data-confirm-delete]').onclick = async () => {
-      await this.deleteDoc(doc.id);
       overlay.classList.remove('active');
+      setTimeout(async () => {
+        await this.deleteDoc(doc.id);
+      }, 100);
     };
   }
 
@@ -7380,7 +7455,7 @@ class NocturneWriter {
     const overlay = document.getElementById('form-overlay');
     const isBook = doc.docType === 'book-chapter';
     overlay.innerHTML = `
-      <form class="form-modal doc-form" id="edit-doc-form">
+      <form class="form-modal doc-form" id="edit-doc-form" novalidate>
         <h2>Редактировать документ</h2>
         
         <div class="doc-type-switcher">
@@ -7464,6 +7539,7 @@ class NocturneWriter {
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('form').onsubmit = async (e) => {
       e.preventDefault();
+      if (!this.validateForm(e.target)) return;
       const data = Object.fromEntries(new FormData(e.target));
       
       doc.docType = data.docType || 'document';
@@ -7485,10 +7561,12 @@ class NocturneWriter {
       const copy = this.sanitizeDoc(doc);
       Object.assign(doc, copy); // preserve reference in memory
       
-      doc.updatedAt = Date.now();
-      await this.db.put('docs', doc);
       overlay.classList.remove('active');
-      this.renderAll();
+      setTimeout(async () => {
+        doc.updatedAt = Date.now();
+        await this.db.put('docs', doc);
+        this.renderAll();
+      }, 100);
     };
   }
 
@@ -13563,7 +13641,7 @@ class NocturneWriter {
     ];
     const overlay = document.getElementById('form-overlay');
     overlay.innerHTML = `
-      <form class="form-modal lore-form-${type}" id="lore-form">
+      <form class="form-modal lore-form-${type}" id="lore-form" novalidate>
         <h2>${id ? 'Редактировать' : 'Создать'} ${isSubtimeline ? 'саб-событие' : isTimeline ? 'событие' : 'карточку'}</h2>
         <div class="form-grid">
           ${isTimeline ? `
@@ -13736,6 +13814,7 @@ class NocturneWriter {
     });
     overlay.querySelector('form').onsubmit = async (event) => {
       event.preventDefault();
+      if (!this.validateForm(event.target)) return;
       const data = Object.fromEntries(new FormData(event.target));
       let image = item.image || '';
       const file = event.target.elements.imageFile?.files?.[0];
@@ -13833,10 +13912,12 @@ class NocturneWriter {
         collection.push(next);
         this.state.kbSearch = '';
       }
-      await this.saveLore();
       overlay.classList.remove('active');
-      this.renderKb();
-      this.refreshVisibleEntityLinks();
+      setTimeout(async () => {
+        await this.saveLore();
+        this.renderKb();
+        this.refreshVisibleEntityLinks();
+      }, 100);
     };
   }
 
@@ -13862,8 +13943,10 @@ class NocturneWriter {
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('[data-confirm-delete-lore]').onclick = async () => {
-      await this.deleteLore(type, id, parentEvent?.id);
       overlay.classList.remove('active');
+      setTimeout(async () => {
+        await this.deleteLore(type, id, parentEvent?.id);
+      }, 100);
     };
   }
 

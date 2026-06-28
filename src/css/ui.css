@@ -3527,6 +3527,7 @@ body.resizing-floating-note {
   background: var(--bg-deep);
   border: 1px solid var(--border);
   box-shadow: 0 40px 100px rgba(0,0,0,.9);
+  transition: transform 330ms cubic-bezier(.16, 1, .3, 1), opacity 330ms ease;
 }
 .material .settings-modal,
 .material .form-modal {
@@ -4566,6 +4567,30 @@ body.resizing-floating-note {
 .kb-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 34px; }
 .kb-header h1 { margin: 0; font: 500 28px 'Lora', serif; }
 .character-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 24px; }
+.custom-select, .modal-select, .form-control {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  color: white;
+  outline: 0;
+  border-radius: var(--radius-sm);
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+.form-control:focus, .modal-select:focus, select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb, 139, 92, 246), 0.16);
+}
+.form-control.invalid, .modal-select.invalid, select.invalid {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25) !important;
+}
+.shake {
+  animation: input-shake 0.15s ease-in-out 2;
+}
+@keyframes input-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
 .char-card, .loc-card, .timeline-content {
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -5208,9 +5233,9 @@ body.mobile-shell-active .sortable-fallback-drag.timeline-item {
   --popover-bg-material: rgba(15, 23, 56, 0.7);
   --popover-border: rgba(139, 172, 255, 0.24);
   --workspace-bg:
-    radial-gradient(circle at 16% 18%, rgba(96, 165, 250, .18), transparent 34%),
+    radial-gradient(circle at 16% 18%, rgba(var(--accent-rgb, 139, 92, 246), .18), transparent 34%),
     radial-gradient(circle at 82% 10%, rgba(var(--accent-rgb, 139, 92, 246), .12), transparent 30%),
-    radial-gradient(circle at 54% 86%, rgba(45, 212, 191, .06), transparent 38%),
+    radial-gradient(circle at 54% 86%, rgba(var(--accent-rgb, 139, 92, 246), .06), transparent 38%),
     linear-gradient(145deg, #02040d 0%, #070b18 48%, #030612 100%);
   --workspace-grid: rgba(147, 197, 253, .028);
   --workspace-grid-2: rgba(var(--accent-hover-rgb, 167, 139, 250), .022);
@@ -5233,7 +5258,7 @@ body.mobile-shell-active .sortable-fallback-drag.timeline-item {
   --workspace-bg:
     radial-gradient(circle at 16% 18%, rgba(var(--accent-rgb, 139, 92, 246), .18), transparent 34%),
     radial-gradient(circle at 82% 10%, rgba(var(--accent-rgb, 139, 92, 246), .12), transparent 30%),
-    radial-gradient(circle at 54% 86%, rgba(16, 185, 129, .06), transparent 38%),
+    radial-gradient(circle at 54% 86%, rgba(var(--accent-rgb, 139, 92, 246), .06), transparent 38%),
     linear-gradient(145deg, var(--bg-deep) 0%, var(--bg-deep) 48%, #010302 100%);
   --workspace-grid: rgba(34, 197, 94, .028);
   --workspace-grid-2: rgba(var(--accent-hover-rgb, 167, 139, 250), .022);
@@ -5256,7 +5281,7 @@ body.mobile-shell-active .sortable-fallback-drag.timeline-item {
   --workspace-bg:
     radial-gradient(circle at 16% 18%, rgba(var(--accent-rgb, 139, 92, 246), .18), transparent 34%),
     radial-gradient(circle at 82% 10%, rgba(var(--accent-rgb, 139, 92, 246), .12), transparent 30%),
-    radial-gradient(circle at 54% 86%, rgba(244, 63, 94, .06), transparent 38%),
+    radial-gradient(circle at 54% 86%, rgba(var(--accent-rgb, 139, 92, 246), .06), transparent 38%),
     linear-gradient(145deg, var(--bg-deep) 0%, var(--bg-deep) 48%, #050308 100%);
   --workspace-grid: rgba(216, 180, 254, .028);
   --workspace-grid-2: rgba(var(--accent-hover-rgb, 167, 139, 250), .022);
@@ -5279,7 +5304,7 @@ body.mobile-shell-active .sortable-fallback-drag.timeline-item {
   --workspace-bg:
     radial-gradient(circle at 16% 18%, rgba(var(--accent-rgb, 139, 92, 246), .18), transparent 34%),
     radial-gradient(circle at 82% 10%, rgba(var(--accent-rgb, 139, 92, 246), .12), transparent 30%),
-    radial-gradient(circle at 54% 86%, rgba(239, 68, 68, .08), transparent 38%),
+    radial-gradient(circle at 54% 86%, rgba(var(--accent-rgb, 139, 92, 246), .08), transparent 38%),
     linear-gradient(145deg, var(--bg-deep) 0%, var(--bg-deep) 48%, #0b0506 100%);
   --workspace-grid: rgba(239, 68, 68, .032);
   --workspace-grid-2: rgba(var(--accent-hover-rgb, 167, 139, 250), .022);
@@ -5304,8 +5329,8 @@ body.mobile-shell-active .sortable-fallback-drag.timeline-item {
   --popover-shadow: 0 24px 60px rgba(70,53,32,.18), 0 1px 0 rgba(255,255,255,.72) inset, 0 0 0 1px rgba(91,72,48,.035) inset;
   --workspace-bg:
     radial-gradient(circle at 18% 18%, rgba(var(--accent-rgb, 139, 92, 246), .12), transparent 34%),
-    radial-gradient(circle at 82% 12%, rgba(14, 165, 233, .09), transparent 32%),
-    radial-gradient(circle at 54% 86%, rgba(217, 119, 6, .06), transparent 38%),
+    radial-gradient(circle at 82% 12%, rgba(var(--accent-rgb, 139, 92, 246), .09), transparent 32%),
+    radial-gradient(circle at 54% 86%, rgba(var(--accent-rgb, 139, 92, 246), .06), transparent 38%),
     linear-gradient(145deg, #f1e8da 0%, #fbf5ea 48%, #ede2d0 100%);
   --workspace-grid: rgba(91,72,48,.038);
   --workspace-grid-2: rgba(91,72,48,.028);
