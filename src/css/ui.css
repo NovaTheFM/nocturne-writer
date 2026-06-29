@@ -4344,7 +4344,7 @@ body.resizing-floating-note {
   font-size: 12px;
 }
 .kb-title { margin: 0 0 30px; padding: 0 24px; font: 500 18px 'Lora', serif; color: white; }
-.kb-main { flex: 1; padding: 40px; overflow-y: auto; overflow-x: hidden; position: relative; }
+.kb-main { flex: 1; padding: 40px; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; position: relative; }
 .kb-close-btn { font-size: 28px; color: var(--text-muted); cursor: pointer; transition: 180ms ease; }
 .kb-close-btn:hover { color: white; transform: rotate(90deg); }
 .kb-search-wrap {
@@ -4539,7 +4539,7 @@ body.resizing-floating-note {
   font-size: 12px;
 }
 .kb-title { margin: 0 0 30px; padding: 0 24px; font: 500 18px 'Lora', serif; color: white; }
-.kb-main { flex: 1; padding: 40px; overflow-y: auto; overflow-x: hidden; position: relative; }
+.kb-main { flex: 1; padding: 40px; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; position: relative; }
 .kb-close-btn { font-size: 28px; color: var(--text-muted); cursor: pointer; transition: 180ms ease; }
 .kb-close-btn:hover { color: white; transform: rotate(90deg); }
 .kb-search-wrap {

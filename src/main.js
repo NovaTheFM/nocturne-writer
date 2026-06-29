@@ -186,6 +186,7 @@ class NocturneWriter {
     this.db = new Database();
     this.runtime = detectRuntime();
     this.isComposing = false;
+    this.kbTransitioning = false;
     const reviewMode = safeGetStorageItem(localStorage, 'nocturne-review-mode', 'write');
     this.state = {
       settings: { ...defaultSettings },
@@ -3491,6 +3492,7 @@ class NocturneWriter {
         }
       }
       this.state.activeLoreDetail = null;
+      this.kbTransitioning = true;
       if (this.isMobileLayout()) {
         this.renderMobileShell();
       } else {
@@ -3753,6 +3755,7 @@ class NocturneWriter {
       this.state.activeKbTab = kbTab;
       this.state.activeLoreDetail = null;
       if (kbTab !== 'timeline') this.state.activeSubtimelineId = null;
+      this.kbTransitioning = true;
       this.renderKb();
     }
     const settingsTab = event.target.closest('[data-settings-tab]')?.dataset.settingsTab;
@@ -6750,6 +6753,7 @@ class NocturneWriter {
           this.state.settings.kbProjects = this.state.kbProjects;
           this.state.settings.activeLoreId = pid;
           this.state.activeLoreId = pid;
+          this.kbTransitioning = true;
           this.state.lore = {
             title,
             characters: [],
@@ -6804,6 +6808,7 @@ class NocturneWriter {
           overlay.classList.remove('active');
           project.title = title;
           this.state.lore.title = title;
+          this.kbTransitioning = true;
           await this.saveLore();
           this.state.settings.kbProjects = this.state.kbProjects;
           await this.persistSettings();
@@ -6844,6 +6849,7 @@ class NocturneWriter {
           this.state.settings.kbProjects = this.state.kbProjects;
           this.state.settings.activeLoreId = 'world';
           this.state.activeLoreId = 'world';
+          this.kbTransitioning = true;
           await this.loadLore();
           await this.persistSettings();
           if (this.isMobileLayout()) {
@@ -12968,15 +12974,14 @@ class NocturneWriter {
 
     const sidebarExists = document.querySelector('#kb-modal .kb-sidebar');
     if (sidebarExists) {
-      const project = this.state.kbProjects?.find(p => p.id === this.state.activeLoreId) || this.state.kbProjects?.[0];
-      const triggerSpan = document.querySelector('#kb-modal .nocturne-select[data-setting-select="activeLoreId"] .nocturne-select-trigger span');
-      if (triggerSpan && project) {
-        triggerSpan.textContent = project.title;
+      const selectRow = document.querySelector('#kb-modal .kb-project-select-row');
+      if (selectRow) {
+        selectRow.innerHTML = `
+          ${this.renderSettingsSelect('activeLoreId', (this.state.kbProjects || []).map(p => [p.id, p.title]))}
+          <button class="mini-icon-btn" data-action="new-kb-project" title="Новое произведение"><i class="bx bx-plus"></i></button>
+          <button class="mini-icon-btn" data-action="rename-kb-project" title="Редактировать"><i class="bx bx-pencil"></i></button>
+        `;
       }
-      document.querySelectorAll('#kb-modal .nocturne-select[data-setting-select="activeLoreId"] .nocturne-select-option').forEach(opt => {
-        const isSelected = opt.dataset.value === this.state.activeLoreId;
-        opt.classList.toggle('selected', isSelected);
-      });
       document.querySelectorAll('#kb-modal .kb-sidebar .settings-tab').forEach(tab => {
         const isCurrent = tab.dataset.kbTab === active;
         tab.classList.toggle('active', isCurrent);
@@ -13035,9 +13040,14 @@ class NocturneWriter {
           </section>
           ${activeSubtimeline ? this.subtimelinePanel(activeSubtimeline) : ''}
         `;
-        main.style.animation = 'none';
-        main.offsetHeight; // trigger reflow
-        main.style.animation = 'pane-content-refresh 250ms ease-out';
+        if (this.kbTransitioning) {
+          main.style.animation = 'none';
+          main.offsetHeight; // trigger reflow
+          main.style.animation = 'pane-content-refresh 250ms ease-out';
+          this.kbTransitioning = false;
+        } else {
+          main.style.animation = 'none';
+        }
       }
       if (!detail) {
         this.setupKbDragDrop();
@@ -13216,6 +13226,7 @@ class NocturneWriter {
     }
     const modal = document.getElementById('kb-modal');
     if (modal) {
+      this.kbTransitioning = true;
       if (!modal.innerHTML.trim()) this.renderKb();
       modal.classList.add('active');
       this.renderKb();
@@ -14707,6 +14718,7 @@ class NocturneWriter {
     this.state.activeKbTab = tab;
     this.state.activeLoreDetail = null;
     if (tab !== 'timeline') this.state.activeSubtimelineId = null;
+    this.kbTransitioning = true;
     // Wipe HTML to force full re-render on open so tab switches
     const modal = document.getElementById('kb-modal');
     modal.innerHTML = ''; 
@@ -16213,6 +16225,7 @@ class NocturneWriter {
     if (key === 'activeLoreId') {
       const val = this.state.settings.activeLoreId;
       this.state.activeLoreId = val;
+      this.kbTransitioning = true;
       this.loadLore().then(() => {
         if (this.isMobileLayout()) {
           this.renderMobileKbContentOnly();
