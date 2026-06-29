@@ -3365,9 +3365,29 @@ class NocturneWriter {
       this.toggleSettingsSelect(settingsSelectToggle.closest('.nocturne-select'));
       return;
     }
+    const formSelectToggle = event.target.closest?.('[data-form-select-toggle]');
+    if (formSelectToggle) {
+      this.toggleSettingsSelect(formSelectToggle.closest('.nocturne-select'));
+      return;
+    }
     const settingsSelectOption = event.target.closest?.('[data-setting-option]');
     if (settingsSelectOption) {
       this.updateSettingFromCustomOption(settingsSelectOption);
+      return;
+    }
+    const formSelectOption = event.target.closest?.('[data-form-option]');
+    if (formSelectOption) {
+      const select = formSelectOption.closest('.nocturne-select');
+      const input = select.querySelector('input[type="hidden"]');
+      const val = formSelectOption.dataset.value;
+      if (input) input.value = val;
+      const labelSpan = select.querySelector('.nocturne-select-trigger span');
+      if (labelSpan) labelSpan.textContent = formSelectOption.querySelector('span')?.textContent || '';
+      select.querySelectorAll('[data-form-option]').forEach(opt => {
+        const selected = opt === formSelectOption;
+        opt.classList.toggle('selected', selected);
+      });
+      this.closeSettingsSelects();
       return;
     }
     const insideFloatingMenu = event.target.closest?.('#floating-menu-portal, #floating-note-menu-wrap, #split-menu-wrap, #kb-dropdown, #format-dropdown, #search-menu-wrap, .review-issue-dropdown, #app-context-menu, #doc-search-panel, #search-navigator, .doc-context-menu, .doc-menu-btn');
@@ -6454,12 +6474,19 @@ class NocturneWriter {
                 <input type="text" name="model" class="form-control" required placeholder="meta-llama-3-8b-instruct">
               </label>
               <label><span>Формат API</span>
-                <select name="apiFormat" class="form-control modal-select" required>
-                  <option value="openai">OpenAI-compatible</option>
-                  <option value="ollama">Ollama</option>
-                  <option value="gemini">Gemini</option>
-                  <option value="anthropic">Anthropic</option>
-                </select>
+                <div class="nocturne-select" style="width: 100%;">
+                  <input type="hidden" name="apiFormat" value="openai">
+                  <button type="button" class="nocturne-select-trigger" data-form-select-toggle style="width: 100%;">
+                    <span>OpenAI-compatible</span>
+                    <i class="bx bx-chevron-down"></i>
+                  </button>
+                  <div class="nocturne-select-menu popover-surface" style="width: 100%; min-width: 100%;">
+                    <button type="button" class="nocturne-select-option selected" data-form-option data-value="openai"><span>OpenAI-compatible</span><i class="bx bx-check"></i></button>
+                    <button type="button" class="nocturne-select-option" data-form-option data-value="ollama"><span>Ollama</span><i class="bx bx-check"></i></button>
+                    <button type="button" class="nocturne-select-option" data-form-option data-value="gemini"><span>Gemini</span><i class="bx bx-check"></i></button>
+                    <button type="button" class="nocturne-select-option" data-form-option data-value="anthropic"><span>Anthropic</span><i class="bx bx-check"></i></button>
+                  </div>
+                </div>
               </label>
             </div>
             <div class="form-actions">
@@ -6513,12 +6540,24 @@ class NocturneWriter {
                 <input type="text" name="model" class="form-control" required value="${escapeHtml(provider.model)}">
               </label>
               <label><span>Формат API</span>
-                <select name="apiFormat" class="form-control modal-select" required>
-                  <option value="openai" ${provider.apiFormat === 'openai' ? 'selected' : ''}>OpenAI-compatible</option>
-                  <option value="ollama" ${provider.apiFormat === 'ollama' ? 'selected' : ''}>Ollama</option>
-                  <option value="gemini" ${provider.apiFormat === 'gemini' ? 'selected' : ''}>Gemini</option>
-                  <option value="anthropic" ${provider.apiFormat === 'anthropic' ? 'selected' : ''}>Anthropic</option>
-                </select>
+                <div class="nocturne-select" style="width: 100%;">
+                  <input type="hidden" name="apiFormat" value="${escapeHtml(provider.apiFormat)}">
+                  <button type="button" class="nocturne-select-trigger" data-form-select-toggle style="width: 100%;">
+                    <span>${
+                      provider.apiFormat === 'ollama' ? 'Ollama' :
+                      provider.apiFormat === 'gemini' ? 'Gemini' :
+                      provider.apiFormat === 'anthropic' ? 'Anthropic' :
+                      'OpenAI-compatible'
+                    }</span>
+                    <i class="bx bx-chevron-down"></i>
+                  </button>
+                  <div class="nocturne-select-menu popover-surface" style="width: 100%; min-width: 100%;">
+                    <button type="button" class="nocturne-select-option ${provider.apiFormat === 'openai' ? 'selected' : ''}" data-form-option data-value="openai"><span>OpenAI-compatible</span><i class="bx bx-check"></i></button>
+                    <button type="button" class="nocturne-select-option ${provider.apiFormat === 'ollama' ? 'selected' : ''}" data-form-option data-value="ollama"><span>Ollama</span><i class="bx bx-check"></i></button>
+                    <button type="button" class="nocturne-select-option ${provider.apiFormat === 'gemini' ? 'selected' : ''}" data-form-option data-value="gemini"><span>Gemini</span><i class="bx bx-check"></i></button>
+                    <button type="button" class="nocturne-select-option ${provider.apiFormat === 'anthropic' ? 'selected' : ''}" data-form-option data-value="anthropic"><span>Anthropic</span><i class="bx bx-check"></i></button>
+                  </div>
+                </div>
               </label>
             </div>
             <div class="form-actions">
@@ -12926,6 +12965,94 @@ class NocturneWriter {
     let time = [...this.state.lore.timeline].sort((a, b) => (a.order - b.order) || parseTimelineRank(a.date) - parseTimelineRank(b.date));
     let notes = [...(this.state.lore.notes || [])].sort((a, b) => a.order - b.order);
     const activeSubtimeline = this.activeSubtimeline();
+
+    const sidebarExists = document.querySelector('#kb-modal .kb-sidebar');
+    if (sidebarExists) {
+      const project = this.state.kbProjects?.find(p => p.id === this.state.activeLoreId) || this.state.kbProjects?.[0];
+      const triggerSpan = document.querySelector('#kb-modal .nocturne-select[data-setting-select="activeLoreId"] .nocturne-select-trigger span');
+      if (triggerSpan && project) {
+        triggerSpan.textContent = project.title;
+      }
+      document.querySelectorAll('#kb-modal .nocturne-select[data-setting-select="activeLoreId"] .nocturne-select-option').forEach(opt => {
+        const isSelected = opt.dataset.value === this.state.activeLoreId;
+        opt.classList.toggle('selected', isSelected);
+      });
+      document.querySelectorAll('#kb-modal .kb-sidebar .settings-tab').forEach(tab => {
+        const isCurrent = tab.dataset.kbTab === active;
+        tab.classList.toggle('active', isCurrent);
+      });
+      const main = document.querySelector('#kb-modal .kb-main');
+      if (main) {
+        main.innerHTML = detail ? this.renderLoreDetail(detail.type, detail.item) : `
+          <div class="kb-search-wrap">
+            <i class="bx bx-search"></i>
+            <input class="form-control kb-search-input" id="kb-search" placeholder="Поиск в базе знаний..." value="${escapeHtml(this.state.kbSearch || '')}">
+          </div>
+          <section class="kb-section ${active === 'characters' ? 'active' : ''}" id="kb-sec-characters">
+            <div class="kb-header">
+              <h1>Управление Персонажами</h1>
+              <div class="kb-header-actions">
+                <button class="pill-btn" data-action="dump-kb-characters" title="Экспорт персонажей"><i class="bx bx-download"></i> Дамп персонажей</button>
+                <button class="pill-btn ai-btn" data-action="new-lore" data-lore-type="characters"><i class="bx bx-plus"></i> Создать профиль</button>
+                <i class="bx bx-x kb-close-btn" data-action="close-kb"></i>
+              </div>
+            </div>
+            <div class="character-grid" data-dnd-zone="characters">${chars.length ? chars.map((item) => this.characterCard(item, true)).join('') : this.emptyStateMarkup('bx-user-pin', 'Персонажей пока нет.', 'Создайте первый профиль, чтобы Nocturne начал узнавать имена в тексте.', 'new-lore', 'Создать профиль', 'data-lore-type="characters"')}</div>
+          </section>
+          <section class="kb-section ${active === 'locations' ? 'active' : ''}" id="kb-sec-locations">
+            <div class="kb-header">
+              <h1>Мир и Локации</h1>
+              <div class="kb-header-actions">
+                <button class="pill-btn" data-action="dump-kb-locations" title="Экспорт локаций"><i class="bx bx-download"></i> Дамп локаций</button>
+                <button class="pill-btn ai-btn" data-action="new-lore" data-lore-type="locations"><i class="bx bx-plus"></i> Добавить место</button>
+                <i class="bx bx-x kb-close-btn" data-action="close-kb"></i>
+              </div>
+            </div>
+            <div class="locations-grid" data-dnd-zone="locations">${locs.length ? locs.map((item) => this.locationCard(item, true)).join('') : this.emptyStateMarkup('bx-map-alt', 'Локаций пока нет.', 'Добавьте первое место мира или сцены.', 'new-lore', 'Добавить место', 'data-lore-type="locations"')}</div>
+          </section>
+          <section class="kb-section ${active === 'timeline' ? 'active' : ''}" id="kb-sec-timeline">
+            <div class="kb-header">
+              <h1>Хронология Событий</h1>
+              <div class="kb-header-actions">
+                <button class="pill-btn" data-action="dump-kb-timeline" title="Экспорт таймлайнов"><i class="bx bx-download"></i> Дамп таймлайнов</button>
+                <button class="pill-btn ai-btn" data-action="new-lore" data-lore-type="timeline"><i class="bx bx-plus"></i> Добавить событие</button>
+                <i class="bx bx-x kb-close-btn" data-action="close-kb"></i>
+              </div>
+            </div>
+            <div class="timeline-container" data-dnd-zone="timeline">${time.length ? time.map((item, i, arr) => this.timelineCard(item, { isLast: i === arr.length - 1, draggable: true })).join('') : this.emptyStateMarkup('bx-git-commit', 'Хронология пока пуста.', 'Добавьте первое событие, чтобы выстроить историю.', 'new-lore', 'Добавить событие', 'data-lore-type="timeline"')}</div>
+          </section>
+          <section class="kb-section ${active === 'notes' ? 'active' : ''}" id="kb-sec-notes">
+            <div class="kb-header">
+              <h1>Записи и Заметки</h1>
+              <div class="kb-header-actions">
+                <button class="pill-btn cleaner-btn" data-action="clean-all-notes" title="«Чистильщик™»"><i class="reaper-icon"></i>«Чистильщик™»</button>
+                <button class="pill-btn" data-action="dump-kb-notes" title="Экспорт записей"><i class="bx bx-download"></i> Дамп записей</button>
+                <button class="pill-btn ai-btn" data-action="new-lore" data-lore-type="notes"><i class="bx bx-plus"></i> Новая запись</button>
+                <i class="bx bx-x kb-close-btn" data-action="close-kb"></i>
+              </div>
+            </div>
+            <div class="character-grid" data-dnd-zone="notes">${notes.length ? notes.map((item) => this.noteCard(item, true)).join('') : this.emptyStateMarkup('bx-note', 'Записей пока нет.', 'Добавьте первую свободную запись или заметку к миру.', 'new-lore', 'Создать запись', 'data-lore-type="notes"')}</div>
+          </section>
+          ${activeSubtimeline ? this.subtimelinePanel(activeSubtimeline) : ''}
+        `;
+        main.style.animation = 'none';
+        main.offsetHeight; // trigger reflow
+        main.style.animation = 'pane-content-refresh 250ms ease-out';
+      }
+      if (!detail) {
+        this.setupKbDragDrop();
+        this.applyKbSearch();
+      }
+      this.setupKbImportDnd();
+      const searchInput = document.getElementById('kb-search');
+      if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+          this.state.kbSearch = e.target.value;
+          this.applyKbSearch();
+        });
+      }
+      return;
+    }
 
     document.getElementById('kb-modal').innerHTML = `
       <aside class="kb-sidebar">

@@ -9371,9 +9371,17 @@ body.sortable-active .doc-item {
   border-color: rgba(239, 68, 68, 0.35);
   color: #ef4444;
 }
+.nocturne-select-trigger span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
 .kb-project-select-row .nocturne-select {
   flex: 1;
   width: auto;
+  min-width: 0;
 }
 .kb-project-select-row .nocturne-select-trigger {
   min-height: 28px;
@@ -9382,6 +9390,8 @@ body.sortable-active .doc-item {
   background: rgba(0, 0, 0, 0.3);
   font-weight: 500;
   border-color: rgba(255, 255, 255, 0.1);
+  min-width: 0;
+  width: 100%;
 }
 .kb-project-select-row .nocturne-select-trigger span {
   font-size: 13px;
