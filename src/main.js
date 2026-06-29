@@ -2033,10 +2033,7 @@ class NocturneWriter {
           <div class="kb-project-select-row">
             ${this.renderSettingsSelect('activeLoreId', (this.state.kbProjects || []).map(p => [p.id, p.title]))}
             <button class="mini-icon-btn" data-action="new-kb-project" title="Новое произведение"><i class="bx bx-plus"></i></button>
-            <button class="mini-icon-btn" data-action="rename-kb-project" title="Переименовать"><i class="bx bx-pencil"></i></button>
-            ${this.state.activeLoreId !== 'world' ? `
-              <button class="mini-icon-btn danger-btn" data-action="delete-kb-project" title="Удалить произведение"><i class="bx bx-trash"></i></button>
-            ` : ''}
+            <button class="mini-icon-btn" data-action="rename-kb-project" title="Редактировать"><i class="bx bx-pencil"></i></button>
           </div>
         </div>
         <div class="mobile-segmented">
@@ -6738,13 +6735,16 @@ class NocturneWriter {
         const overlay = document.getElementById('form-overlay');
         overlay.innerHTML = `
           <form class="form-modal" id="rename-kb-project-form" novalidate>
-            <h2>Переименовать произведение</h2>
+            <h2>Редактировать произведение</h2>
             <div class="form-grid">
-              <label><span>Новое название</span>
+              <label><span>Название произведения</span>
                 <input type="text" name="title" class="form-control" required value="${escapeHtml(project.title)}">
               </label>
             </div>
             <div class="form-actions">
+              ${activeId !== 'world' ? `
+                <button type="button" class="pill-btn danger-btn" data-action="delete-kb-project-inside" style="margin-right: auto;"><i class="bx bx-trash"></i> Удалить</button>
+              ` : ''}
               <button type="button" class="pill-btn" data-close-form>Отмена</button>
               <button type="submit" class="pill-btn ai-btn"><i class="bx bx-save"></i> Сохранить</button>
             </div>
@@ -6752,6 +6752,12 @@ class NocturneWriter {
         `;
         overlay.classList.add('active');
         overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
+        if (activeId !== 'world') {
+          overlay.querySelector('[data-action="delete-kb-project-inside"]').onclick = () => {
+            overlay.classList.remove('active');
+            this.runAction('delete-kb-project');
+          };
+        }
         overlay.querySelector('form').onsubmit = async (e) => {
           e.preventDefault();
           if (!this.validateForm(e.target)) return;
@@ -12929,10 +12935,7 @@ class NocturneWriter {
           <div class="kb-project-select-row">
             ${this.renderSettingsSelect('activeLoreId', (this.state.kbProjects || []).map(p => [p.id, p.title]))}
             <button class="mini-icon-btn" data-action="new-kb-project" title="Новое произведение"><i class="bx bx-plus"></i></button>
-            <button class="mini-icon-btn" data-action="rename-kb-project" title="Переименовать"><i class="bx bx-pencil"></i></button>
-            ${this.state.activeLoreId !== 'world' ? `
-              <button class="mini-icon-btn danger-btn" data-action="delete-kb-project" title="Удалить произведение"><i class="bx bx-trash"></i></button>
-            ` : ''}
+            <button class="mini-icon-btn" data-action="rename-kb-project" title="Редактировать"><i class="bx bx-pencil"></i></button>
           </div>
         </div>
         ${[
