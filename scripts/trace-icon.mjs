@@ -15,7 +15,6 @@ try {
   const page = await browser.newPage();
   
   await page.goto('about:blank');
-  
   await page.addScriptTag({ url: 'https://cdn.jsdelivr.net/npm/imagetracerjs@1.2.6/imagetracer_v1.2.6.js' });
   
   const svgString = await page.evaluate(async (imgUrl) => {
@@ -23,19 +22,20 @@ try {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        canvas.width = 512;
-        canvas.height = 512;
+        // Downscale to 64x64 to merge fine details into a solid, bold shape
+        canvas.width = 64;
+        canvas.height = 64;
         const ctx = canvas.getContext('2d');
         
-        // 1. Draw transparent image on transparent canvas first
-        ctx.drawImage(img, 0, 0, 512, 512);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, 64, 64);
         
-        // 2. Classify transparent pixels to make a clean black/white image
-        const imgData = ctx.getImageData(0, 0, 512, 512);
+        const imgData = ctx.getImageData(0, 0, 64, 64);
         const data = imgData.data;
         for (let i = 0; i < data.length; i += 4) {
           const alpha = data[i + 3];
-          if (alpha > 40) {
+          if (alpha > 50) {
             data[i] = 0;       // R
             data[i + 1] = 0;   // G
             data[i + 2] = 0;   // B
@@ -51,7 +51,6 @@ try {
         
         const processedUrl = canvas.toDataURL('image/png');
         
-        // 3. Trace using ImageTracer
         ImageTracer.imageToSVG(
           processedUrl,
           (svgstr) => {
@@ -76,17 +75,13 @@ try {
   
   await browser.close();
   
-  // Clean up the SVG output to make it a perfect, clean mask
   let cleanedSvg = svgString;
-  
-  // Replace white paths with nothing
   cleanedSvg = cleanedSvg.replace(/<path fill="rgb\(255,255,255\)"[^>]*\/>/g, '');
-  // Set the color of the black path to currentColor for CSS styling!
   cleanedSvg = cleanedSvg.replace(/fill="rgb\(0,0,0\)"/g, 'fill="currentColor"');
   cleanedSvg = cleanedSvg.replace(/stroke="rgb\(0,0,0\)"/g, 'stroke="currentColor"');
   
   await writeFile(svgPath, cleanedSvg);
-  console.log('Successfully generated vector SVG:', svgPath);
+  console.log('Successfully generated clean vector SVG:', svgPath);
 } catch (e) {
   console.error('Tracing error:', e);
 }

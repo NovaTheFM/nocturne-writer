@@ -9074,8 +9074,8 @@ body.sortable-active .doc-item {
   width: 18px; /* Standard icon size to match boxicons */
   height: 18px;
   background-color: currentColor;
-  -webkit-mask-image: url('/reaper_photo/reaper_icon.svg?v=6');
-  mask-image: url('/reaper_photo/reaper_icon.svg?v=6');
+  -webkit-mask-image: url('/reaper_photo/reaper_icon.svg?v=7');
+  mask-image: url('/reaper_photo/reaper_icon.svg?v=7');
   -webkit-mask-size: contain;
   mask-size: contain;
   -webkit-mask-repeat: no-repeat;
