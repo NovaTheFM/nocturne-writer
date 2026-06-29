@@ -5012,6 +5012,14 @@ body.mobile-shell-active .sortable-fallback-drag.timeline-item {
   align-items: center;
   justify-content: center;
   backdrop-filter: blur(10px);
+  padding: 0; /* Reset default button padding that causes alignment shift */
+}
+.lore-card-actions button i {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
 }
 .lore-card-actions button:hover {
   color: white;
@@ -9063,20 +9071,25 @@ body.sortable-active .doc-item {
 /* Cleaner button icon */
 .reaper-icon {
   display: inline-block;
-  width: 22px; /* Larger size for note card actions */
-  height: 22px;
+  width: 18px; /* Standard icon size to match boxicons */
+  height: 18px;
   background-color: currentColor;
-  -webkit-mask-image: url('/reaper_photo/reaper_icon_small.png?v=3');
-  mask-image: url('/reaper_photo/reaper_icon_small.png?v=3');
+  -webkit-mask-image: url('/reaper_photo/reaper_icon.svg?v=6');
+  mask-image: url('/reaper_photo/reaper_icon.svg?v=6');
   -webkit-mask-size: contain;
   mask-size: contain;
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
   vertical-align: middle;
 }
-.pill-btn.cleaner-btn .reaper-icon {
-  width: 18px; /* Larger size for pill button */
+.lore-card-actions button .reaper-icon {
+  width: 18px;
   height: 18px;
+  display: block; /* Align with general boxicons in the button wrapper */
+}
+.pill-btn.cleaner-btn .reaper-icon {
+  width: 16px;
+  height: 16px;
   margin-right: 0 !important; /* Use default pill-btn gap */
 }
 
