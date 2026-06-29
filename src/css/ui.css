@@ -9366,6 +9366,32 @@ body.sortable-active .doc-item {
 .kb-project-btn i {
   font-size: 16px;
 }
+.mini-icon-btn.danger-btn:hover {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #ef4444;
+}
+.kb-project-select-row .nocturne-select {
+  flex: 1;
+  width: auto;
+}
+.kb-project-select-row .nocturne-select-trigger {
+  min-height: 28px;
+  padding: 0 8px 0 10px;
+  border-radius: var(--radius-sm, 4px);
+  background: rgba(0, 0, 0, 0.3);
+  font-weight: 500;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+.kb-project-select-row .nocturne-select-trigger span {
+  font-size: 13px;
+}
+.kb-project-select-row .nocturne-select-trigger i {
+  font-size: 14px;
+}
+.kb-project-select-row .nocturne-select-menu {
+  width: 100%;
+}
 
 /* Mobile specific overrides */
 .mobile-project-selector {

@@ -455,12 +455,37 @@ class NocturneWriter {
     } else {
       merged.customAiPersonas = [];
     }
+    const allowedProviders = ['local', 'ollama', 'groq', 'gemini', 'openai', 'anthropic'];
+    if (Array.isArray(merged.customAiProviders)) {
+      merged.customAiProviders = merged.customAiProviders
+        .map(p => this.sanitizeCustomProvider(p))
+        .filter(Boolean);
+      merged.customAiProviders.forEach((p) => {
+        if (p.id) allowedProviders.push(p.id);
+      });
+    } else {
+      merged.customAiProviders = [];
+    }
+
+    const allowedLores = ['world'];
+    if (Array.isArray(merged.kbProjects)) {
+      merged.kbProjects = merged.kbProjects.filter(p => p && typeof p.id === 'string' && typeof p.title === 'string');
+      merged.kbProjects.forEach((p) => {
+        if (p.id) allowedLores.push(p.id);
+      });
+    } else {
+      merged.kbProjects = [{ id: 'world', title: 'Основное' }];
+    }
+    if (!allowedLores.includes(merged.activeLoreId)) {
+      merged.activeLoreId = 'world';
+    }
+
     const enums = {
       theme: ['nocturne', 'midnight', 'paper', 'matrix', 'lavender', 'crimson'],
       caretStyle: ['line', 'block', 'underline'],
       fontFamily: allowedFonts,
       dialogueLens: ['off', 'dialogues', 'descriptions'],
-      aiProvider: ['local', 'ollama', 'groq', 'gemini', 'openai', 'anthropic'],
+      aiProvider: allowedProviders,
       aiPersona: allowedPersonas,
       loreReaction: ['soft', 'warn', 'hard'],
       writingAnimation: ['off', 'ripple', 'mist', 'sparkles', 'glow', 'spark'],
@@ -486,6 +511,18 @@ class NocturneWriter {
     clamp('loreStrictness', 0, 100);
     clamp('autosaveMinutes', 1, 120);
     return merged;
+  }
+
+  sanitizeCustomProvider(p) {
+    if (!p || typeof p !== 'object') return null;
+    return {
+      id: String(p.id || ''),
+      name: String(p.name || ''),
+      endpoint: String(p.endpoint || ''),
+      key: String(p.key || ''),
+      model: String(p.model || ''),
+      apiFormat: ['openai', 'ollama', 'gemini', 'anthropic'].includes(p.apiFormat) ? p.apiFormat : 'openai'
+    };
   }
 
   validateFolders(folders = []) {
@@ -939,12 +976,41 @@ class NocturneWriter {
     return '';
   }
 
+  resolveAiProviderSettings() {
+    const s = this.state.settings;
+    const providerId = s.aiProvider;
+    if (providerId?.startsWith?.('prov_')) {
+      const custom = (s.customAiProviders || []).find(p => p.id === providerId);
+      if (custom) {
+        return {
+          id: custom.id,
+          name: custom.name,
+          endpoint: custom.endpoint,
+          key: custom.key,
+          model: custom.model,
+          apiFormat: custom.apiFormat,
+          temperature: s.aiTemperature
+        };
+      }
+    }
+    return {
+      id: providerId,
+      name: providerId,
+      endpoint: s.aiEndpoint,
+      key: s.aiKey,
+      model: s.aiModel,
+      apiFormat: providerId === 'ollama' ? 'ollama' : providerId === 'gemini' ? 'gemini' : providerId === 'anthropic' ? 'anthropic' : 'openai',
+      temperature: s.aiTemperature
+    };
+  }
+
   assistantProviderProblem() {
     const s = this.state.settings;
     if (s.aiProvider === 'local') return 'Ассистент не настроен. Выберите провайдера или подключите Ollama.';
-    if (!String(s.aiEndpoint || '').trim()) return 'У провайдера ИИ не указан endpoint.';
-    if (!String(s.aiModel || '').trim()) return 'У провайдера ИИ не указана модель.';
-    if (!['ollama'].includes(s.aiProvider) && !String(s.aiKey || '').trim()) return 'У провайдера ИИ не указан API key.';
+    const p = this.resolveAiProviderSettings();
+    if (!String(p.endpoint || '').trim()) return 'У провайдера ИИ не указан endpoint.';
+    if (!String(p.model || '').trim()) return 'У провайдера ИИ не указана модель.';
+    if (!['ollama'].includes(p.id) && !String(p.key || '').trim()) return 'У провайдера ИИ не указан API key.';
     return '';
   }
 
@@ -1960,22 +2026,16 @@ class NocturneWriter {
         ? (locs.length ? locs.map((item, index) => this.mobileLoreCard('locations', item, index, locs.length)).join('') : this.emptyStateMarkup('bx-map-alt', 'Локаций пока нет.', 'Добавьте место.', 'new-lore', 'Добавить', 'data-lore-type="locations"'))
         : (time.length ? time.map((item, i, arr) => this.timelineCard(item, { isLast: i === arr.length - 1, draggable: true })).join('') : this.emptyStateMarkup('bx-git-commit', 'Таймлайн пуст.', 'Добавьте событие.', 'new-lore', 'Добавить', 'data-lore-type="timeline"'));
     const zone = active === 'timeline' ? 'timeline' : active;
-    const projectsOptions = (this.state.kbProjects || [])
-      .map(p => `<option value="${p.id}" ${this.state.activeLoreId === p.id ? 'selected' : ''}>${escapeHtml(p.title)}</option>`)
-      .join('');
-
     return `
       ${options.asTab ? this.mobileTabHeader('База знаний', 'Персонажи, локации и таймлайн') : this.mobilePanelHeader('База знаний', 'Персонажи, локации и таймлайн')}
       <div class="mobile-panel-body">
         <div class="kb-project-selector-container mobile-project-selector">
           <div class="kb-project-select-row">
-            <select class="kb-project-select" data-action="switch-kb-project">
-              ${projectsOptions}
-            </select>
-            <button class="kb-project-btn" data-action="new-kb-project" title="Новое произведение"><i class="bx bx-plus"></i></button>
-            <button class="kb-project-btn" data-action="rename-kb-project" title="Переименовать"><i class="bx bx-pencil"></i></button>
+            ${this.renderSettingsSelect('activeLoreId', (this.state.kbProjects || []).map(p => [p.id, p.title]))}
+            <button class="mini-icon-btn" data-action="new-kb-project" title="Новое произведение"><i class="bx bx-plus"></i></button>
+            <button class="mini-icon-btn" data-action="rename-kb-project" title="Переименовать"><i class="bx bx-pencil"></i></button>
             ${this.state.activeLoreId !== 'world' ? `
-              <button class="kb-project-btn danger-btn" data-action="delete-kb-project" title="Удалить произведение"><i class="bx bx-trash"></i></button>
+              <button class="mini-icon-btn danger-btn" data-action="delete-kb-project" title="Удалить произведение"><i class="bx bx-trash"></i></button>
             ` : ''}
           </div>
         </div>
@@ -6378,6 +6438,145 @@ class NocturneWriter {
       'close-notes': () => document.getElementById('notes-panel').classList.remove('open'),
       'apply-ai-preset': () => this.applyAiPreset(event.target.closest('[data-ai-preset]')?.dataset.aiPreset),
       'test-ai-connection': () => this.testAiConnection(),
+      'new-custom-provider': () => {
+        const overlay = document.getElementById('form-overlay');
+        overlay.innerHTML = `
+          <form class="form-modal" id="new-custom-provider-form" novalidate>
+            <h2>Новый провайдер ИИ</h2>
+            <div class="form-grid">
+              <label><span>Название провайдера</span>
+                <input type="text" name="name" class="form-control" required placeholder="Например: Локальная модель LM Studio">
+              </label>
+              <label><span>Endpoint (URL)</span>
+                <input type="text" name="endpoint" class="form-control" required placeholder="http://localhost:1234/v1/chat/completions">
+              </label>
+              <label><span>API-ключ (если требуется)</span>
+                <input type="password" name="key" class="form-control" placeholder="Оставьте пустым, если не требуется">
+              </label>
+              <label><span>Идентификатор модели</span>
+                <input type="text" name="model" class="form-control" required placeholder="meta-llama-3-8b-instruct">
+              </label>
+              <label><span>Формат API</span>
+                <select name="apiFormat" class="form-control modal-select" required>
+                  <option value="openai">OpenAI-compatible</option>
+                  <option value="ollama">Ollama</option>
+                  <option value="gemini">Gemini</option>
+                  <option value="anthropic">Anthropic</option>
+                </select>
+              </label>
+            </div>
+            <div class="form-actions">
+              <button type="button" class="pill-btn" data-close-form>Отмена</button>
+              <button type="submit" class="pill-btn ai-btn"><i class="bx bx-plus"></i> Добавить</button>
+            </div>
+          </form>
+        `;
+        overlay.classList.add('active');
+        overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
+        overlay.querySelector('form').onsubmit = async (e) => {
+          e.preventDefault();
+          if (!this.validateForm(e.target)) return;
+          const data = Object.fromEntries(new FormData(e.target));
+          overlay.classList.remove('active');
+          const id = 'prov_' + Math.random().toString(36).substr(2, 9);
+          this.state.settings.customAiProviders = this.state.settings.customAiProviders || [];
+          this.state.settings.customAiProviders.push({
+            id,
+            name: data.name.trim(),
+            endpoint: data.endpoint.trim(),
+            key: data.key.trim(),
+            model: data.model.trim(),
+            apiFormat: data.apiFormat
+          });
+          await this.persistSettings();
+          this.renderSettings();
+          this.toast(`Провайдер "${data.name}" добавлен.`);
+        };
+      },
+      'edit-custom-provider': () => {
+        const btn = event.target.closest('[data-provider-id]');
+        const pid = btn?.dataset.providerId;
+        const provider = this.state.settings.customAiProviders?.find(p => p.id === pid);
+        if (!provider) return;
+        const overlay = document.getElementById('form-overlay');
+        overlay.innerHTML = `
+          <form class="form-modal" id="edit-custom-provider-form" novalidate>
+            <h2>Редактировать провайдера ИИ</h2>
+            <div class="form-grid">
+              <label><span>Название провайдера</span>
+                <input type="text" name="name" class="form-control" required value="${escapeHtml(provider.name)}">
+              </label>
+              <label><span>Endpoint (URL)</span>
+                <input type="text" name="endpoint" class="form-control" required value="${escapeHtml(provider.endpoint)}">
+              </label>
+              <label><span>API-ключ (если требуется)</span>
+                <input type="password" name="key" class="form-control" value="${escapeHtml(provider.key)}" placeholder="Оставьте пустым, если не требуется">
+              </label>
+              <label><span>Идентификатор модели</span>
+                <input type="text" name="model" class="form-control" required value="${escapeHtml(provider.model)}">
+              </label>
+              <label><span>Формат API</span>
+                <select name="apiFormat" class="form-control modal-select" required>
+                  <option value="openai" ${provider.apiFormat === 'openai' ? 'selected' : ''}>OpenAI-compatible</option>
+                  <option value="ollama" ${provider.apiFormat === 'ollama' ? 'selected' : ''}>Ollama</option>
+                  <option value="gemini" ${provider.apiFormat === 'gemini' ? 'selected' : ''}>Gemini</option>
+                  <option value="anthropic" ${provider.apiFormat === 'anthropic' ? 'selected' : ''}>Anthropic</option>
+                </select>
+              </label>
+            </div>
+            <div class="form-actions">
+              <button type="button" class="pill-btn" data-close-form>Отмена</button>
+              <button type="submit" class="pill-btn ai-btn"><i class="bx bx-save"></i> Сохранить</button>
+            </div>
+          </form>
+        `;
+        overlay.classList.add('active');
+        overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
+        overlay.querySelector('form').onsubmit = async (e) => {
+          e.preventDefault();
+          if (!this.validateForm(e.target)) return;
+          const data = Object.fromEntries(new FormData(e.target));
+          overlay.classList.remove('active');
+          provider.name = data.name.trim();
+          provider.endpoint = data.endpoint.trim();
+          provider.key = data.key.trim();
+          provider.model = data.model.trim();
+          provider.apiFormat = data.apiFormat;
+          await this.persistSettings();
+          this.renderSettings();
+          this.toast('Изменения сохранены.');
+        };
+      },
+      'delete-custom-provider': () => {
+        const btn = event.target.closest('[data-provider-id]');
+        const pid = btn?.dataset.providerId;
+        const provider = this.state.settings.customAiProviders?.find(p => p.id === pid);
+        if (!provider) return;
+        const overlay = document.getElementById('form-overlay');
+        overlay.innerHTML = `
+          <div class="form-modal confirm-modal">
+            <div class="confirm-icon"><i class="bx bx-trash"></i></div>
+            <h2>Удалить провайдера?</h2>
+            <p>Вы уверены, что хотите удалить провайдера «${escapeHtml(provider.name)}»?</p>
+            <div class="form-actions">
+              <button class="pill-btn" data-close-form>Отмена</button>
+              <button class="pill-btn danger-btn" data-confirm-delete>Удалить</button>
+            </div>
+          </div>
+        `;
+        overlay.classList.add('active');
+        overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
+        overlay.querySelector('[data-confirm-delete]').onclick = async () => {
+          overlay.classList.remove('active');
+          this.state.settings.customAiProviders = (this.state.settings.customAiProviders || []).filter(p => p.id !== pid);
+          if (this.state.settings.aiProvider === pid) {
+            this.state.settings.aiProvider = 'local'; // fallback to default
+          }
+          await this.persistSettings();
+          this.renderSettings();
+          this.toast(`Провайдер "${provider.name}" удален.`);
+        };
+      },
       'new-custom-persona': () => {
         const overlay = document.getElementById('form-overlay');
         overlay.innerHTML = `
@@ -6486,30 +6685,19 @@ class NocturneWriter {
         this.state.activeLoreDetail = null;
         document.getElementById('kb-modal').classList.remove('active');
       },
-      'switch-kb-project': async () => {
-        const val = event.target.value;
-        if (val) {
-          this.state.activeLoreId = val;
-          await this.loadLore();
-          if (this.isMobileLayout()) {
-            this.renderMobileKbContentOnly();
-          } else {
-            this.renderKb();
-          }
-        }
-      },
       'new-kb-project': () => {
         const overlay = document.getElementById('form-overlay');
         overlay.innerHTML = `
-          <form class="form-modal" id="new-kb-project-form">
+          <form class="form-modal" id="new-kb-project-form" novalidate>
             <h2>Новое произведение</h2>
-            <div class="form-group">
-              <label for="new-project-title">Название произведения</label>
-              <input type="text" id="new-project-title" class="form-control" required placeholder="Например: Сага о драконах">
+            <div class="form-grid">
+              <label><span>Название произведения</span>
+                <input type="text" name="title" class="form-control" required placeholder="Например: Сага о драконах">
+              </label>
             </div>
             <div class="form-actions">
               <button type="button" class="pill-btn" data-close-form>Отмена</button>
-              <button type="submit" class="pill-btn ai-btn">Создать</button>
+              <button type="submit" class="pill-btn ai-btn"><i class="bx bx-plus"></i> Создать</button>
             </div>
           </form>
         `;
@@ -6517,12 +6705,14 @@ class NocturneWriter {
         overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
         overlay.querySelector('form').onsubmit = async (e) => {
           e.preventDefault();
-          const title = document.getElementById('new-project-title').value.trim();
-          if (!title) return;
+          if (!this.validateForm(e.target)) return;
+          const title = e.target.elements.title.value.trim();
           overlay.classList.remove('active');
           const pid = 'lore_' + Math.random().toString(36).substr(2, 9);
           this.state.kbProjects = this.state.kbProjects || [];
           this.state.kbProjects.push({ id: pid, title });
+          this.state.settings.kbProjects = this.state.kbProjects;
+          this.state.settings.activeLoreId = pid;
           this.state.activeLoreId = pid;
           this.state.lore = {
             title,
@@ -6532,7 +6722,6 @@ class NocturneWriter {
             notes: []
           };
           await this.saveLore();
-          this.state.settings.customAiPersonas = this.state.settings.customAiPersonas || [];
           await this.persistSettings();
           if (this.isMobileLayout()) {
             this.renderMobileKbContentOnly();
@@ -6548,15 +6737,16 @@ class NocturneWriter {
         if (!project) return;
         const overlay = document.getElementById('form-overlay');
         overlay.innerHTML = `
-          <form class="form-modal" id="rename-kb-project-form">
+          <form class="form-modal" id="rename-kb-project-form" novalidate>
             <h2>Переименовать произведение</h2>
-            <div class="form-group">
-              <label for="rename-project-title">Новое название</label>
-              <input type="text" id="rename-project-title" class="form-control" required value="${escapeHtml(project.title)}">
+            <div class="form-grid">
+              <label><span>Новое название</span>
+                <input type="text" name="title" class="form-control" required value="${escapeHtml(project.title)}">
+              </label>
             </div>
             <div class="form-actions">
               <button type="button" class="pill-btn" data-close-form>Отмена</button>
-              <button type="submit" class="pill-btn ai-btn">Сохранить</button>
+              <button type="submit" class="pill-btn ai-btn"><i class="bx bx-save"></i> Сохранить</button>
             </div>
           </form>
         `;
@@ -6564,13 +6754,13 @@ class NocturneWriter {
         overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
         overlay.querySelector('form').onsubmit = async (e) => {
           e.preventDefault();
-          const title = document.getElementById('rename-project-title').value.trim();
-          if (!title) return;
+          if (!this.validateForm(e.target)) return;
+          const title = e.target.elements.title.value.trim();
           overlay.classList.remove('active');
           project.title = title;
           this.state.lore.title = title;
           await this.saveLore();
-          this.state.settings.customAiPersonas = this.state.settings.customAiPersonas || [];
+          this.state.settings.kbProjects = this.state.kbProjects;
           await this.persistSettings();
           if (this.isMobileLayout()) {
             this.renderMobileKbContentOnly();
@@ -6606,8 +6796,11 @@ class NocturneWriter {
           overlay.classList.remove('active');
           await this.db.delete('lore', activeId);
           this.state.kbProjects = (this.state.kbProjects || []).filter(p => p.id !== activeId);
+          this.state.settings.kbProjects = this.state.kbProjects;
+          this.state.settings.activeLoreId = 'world';
           this.state.activeLoreId = 'world';
           await this.loadLore();
+          await this.persistSettings();
           if (this.isMobileLayout()) {
             this.renderMobileKbContentOnly();
           } else {
@@ -12728,23 +12921,17 @@ class NocturneWriter {
     let notes = [...(this.state.lore.notes || [])].sort((a, b) => a.order - b.order);
     const activeSubtimeline = this.activeSubtimeline();
 
-    const projectsOptions = (this.state.kbProjects || [])
-      .map(p => `<option value="${p.id}" ${this.state.activeLoreId === p.id ? 'selected' : ''}>${escapeHtml(p.title)}</option>`)
-      .join('');
-
     document.getElementById('kb-modal').innerHTML = `
       <aside class="kb-sidebar">
         <h2 class="kb-title">База Знаний</h2>
         <div class="kb-project-selector-container">
           <div class="kb-project-label">Произведение:</div>
           <div class="kb-project-select-row">
-            <select class="kb-project-select" data-action="switch-kb-project">
-              ${projectsOptions}
-            </select>
-            <button class="kb-project-btn" data-action="new-kb-project" title="Новое произведение"><i class="bx bx-plus"></i></button>
-            <button class="kb-project-btn" data-action="rename-kb-project" title="Переименовать"><i class="bx bx-pencil"></i></button>
+            ${this.renderSettingsSelect('activeLoreId', (this.state.kbProjects || []).map(p => [p.id, p.title]))}
+            <button class="mini-icon-btn" data-action="new-kb-project" title="Новое произведение"><i class="bx bx-plus"></i></button>
+            <button class="mini-icon-btn" data-action="rename-kb-project" title="Переименовать"><i class="bx bx-pencil"></i></button>
             ${this.state.activeLoreId !== 'world' ? `
-              <button class="kb-project-btn danger-btn" data-action="delete-kb-project" title="Удалить произведение"><i class="bx bx-trash"></i></button>
+              <button class="mini-icon-btn danger-btn" data-action="delete-kb-project" title="Удалить произведение"><i class="bx bx-trash"></i></button>
             ` : ''}
           </div>
         </div>
@@ -14150,8 +14337,8 @@ class NocturneWriter {
         event.to.classList.remove('is-dragging');
         this.updateTimelineConnectors(event.from);
         this.updateTimelineConnectors(event.to);
+        this.kbSuppressClickUntil = Date.now() + 260;
         if (event.oldIndex !== event.newIndex) {
-          this.kbSuppressClickUntil = Date.now() + 260;
           await this.persistKbDomOrder(zoneType, event.from);
         }
         this.kbDragState = null;
@@ -15136,11 +15323,45 @@ class NocturneWriter {
         <div class="tab-content active">
           ${this.aiPresetsContent()}
           <div class="setting-group-title">Провайдер</div>
-          ${row('LLM Provider', 'Режим «Не настроен» ничего не генерирует. Для локальной модели используйте Ollama, для облачных провайдеров укажите endpoint, model и ключ.', select('aiProvider', [['local', 'Не настроен / без генерации'], ['ollama', 'Ollama'], ['groq', 'Groq free tier'], ['gemini', 'Gemini free tier'], ['openai', 'OpenAI-compatible'], ['anthropic', 'Anthropic-compatible']]))}
-          ${row('Endpoint', 'Адрес API выбранного провайдера. У Ollama это локальный endpoint, у облачных сервисов — HTTPS API.', input('aiEndpoint'))}
-          ${row('API Key', 'Ключ хранится локально в настройках браузера. Для Ollama обычно не нужен.', input('aiKey', 'password'))}
-          ${row('Model', 'Идентификатор модели, который понимает выбранный провайдер.', input('aiModel'))}
+          ${row('LLM Provider', 'Режим «Не настроен» ничего не генерирует. Для локальной модели используйте Ollama, для облачных провайдеров укажите endpoint, model и ключ.', select('aiProvider', [
+            ['local', 'Не настроен / без генерации'],
+            ['ollama', 'Ollama'],
+            ['groq', 'Groq free tier'],
+            ['gemini', 'Gemini free tier'],
+            ['openai', 'OpenAI-compatible'],
+            ['anthropic', 'Anthropic-compatible'],
+            ...(s.customAiProviders || []).map(p => [p.id, p.name])
+          ]))}
+          ${s.aiProvider?.startsWith?.('prov_') ? '' : `
+            ${row('Endpoint', 'Адрес API выбранного провайдера. У Ollama это локальный endpoint, у облачных сервисов — HTTPS API.', input('aiEndpoint'))}
+            ${row('API Key', 'Ключ хранится локально в настройках браузера. Для Ollama обычно не нужен.', input('aiKey', 'password'))}
+            ${row('Model', 'Идентификатор модели, который понимает выбранный провайдер.', input('aiModel'))}
+          `}
           ${row('Проверка подключения', 'Отправляет минимальный тестовый запрос текущему провайдеру.', `<button class="pill-btn" data-action="test-ai-connection"><i class="bx bx-plug"></i> Проверить подключение</button>`)}
+          
+          <div class="custom-providers-section" style="margin: 12px 0 24px 0; padding: 16px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.02); border-radius: 8px;">
+            <div class="custom-providers-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <span style="font-weight: 500;">Пользовательские провайдеры</span>
+              <button class="pill-btn ai-btn" data-action="new-custom-provider"><i class="bx bx-plus"></i> Добавить</button>
+            </div>
+            <div class="custom-providers-list" style="display: flex; flex-direction: column; gap: 8px;">
+              ${(s.customAiProviders || []).length === 0 ? `
+                <p style="color: var(--text-muted); font-size: 0.9em; margin: 0;">Вы можете добавить собственные эндпоинты моделей (например, LM Studio, DeepSeek или локальные API).</p>
+              ` : (s.customAiProviders || []).map(p => `
+                <div class="custom-provider-item" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: rgba(0,0,0,0.2); border-radius: 6px; border: 1px solid rgba(255,255,255,0.04);">
+                  <div class="custom-provider-info" style="min-width: 0; flex: 1;">
+                    <strong style="display: block; font-size: 0.95em; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">${escapeHtml(p.name)}</strong>
+                    <span style="font-size: 0.8em; color: var(--text-muted); display: block; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">Format: ${p.apiFormat} | Model: ${escapeHtml(p.model)}</span>
+                  </div>
+                  <div class="custom-provider-actions" style="display: flex; gap: 6px; flex-shrink: 0; margin-left: 12px;">
+                    <button class="mini-icon-btn" data-action="edit-custom-provider" data-provider-id="${p.id}" title="Редактировать"><i class="bx bx-pencil"></i></button>
+                    <button class="mini-icon-btn danger-btn" data-action="delete-custom-provider" data-provider-id="${p.id}" title="Удалить"><i class="bx bx-trash"></i></button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
           <div class="setting-group-title">Поведение</div>
           ${row('Персона редактора', '', select('aiPersona', [
             ['critic', 'Злой критик'],
@@ -15163,8 +15384,8 @@ class NocturneWriter {
                     <span style="font-size: 0.8em; color: var(--text-muted); display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;" title="${escapeHtml(p.prompt)}">${escapeHtml(p.prompt)}</span>
                   </div>
                   <div class="custom-persona-actions" style="display: flex; gap: 6px; flex-shrink: 0; margin-left: 12px;">
-                    <button class="kb-project-btn" data-action="edit-custom-persona" data-persona-id="${p.id}" title="Редактировать"><i class="bx bx-pencil"></i></button>
-                    <button class="kb-project-btn danger-btn" data-action="delete-custom-persona" data-persona-id="${p.id}" title="Удалить"><i class="bx bx-trash"></i></button>
+                    <button class="mini-icon-btn" data-action="edit-custom-persona" data-persona-id="${p.id}" title="Редактировать"><i class="bx bx-pencil"></i></button>
+                    <button class="mini-icon-btn danger-btn" data-action="delete-custom-persona" data-persona-id="${p.id}" title="Удалить"><i class="bx bx-trash"></i></button>
                   </div>
                 </div>
               `).join('')}
@@ -15859,6 +16080,17 @@ class NocturneWriter {
   }
 
   applySettingSideEffects(key, control = null) {
+    if (key === 'activeLoreId') {
+      const val = this.state.settings.activeLoreId;
+      this.state.activeLoreId = val;
+      this.loadLore().then(() => {
+        if (this.isMobileLayout()) {
+          this.renderMobileKbContentOnly();
+        } else {
+          this.renderKb();
+        }
+      });
+    }
     if (key === 'writingAnimation') safeSetStorageItem(localStorage, 'nocturne-writing-animation-choice', '1');
     if (key === 'e2e') {
       if (this.state.settings.e2e) {
@@ -16816,14 +17048,14 @@ ${raw}`;
   }
 
   async streamAi(prompt, onChunk, signal = null, budget = {}) {
-    const s = this.state.settings;
     const providerProblem = this.assistantProviderProblem();
     if (providerProblem) throw new Error(providerProblem);
-    const endpoint = s.aiProvider === 'gemini' && s.aiKey ? `${s.aiEndpoint}?key=${encodeURIComponent(s.aiKey)}` : s.aiEndpoint;
+    const p = this.resolveAiProviderSettings();
+    const endpoint = p.apiFormat === 'gemini' && p.key ? `${p.endpoint}?key=${encodeURIComponent(p.key)}` : p.endpoint;
     const response = await fetch(endpoint, {
       method: 'POST',
-      headers: this.aiHeaders(),
-      body: JSON.stringify(this.aiRequestBody(prompt, budget)),
+      headers: this.aiHeaders(p),
+      body: JSON.stringify(this.aiRequestBody(prompt, budget, p)),
       signal,
     });
     if (!response.ok) throw new Error(`Ошибка провайдера ИИ: HTTP ${response.status}`);
@@ -16849,35 +17081,33 @@ ${raw}`;
     }
   }
 
-  aiHeaders() {
-    const s = this.state.settings;
+  aiHeaders(p) {
     const headers = { 'Content-Type': 'application/json' };
-    if (s.aiProvider === 'anthropic') {
-      headers['x-api-key'] = s.aiKey;
+    if (p.apiFormat === 'anthropic') {
+      headers['x-api-key'] = p.key;
       headers['anthropic-version'] = '2023-06-01';
       return headers;
     }
-    if (s.aiKey && s.aiProvider !== 'gemini') headers.Authorization = `Bearer ${s.aiKey}`;
+    if (p.key && p.apiFormat !== 'gemini') headers.Authorization = `Bearer ${p.key}`;
     return headers;
   }
 
-  aiRequestBody(prompt, budget = {}) {
-    const s = this.state.settings;
+  aiRequestBody(prompt, budget = {}, p) {
     const maxTokens = budget.maxTokens || 420;
-    if (s.aiProvider === 'ollama') return { model: s.aiModel, prompt, stream: true, format: 'json', options: { temperature: s.aiTemperature, num_predict: maxTokens } };
-    if (s.aiProvider === 'gemini') {
+    if (p.apiFormat === 'ollama') return { model: p.model, prompt, stream: true, format: 'json', options: { temperature: p.temperature, num_predict: maxTokens } };
+    if (p.apiFormat === 'gemini') {
       return {
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: {
-          temperature: s.aiTemperature,
+          temperature: p.temperature,
           maxOutputTokens: maxTokens,
           responseMimeType: 'application/json',
           responseSchema: this.aiJsonResponseSchema(),
         },
       };
     }
-    if (s.aiProvider === 'anthropic') return { model: s.aiModel, max_tokens: maxTokens, stream: true, temperature: s.aiTemperature, messages: [{ role: 'user', content: prompt }] };
-    return { model: s.aiModel, messages: [{ role: 'user', content: prompt }], stream: true, temperature: s.aiTemperature, max_tokens: maxTokens, response_format: { type: 'json_object' } };
+    if (p.apiFormat === 'anthropic') return { model: p.model, max_tokens: maxTokens, stream: true, temperature: p.temperature, messages: [{ role: 'user', content: prompt }] };
+    return { model: p.model, messages: [{ role: 'user', content: prompt }], stream: true, temperature: p.temperature, max_tokens: maxTokens, response_format: { type: 'json_object' } };
   }
 
   aiJsonResponseSchema() {

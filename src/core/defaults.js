@@ -63,6 +63,9 @@ export const defaultSettings = {
       { keys: 'Ctrl+]', value: '»' }
     ],
     customAiPersonas: [],
+    activeLoreId: 'world',
+    kbProjects: [{ id: 'world', title: 'Основное' }],
+    customAiProviders: [],
   };
 
 export const seedFolders = [
