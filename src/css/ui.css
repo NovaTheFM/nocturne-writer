@@ -9302,3 +9302,73 @@ body.sortable-active .doc-item {
   0% { text-shadow: 0 0 10px rgba(var(--accent-rgb, 139, 92, 246), 0.2); }
   100% { text-shadow: 0 0 25px rgba(var(--accent-rgb, 139, 92, 246), 0.5); }
 }
+
+/* KB Project Selector & Custom AI Personas */
+.kb-project-selector-container {
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-md, 6px);
+  margin-bottom: 16px;
+}
+.kb-project-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.kb-project-select-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.kb-project-select {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-main, #e0e0e0);
+  border-radius: var(--radius-sm, 4px);
+  padding: 6px 8px;
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+  min-width: 0;
+}
+.kb-project-select:focus {
+  border-color: var(--accent);
+}
+.kb-project-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--text-main, #e0e0e0);
+  cursor: pointer;
+  transition: all 150ms ease;
+  flex-shrink: 0;
+  padding: 0;
+}
+.kb-project-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.kb-project-btn.danger-btn:hover {
+  border-color: #ef4444;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+.kb-project-btn i {
+  font-size: 16px;
+}
+
+/* Mobile specific overrides */
+.mobile-project-selector {
+  margin: 0 0 12px 0;
+  padding: 8px 12px;
+}

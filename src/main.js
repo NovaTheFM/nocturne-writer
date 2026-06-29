@@ -192,6 +192,8 @@ class NocturneWriter {
       folders: [],
       docs: [],
       lore: { characters: [], locations: [], timeline: [], notes: [] },
+      activeLoreId: safeGetStorageItem(localStorage, 'nocturne-active-lore-id', 'world'),
+      kbProjects: [],
       activeDocId: null,
       workspace: null,
       sync: {
@@ -444,13 +446,22 @@ class NocturneWriter {
         if (f && f.name) allowedFonts.push(f.name);
       });
     }
+    const allowedPersonas = ['coauthor', 'muse', 'critic'];
+    if (Array.isArray(merged.customAiPersonas)) {
+      merged.customAiPersonas = merged.customAiPersonas.filter(p => p && typeof p.id === 'string' && typeof p.name === 'string' && typeof p.prompt === 'string');
+      merged.customAiPersonas.forEach((p) => {
+        if (p.id) allowedPersonas.push(p.id);
+      });
+    } else {
+      merged.customAiPersonas = [];
+    }
     const enums = {
       theme: ['nocturne', 'midnight', 'paper', 'matrix', 'lavender', 'crimson'],
       caretStyle: ['line', 'block', 'underline'],
       fontFamily: allowedFonts,
       dialogueLens: ['off', 'dialogues', 'descriptions'],
       aiProvider: ['local', 'ollama', 'groq', 'gemini', 'openai', 'anthropic'],
-      aiPersona: ['coauthor', 'muse', 'critic'],
+      aiPersona: allowedPersonas,
       loreReaction: ['soft', 'warn', 'hard'],
       writingAnimation: ['off', 'ripple', 'mist', 'sparkles', 'glow', 'spark'],
     };
@@ -701,8 +712,24 @@ class NocturneWriter {
   }
 
   async loadLore() {
-    const lore = await this.db.get('lore', 'world');
+    const lores = await this.db.getAll('lore');
+    if (!lores.some(p => p.id === 'world')) {
+      const defaultLore = { id: 'world', title: 'Основное произведение', characters: [], locations: [], timeline: [], notes: [] };
+      await this.db.put('lore', defaultLore);
+      lores.push(defaultLore);
+    }
+    this.state.kbProjects = lores.map(p => ({ id: p.id, title: p.title || (p.id === 'world' ? 'Основное произведение' : 'Произведение ' + p.id) }));
+    
+    const activeId = this.state.activeLoreId || 'world';
+    let lore = lores.find(p => p.id === activeId);
+    if (!lore) {
+      lore = await this.db.get('lore', activeId);
+    }
+    if (!lore) {
+      lore = { id: activeId, title: 'Произведение', characters: [], locations: [], timeline: [], notes: [] };
+    }
     return {
+      title: lore.title || (activeId === 'world' ? 'Основное произведение' : 'Произведение'),
       characters: (lore?.characters || []).map((item, index) => this.normalizeCharacter(item, index)),
       locations: (lore?.locations || []).map((item, index) => this.normalizeLocation(item, index)),
       timeline: (lore?.timeline || []).map((item, index) => this.normalizeTimelineEvent(item, index)),
@@ -1330,22 +1357,44 @@ class NocturneWriter {
   paneTitle(pane) {
     if (!pane?.type) return 'Пустая область';
     if (pane.type === 'document') return this.state.docs.find((doc) => doc.id === pane.docId)?.title || 'Документ';
-    if (pane.type === 'kb-tab') return { characters: 'Персонажи', locations: 'Локации', timeline: 'Таймлайн' }[pane.kbTab] || 'База знаний';
-    const list = pane.entityType === 'location' ? this.state.lore.locations : this.state.lore.characters;
+    if (pane.type === 'kb-tab') return { characters: 'Персонажи', locations: 'Локации', timeline: 'Таймлайн', notes: 'Записи' }[pane.kbTab] || 'База знаний';
+    
+    let list;
+    if (pane.entityType === 'location') list = this.state.lore.locations;
+    else if (pane.entityType === 'note') list = this.state.lore.notes || [];
+    else if (pane.entityType === 'timeline') list = this.state.lore.timeline;
+    else if (pane.entityType === 'subtimeline') {
+      list = this.state.lore.timeline.flatMap(e => e.subEvents || []);
+    } else list = this.state.lore.characters;
+    
     const entity = list.find((item) => item.id === pane.entityId);
-    return this.entityDisplayName(entity) || 'Досье';
+    return entity ? (entity.title || this.entityDisplayName(entity) || 'Досье') : 'Досье';
   }
 
   paneKindLabel(pane) {
     if (!pane?.type) return 'Split-screen';
     if (pane.type === 'document') return 'Документ';
     if (pane.type === 'kb-tab') return 'База знаний';
-    return pane.entityType === 'location' ? 'Локация' : 'Персонаж';
+    if (pane.entityType === 'location') return 'Локация';
+    if (pane.entityType === 'note') return 'Запись';
+    if (pane.entityType === 'timeline') return 'Событие';
+    if (pane.entityType === 'subtimeline') return 'Подсобытие';
+    return 'Персонаж';
   }
 
   renderLoreDetailPane(pane) {
-    const type = pane.entityType === 'location' ? 'locations' : pane.entityType === 'note' ? 'notes' : 'characters';
-    const item = this.state.lore[type]?.find((entry) => entry.id === pane.entityId);
+    const type = pane.entityType === 'location' ? 'locations' : pane.entityType === 'note' ? 'notes' : pane.entityType === 'timeline' ? 'timeline' : pane.entityType === 'subtimeline' ? 'subtimeline' : 'characters';
+    let item;
+    if (type === 'timeline') {
+      item = this.state.lore.timeline?.find((entry) => entry.id === pane.entityId);
+    } else if (type === 'subtimeline') {
+      for (const parent of this.state.lore.timeline) {
+        item = parent.subEvents?.find((entry) => entry.id === pane.entityId);
+        if (item) break;
+      }
+    } else {
+      item = this.state.lore[type]?.find((entry) => entry.id === pane.entityId);
+    }
     if (!item) return '<div class="workspace-empty"><p>Карточка не найдена.</p></div>';
     return this.renderLoreDetail(type, item);
   }
@@ -1898,7 +1947,7 @@ class NocturneWriter {
   renderMobileKb(options = {}) {
     const active = this.state.mobile.kbTab || this.state.activeKbTab || 'characters';
     const detail = this.activeLoreDetailItem();
-    if (detail && ['characters', 'locations'].includes(detail.type)) return this.renderMobileLoreDetail(detail.type, detail.item);
+    if (detail && ['characters', 'locations', 'notes', 'timeline', 'subtimeline'].includes(detail.type)) return this.renderMobileLoreDetail(detail.type, detail.item);
     if (this.state.activeSubtimelineId) return this.renderMobileSubtimeline(this.state.activeSubtimelineId);
     const q = (this.state.mobile.loreSearch || '').toLowerCase().trim();
     const filter = (item) => !q || `${this.entityDisplayName(item)} ${item.title || ''} ${item.role || ''} ${item.body || ''} ${item.date || ''}`.toLowerCase().includes(q);
@@ -1911,9 +1960,25 @@ class NocturneWriter {
         ? (locs.length ? locs.map((item, index) => this.mobileLoreCard('locations', item, index, locs.length)).join('') : this.emptyStateMarkup('bx-map-alt', 'Локаций пока нет.', 'Добавьте место.', 'new-lore', 'Добавить', 'data-lore-type="locations"'))
         : (time.length ? time.map((item, i, arr) => this.timelineCard(item, { isLast: i === arr.length - 1, draggable: true })).join('') : this.emptyStateMarkup('bx-git-commit', 'Таймлайн пуст.', 'Добавьте событие.', 'new-lore', 'Добавить', 'data-lore-type="timeline"'));
     const zone = active === 'timeline' ? 'timeline' : active;
+    const projectsOptions = (this.state.kbProjects || [])
+      .map(p => `<option value="${p.id}" ${this.state.activeLoreId === p.id ? 'selected' : ''}>${escapeHtml(p.title)}</option>`)
+      .join('');
+
     return `
       ${options.asTab ? this.mobileTabHeader('База знаний', 'Персонажи, локации и таймлайн') : this.mobilePanelHeader('База знаний', 'Персонажи, локации и таймлайн')}
       <div class="mobile-panel-body">
+        <div class="kb-project-selector-container mobile-project-selector">
+          <div class="kb-project-select-row">
+            <select class="kb-project-select" data-action="switch-kb-project">
+              ${projectsOptions}
+            </select>
+            <button class="kb-project-btn" data-action="new-kb-project" title="Новое произведение"><i class="bx bx-plus"></i></button>
+            <button class="kb-project-btn" data-action="rename-kb-project" title="Переименовать"><i class="bx bx-pencil"></i></button>
+            ${this.state.activeLoreId !== 'world' ? `
+              <button class="kb-project-btn danger-btn" data-action="delete-kb-project" title="Удалить произведение"><i class="bx bx-trash"></i></button>
+            ` : ''}
+          </div>
+        </div>
         <div class="mobile-segmented">
           ${[['characters', 'Персонажи'], ['locations', 'Локации'], ['timeline', 'Таймлайн']].map(([id, label]) => `<button class="${active === id ? 'active' : ''}" data-mobile-kb-tab="${id}">${label}</button>`).join('')}
         </div>
@@ -1954,12 +2019,19 @@ class NocturneWriter {
   }
 
   renderMobileLoreDetail(type, item) {
-    const title = this.entityDisplayName(item) || (type === 'locations' ? 'Локация' : 'Персонаж');
-    const subtitle = type === 'locations' ? 'Карточка локации' : 'Карточка персонажа';
+    const labelMap = {
+      locations: ['Локация', 'Карточка локации'],
+      notes: ['Запись', 'Запись базы знаний'],
+      timeline: ['Событие', 'Событие таймлайна'],
+      subtimeline: ['Подсобытие', 'Подсобытие таймлайна'],
+      characters: ['Персонаж', 'Карточка персонажа']
+    };
+    const [defTitle, defSub] = labelMap[type] || ['Досье', 'База знаний'];
+    const title = item.title || this.entityDisplayName(item) || defTitle;
     return `
       <header class="mobile-panel-header">
         <button class="mobile-icon-btn" data-action="mobile-lore-back" aria-label="Назад"><i class="bx bx-left-arrow-alt"></i></button>
-        <div><h2>${escapeHtml(title)}</h2><p>${subtitle}</p></div>
+        <div><h2>${escapeHtml(title)}</h2><p>${defSub}</p></div>
         <button class="mobile-icon-btn" data-action="mobile-close-all" aria-label="Закрыть"><i class="bx bx-x"></i></button>
       </header>
       <div class="mobile-panel-body mobile-lore-detail">
@@ -3330,10 +3402,10 @@ class NocturneWriter {
       const paneId = event.target.closest('[data-pane-id]')?.dataset.paneId || event.target.closest('.workspace-pane[data-pane-id]')?.dataset.paneId;
       if (paneId) {
         const pane = this.getPane(paneId);
-        if (pane && (pane.type === 'character-detail' || pane.type === 'location-detail' || pane.type === 'note-detail')) {
+        if (pane && (pane.type === 'character-detail' || pane.type === 'location-detail' || pane.type === 'note-detail' || pane.type === 'timeline-detail' || pane.type === 'subtimeline-detail')) {
           const originalType = pane.type;
           pane.type = 'kb-tab';
-          pane.kbTab = originalType === 'location-detail' ? 'locations' : originalType === 'note-detail' ? 'notes' : 'characters';
+          pane.kbTab = originalType === 'location-detail' ? 'locations' : originalType === 'note-detail' ? 'notes' : (originalType === 'timeline-detail' || originalType === 'subtimeline-detail') ? 'timeline' : 'characters';
           pane.entityId = null;
           pane.entityType = null;
           this.persistWorkspaceState();
@@ -3660,9 +3732,12 @@ class NocturneWriter {
     const ai = event.target.closest('[data-ai]')?.dataset.ai;
     if (ai) this.runAi(ai);
     const loreCard = event.target.closest('[data-lore-id]');
-    if (loreCard && Date.now() >= this.kbSuppressClickUntil) {
-      if (['characters', 'locations'].includes(loreCard.dataset.loreType)) this.openLoreDetail(loreCard.dataset.loreType, loreCard.dataset.loreId);
-      else this.editLore(loreCard.dataset.loreType, loreCard.dataset.loreId, loreCard.dataset.parentId);
+    if (loreCard && Date.now() >= this.kbSuppressClickUntil && !event.target.closest('.lore-card-actions, .association-badge, button, a')) {
+      if (['characters', 'locations', 'notes', 'timeline', 'subtimeline'].includes(loreCard.dataset.loreType)) {
+        this.openLoreDetail(loreCard.dataset.loreType, loreCard.dataset.loreId);
+      } else {
+        this.editLore(loreCard.dataset.loreType, loreCard.dataset.loreId, loreCard.dataset.parentId);
+      }
     }
     if (!insideFloatingMenu) {
       this.closeAllFloatingMenus();
@@ -4958,6 +5033,11 @@ class NocturneWriter {
   }
 
   handleChange(event) {
+    const action = event.target.closest('[data-action]')?.dataset.action;
+    if (action) {
+      this.runAction(action, event);
+      return;
+    }
     if (event.target.matches('[data-setting]')) this.updateSettingFromControl(event.target);
     if (event.target.id === 'import-input') this.importDocuments(event.target.files);
         if (event.target.id === 'custom-font-uploader') {
@@ -6298,10 +6378,243 @@ class NocturneWriter {
       'close-notes': () => document.getElementById('notes-panel').classList.remove('open'),
       'apply-ai-preset': () => this.applyAiPreset(event.target.closest('[data-ai-preset]')?.dataset.aiPreset),
       'test-ai-connection': () => this.testAiConnection(),
+      'new-custom-persona': () => {
+        const overlay = document.getElementById('form-overlay');
+        overlay.innerHTML = `
+          <form class="form-modal" id="new-custom-persona-form">
+            <h2>Новый ИИ-соавтор</h2>
+            <div class="form-group">
+              <label for="new-persona-name">Имя персоны</label>
+              <input type="text" id="new-persona-name" class="form-control" required placeholder="Например: Романтик">
+            </div>
+            <div class="form-group">
+              <label for="new-persona-prompt">Системная инструкция (системный промпт)</label>
+              <textarea id="new-persona-prompt" class="form-control" rows="4" required placeholder="Например: Ты романтический писатель. Твоя задача — советовать нежные метафоры и развивать чувства героев..."></textarea>
+            </div>
+            <div class="form-actions">
+              <button type="button" class="pill-btn" data-close-form>Отмена</button>
+              <button type="submit" class="pill-btn ai-btn">Создать</button>
+            </div>
+          </form>
+        `;
+        overlay.classList.add('active');
+        overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
+        overlay.querySelector('form').onsubmit = async (e) => {
+          e.preventDefault();
+          const name = document.getElementById('new-persona-name').value.trim();
+          const prompt = document.getElementById('new-persona-prompt').value.trim();
+          if (!name || !prompt) return;
+          overlay.classList.remove('active');
+          const id = 'custom_' + Math.random().toString(36).substr(2, 9);
+          this.state.settings.customAiPersonas = this.state.settings.customAiPersonas || [];
+          this.state.settings.customAiPersonas.push({ id, name, prompt });
+          await this.persistSettings();
+          this.renderSettings();
+          this.toast(`Персона "${name}" создана.`);
+        };
+      },
+      'edit-custom-persona': () => {
+        const btn = event.target.closest('[data-persona-id]');
+        const pid = btn?.dataset.personaId;
+        const persona = this.state.settings.customAiPersonas?.find(p => p.id === pid);
+        if (!persona) return;
+        const overlay = document.getElementById('form-overlay');
+        overlay.innerHTML = `
+          <form class="form-modal" id="edit-custom-persona-form">
+            <h2>Редактировать ИИ-соавтора</h2>
+            <div class="form-group">
+              <label for="edit-persona-name">Имя персоны</label>
+              <input type="text" id="edit-persona-name" class="form-control" required value="${escapeHtml(persona.name)}">
+            </div>
+            <div class="form-group">
+              <label for="edit-persona-prompt">Системная инструкция (системный промпт)</label>
+              <textarea id="edit-persona-prompt" class="form-control" rows="4" required>${escapeHtml(persona.prompt)}</textarea>
+            </div>
+            <div class="form-actions">
+              <button type="button" class="pill-btn" data-close-form>Отмена</button>
+              <button type="submit" class="pill-btn ai-btn">Сохранить</button>
+            </div>
+          </form>
+        `;
+        overlay.classList.add('active');
+        overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
+        overlay.querySelector('form').onsubmit = async (e) => {
+          e.preventDefault();
+          const name = document.getElementById('edit-persona-name').value.trim();
+          const prompt = document.getElementById('edit-persona-prompt').value.trim();
+          if (!name || !prompt) return;
+          overlay.classList.remove('active');
+          persona.name = name;
+          persona.prompt = prompt;
+          await this.persistSettings();
+          this.renderSettings();
+          this.toast('Изменения сохранены.');
+        };
+      },
+      'delete-custom-persona': () => {
+        const btn = event.target.closest('[data-persona-id]');
+        const pid = btn?.dataset.personaId;
+        const persona = this.state.settings.customAiPersonas?.find(p => p.id === pid);
+        if (!persona) return;
+        const overlay = document.getElementById('form-overlay');
+        overlay.innerHTML = `
+          <div class="form-modal confirm-modal">
+            <div class="confirm-icon"><i class="bx bx-trash"></i></div>
+            <h2>Удалить персону?</h2>
+            <p>Вы уверены, что хотите удалить персону «${escapeHtml(persona.name)}»?</p>
+            <div class="form-actions">
+              <button class="pill-btn" data-close-form>Отмена</button>
+              <button class="pill-btn danger-btn" data-confirm-delete>Удалить</button>
+            </div>
+          </div>
+        `;
+        overlay.classList.add('active');
+        overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
+        overlay.querySelector('[data-confirm-delete]').onclick = async () => {
+          overlay.classList.remove('active');
+          this.state.settings.customAiPersonas = (this.state.settings.customAiPersonas || []).filter(p => p.id !== pid);
+          if (this.state.settings.aiPersona === pid) {
+            this.state.settings.aiPersona = 'critic'; // fallback to default
+          }
+          await this.persistSettings();
+          this.renderSettings();
+          this.toast(`Персона "${persona.name}" удалена.`);
+        };
+      },
       'close-kb': () => {
         this.state.activeSubtimelineId = null;
         this.state.activeLoreDetail = null;
         document.getElementById('kb-modal').classList.remove('active');
+      },
+      'switch-kb-project': async () => {
+        const val = event.target.value;
+        if (val) {
+          this.state.activeLoreId = val;
+          await this.loadLore();
+          if (this.isMobileLayout()) {
+            this.renderMobileKbContentOnly();
+          } else {
+            this.renderKb();
+          }
+        }
+      },
+      'new-kb-project': () => {
+        const overlay = document.getElementById('form-overlay');
+        overlay.innerHTML = `
+          <form class="form-modal" id="new-kb-project-form">
+            <h2>Новое произведение</h2>
+            <div class="form-group">
+              <label for="new-project-title">Название произведения</label>
+              <input type="text" id="new-project-title" class="form-control" required placeholder="Например: Сага о драконах">
+            </div>
+            <div class="form-actions">
+              <button type="button" class="pill-btn" data-close-form>Отмена</button>
+              <button type="submit" class="pill-btn ai-btn">Создать</button>
+            </div>
+          </form>
+        `;
+        overlay.classList.add('active');
+        overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
+        overlay.querySelector('form').onsubmit = async (e) => {
+          e.preventDefault();
+          const title = document.getElementById('new-project-title').value.trim();
+          if (!title) return;
+          overlay.classList.remove('active');
+          const pid = 'lore_' + Math.random().toString(36).substr(2, 9);
+          this.state.kbProjects = this.state.kbProjects || [];
+          this.state.kbProjects.push({ id: pid, title });
+          this.state.activeLoreId = pid;
+          this.state.lore = {
+            title,
+            characters: [],
+            locations: [],
+            timeline: [],
+            notes: []
+          };
+          await this.saveLore();
+          this.state.settings.customAiPersonas = this.state.settings.customAiPersonas || [];
+          await this.persistSettings();
+          if (this.isMobileLayout()) {
+            this.renderMobileKbContentOnly();
+          } else {
+            this.renderKb();
+          }
+          this.toast(`Произведение "${title}" создано.`);
+        };
+      },
+      'rename-kb-project': () => {
+        const activeId = this.state.activeLoreId || 'world';
+        const project = this.state.kbProjects?.find(p => p.id === activeId);
+        if (!project) return;
+        const overlay = document.getElementById('form-overlay');
+        overlay.innerHTML = `
+          <form class="form-modal" id="rename-kb-project-form">
+            <h2>Переименовать произведение</h2>
+            <div class="form-group">
+              <label for="rename-project-title">Новое название</label>
+              <input type="text" id="rename-project-title" class="form-control" required value="${escapeHtml(project.title)}">
+            </div>
+            <div class="form-actions">
+              <button type="button" class="pill-btn" data-close-form>Отмена</button>
+              <button type="submit" class="pill-btn ai-btn">Сохранить</button>
+            </div>
+          </form>
+        `;
+        overlay.classList.add('active');
+        overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
+        overlay.querySelector('form').onsubmit = async (e) => {
+          e.preventDefault();
+          const title = document.getElementById('rename-project-title').value.trim();
+          if (!title) return;
+          overlay.classList.remove('active');
+          project.title = title;
+          this.state.lore.title = title;
+          await this.saveLore();
+          this.state.settings.customAiPersonas = this.state.settings.customAiPersonas || [];
+          await this.persistSettings();
+          if (this.isMobileLayout()) {
+            this.renderMobileKbContentOnly();
+          } else {
+            this.renderKb();
+          }
+          this.toast('Произведение переименовано.');
+        };
+      },
+      'delete-kb-project': () => {
+        const activeId = this.state.activeLoreId || 'world';
+        if (activeId === 'world') {
+          this.toast('Основное произведение нельзя удалить.');
+          return;
+        }
+        const project = this.state.kbProjects?.find(p => p.id === activeId);
+        if (!project) return;
+        const overlay = document.getElementById('form-overlay');
+        overlay.innerHTML = `
+          <div class="form-modal confirm-modal">
+            <div class="confirm-icon"><i class="bx bx-trash"></i></div>
+            <h2>Удалить произведение?</h2>
+            <p>Вы уверены, что хотите удалить произведение «${escapeHtml(project.title)}»? Это действие удалит все его персонажи, локации и события без возможности восстановления.</p>
+            <div class="form-actions">
+              <button class="pill-btn" data-close-form>Отмена</button>
+              <button class="pill-btn danger-btn" data-confirm-delete>Удалить</button>
+            </div>
+          </div>
+        `;
+        overlay.classList.add('active');
+        overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
+        overlay.querySelector('[data-confirm-delete]').onclick = async () => {
+          overlay.classList.remove('active');
+          await this.db.delete('lore', activeId);
+          this.state.kbProjects = (this.state.kbProjects || []).filter(p => p.id !== activeId);
+          this.state.activeLoreId = 'world';
+          await this.loadLore();
+          if (this.isMobileLayout()) {
+            this.renderMobileKbContentOnly();
+          } else {
+            this.renderKb();
+          }
+          this.toast(`Произведение "${project.title}" удалено.`);
+        };
       },
       'toggle-zen': () => this.toggleZen(),
       'new-doc': () => this.openDocForm(event.target.closest('[data-folder-id]')?.dataset.folderId || this.defaultFolderId()),
@@ -12415,9 +12728,26 @@ class NocturneWriter {
     let notes = [...(this.state.lore.notes || [])].sort((a, b) => a.order - b.order);
     const activeSubtimeline = this.activeSubtimeline();
 
+    const projectsOptions = (this.state.kbProjects || [])
+      .map(p => `<option value="${p.id}" ${this.state.activeLoreId === p.id ? 'selected' : ''}>${escapeHtml(p.title)}</option>`)
+      .join('');
+
     document.getElementById('kb-modal').innerHTML = `
       <aside class="kb-sidebar">
         <h2 class="kb-title">База Знаний</h2>
+        <div class="kb-project-selector-container">
+          <div class="kb-project-label">Произведение:</div>
+          <div class="kb-project-select-row">
+            <select class="kb-project-select" data-action="switch-kb-project">
+              ${projectsOptions}
+            </select>
+            <button class="kb-project-btn" data-action="new-kb-project" title="Новое произведение"><i class="bx bx-plus"></i></button>
+            <button class="kb-project-btn" data-action="rename-kb-project" title="Переименовать"><i class="bx bx-pencil"></i></button>
+            ${this.state.activeLoreId !== 'world' ? `
+              <button class="kb-project-btn danger-btn" data-action="delete-kb-project" title="Удалить произведение"><i class="bx bx-trash"></i></button>
+            ` : ''}
+          </div>
+        </div>
         ${[
         ['characters', 'bx-user-pin', 'Персонажи'],
         ['locations', 'bx-map-alt', 'Локации'],
@@ -12512,7 +12842,17 @@ class NocturneWriter {
     const detail = this.state.activeLoreDetail;
     if (!detail) return null;
     const type = this.normalizeLoreType(detail.type);
-    const item = this.state.lore[type]?.find((entry) => entry.id === detail.id);
+    let item;
+    if (type === 'timeline') {
+      item = this.state.lore.timeline?.find((entry) => entry.id === detail.id);
+    } else if (type === 'subtimeline') {
+      for (const parent of this.state.lore.timeline) {
+        item = parent.subEvents?.find((entry) => entry.id === detail.id);
+        if (item) break;
+      }
+    } else {
+      item = this.state.lore[type]?.find((entry) => entry.id === detail.id);
+    }
     return item ? { type, item } : null;
   }
 
@@ -12529,10 +12869,28 @@ class NocturneWriter {
 
   openLoreDetail(type, id) {
     const normalizedType = this.normalizeLoreType(type);
-    if (!['characters', 'locations', 'notes'].includes(normalizedType)) return;
-    if (!this.state.lore[normalizedType]?.some((item) => item.id === id)) return;
-    this.state.activeKbTab = normalizedType;
-    this.state.mobile.kbTab = normalizedType;
+    if (!['characters', 'locations', 'notes', 'timeline', 'subtimeline'].includes(normalizedType)) return;
+    
+    let item;
+    if (normalizedType === 'timeline') {
+      item = this.state.lore.timeline?.find((entry) => entry.id === id);
+    } else if (normalizedType === 'subtimeline') {
+      for (const parent of this.state.lore.timeline) {
+        item = parent.subEvents?.find((entry) => entry.id === id);
+        if (item) break;
+      }
+    } else {
+      item = this.state.lore[normalizedType]?.find((entry) => entry.id === id);
+    }
+    if (!item) return;
+
+    if (['timeline', 'subtimeline'].includes(normalizedType)) {
+      this.state.activeKbTab = 'timeline';
+      this.state.mobile.kbTab = 'timeline';
+    } else {
+      this.state.activeKbTab = normalizedType;
+      this.state.mobile.kbTab = normalizedType;
+    }
     this.state.activeLoreDetail = { type: normalizedType, id };
     this.hideEntityHoverCards();
     if (this.isMobileLayout()) {
@@ -12549,6 +12907,86 @@ class NocturneWriter {
 
   renderLoreDetail(type, item) {
     const kind = this.singularLoreType(type);
+    if (kind === 'timeline' || kind === 'subtimeline') {
+      const isSub = kind === 'subtimeline';
+      const label = isSub ? 'Подсобытие' : 'Событие таймлайна';
+      const visual = isSub ? `<i class="bx bx-git-branch"></i>` : `<i class="bx bx-git-commit"></i>`;
+      
+      const chars = (item.characterIds || []).map(cid => this.state.lore.characters.find(c => c.id === cid)).filter(Boolean);
+      const locs = (item.locationIds || []).map(lid => this.state.lore.locations.find(l => l.id === lid)).filter(Boolean);
+      const notes = (item.noteIds || []).map(nid => (this.state.lore.notes || []).find(n => n.id === nid)).filter(Boolean);
+      const chapters = (item.chapterIds || []).map(did => this.state.docs.find(d => d.id === did)).filter(Boolean);
+
+      let parentAttr = '';
+      if (isSub) {
+        const parent = this.state.lore.timeline.find(e => e.subEvents?.some(sub => sub.id === item.id));
+        if (parent) parentAttr = ` data-parent-id="${escapeHtml(parent.id)}"`;
+      }
+
+      const associationSection = (title, items, entityKind, iconClass) => {
+        if (!items.length) return '';
+        return `
+          <div class="lore-detail-panel">
+            <h3>${title}</h3>
+            <div class="dossier-chip-row">
+              ${items.map(entity => `
+                <span class="association-badge" data-action="open-lore-detail" data-entity-kind="${entityKind}" data-entity-id="${entity.id}">
+                  <i class="bx ${iconClass}"></i>${escapeHtml(this.entityDisplayName(entity) || entity.title)}
+                </span>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      };
+
+      const docsSection = () => {
+        if (!chapters.length) return '';
+        return `
+          <div class="lore-detail-panel">
+            <h3>Связанные главы</h3>
+            <div class="dossier-chip-row">
+              ${chapters.map(doc => `
+                <span class="association-badge doc-badge" data-action="open-search-result" data-doc-id="${doc.id}">
+                  <i class="bx bx-book-content"></i>${escapeHtml(doc.title || 'Без названия')}
+                </span>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      };
+
+      return `
+        <article class="lore-detail timeline-detail">
+          <div class="lore-detail-topbar">
+            <button class="pill-btn" data-action="back-lore-list"><i class="bx bx-arrow-back"></i> Назад к списку</button>
+            <button class="btn-icon" data-action="close-kb"><i class="bx bx-x"></i></button>
+          </div>
+          <header class="lore-detail-hero">
+            <div class="lore-detail-visual">${visual}</div>
+            <div>
+              <div class="entity-chip">${label}</div>
+              <h1>${escapeHtml(item.title || 'Без названия')}</h1>
+              <p>${escapeHtml(item.date || '')}</p>
+              <div class="lore-detail-actions">
+                <button class="pill-btn ai-btn" data-action="edit-lore" data-lore-type="${type}" data-lore-id="${item.id}"${parentAttr}><i class="bx bx-edit"></i> Редактировать</button>
+                <button class="pill-btn" data-action="dump-single-entity" data-lore-type="${type}" data-lore-id="${item.id}"${parentAttr}><i class="bx bx-download"></i> Дамп карточки</button>
+                <button class="pill-btn" data-action="open-lore-side" data-entity-kind="${kind}" data-entity-id="${item.id}"><i class="bx bx-dock-right"></i> Открыть справа</button>
+              </div>
+            </div>
+          </header>
+          <section class="lore-detail-grid">
+            <div class="lore-detail-panel lore-detail-main">
+              <h3>Описание</h3>
+              <p>${escapeHtml(item.body || 'Описание отсутствует.').replace(/\n/g, '<br>')}</p>
+            </div>
+            ${associationSection('Персонажи', chars, 'character', 'bx-user')}
+            ${associationSection('Локации', locs, 'location', 'bx-map-alt')}
+            ${associationSection('Записи', notes, 'note', 'bx-note')}
+            ${docsSection()}
+          </section>
+        </article>
+      `;
+    }
     const label = kind === 'location' ? 'Локация' : kind === 'note' ? 'Запись' : 'Персонаж';
     const title = this.entityDisplayName(item) || item.title || 'Без названия';
     const visual = kind === 'note' ? `<i class="bx bx-note"></i>` : (item.image ? `<img src="${item.image}" alt="">` : `<i class="bx ${item.icon || (kind === 'location' ? 'bx-buildings' : 'bx-user')}"></i>`);
@@ -14481,7 +14919,8 @@ class NocturneWriter {
     this.state.lore.timeline = (this.state.lore.timeline || []).map((item, index) => this.normalizeTimelineEvent(item, index));
     this.state.lore.notes = (this.state.lore.notes || []).map((item, index) => this.normalizeNote(item, index));
     if (this.state.activeSubtimelineId && !this.timelineEvent(this.state.activeSubtimelineId)) this.state.activeSubtimelineId = null;
-    await this.db.put('lore', { id: 'world', ...this.state.lore });
+    const activeId = this.state.activeLoreId || 'world';
+    await this.db.put('lore', { id: activeId, title: this.state.lore.title || 'Основное произведение', ...this.state.lore });
     this.updateTypoHighlightsDebounced();
   }
 
@@ -14703,7 +15142,34 @@ class NocturneWriter {
           ${row('Model', 'Идентификатор модели, который понимает выбранный провайдер.', input('aiModel'))}
           ${row('Проверка подключения', 'Отправляет минимальный тестовый запрос текущему провайдеру.', `<button class="pill-btn" data-action="test-ai-connection"><i class="bx bx-plug"></i> Проверить подключение</button>`)}
           <div class="setting-group-title">Поведение</div>
-          ${row('Персона редактора', '', select('aiPersona', [['critic', 'Злой критик'], ['muse', 'Муза'], ['coauthor', 'Соавтор']]))}
+          ${row('Персона редактора', '', select('aiPersona', [
+            ['critic', 'Злой критик'],
+            ['muse', 'Муза'],
+            ['coauthor', 'Соавтор'],
+            ...(s.customAiPersonas || []).map(p => [p.id, p.name])
+          ]))}
+          <div class="custom-personas-section" style="margin: 12px 0 24px 0; padding: 16px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.02); border-radius: 8px;">
+            <div class="custom-personas-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <span style="font-weight: 500;">Персональные ИИ-соавторы</span>
+              <button class="pill-btn ai-btn" data-action="new-custom-persona"><i class="bx bx-plus"></i> Создать</button>
+            </div>
+            <div class="custom-personas-list" style="display: flex; flex-direction: column; gap: 8px;">
+              ${(s.customAiPersonas || []).length === 0 ? `
+                <p style="color: var(--text-muted); font-size: 0.9em; margin: 0;">Вы можете создать собственную персону с уникальной системной инструкцией.</p>
+              ` : (s.customAiPersonas || []).map(p => `
+                <div class="custom-persona-item" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: rgba(0,0,0,0.2); border-radius: 6px; border: 1px solid rgba(255,255,255,0.04);">
+                  <div class="custom-persona-info" style="min-width: 0; flex: 1;">
+                    <strong style="display: block; font-size: 0.95em; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">${escapeHtml(p.name)}</strong>
+                    <span style="font-size: 0.8em; color: var(--text-muted); display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;" title="${escapeHtml(p.prompt)}">${escapeHtml(p.prompt)}</span>
+                  </div>
+                  <div class="custom-persona-actions" style="display: flex; gap: 6px; flex-shrink: 0; margin-left: 12px;">
+                    <button class="kb-project-btn" data-action="edit-custom-persona" data-persona-id="${p.id}" title="Редактировать"><i class="bx bx-pencil"></i></button>
+                    <button class="kb-project-btn danger-btn" data-action="delete-custom-persona" data-persona-id="${p.id}" title="Удалить"><i class="bx bx-trash"></i></button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
           ${row('Креативность', 'Температура запроса: ниже — предсказуемее, выше — свободнее формулировки.', range('aiTemperature', 0, 1.4, .05))}
           ${row('Контекст базы знаний', 'Передаёт ассистенту релевантных персонажей, локации, таймлайн, сабтаймлайны и заметки как справочный контекст, не вставляя его в документ.', toggle('aiKnowledgeContext'))}
           ${row('Группы контекста', 'Можно отключить отдельные части контекста для более коротких запросов.', `
@@ -15846,11 +16312,20 @@ class NocturneWriter {
     const targetText = aiTarget?.selectedText || aiTarget?.targetBlockText || '';
     const entities = this.findRelevantLore(`${targetText}\n${text}`).map((item) => `${this.entityDisplayName(item) || item.title}: ${item.body}`).join('\n');
     const knowledgeContext = aiContext ? serializeAiContextSafe(aiContext) : '';
-    const persona = {
+    let persona = {
       critic: 'Ты злой, точный литературный критик. Указывай на слабые места без комплиментов.',
       muse: 'Ты поэтичная муза. Предлагай образные, музыкальные решения.',
       coauthor: 'Ты соавтор. Сохраняй стиль автора и продолжай сцену аккуратно.',
     }[this.state.settings.aiPersona];
+    if (!persona && this.state.settings.customAiPersonas) {
+      const custom = this.state.settings.customAiPersonas.find(p => p.id === this.state.settings.aiPersona);
+      if (custom) {
+        persona = custom.prompt;
+      }
+    }
+    if (!persona) {
+      persona = 'Ты соавтор. Сохраняй стиль автора и продолжай сцену аккуратно.';
+    }
     const preferredMode = kind === 'continue' ? this.preferredContinuationMode(aiTarget) : aiTarget?.mode === 'replace-selection' ? 'replace-selection' : 'replace-block';
     const contract = `СТРОГИЙ JSON-КОНТРАКТ ОТВЕТА:
 Верни ровно один JSON-объект без Markdown, без XML, без текста до или после JSON.
@@ -17496,6 +17971,10 @@ ${raw}`;
     if (mode === 'replace') {
       await Promise.all(['settings', 'folders', 'docs', 'lore', 'snapshots', 'stats', 'floatingNotes', 'typoRules', 'reviewMarks'].map((store) => this.db.clear(store)));
       this.state.settings = this.validateSettings(payload.settings || {});
+      this.state.settings.activeLoreId = 'world';
+      this.state.settings.kbProjects = [{ id: 'world', title: payload.lore?.title || 'Основное' }];
+      this.state.kbProjects = structuredClone(this.state.settings.kbProjects);
+      this.state.activeLoreId = 'world';
       this.state.folders = this.validateFolders(payload.folders || []);
       this.state.docs = (payload.docs || []).map((doc) => this.sanitizeDoc(structuredClone(doc)));
       this.state.lore = {

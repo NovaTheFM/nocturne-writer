@@ -62,6 +62,7 @@ export const defaultSettings = {
       { keys: 'Ctrl+[', value: '«' },
       { keys: 'Ctrl+]', value: '»' }
     ],
+    customAiPersonas: [],
   };
 
 export const seedFolders = [
