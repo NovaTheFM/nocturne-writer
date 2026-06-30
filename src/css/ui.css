@@ -9474,7 +9474,7 @@ body.sortable-active .doc-item {
   padding: 6px;
   display: none;
   flex-direction: column;
-  animation: popover-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: popover-rise 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 .kb-project-switcher.open .kb-project-switcher-dropdown {
   display: flex;

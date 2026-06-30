@@ -2050,7 +2050,7 @@ class NocturneWriter {
               </div>
               <div class="kb-project-action" data-action="rename-kb-project">
                 <i class="bx bx-edit-alt"></i>
-                <span>Настройки</span>
+                <span>Редактировать</span>
               </div>
             </div>
           </div>
@@ -3380,6 +3380,10 @@ class NocturneWriter {
     const projectItem = event.target.closest('.kb-project-item[data-project-id]');
     if (projectItem) {
       const pid = projectItem.dataset.projectId;
+      const currentActive = this.state.activeLoreId || 'world';
+      if (pid === currentActive) {
+        return;
+      }
       this.state.settings.activeLoreId = pid;
       this.applySettingSideEffects('activeLoreId');
       return;
@@ -13038,7 +13042,7 @@ class NocturneWriter {
             </div>
             <div class="kb-project-action" data-action="rename-kb-project">
               <i class="bx bx-edit-alt"></i>
-              <span>Настройки</span>
+              <span>Редактировать</span>
             </div>
           `;
         }
@@ -13127,6 +13131,7 @@ class NocturneWriter {
 
     document.getElementById('kb-modal').innerHTML = `
       <aside class="kb-sidebar">
+        <h2 class="kb-title">База Знаний</h2>
         <div class="kb-sidebar-header">
           <div class="kb-project-switcher" id="kb-project-switcher-btn">
             <i class="bx bx-cabinet"></i>
@@ -13147,7 +13152,7 @@ class NocturneWriter {
               </div>
               <div class="kb-project-action" data-action="rename-kb-project">
                 <i class="bx bx-edit-alt"></i>
-                <span>Настройки</span>
+                <span>Редактировать</span>
               </div>
             </div>
           </div>
