@@ -2030,11 +2030,29 @@ class NocturneWriter {
     return `
       ${options.asTab ? this.mobileTabHeader('База знаний', 'Персонажи, локации и таймлайн') : this.mobilePanelHeader('База знаний', 'Персонажи, локации и таймлайн')}
       <div class="mobile-panel-body">
-        <div class="kb-project-selector-container mobile-project-selector">
-          <div class="kb-project-select-row">
-            ${this.renderSettingsSelect('activeLoreId', (this.state.kbProjects || []).map(p => [p.id, p.title]))}
-            <button class="mini-icon-btn" data-action="new-kb-project" title="Новое произведение"><i class="bx bx-plus"></i></button>
-            <button class="mini-icon-btn" data-action="rename-kb-project" title="Редактировать"><i class="bx bx-pencil"></i></button>
+        <div class="kb-project-switcher-mobile-wrap">
+          <div class="kb-project-switcher" id="kb-project-switcher-btn-mobile">
+            <i class="bx bx-cabinet"></i>
+            <span>${escapeHtml(this.state.lore.title || 'Основное произведение')}</span>
+            <i class="bx bx-chevron-down"></i>
+            <div class="kb-project-switcher-dropdown popover-surface">
+              ${(this.state.kbProjects || []).map(p => `
+                <div class="kb-project-item ${p.id === (this.state.activeLoreId || 'world') ? 'active' : ''}" data-project-id="${p.id}">
+                  <i class="bx bx-book-bookmark"></i>
+                  <span>${escapeHtml(p.title)}</span>
+                  ${p.id === (this.state.activeLoreId || 'world') ? '<i class="bx bx-check check-icon"></i>' : ''}
+                </div>
+              `).join('')}
+              <div class="dropdown-divider"></div>
+              <div class="kb-project-action" data-action="new-kb-project">
+                <i class="bx bx-plus"></i>
+                <span>Создать произведение</span>
+              </div>
+              <div class="kb-project-action" data-action="rename-kb-project">
+                <i class="bx bx-edit-alt"></i>
+                <span>Настройки</span>
+              </div>
+            </div>
           </div>
         </div>
         <div class="mobile-segmented">
@@ -3344,6 +3362,29 @@ class NocturneWriter {
       event.stopPropagation();
       return;
     }
+
+    // KB Project Switcher toggle / dropdown close
+    const projectSwitcher = event.target.closest('.kb-project-switcher');
+    if (projectSwitcher) {
+      const isDropdownClick = event.target.closest('.kb-project-switcher-dropdown');
+      if (!isDropdownClick) {
+        projectSwitcher.classList.toggle('open');
+      } else {
+        projectSwitcher.classList.remove('open');
+      }
+    } else {
+      document.querySelectorAll('.kb-project-switcher.open').forEach(el => el.classList.remove('open'));
+    }
+
+    // KB Project switcher item selection click
+    const projectItem = event.target.closest('.kb-project-item[data-project-id]');
+    if (projectItem) {
+      const pid = projectItem.dataset.projectId;
+      this.state.settings.activeLoreId = pid;
+      this.applySettingSideEffects('activeLoreId');
+      return;
+    }
+
     if (event.target.id === 'mobile-overlay') {
       if (this.state.mobile.panel === 'actions') this.closeMobilePanel();
       return;
@@ -6850,12 +6891,12 @@ class NocturneWriter {
           this.state.settings.activeLoreId = 'world';
           this.state.activeLoreId = 'world';
           this.kbTransitioning = true;
-          await this.loadLore();
+          this.state.lore = await this.loadLore();
           await this.persistSettings();
           if (this.isMobileLayout()) {
             this.renderMobileKbContentOnly();
           } else {
-            this.renderKb();
+            this.transitionKbContent(() => this.renderKb());
           }
           this.toast(`Произведение "${project.title}" удалено.`);
         };
@@ -12974,13 +13015,33 @@ class NocturneWriter {
 
     const sidebarExists = document.querySelector('#kb-modal .kb-sidebar');
     if (sidebarExists) {
-      const selectRow = document.querySelector('#kb-modal .kb-project-select-row');
-      if (selectRow) {
-        selectRow.innerHTML = `
-          ${this.renderSettingsSelect('activeLoreId', (this.state.kbProjects || []).map(p => [p.id, p.title]))}
-          <button class="mini-icon-btn" data-action="new-kb-project" title="Новое произведение"><i class="bx bx-plus"></i></button>
-          <button class="mini-icon-btn" data-action="rename-kb-project" title="Редактировать"><i class="bx bx-pencil"></i></button>
-        `;
+      const switcher = document.querySelector('#kb-modal .kb-project-switcher');
+      if (switcher) {
+        const titleSpan = switcher.querySelector('span');
+        if (titleSpan) titleSpan.textContent = this.state.lore.title || 'Основное произведение';
+        
+        const dropdown = switcher.querySelector('.kb-project-switcher-dropdown');
+        if (dropdown) {
+          const activeId = this.state.activeLoreId || 'world';
+          dropdown.innerHTML = `
+            ${(this.state.kbProjects || []).map(p => `
+              <div class="kb-project-item ${p.id === activeId ? 'active' : ''}" data-project-id="${p.id}">
+                <i class="bx bx-book-bookmark"></i>
+                <span>${escapeHtml(p.title)}</span>
+                ${p.id === activeId ? '<i class="bx bx-check check-icon"></i>' : ''}
+              </div>
+            `).join('')}
+            <div class="dropdown-divider"></div>
+            <div class="kb-project-action" data-action="new-kb-project">
+              <i class="bx bx-plus"></i>
+              <span>Создать произведение</span>
+            </div>
+            <div class="kb-project-action" data-action="rename-kb-project">
+              <i class="bx bx-edit-alt"></i>
+              <span>Настройки</span>
+            </div>
+          `;
+        }
       }
       document.querySelectorAll('#kb-modal .kb-sidebar .settings-tab').forEach(tab => {
         const isCurrent = tab.dataset.kbTab === active;
@@ -13066,13 +13127,29 @@ class NocturneWriter {
 
     document.getElementById('kb-modal').innerHTML = `
       <aside class="kb-sidebar">
-        <h2 class="kb-title">База Знаний</h2>
-        <div class="kb-project-selector-container">
-          <div class="kb-project-label">Произведение:</div>
-          <div class="kb-project-select-row">
-            ${this.renderSettingsSelect('activeLoreId', (this.state.kbProjects || []).map(p => [p.id, p.title]))}
-            <button class="mini-icon-btn" data-action="new-kb-project" title="Новое произведение"><i class="bx bx-plus"></i></button>
-            <button class="mini-icon-btn" data-action="rename-kb-project" title="Редактировать"><i class="bx bx-pencil"></i></button>
+        <div class="kb-sidebar-header">
+          <div class="kb-project-switcher" id="kb-project-switcher-btn">
+            <i class="bx bx-cabinet"></i>
+            <span>${escapeHtml(this.state.lore.title || 'Основное произведение')}</span>
+            <i class="bx bx-chevron-down"></i>
+            <div class="kb-project-switcher-dropdown popover-surface">
+              ${(this.state.kbProjects || []).map(p => `
+                <div class="kb-project-item ${p.id === (this.state.activeLoreId || 'world') ? 'active' : ''}" data-project-id="${p.id}">
+                  <i class="bx bx-book-bookmark"></i>
+                  <span>${escapeHtml(p.title)}</span>
+                  ${p.id === (this.state.activeLoreId || 'world') ? '<i class="bx bx-check check-icon"></i>' : ''}
+                </div>
+              `).join('')}
+              <div class="dropdown-divider"></div>
+              <div class="kb-project-action" data-action="new-kb-project">
+                <i class="bx bx-plus"></i>
+                <span>Создать произведение</span>
+              </div>
+              <div class="kb-project-action" data-action="rename-kb-project">
+                <i class="bx bx-edit-alt"></i>
+                <span>Настройки</span>
+              </div>
+            </div>
           </div>
         </div>
         ${[
@@ -14727,6 +14804,22 @@ class NocturneWriter {
     this.closeFloatingMenu('kb');
   }
 
+  async transitionKbContent(renderFn) {
+    const main = document.querySelector('#kb-modal .kb-main');
+    if (!main) {
+      renderFn();
+      return;
+    }
+    main.classList.add('kb-main-fade-out');
+    await new Promise(resolve => setTimeout(resolve, 120));
+    renderFn();
+    main.classList.remove('kb-main-fade-out');
+    main.classList.add('kb-main-fade-in');
+    main.addEventListener('animationend', () => {
+      main.classList.remove('kb-main-fade-in');
+    }, { once: true });
+  }
+
   renderLoreEntityFields(type, item, iconOptions) {
     const iconSelect = `<select class="form-control" name="icon">${iconOptions.map(([value, label]) => `<option value="${value}" ${item.icon === value ? 'selected' : ''}>${label}</option>`).join('')}</select>`;
     const fileName = item.image ? 'Текущая картинка сохранена' : 'Файл не выбран';
@@ -16226,11 +16319,12 @@ class NocturneWriter {
       const val = this.state.settings.activeLoreId;
       this.state.activeLoreId = val;
       this.kbTransitioning = true;
-      this.loadLore().then(() => {
+      this.loadLore().then((lore) => {
+        this.state.lore = lore;
         if (this.isMobileLayout()) {
           this.renderMobileKbContentOnly();
         } else {
-          this.renderKb();
+          this.transitionKbContent(() => this.renderKb());
         }
       });
     }

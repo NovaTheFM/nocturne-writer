@@ -4566,7 +4566,7 @@ body.resizing-floating-note {
 .kb-section.active { display: block; }
 .kb-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 34px; }
 .kb-header h1 { margin: 0; font: 500 28px 'Lora', serif; }
-.character-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 24px; }
+.character-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 260px)); gap: 24px; justify-content: start; }
 .custom-select, .modal-select, .form-control {
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -4626,7 +4626,7 @@ body.sortable-active * {
 .char-info h3, .loc-info h3, .timeline-content h3 { margin: 0 0 8px; color: white; font-size: 16px; }
 .char-info p, .loc-info p, .timeline-content p { margin: 0; color: var(--text-muted); font-size: 13px; line-height: 1.5; }
 .char-info p { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; }
-.locations-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px; }
+.locations-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 320px)); gap: 24px; justify-content: start; }
 .loc-card { display: flex; height: 140px; border-radius: var(--radius-md); overflow: hidden; }
 .loc-card:hover { border-color: rgba(var(--accent-rgb, 139, 92, 246),.5); transform: translateY(-3px); box-shadow: 0 10px 30px rgba(0,0,0,.5); }
 .loc-img { width: 120px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: #1a1a22; border-right: 1px solid var(--border); }
@@ -9415,3 +9415,124 @@ body.sortable-active .doc-item {
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: var(--radius-md, 6px);
 }
+
+/* Workspace Switcher Header & Popover Dropdown */
+.kb-sidebar-header {
+  padding: 10px 0 0 0;
+}
+.kb-project-switcher {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin: 0 16px 20px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md, 8px);
+  cursor: pointer;
+  user-select: none;
+  transition: background 180ms ease, border-color 180ms ease;
+  z-index: 2000;
+}
+.kb-project-switcher:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+.kb-project-switcher i:first-child {
+  font-size: 18px;
+  color: var(--accent);
+}
+.kb-project-switcher span {
+  font-size: 14px;
+  font-weight: 500;
+  color: white;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kb-project-switcher i:last-child {
+  font-size: 14px;
+  color: var(--text-muted);
+  transition: transform 180ms ease;
+}
+.kb-project-switcher.open i:last-child {
+  transform: rotate(180deg);
+}
+
+.kb-project-switcher-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 100%;
+  z-index: 3000;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: var(--shadow-float, 0 10px 30px rgba(0, 0, 0, 0.5));
+  padding: 6px;
+  display: none;
+  flex-direction: column;
+  animation: popover-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.kb-project-switcher.open .kb-project-switcher-dropdown {
+  display: flex;
+}
+.kb-project-item, .kb-project-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.kb-project-item:hover, .kb-project-action:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: white;
+}
+.kb-project-item.active {
+  background: rgba(var(--accent-rgb, 139, 92, 246), 0.12);
+  color: var(--accent);
+  font-weight: 500;
+}
+.kb-project-item .check-icon {
+  margin-left: auto;
+  font-size: 14px;
+}
+.kb-project-switcher-dropdown .dropdown-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 6px 0;
+}
+.kb-project-action i {
+  font-size: 16px;
+  color: var(--text-muted);
+}
+.kb-project-action:hover i {
+  color: white;
+}
+.kb-project-switcher-mobile-wrap {
+  padding: 0 16px 12px 16px;
+}
+.kb-project-switcher-mobile-wrap .kb-project-switcher {
+  margin: 0;
+}
+
+/* Cross-fade and transition utilities for KB Main pane */
+.kb-main-fade-out {
+  opacity: 0 !important;
+  transform: translateY(-4px) !important;
+  transition: opacity 120ms ease, transform 120ms ease !important;
+}
+.kb-main-fade-in {
+  animation: kb-pane-fade-in 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes kb-pane-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
