@@ -8572,7 +8572,7 @@ class NocturneWriter {
         fallbackOnBody: true,
         fallbackClass: 'sortable-drag',
         ghostClass: 'sortable-ghost',
-        filter: '.doc-menu-btn, .doc-context-menu, button',
+        filter: '.doc-folder-empty, .empty-card, .mobile-empty-card, .workspace-empty, .workspace-single-empty, .doc-menu-btn, .doc-context-menu, button',
         preventOnFilter: false,
         onStart: (event) => {
           document.body.classList.add('sortable-active');
@@ -14539,7 +14539,7 @@ class NocturneWriter {
       scrollSensitivity: mobile ? 42 : 36,
       scrollSpeed: mobile ? 9 : 10,
       handle: undefined,
-      filter: 'button, input, textarea, select, a, [data-action], .lore-card-actions, .mobile-lore-actions',
+      filter: '.empty-card, .mobile-empty-card, .doc-folder-empty, .workspace-empty, .workspace-single-empty, button, input, textarea, select, a, [data-action], .lore-card-actions, .mobile-lore-actions',
       preventOnFilter: false,
       onStart: (event) => {
         document.body.classList.add('sortable-active');

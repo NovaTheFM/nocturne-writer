@@ -9536,3 +9536,19 @@ body.sortable-active .doc-item {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Disable dragging and cursor selection for empty state cards/placeholders */
+.empty-card, 
+.mobile-empty-card, 
+.doc-folder-empty, 
+.workspace-empty, 
+.workspace-single-empty,
+.search-empty,
+.command-empty,
+.macros-empty-state,
+.settings-search-empty {
+  user-select: none;
+  -webkit-user-drag: none;
+  user-drag: none;
+}
+
+
