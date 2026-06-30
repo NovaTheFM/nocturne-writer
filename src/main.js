@@ -1427,10 +1427,11 @@ class NocturneWriter {
     if (pane.type === 'kb-tab') return { characters: 'Персонажи', locations: 'Локации', timeline: 'Таймлайн', notes: 'Записи' }[pane.kbTab] || 'База знаний';
     
     let list;
-    if (pane.entityType === 'location') list = this.state.lore.locations;
-    else if (pane.entityType === 'note') list = this.state.lore.notes || [];
-    else if (pane.entityType === 'timeline') list = this.state.lore.timeline;
-    else if (pane.entityType === 'subtimeline') {
+    const rawType = pane.entityType;
+    if (rawType === 'location' || rawType === 'locations') list = this.state.lore.locations;
+    else if (rawType === 'note' || rawType === 'notes') list = this.state.lore.notes || [];
+    else if (rawType === 'timeline') list = this.state.lore.timeline;
+    else if (rawType === 'subtimeline') {
       list = this.state.lore.timeline.flatMap(e => e.subEvents || []);
     } else list = this.state.lore.characters;
     
@@ -1442,15 +1443,21 @@ class NocturneWriter {
     if (!pane?.type) return 'Split-screen';
     if (pane.type === 'document') return 'Документ';
     if (pane.type === 'kb-tab') return 'База знаний';
-    if (pane.entityType === 'location') return 'Локация';
-    if (pane.entityType === 'note') return 'Запись';
-    if (pane.entityType === 'timeline') return 'Событие';
-    if (pane.entityType === 'subtimeline') return 'Подсобытие';
+    const rawType = pane.entityType;
+    if (rawType === 'location' || rawType === 'locations') return 'Локация';
+    if (rawType === 'note' || rawType === 'notes') return 'Запись';
+    if (rawType === 'timeline') return 'Событие';
+    if (rawType === 'subtimeline') return 'Подсобытие';
     return 'Персонаж';
   }
 
   renderLoreDetailPane(pane) {
-    const type = pane.entityType === 'location' ? 'locations' : pane.entityType === 'note' ? 'notes' : pane.entityType === 'timeline' ? 'timeline' : pane.entityType === 'subtimeline' ? 'subtimeline' : 'characters';
+    const rawType = pane.entityType;
+    const type = (rawType === 'location' || rawType === 'locations') ? 'locations'
+               : (rawType === 'note' || rawType === 'notes') ? 'notes'
+               : (rawType === 'timeline') ? 'timeline'
+               : (rawType === 'subtimeline') ? 'subtimeline'
+               : 'characters';
     let item;
     if (type === 'timeline') {
       item = this.state.lore.timeline?.find((entry) => entry.id === pane.entityId);
@@ -8572,6 +8579,7 @@ class NocturneWriter {
         fallbackOnBody: true,
         fallbackClass: 'sortable-drag',
         ghostClass: 'sortable-ghost',
+        draggable: '.doc-item',
         filter: '.doc-folder-empty, .empty-card, .mobile-empty-card, .workspace-empty, .workspace-single-empty, .doc-menu-btn, .doc-context-menu, button',
         preventOnFilter: false,
         onStart: (event) => {
@@ -11200,7 +11208,7 @@ class NocturneWriter {
     if (doc) return { scope: 'document', linkedId: doc.id };
     const pane = this.getFocusedPane();
     if ((pane?.type === 'character-detail' || pane?.type === 'location-detail' || pane?.type === 'note-detail') && pane.entityId) {
-      return { scope: pane.entityType === 'location' ? 'location' : pane.entityType === 'note' ? 'note' : 'character', linkedId: pane.entityId };
+      return { scope: (pane.entityType === 'location' || pane.entityType === 'locations') ? 'location' : (pane.entityType === 'note' || pane.entityType === 'notes') ? 'note' : 'character', linkedId: pane.entityId };
     }
     return { scope: 'global', linkedId: null };
   }
@@ -11875,13 +11883,7 @@ class NocturneWriter {
     };
     return `
       <div class="tab-content active dictionary-settings">
-        <section class="dictionary-hero">
-          <div>
-            <h3>Словарь частых ошибок</h3>
-            <p>Локальные правила проверки текста. Встроенную базу можно дополнять, отключать и переопределять под ваш проект.</p>
-          </div>
-          <button class="pill-btn ai-btn" data-action="dictionary-add"><i class="bx bx-plus"></i> Добавить правило</button>
-        </section>
+        <p class="settings-tab-desc" style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px; line-height: 1.5;">Локальные правила проверки текста. Встроенную базу можно дополнять, отключать и переопределять под ваш проект.</p>
         <section class="dictionary-controls">
           <div class="dictionary-control-row">
             <label class="dictionary-toggle"><span>Проверка частых ошибок</span><div class="toggle ${this.state.settings.strictSpellcheck ? 'on' : ''}" data-setting="strictSpellcheck" data-kind="toggle"></div></label>
@@ -11891,8 +11893,11 @@ class NocturneWriter {
               <input class="form-control" data-dictionary-search placeholder="Поиск правил..." value="${escapeHtml(this.state.dictionarySearch || '')}">
             </div>
           </div>
-          <div class="dictionary-filters">
-            ${[['all', 'Все'], ['mine', 'Мои'], ['builtin', 'Встроенные'], ['disabled', 'Отключённые'], ['override', 'Переопределённые']].map(([id, label]) => `<button class="${filter === id ? 'active' : ''}" data-dictionary-filter="${id}">${label}</button>`).join('')}
+          <div class="dictionary-filters-row" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-top:8px;">
+            <div class="dictionary-filters" style="margin:0;">
+              ${[['all', 'Все'], ['mine', 'Мои'], ['builtin', 'Встроенные'], ['disabled', 'Отключённые'], ['override', 'Переопределённые']].map(([id, label]) => `<button class="${filter === id ? 'active' : ''}" data-dictionary-filter="${id}">${label}</button>`).join('')}
+            </div>
+            <button class="pill-btn ai-btn" data-action="dictionary-add" style="height:32px;"><i class="bx bx-plus"></i> Добавить правило</button>
           </div>
         </section>
         <div class="dictionary-list">
@@ -11962,12 +11967,7 @@ class NocturneWriter {
     </button>`;
     return `
       <div class="tab-content active review-settings">
-        <div class="dictionary-header">
-          <div>
-            <h3>Режимы работы и редактура</h3>
-            <p>Выберите, как документ ведёт себя сейчас: свободное письмо, редакторская разметка или финальная обработка правок.</p>
-          </div>
-        </div>
+        <p class="settings-tab-desc" style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px; line-height: 1.5;">Выберите, как документ ведёт себя сейчас: свободное письмо, редакторская разметка или финальная обработка правок.</p>
         <div class="review-mode-grid">
           ${modeCard('write', 'Письмо', 'Обычное редактирование текста.', 'bx-pen')}
           ${modeCard('editor', 'Редактор', 'Текст защищён, доступны комментарии, пометки и предложения.', 'bx-comment-edit')}
@@ -14539,6 +14539,7 @@ class NocturneWriter {
       scrollSensitivity: mobile ? 42 : 36,
       scrollSpeed: mobile ? 9 : 10,
       handle: undefined,
+      draggable: '.char-card, .loc-card, .timeline-item, .note-card',
       filter: '.empty-card, .mobile-empty-card, .doc-folder-empty, .workspace-empty, .workspace-single-empty, button, input, textarea, select, a, [data-action], .lore-card-actions, .mobile-lore-actions',
       preventOnFilter: false,
       onStart: (event) => {
@@ -15956,14 +15957,7 @@ class NocturneWriter {
   exportSettingsContent(row, toggle, input) {
     return `
       <div class="tab-content active export-settings">
-        <section class="export-hero-card">
-          <div>
-            <span class="export-kicker">Экспорт</span>
-            <h3>Профессиональный экспорт</h3>
-            <p>Соберите рукопись для чтения, печати или обмена с редактором.</p>
-          </div>
-          <div class="export-badges"><span>PDF</span><span>DOCX</span><span>.NOCTURNED</span></div>
-        </section>
+        <p class="settings-tab-desc" style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px; line-height: 1.5;">Соберите рукопись для чтения, печати или обмена с редактором (поддерживаются форматы PDF, DOCX, .NOCTURNED).</p>
         <section class="export-format-grid">
           <article class="export-format-card">
             <i class="bx bxs-file-pdf"></i>
@@ -16009,12 +16003,7 @@ class NocturneWriter {
     
     return `
       <div class="tab-content active macros-settings">
-        <section class="macros-hero">
-          <div>
-            <h3>Клавиатурные Макросы</h3>
-            <p>Настройте автозамену при печати. Например, одновременное нажатие <strong>Ctrl + [</strong> выдаст <strong>«</strong>, или любая другая комбинация клавиш вставит нужный символ.</p>
-          </div>
-        </section>
+        <p class="settings-tab-desc" style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px; line-height: 1.5;">Настройте автозамену при печати. Например, одновременное нажатие <strong>Ctrl + [</strong> выдаст <strong>«</strong>, или любая другая комбинация клавиш вставит нужный символ.</p>
 
         <section class="macro-add-card">
           <h4>Добавить новый макрос</h4>
@@ -16025,6 +16014,7 @@ class NocturneWriter {
                 <input class="form-control" type="text" id="new-macro-keys" placeholder="Нажмите 'Записать'..." value="${escapeHtml(recordedVal)}" readonly>
                 <button class="pill-btn ${this.macroRecordingState ? 'recording active' : ''}" data-action="macro-record-toggle">${recordBtnText}</button>
               </div>
+              <div id="macro-record-instructions" class="macro-helper-text" style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: ${this.macroRecordingState ? 'block' : 'none'};">Нажмите сочетание клавиш на клавиатуре, чтобы записать макрос.</div>
               <div id="macro-conflict-warning" class="macro-warning" style="display:none; color:var(--accent); font-size:12px; margin-top:6px; font-weight:500;"></div>
             </div>
             <div class="macro-form-field">
@@ -16067,10 +16057,14 @@ class NocturneWriter {
     // Update record button state
     const recordBtn = document.querySelector('[data-action="macro-record-toggle"]');
     if (recordBtn) {
-      const btnText = this.macroRecordingState ? 'Запись... (нажмите клавиши)' : 'Записать';
+      const btnText = this.macroRecordingState ? 'Запись...' : 'Записать';
       recordBtn.textContent = btnText;
       recordBtn.classList.toggle('recording', !!this.macroRecordingState);
       recordBtn.classList.toggle('active', !!this.macroRecordingState);
+    }
+    const recordInstruct = document.getElementById('macro-record-instructions');
+    if (recordInstruct) {
+      recordInstruct.style.display = this.macroRecordingState ? 'block' : 'none';
     }
     const keysInput = document.getElementById('new-macro-keys');
     if (keysInput) keysInput.value = this.macroRecordedKeys || '';
@@ -17823,7 +17817,7 @@ ${raw}`;
 
   findTelegramArtifacts(text) {
     const matches = [];
-    const pcRegex = /(^|\r?\n)(\[\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2}\]\s+([^:\n\s][a-zA-Z0-9_а-яА-ЯёЁ\s\-]{1,30}):\s*)/g;
+    const pcRegex = /(^|\r?\n)(\[\d{2}\.\d{2}\.\d{2,4},?\s+\d{2}:\d{2}(:\d{2})?\]\s+([^:\n\s][a-zA-Z0-9_а-яА-ЯёЁ\s\-\.]{1,40}):\s*)/g;
     const mobileRegex = /(^|\r?\n)(([^:\n\s\.\?!,][a-zA-Z0-9_а-яА-ЯёЁ\s\-]{1,30}):\s*)(?=\r?\n)/g;
     
     let match;
@@ -17849,7 +17843,7 @@ ${raw}`;
   }
 
   cleanTelegramArtifacts(text) {
-    let cleaned = text.replace(/(^|\r?\n)\[\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2}\]\s+([^:\n\s][a-zA-Z0-9_а-яА-ЯёЁ\s\-]{1,30}):\s*/g, (match, p1) => {
+    let cleaned = text.replace(/(^|\r?\n)\[\d{2}\.\d{2}\.\d{2,4},?\s+\d{2}:\d{2}(:\d{2})?\]\s+([^:\n\s][a-zA-Z0-9_а-яА-ЯёЁ\s\-\.]{1,40}):\s*/g, (match, p1) => {
       return p1;
     });
     
@@ -17861,7 +17855,7 @@ ${raw}`;
   }
 
   setReaperImage(imgEl, stateName) {
-    const src = `/reaper_photo/reaper_${stateName}.png`;
+    const src = `reaper_photo/reaper_${stateName}.png`;
     imgEl.src = src;
     const wrapper = imgEl.closest('.cleaner-reaper-wrapper');
     if (wrapper) {
@@ -17910,9 +17904,9 @@ ${raw}`;
     
     if (nextState === 'found') {
       if (glowImg && glowTint) {
-        glowImg.src = '/reaper_photo/reaper_found.png';
-        glowTint.style.webkitMaskImage = 'url(/reaper_photo/reaper_found.png)';
-        glowTint.style.maskImage = 'url(/reaper_photo/reaper_found.png)';
+        glowImg.src = 'reaper_photo/reaper_found.png';
+        glowTint.style.webkitMaskImage = 'url(reaper_photo/reaper_found.png)';
+        glowTint.style.maskImage = 'url(reaper_photo/reaper_found.png)';
         glowImg.style.transition = `opacity ${duration}ms ease`;
         glowTint.style.transition = `opacity ${duration}ms ease`;
         glowImg.style.opacity = '1';
@@ -17923,7 +17917,7 @@ ${raw}`;
     }
     
     if (glowImg && glowTint) {
-      const src = `/reaper_photo/reaper_${nextState}.png`;
+      const src = `reaper_photo/reaper_${nextState}.png`;
       glowImg.src = src;
       glowTint.style.webkitMaskImage = `url(${src})`;
       glowTint.style.maskImage = `url(${src})`;
@@ -17981,7 +17975,7 @@ ${raw}`;
     }
     
     if (glowImg && glowTint) {
-      const src = '/reaper_photo/reaper_delete.png';
+      const src = 'reaper_photo/reaper_delete.png';
       glowImg.src = src;
       glowTint.style.webkitMaskImage = `url(${src})`;
       glowTint.style.maskImage = `url(${src})`;
@@ -18040,12 +18034,12 @@ ${raw}`;
       <div class="cleaner-modal-container">
         <div class="cleaner-reaper-wrapper">
           <!-- Base layers -->
-          <img src="/reaper_photo/reaper_start.png" id="cleaner-reaper-img" class="cleaner-reaper-img" alt="Reaper">
-          <div class="cleaner-reaper-tint" style="-webkit-mask-image: url(/reaper_photo/reaper_start.png); mask-image: url(/reaper_photo/reaper_start.png);"></div>
+          <img src="reaper_photo/reaper_start.png" id="cleaner-reaper-img" class="cleaner-reaper-img" alt="Reaper">
+          <div class="cleaner-reaper-tint" style="-webkit-mask-image: url(reaper_photo/reaper_start.png); mask-image: url(reaper_photo/reaper_start.png);"></div>
           
           <!-- Glow overlay (reaper_found.png) -->
-          <img src="/reaper_photo/reaper_found.png" id="cleaner-reaper-glow-img" class="cleaner-reaper-img" style="opacity: 0; z-index: 10;" alt="Reaper Glow">
-          <div class="cleaner-reaper-glow-tint" style="-webkit-mask-image: url(/reaper_photo/reaper_found.png); mask-image: url(/reaper_photo/reaper_found.png); opacity: 0; z-index: 11;"></div>
+          <img src="reaper_photo/reaper_found.png" id="cleaner-reaper-glow-img" class="cleaner-reaper-img" style="opacity: 0; z-index: 10;" alt="Reaper Glow">
+          <div class="cleaner-reaper-glow-tint" style="-webkit-mask-image: url(reaper_photo/reaper_found.png); mask-image: url(reaper_photo/reaper_found.png); opacity: 0; z-index: 11;"></div>
         </div>
         <div class="cleaner-modal">
           <div class="cleaner-content" id="cleaner-content">

@@ -583,18 +583,6 @@ body.theme-experimental:hover .sidebar,
 }
 
 /* Macros Tab Styling */
-.macros-hero {
-  margin-bottom: 24px;
-}
-.macros-hero h3 {
-  font-size: 20px;
-  color: var(--text-main);
-  margin-bottom: 6px;
-}
-.macros-hero p {
-  font-size: 14px;
-  color: var(--text-muted);
-}
 .macro-add-card {
   background: var(--surface-soft, rgba(255, 255, 255, 0.02));
   border: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
@@ -608,21 +596,19 @@ body.theme-experimental:hover .sidebar,
   margin-bottom: 16px;
 }
 .macro-form-grid {
-  display: grid;
-  grid-template-columns: 2fr 1.5fr 1fr;
+  display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   align-items: flex-end;
 }
-@media (max-width: 768px) {
-  .macro-form-grid {
-    grid-template-columns: 1fr;
-    align-items: stretch;
-  }
-}
 .macro-form-field {
+  flex: 1 1 200px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+.macro-form-field.btn-field {
+  flex: 0 0 auto;
 }
 .macro-form-field label {
   font-size: 12px;

@@ -8,6 +8,7 @@ await rm(dist, { recursive: true, force: true });
 await mkdir(dist, { recursive: true });
 await copyFile(join(root, 'index.html'), join(dist, 'index.html'));
 await cp(join(root, 'src'), join(dist, 'src'), { recursive: true });
+await cp(join(root, 'reaper_photo'), join(dist, 'reaper_photo'), { recursive: true });
 
 // Bundle CSS
 const stylesPath = join(dist, 'src', 'styles.css');

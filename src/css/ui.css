@@ -1351,6 +1351,7 @@ body.resizing-workspace {
   padding: 5px 8px;
   font: 700 11px var(--font-ui);
   cursor: pointer;
+  transition: all 0.2s ease;
 }
 .mini-text-btn:hover {
   border-color: rgba(var(--accent-rgb, 139, 92, 246),.42);
@@ -1820,17 +1821,6 @@ body.ctrl-pressed .entity-family-link:hover {
 .tab-content.active.dictionary-settings {
   display: flex;
 }
-.dictionary-header,
-.dictionary-hero {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: linear-gradient(135deg, rgba(var(--accent-rgb, 139, 92, 246),.09), rgba(255,255,255,.025) 48%, rgba(56,189,248,.045));
-}
 .dictionary-controls {
   display: grid;
   gap: 14px;
@@ -1844,17 +1834,6 @@ body.ctrl-pressed .entity-family-link:hover {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   align-items: center;
   gap: 12px;
-}
-.dictionary-header h3,
-.dictionary-hero h3 {
-  margin: 0 0 4px;
-  font-size: 18px;
-}
-.dictionary-header p,
-.dictionary-hero p {
-  margin: 0;
-  color: var(--text-muted);
-  max-width: 620px;
 }
 .dictionary-toggle {
   display: flex;
@@ -3572,6 +3551,7 @@ body.resizing-floating-note {
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
+  transition: color 150ms ease, background-color 150ms ease, border-left-color 150ms ease, background 150ms ease;
 }
 .settings-tab:hover { color: var(--button-text-strong); background: var(--card-bg); }
 .settings-tab.active {
@@ -4040,51 +4020,11 @@ body.resizing-floating-note {
 .tab-content.export-settings.active {
   display: flex;
 }
-.export-hero-card,
 .export-meta-card,
 .export-format-card {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: rgba(255,255,255,.025);
-}
-.export-hero-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 20px 22px;
-  background: linear-gradient(135deg, rgba(var(--accent-rgb, 139, 92, 246),.14), rgba(56,189,248,.055)), rgba(255,255,255,.022);
-}
-.export-kicker {
-  color: var(--accent);
-  font-size: 11px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: .08em;
-}
-.export-hero-card h3 {
-  margin: 5px 0 8px;
-  font-size: 24px;
-}
-.export-hero-card p {
-  margin: 0;
-  max-width: 520px;
-  color: var(--text-muted);
-  line-height: 1.55;
-}
-.export-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.export-badges span {
-  padding: 6px 9px;
-  border: 1px solid rgba(255,255,255,.08);
-  border-radius: 999px;
-  background: rgba(0,0,0,.18);
-  color: var(--text-main);
-  font-size: 11px;
-  font-weight: 800;
 }
 .export-format-grid {
   display: grid;

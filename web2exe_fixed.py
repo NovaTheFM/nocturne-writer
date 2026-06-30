@@ -31,13 +31,14 @@ def clean_build_dir():
 
 
 def copy_web_app():
-    required = [ROOT / "index.html", ROOT / "src"]
+    required = [ROOT / "index.html", ROOT / "src", ROOT / "reaper_photo"]
     missing = [str(path) for path in required if not path.exists()]
     if missing:
         raise FileNotFoundError(f"Missing production files: {', '.join(missing)}")
 
     shutil.copy2(ROOT / "index.html", APP_SRC / "index.html")
     shutil.copytree(ROOT / "src", APP_SRC / "src")
+    shutil.copytree(ROOT / "reaper_photo", APP_SRC / "reaper_photo")
     shutil.copytree(ROOT / "electron", BUILD_DIR / "electron")
     scripts_dir = BUILD_DIR / "scripts"
     scripts_dir.mkdir(parents=True, exist_ok=True)
