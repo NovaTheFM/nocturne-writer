@@ -8317,9 +8317,7 @@ body.theme-paper .accent-preset.active {
   align-items: center;
   cursor: pointer;
 }
-.timeline-associations-fields:not(.collapsed) .associations-title-row {
-  margin-bottom: 14px;
-}
+
 .associations-title {
   margin: 0;
   font-size: 14px;
@@ -8356,6 +8354,7 @@ body.theme-paper .accent-preset.active {
 .assoc-collapsible-content {
   overflow: hidden;
   min-height: 0;
+  padding-top: 14px;
 }
 .associations-title i {
   color: rgba(var(--accent-rgb, 139, 92, 246), 0.85);
