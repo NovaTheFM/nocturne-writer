@@ -31,8 +31,8 @@
   --popover-shadow: 0 24px 64px rgba(0,0,0,.52), 0 1px 0 rgba(255,255,255,.07) inset, 0 0 0 1px rgba(255,255,255,.026) inset;
   --workspace-bg:
     radial-gradient(circle at 22% 18%, rgba(var(--accent-rgb, 139, 92, 246), .13), transparent 34%),
-    radial-gradient(circle at 80% 12%, rgba(56, 189, 248, .075), transparent 30%),
-    radial-gradient(circle at 52% 82%, rgba(16, 185, 129, .045), transparent 36%),
+    radial-gradient(circle at 80% 12%, rgba(var(--accent-rgb, 139, 92, 246), .075), transparent 30%),
+    radial-gradient(circle at 52% 82%, rgba(var(--accent-rgb, 139, 92, 246), .045), transparent 36%),
     linear-gradient(145deg, #07070a 0%, #0d0d12 44%, #09090d 100%);
   --workspace-grid: rgba(255,255,255,.025);
   --workspace-grid-2: rgba(255,255,255,.018);
