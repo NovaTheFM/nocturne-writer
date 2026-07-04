@@ -14723,20 +14723,20 @@ class NocturneWriter {
     const visual = item.image ? `<img src="${item.image}" alt="">` : `<i class="bx ${item.icon || 'bx-user'}"></i>`;
     const isNew = this.state.newlyCreatedId === item.id;
     const entranceClass = isNew ? ' new-card-entrance' : '';
-    return `<div class="char-card${entranceClass}" data-lore-type="characters" data-lore-id="${item.id}" ${draggable ? 'draggable="true"' : ''}>${this.loreCardActions('characters', item.id)}<div class="char-img">${visual}</div><div class="char-info"><h3>${escapeHtml(this.entityDisplayName(item))}</h3><p>${escapeHtml(item.role || item.body)}</p></div></div>`;
+    return `<div class="char-card${entranceClass}" data-lore-type="characters" data-lore-id="${item.id}">${this.loreCardActions('characters', item.id)}<div class="char-img">${visual}</div><div class="char-info"><h3>${escapeHtml(this.entityDisplayName(item))}</h3><p>${escapeHtml(item.role || item.body)}</p></div></div>`;
   }
 
   locationCard(item, draggable = false) {
     const visual = item.image ? `<img src="${escapeHtml(item.image)}" alt="">` : `<i class="bx ${escapeHtml(item.icon || 'bx-buildings')}"></i>`;
     const isNew = this.state.newlyCreatedId === item.id;
     const entranceClass = isNew ? ' new-card-entrance' : '';
-    return `<div class="loc-card${entranceClass}" data-lore-type="locations" data-lore-id="${item.id}" ${draggable ? 'draggable="true"' : ''}>${this.loreCardActions('locations', item.id)}<div class="loc-img">${visual}</div><div class="loc-info"><h3>${escapeHtml(this.entityDisplayName(item))}</h3><p>${escapeHtml(item.role || item.body)}</p></div></div>`;
+    return `<div class="loc-card${entranceClass}" data-lore-type="locations" data-lore-id="${item.id}">${this.loreCardActions('locations', item.id)}<div class="loc-img">${visual}</div><div class="loc-info"><h3>${escapeHtml(this.entityDisplayName(item))}</h3><p>${escapeHtml(item.role || item.body)}</p></div></div>`;
   }
 
   noteCard(item, draggable = false) {
     const isNew = this.state.newlyCreatedId === item.id;
     const entranceClass = isNew ? ' new-card-entrance' : '';
-    return `<div class="char-card note-card${entranceClass}" data-lore-type="notes" data-lore-id="${item.id}" ${draggable ? 'draggable="true"' : ''}>${this.loreCardActions('notes', item.id)}<div class="char-img"><i class="bx bx-note"></i></div><div class="char-info"><h3>${escapeHtml(item.title || 'Без названия')}</h3><p>${escapeHtml(item.body || 'Пустая запись')}</p></div></div>`;
+    return `<div class="char-card note-card${entranceClass}" data-lore-type="notes" data-lore-id="${item.id}">${this.loreCardActions('notes', item.id)}<div class="char-img"><i class="bx bx-note"></i></div><div class="char-info"><h3>${escapeHtml(item.title || 'Без названия')}</h3><p>${escapeHtml(item.body || 'Пустая запись')}</p></div></div>`;
   }
 
   timelineCard(item, options = {}) {
@@ -14794,7 +14794,7 @@ class NocturneWriter {
     const isNew = this.state.newlyCreatedId === item.id;
     const entranceClass = isNew ? ' new-card-entrance' : '';
 
-    return `<div class="timeline-item ${isLast ? 'last' : ''}${entranceClass}" data-lore-type="${type}" data-lore-id="${item.id}"${parentAttr} ${draggable ? 'draggable="true"' : ''}>
+    return `<div class="timeline-item ${isLast ? 'last' : ''}${entranceClass}" data-lore-type="${type}" data-lore-id="${item.id}"${parentAttr}>
       <div class="timeline-track"><div class="timeline-dot"></div><div class="timeline-line"></div></div>
       <div class="timeline-content-wrapper">
         <div class="timeline-date">${escapeHtml(item.date)}</div>
