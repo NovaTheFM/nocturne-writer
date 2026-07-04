@@ -8600,6 +8600,13 @@ class NocturneWriter {
     document.querySelectorAll('.folder-docs').forEach((zone) => {
       const folderId = zone.previousElementSibling?.dataset.folderId;
       if (!folderId) return;
+      
+      // Prevent browser native drag-and-drop session from interfering with SortableJS
+      zone.addEventListener('dragstart', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }, { capture: true });
+
       const sortable = new window.Sortable(zone, {
         group: 'docs',
         animation: 250,
@@ -8623,6 +8630,15 @@ class NocturneWriter {
           document.body.classList.remove('sortable-active');
           event.from.classList.remove('is-dragging');
           event.to.classList.remove('is-dragging');
+          
+          // Add drop landing animation
+          if (event.item) {
+            event.item.classList.add('sortable-drop-landing');
+            setTimeout(() => {
+              event.item?.classList.remove('sortable-drop-landing');
+            }, 460);
+          }
+
           if (paneDrop) {
             this.renderDocs();
             this.kbSuppressClickUntil = Date.now() + 360;
@@ -14594,6 +14610,13 @@ class NocturneWriter {
   setupKbSortable(zone) {
     if (!window.Sortable) return;
     zone.querySelectorAll('[draggable]').forEach((el) => el.removeAttribute('draggable'));
+    
+    // Prevent browser native drag-and-drop session from interfering with SortableJS
+    zone.addEventListener('dragstart', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    }, { capture: true });
+
     const zoneType = zone.dataset.dndZone;
     const isTimelineZone = ['timeline', 'subtimeline'].includes(zoneType);
     const mobile = this.isMobileLayout?.();
@@ -14637,6 +14660,15 @@ class NocturneWriter {
         this.updateTimelineConnectors(event.from);
         this.updateTimelineConnectors(event.to);
         this.kbSuppressClickUntil = Date.now() + 260;
+        
+        // Add drop landing animation
+        if (event.item) {
+          event.item.classList.add('sortable-drop-landing');
+          setTimeout(() => {
+            event.item?.classList.remove('sortable-drop-landing');
+          }, 460);
+        }
+
         if (event.oldIndex !== event.newIndex) {
           await this.persistKbDomOrder(zoneType, event.from);
         }

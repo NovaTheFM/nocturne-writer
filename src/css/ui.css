@@ -4846,6 +4846,29 @@ body.sortable-active * {
   border-color: #3e3e4d;
   box-shadow: none;
 }
+@keyframes sortable-drop-float {
+  0% {
+    transform: translateY(-8px) scale(1.02);
+    box-shadow: 0 16px 32px rgba(0,0,0,.5), 0 0 20px rgba(var(--accent-rgb, 139, 92, 246), 0.35);
+    border-color: rgba(var(--accent-rgb, 139, 92, 246), 0.5);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+.sortable-drop-landing:not(.timeline-item) {
+  animation: sortable-drop-float 0.46s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, box-shadow;
+  z-index: 10;
+}
+
+.sortable-drop-landing.timeline-item .timeline-content {
+  animation: sortable-drop-float 0.46s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, box-shadow;
+  z-index: 10;
+}
+
 .sortable-ghost {
   opacity: .28 !important;
   transform: scale(.985);
@@ -4872,9 +4895,12 @@ body.sortable-active * {
 .sortable-ghost.doc-item {
   opacity: .22 !important;
 }
+.sortable-drag:not(.char-card):not(.loc-card):not(.doc-item):not(.note-card):not(.mobile-lore-card),
+.sortable-fallback-drag:not(.char-card):not(.loc-card):not(.doc-item):not(.note-card):not(.mobile-lore-card) {
+  background: transparent !important;
+}
 .sortable-drag,
 .sortable-fallback-drag {
-  background: transparent !important;
   pointer-events: none !important;
   will-change: transform;
 }
