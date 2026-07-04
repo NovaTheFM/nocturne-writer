@@ -1484,6 +1484,10 @@ class NocturneWriter {
       const time = [...this.state.lore.timeline].sort((a, b) => (a.order - b.order) || parseTimelineRank(a.date) - parseTimelineRank(b.date));
       return `<section class="kb-pane-section"><h2>Таймлайн</h2><div class="timeline-container">${time.length ? time.map((item, i, arr) => this.timelineCard(item, { isLast: i === arr.length - 1 })).join('') : this.emptyStateMarkup('bx-git-commit', 'Хронология пока пуста.', 'Добавьте первое событие, чтобы собрать порядок истории.', 'new-lore', 'Добавить событие', 'data-lore-type="timeline"')}</div></section>`;
     }
+    if (tab === 'notes') {
+      const notes = [...(this.state.lore.notes || [])].sort((a, b) => a.order - b.order);
+      return `<section class="kb-pane-section"><h2>Записи</h2><div class="character-grid">${notes.length ? notes.map((item) => this.noteCard(item, false)).join('') : this.emptyStateMarkup('bx-note', 'Записей пока нет.', 'Добавьте первую свободную запись или заметку к миру.', 'new-lore', 'Создать запись', 'data-lore-type="notes"')}</div></section>`;
+    }
     const chars = [...this.state.lore.characters].sort((a, b) => a.order - b.order);
     return `<section class="kb-pane-section"><h2>Персонажи</h2><div class="character-grid">${chars.length ? chars.map((item) => this.characterCard(item, false)).join('') : this.emptyStateMarkup('bx-user-pin', 'Персонажей пока нет.', 'Создайте первый профиль для распознавания имён в тексте.', 'new-lore', 'Создать профиль', 'data-lore-type="characters"')}</div></section>`;
   }
@@ -14899,14 +14903,18 @@ class NocturneWriter {
           <label class="lore-field lore-field-wide lore-description-field">Описание <textarea class="form-control" name="body" required>${escapeHtml(item.body || '')}</textarea></label>
           ${isTimeline ? `
             <div class="lore-field lore-field-wide timeline-associations-fields">
-              <h4 class="associations-title"><i class="bx bx-link"></i> Привязки и Ассоциации</h4>
-              <div class="assoc-tabs-header">
-                <button type="button" class="assoc-tab-btn active" data-assoc-tab="char"><i class="bx bx-user"></i> Персонажи</button>
-                <button type="button" class="assoc-tab-btn" data-assoc-tab="loc"><i class="bx bx-map-alt"></i> Локации</button>
-                <button type="button" class="assoc-tab-btn" data-assoc-tab="note"><i class="bx bx-note"></i> Записи</button>
-                <button type="button" class="assoc-tab-btn" data-assoc-tab="doc"><i class="bx bx-file"></i> Документы</button>
+              <div class="associations-title-row" onclick="this.closest('.timeline-associations-fields').classList.toggle('collapsed')">
+                <h4 class="associations-title"><i class="bx bx-link"></i> Привязки и Ассоциации</h4>
+                <button type="button" class="btn-icon assoc-collapse-btn" title="Скрыть/Показать"><i class="bx bx-chevron-down"></i></button>
               </div>
-              
+              <div class="assoc-collapsible-wrapper">
+                <div class="assoc-collapsible-content">
+                  <div class="assoc-tabs-header">
+                    <button type="button" class="assoc-tab-btn active" data-assoc-tab="char"><i class="bx bx-user"></i> Персонажи</button>
+                    <button type="button" class="assoc-tab-btn" data-assoc-tab="loc"><i class="bx bx-map-alt"></i> Локации</button>
+                    <button type="button" class="assoc-tab-btn" data-assoc-tab="note"><i class="bx bx-note"></i> Записи</button>
+                    <button type="button" class="assoc-tab-btn" data-assoc-tab="doc"><i class="bx bx-file"></i> Документы</button>
+                  </div>
               <div class="assoc-tab-content active" data-assoc-content="char">
                 <div class="assoc-search-wrap">
                   <input type="text" class="form-control assoc-search-input" placeholder="Поиск персонажей..." data-assoc-search="char" autocomplete="off">
@@ -14926,9 +14934,9 @@ class NocturneWriter {
                           </div>
                         </div>
                         <div class="assoc-card-role-selector">
-                          <button type="button" class="role-btn ${role === 'regular' ? 'active' : ''}" data-role="regular" title="Участие">Участ.</button>
-                          <button type="button" class="role-btn ${role === 'first_appearance' ? 'active' : ''}" data-role="first_appearance" title="Появление">Появл.</button>
-                          <button type="button" class="role-btn ${role === 'death' ? 'active' : ''}" data-role="death" title="Смерть">Смерть</button>
+                          <button type="button" class="role-btn ${checked && role === 'regular' ? 'active' : ''}" data-role="regular" title="Участие">Участ.</button>
+                          <button type="button" class="role-btn ${checked && role === 'first_appearance' ? 'active' : ''}" data-role="first_appearance" title="Появление">Появл.</button>
+                          <button type="button" class="role-btn ${checked && role === 'death' ? 'active' : ''}" data-role="death" title="Смерть">Смерть</button>
                         </div>
                         <input type="checkbox" name="char_assoc_${char.id}" ${checked ? 'checked' : ''} style="display:none">
                         <input type="hidden" name="char_role_${char.id}" value="${role}" class="assoc-hidden-role">
@@ -14996,6 +15004,8 @@ class NocturneWriter {
                     `;
                   }).join('') || '<div class="empty-state-text">Нет документов</div>'}
                 </div>
+                </div>
+                </div>
               </div>
             </div>
           ` : ''}
@@ -15013,17 +15023,45 @@ class NocturneWriter {
     // Tab switching behavior
     overlay.querySelectorAll('.assoc-tab-btn').forEach(btn => {
       btn.onclick = () => {
-        overlay.querySelectorAll('.assoc-tab-btn').forEach(b => b.classList.remove('active'));
-        overlay.querySelectorAll('.assoc-tab-content').forEach(c => c.classList.remove('active'));
-        btn.classList.add('active');
-        const tab = btn.dataset.assocTab;
-        overlay.querySelector(`[data-assoc-content="${tab}"]`).classList.add('active');
+        const wrapper = overlay.querySelector('.assoc-collapsible-content');
+        if (wrapper) {
+          const prevHeight = wrapper.offsetHeight;
+          wrapper.style.height = `${prevHeight}px`;
+          
+          overlay.querySelectorAll('.assoc-tab-btn').forEach(b => b.classList.remove('active'));
+          overlay.querySelectorAll('.assoc-tab-content').forEach(c => c.classList.remove('active'));
+          btn.classList.add('active');
+          const tab = btn.dataset.assocTab;
+          overlay.querySelector(`[data-assoc-content="${tab}"]`).classList.add('active');
+          
+          wrapper.style.height = 'auto';
+          const targetHeight = wrapper.offsetHeight;
+          
+          wrapper.style.height = `${prevHeight}px`;
+          // Force reflow
+          wrapper.offsetHeight;
+          
+          wrapper.style.transition = 'height 300ms ease-out';
+          wrapper.style.height = `${targetHeight}px`;
+          
+          setTimeout(() => {
+            wrapper.style.transition = '';
+            wrapper.style.height = '';
+          }, 300);
+        } else {
+          overlay.querySelectorAll('.assoc-tab-btn').forEach(b => b.classList.remove('active'));
+          overlay.querySelectorAll('.assoc-tab-content').forEach(c => c.classList.remove('active'));
+          btn.classList.add('active');
+          const tab = btn.dataset.assocTab;
+          overlay.querySelector(`[data-assoc-content="${tab}"]`).classList.add('active');
+        }
       };
     });
 
     overlay.querySelectorAll('.assoc-card').forEach(card => {
       card.onclick = (e) => {
         const roleBtn = e.target.closest('.role-btn');
+        const checkbox = card.querySelector('input[type="checkbox"]');
         if (roleBtn) {
           e.stopPropagation();
           const role = roleBtn.dataset.role;
@@ -15033,12 +15071,21 @@ class NocturneWriter {
           if (roleLabel) {
             roleLabel.textContent = role === 'first_appearance' ? 'Появление' : role === 'death' ? 'Смерть' : 'Участие';
           }
+          if (!checkbox.checked) {
+            checkbox.checked = true;
+            card.classList.add('active');
+          }
           card.querySelectorAll('.role-btn').forEach(btn => btn.classList.toggle('active', btn === roleBtn));
           return;
         }
-        const checkbox = card.querySelector('input[type="checkbox"]');
         checkbox.checked = !checkbox.checked;
         card.classList.toggle('active', checkbox.checked);
+        if (checkbox.checked) {
+          const currentRole = card.dataset.role || 'regular';
+          card.querySelectorAll('.role-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.role === currentRole));
+        } else {
+          card.querySelectorAll('.role-btn').forEach(btn => btn.classList.remove('active'));
+        }
       };
     });
     // Search filter for association columns (Item 3)
@@ -16014,8 +16061,6 @@ class NocturneWriter {
                 <input class="form-control" type="text" id="new-macro-keys" placeholder="Нажмите 'Записать'..." value="${escapeHtml(recordedVal)}" readonly>
                 <button class="pill-btn ${this.macroRecordingState ? 'recording active' : ''}" data-action="macro-record-toggle">${recordBtnText}</button>
               </div>
-              <div id="macro-record-instructions" class="macro-helper-text" style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: ${this.macroRecordingState ? 'block' : 'none'};">Нажмите сочетание клавиш на клавиатуре, чтобы записать макрос.</div>
-              <div id="macro-conflict-warning" class="macro-warning" style="display:none; color:var(--accent); font-size:12px; margin-top:6px; font-weight:500;"></div>
             </div>
             <div class="macro-form-field">
               <label>Выводимый символ</label>
@@ -16025,6 +16070,8 @@ class NocturneWriter {
               <button class="pill-btn ai-btn" data-action="macro-save-new"><i class="bx bx-plus"></i> Добавить</button>
             </div>
           </div>
+          <div id="macro-record-instructions" class="macro-helper-text" style="font-size: 11px; color: var(--text-muted); margin-top: 12px; display: ${this.macroRecordingState ? 'block' : 'none'};">Нажмите сочетание клавиш на клавиатуре, чтобы записать макрос.</div>
+          <div id="macro-conflict-warning" class="macro-warning" style="display:none; color:var(--accent); font-size:12px; margin-top:8px; font-weight:500;"></div>
         </section>
 
         <section class="macros-list-section">
@@ -17855,7 +17902,7 @@ ${raw}`;
   }
 
   setReaperImage(imgEl, stateName) {
-    const src = `reaper_photo/reaper_${stateName}.png`;
+    const src = `./reaper_photo/reaper_${stateName}.png`;
     imgEl.src = src;
     const wrapper = imgEl.closest('.cleaner-reaper-wrapper');
     if (wrapper) {
@@ -17904,9 +17951,9 @@ ${raw}`;
     
     if (nextState === 'found') {
       if (glowImg && glowTint) {
-        glowImg.src = 'reaper_photo/reaper_found.png';
-        glowTint.style.webkitMaskImage = 'url(reaper_photo/reaper_found.png)';
-        glowTint.style.maskImage = 'url(reaper_photo/reaper_found.png)';
+        glowImg.src = './reaper_photo/reaper_found.png';
+        glowTint.style.webkitMaskImage = 'url(./reaper_photo/reaper_found.png)';
+        glowTint.style.maskImage = 'url(./reaper_photo/reaper_found.png)';
         glowImg.style.transition = `opacity ${duration}ms ease`;
         glowTint.style.transition = `opacity ${duration}ms ease`;
         glowImg.style.opacity = '1';
@@ -17917,7 +17964,7 @@ ${raw}`;
     }
     
     if (glowImg && glowTint) {
-      const src = `reaper_photo/reaper_${nextState}.png`;
+      const src = `./reaper_photo/reaper_${nextState}.png`;
       glowImg.src = src;
       glowTint.style.webkitMaskImage = `url(${src})`;
       glowTint.style.maskImage = `url(${src})`;
@@ -17975,7 +18022,7 @@ ${raw}`;
     }
     
     if (glowImg && glowTint) {
-      const src = 'reaper_photo/reaper_delete.png';
+      const src = './reaper_photo/reaper_delete.png';
       glowImg.src = src;
       glowTint.style.webkitMaskImage = `url(${src})`;
       glowTint.style.maskImage = `url(${src})`;
@@ -18034,12 +18081,12 @@ ${raw}`;
       <div class="cleaner-modal-container">
         <div class="cleaner-reaper-wrapper">
           <!-- Base layers -->
-          <img src="reaper_photo/reaper_start.png" id="cleaner-reaper-img" class="cleaner-reaper-img" alt="Reaper">
-          <div class="cleaner-reaper-tint" style="-webkit-mask-image: url(reaper_photo/reaper_start.png); mask-image: url(reaper_photo/reaper_start.png);"></div>
+          <img src="./reaper_photo/reaper_start.png" id="cleaner-reaper-img" class="cleaner-reaper-img" alt="Reaper">
+          <div class="cleaner-reaper-tint" style="-webkit-mask-image: url(./reaper_photo/reaper_start.png); mask-image: url(./reaper_photo/reaper_start.png);"></div>
           
           <!-- Glow overlay (reaper_found.png) -->
-          <img src="reaper_photo/reaper_found.png" id="cleaner-reaper-glow-img" class="cleaner-reaper-img" style="opacity: 0; z-index: 10;" alt="Reaper Glow">
-          <div class="cleaner-reaper-glow-tint" style="-webkit-mask-image: url(reaper_photo/reaper_found.png); mask-image: url(reaper_photo/reaper_found.png); opacity: 0; z-index: 11;"></div>
+          <img src="./reaper_photo/reaper_found.png" id="cleaner-reaper-glow-img" class="cleaner-reaper-img" style="opacity: 0; z-index: 10;" alt="Reaper Glow">
+          <div class="cleaner-reaper-glow-tint" style="-webkit-mask-image: url(./reaper_photo/reaper_found.png); mask-image: url(./reaper_photo/reaper_found.png); opacity: 0; z-index: 11;"></div>
         </div>
         <div class="cleaner-modal">
           <div class="cleaner-content" id="cleaner-content">
