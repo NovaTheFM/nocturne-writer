@@ -184,13 +184,14 @@ const NocturneEntityMentions = Extension.create({
 });
 
 export class NocturneEditorBridge {
-  constructor({ onChange, onFocus, onSelectionUpdate, getSettings, getMentionIndex }) {
+  constructor({ onChange, onFocus, onSelectionUpdate, getSettings, getMentionIndex, onKeydown }) {
     this.instances = new Map();
     this.onChange = onChange;
     this.onFocus = onFocus;
     this.onSelectionUpdate = onSelectionUpdate;
     this.getSettings = getSettings;
     this.getMentionIndex = getMentionIndex;
+    this.onKeydown = onKeydown;
     this.visualPageRaf = new Map();
   }
 
@@ -231,6 +232,7 @@ export class NocturneEditorBridge {
               console.log("PLAYING SOUND");
               this.playTypewriterSound();
             }
+            this.onKeydown?.(event);
             return false;
           },
           focus: () => {

@@ -348,6 +348,12 @@ class NocturneWriter {
         this.updateToolbarState();
       },
       onChange: ({ paneId, doc, transaction }) => this.handleRichEditorChange(paneId, doc, transaction),
+      onKeydown: (event) => {
+        const editable = event.target.closest?.('.page-content');
+        if (editable && this.isEditable(editable) && event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
+          setTimeout(() => this.spawnLetterAnimation(event.key), 0);
+        }
+      }
     });
     this.syncClient = new LocalSyncClient(this);
                     this.lastAiContext = null;
