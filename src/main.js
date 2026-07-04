@@ -3530,7 +3530,11 @@ class NocturneWriter {
     }
     if (action === 'open-lore-detail') {
       const button = event.target.closest('[data-entity-kind][data-entity-id]');
-      if (button) this.openLoreDetail(button.dataset.entityKind, button.dataset.entityId);
+      if (button) {
+        const paneEl = button.closest('.workspace-pane');
+        const paneId = paneEl?.dataset.paneId || null;
+        this.openLoreDetail(button.dataset.entityKind, button.dataset.entityId, paneId);
+      }
       return;
     }
     if (action === 'back-lore-list') {
@@ -3871,7 +3875,9 @@ class NocturneWriter {
     const loreCard = event.target.closest('[data-lore-id]');
     if (loreCard && Date.now() >= this.kbSuppressClickUntil && !event.target.closest('.lore-card-actions, .association-badge, button, a')) {
       if (['characters', 'locations', 'notes', 'timeline', 'subtimeline'].includes(loreCard.dataset.loreType)) {
-        this.openLoreDetail(loreCard.dataset.loreType, loreCard.dataset.loreId);
+        const paneEl = loreCard.closest('.workspace-pane');
+        const paneId = paneEl?.dataset.paneId || null;
+        this.openLoreDetail(loreCard.dataset.loreType, loreCard.dataset.loreId, paneId);
       } else {
         this.editLore(loreCard.dataset.loreType, loreCard.dataset.loreId, loreCard.dataset.parentId);
       }
@@ -5668,7 +5674,7 @@ class NocturneWriter {
   runEntityContextAction(action, payload) {
     if (!payload || payload.kind === 'family') return;
     const loreType = payload.kind === 'location' ? 'locations' : 'characters';
-    if (action === 'context-entity-detail') this.openLoreDetail(payload.kind, payload.id);
+    if (action === 'context-entity-detail') this.openLoreDetail(payload.kind, payload.id, this.state.workspace.mode === 'split' ? 'secondary' : null);
     if (action === 'context-entity-side') this.openSecondaryPane({ type: `${payload.kind}-detail`, entityType: payload.kind, entityId: payload.id });
     if (action === 'context-entity-edit') this.editLore(loreType, payload.id);
     if (action === 'context-entity-note') this.createFloatingNote({ scope: payload.kind, linkedId: payload.id, title: 'Заметка к досье', forceVisible: true });
@@ -5886,7 +5892,7 @@ class NocturneWriter {
   openEntityLinkDetail(link) {
     const payload = this.entityPayloadFromLink(link);
     if (!payload || payload.kind === 'family') return;
-    this.openLoreDetail(payload.kind, payload.entity.id);
+    this.openLoreDetail(payload.kind, payload.entity.id, this.state.workspace.mode === 'split' ? 'secondary' : null);
   }
 
   insertSoftLineBreak(editable) {
@@ -13032,7 +13038,7 @@ class NocturneWriter {
     letter.textContent = char;
     
     // Append to page shell instead of body so it scrolls with the text
-    const pageShell = sel.anchorNode?.parentElement?.closest('.page-shell');
+    const pageShell = sel.anchorNode?.parentElement?.closest('.visual-page-shell') || sel.anchorNode?.parentElement?.closest('.page');
     if (pageShell) {
       pageShell.style.position = 'relative';
       const shellRect = pageShell.getBoundingClientRect();
@@ -13331,7 +13337,7 @@ class NocturneWriter {
     return type === 'locations' ? 'location' : type === 'characters' ? 'character' : type === 'notes' ? 'note' : type;
   }
 
-  openLoreDetail(type, id) {
+  openLoreDetail(type, id, paneId = null) {
     const normalizedType = this.normalizeLoreType(type);
     if (!['characters', 'locations', 'notes', 'timeline', 'subtimeline'].includes(normalizedType)) return;
     
@@ -13355,6 +13361,14 @@ class NocturneWriter {
       this.state.activeKbTab = normalizedType;
       this.state.mobile.kbTab = normalizedType;
     }
+
+    if (paneId) {
+      const entityType = normalizedType === 'notes' ? 'note' : normalizedType === 'characters' ? 'character' : normalizedType === 'locations' ? 'location' : normalizedType;
+      const detailType = `${entityType}-detail`;
+      this.openInPane(paneId, { type: detailType, entityType: normalizedType, entityId: id });
+      return;
+    }
+
     this.state.activeLoreDetail = { type: normalizedType, id };
     this.hideEntityHoverCards();
     if (this.isMobileLayout()) {
@@ -15332,6 +15346,14 @@ class NocturneWriter {
         } else {
           this.renderKb();
         }
+
+        // Re-render active split-screen or main panes showing KB or detail cards
+        ['primary', 'secondary'].forEach((paneId) => {
+          const pane = this.getPane(paneId);
+          if (pane && (pane.type === 'kb-tab' || (pane.type && pane.type.endsWith('-detail')))) {
+            this.renderWorkspacePane(paneId);
+          }
+        });
       }, 100);
     };
   }
@@ -15396,6 +15418,12 @@ class NocturneWriter {
       await this.saveLore();
       this.renderKb();
       this.refreshVisibleEntityLinks();
+      ['primary', 'secondary'].forEach((paneId) => {
+        const pane = this.getPane(paneId);
+        if (pane && (pane.type === 'kb-tab' || (pane.type && pane.type.endsWith('-detail')))) {
+          this.renderWorkspacePane(paneId);
+        }
+      });
       return;
     }
     if (!this.state.lore[type]) return;
@@ -15428,6 +15456,12 @@ class NocturneWriter {
       this.renderKb();
     }
     this.refreshVisibleEntityLinks();
+    ['primary', 'secondary'].forEach((paneId) => {
+      const pane = this.getPane(paneId);
+      if (pane && (pane.type === 'kb-tab' || (pane.type && pane.type.endsWith('-detail')))) {
+        this.renderWorkspacePane(paneId);
+      }
+    });
   }
 
   fileToDataUrl(file) {
