@@ -8303,16 +8303,13 @@ body.theme-paper .accent-preset.active {
 }
 
 .timeline-associations-fields {
+  display: block;
   margin-top: 16px;
   padding: 16px;
   background: rgba(0, 0, 0, 0.12);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   overflow: hidden;
-  transition: padding 0.3s ease;
-}
-.timeline-associations-fields.collapsed {
-  padding: 8px 16px;
 }
 .associations-title-row {
   display: flex;
