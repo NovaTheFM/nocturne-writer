@@ -3281,6 +3281,7 @@ class NocturneWriter {
         await this.importDocuments(droppedFiles);
       }
     });
+    this.startCaretUpdateLoop();
   }
 
   bindCapacitorBackButton() {
@@ -6378,8 +6379,20 @@ class NocturneWriter {
 
   blockForSelection(editable) {
     const sel = getSelection();
-    const node = sel?.anchorNode;
-    const element = node?.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+    if (!sel || !sel.rangeCount) return null;
+    const range = sel.getRangeAt(0);
+    let node = range.startContainer;
+    if (!node) return null;
+
+    if (node === editable || node.classList?.contains('page-content')) {
+      const offset = range.startOffset;
+      if (node.childNodes && node.childNodes.length > 0) {
+        const index = offset > 0 ? Math.min(offset - 1, node.childNodes.length - 1) : 0;
+        node = node.childNodes[index];
+      }
+    }
+
+    const element = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
     return element?.closest?.('[data-block-id]') || this.editorBlocks(editable)[0] || null;
   }
 
@@ -9915,9 +9928,22 @@ class NocturneWriter {
       <div class="form-modal review-form-modal">
         <h2>Добавить комментарий</h2>
         <div class="review-form-stack">
-          <label class="form-field"><span>Категория</span><select class="modal-select" id="review-category">
-            <option value="style">Стиль / ритм</option><option value="logic">Логика</option><option value="plot">Сюжет / мотивация</option><option value="continuity">Лор / непрерывность</option><option value="orthography">Орфография</option>
-          </select></label>
+          <label class="form-field"><span>Категория</span>
+            <div class="nocturne-select" style="width: 100%;">
+              <input type="hidden" id="review-category" value="style">
+              <button type="button" class="nocturne-select-trigger" data-form-select-toggle data-setting-select-toggle style="width: 100%;">
+                <span>Стиль / ритм</span>
+                <i class="bx bx-chevron-down"></i>
+              </button>
+              <div class="nocturne-select-menu popover-surface" style="width: 100%; min-width: 100%;">
+                <button type="button" class="nocturne-select-option selected" data-form-option data-value="style"><span>Стиль / ритм</span><i class="bx bx-check"></i></button>
+                <button type="button" class="nocturne-select-option" data-form-option data-value="logic"><span>Логика</span><i class="bx bx-check"></i></button>
+                <button type="button" class="nocturne-select-option" data-form-option data-value="plot"><span>Сюжет / мотивация</span><i class="bx bx-check"></i></button>
+                <button type="button" class="nocturne-select-option" data-form-option data-value="continuity"><span>Лор / непрерывность</span><i class="bx bx-check"></i></button>
+                <button type="button" class="nocturne-select-option" data-form-option data-value="orthography"><span>Орфография</span><i class="bx bx-check"></i></button>
+              </div>
+            </div>
+          </label>
           <label class="form-field"><span>Комментарий</span><textarea class="form-control" id="review-comment" rows="6"></textarea></label>
         </div>
         <div class="form-actions"><button class="pill-btn" data-close-form>Отмена</button><button class="pill-btn ai-btn" id="save-review-comment">Сохранить</button></div>
@@ -12820,16 +12846,25 @@ class NocturneWriter {
     const caret = document.getElementById('custom-caret');
     if (!caret || !document.getElementById('app-shell').classList.contains('custom-caret-enabled')) return;
     const sel = getSelection();
-    const activeEditable = document.activeElement?.closest?.('.page-content');
+    
+    let activeEditable = document.activeElement?.closest?.('.page-content');
+    let isFocused = !!activeEditable;
+    if (!activeEditable && sel.rangeCount) {
+      const range = sel.getRangeAt(0);
+      const containerNode = range.commonAncestorContainer;
+      const element = containerNode.nodeType === Node.ELEMENT_NODE ? containerNode : containerNode.parentElement;
+      activeEditable = element?.closest?.('.page-content');
+    }
+
     const paneId = this.state.workspace?.focusedPaneId || 'primary';
     const activePaneEl = activeEditable?.closest(`.workspace-pane[data-pane-id="${paneId}"]`);
     if (!sel.rangeCount || !activeEditable || !activePaneEl) {
-      caret.style.display = 'none';
+      if (caret.style.display !== 'none') caret.style.display = 'none';
       return;
     }
     const range = sel.getRangeAt(0).cloneRange();
     if (!activeEditable.contains(range.commonAncestorContainer)) {
-      caret.style.display = 'none';
+      if (caret.style.display !== 'none') caret.style.display = 'none';
       return;
     }
     const rect = this.rangeRect(range);
@@ -12846,17 +12881,33 @@ class NocturneWriter {
         rect.bottom > scrollRect.bottom ||
         rect.left < scrollRect.left ||
         rect.right > scrollRect.right) {
-      caret.style.display = 'none';
+      if (caret.style.display !== 'none') caret.style.display = 'none';
       return;
     }
 
-    caret.style.display = 'block';
-    caret.style.left = `${rect.left}px`;
-    caret.style.top = `${rect.top}px`;
-    caret.style.height = `${Math.max(4, rect.height || this.state.settings.fontSize * this.state.settings.lineHeight)}px`;
+    if (caret.style.display !== 'block') caret.style.display = 'block';
+
+    const targetLeft = `${rect.left}px`;
+    const targetTop = `${rect.top}px`;
+    const targetHeight = `${Math.max(4, rect.height || this.state.settings.fontSize * this.state.settings.lineHeight)}px`;
+
+    if (caret.style.left !== targetLeft) caret.style.left = targetLeft;
+    if (caret.style.top !== targetTop) caret.style.top = targetTop;
+    if (caret.style.height !== targetHeight) caret.style.height = targetHeight;
+
+    caret.classList.toggle('inactive', !isFocused);
     this.updateCursorLight(activeEditable);
+  }
 
-
+  startCaretUpdateLoop() {
+    if (this.caretLoopId) cancelAnimationFrame(this.caretLoopId);
+    const loop = () => {
+      if (document.hasFocus()) {
+        this.updateCustomCaret();
+      }
+      this.caretLoopId = requestAnimationFrame(loop);
+    };
+    this.caretLoopId = requestAnimationFrame(loop);
   }
 
   expandRangeToWord(range) {
