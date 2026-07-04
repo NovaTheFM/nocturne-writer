@@ -8358,7 +8358,6 @@ body.theme-paper .accent-preset.active {
 .assoc-collapsible-content {
   overflow: hidden;
   min-height: 0;
-  padding-top: 14px;
 }
 .associations-title i {
   color: rgba(var(--accent-rgb, 139, 92, 246), 0.85);
@@ -8366,6 +8365,7 @@ body.theme-paper .accent-preset.active {
 .assoc-tabs-header {
   display: flex;
   gap: 8px;
+  margin-top: 14px;
   margin-bottom: 14px;
   border-bottom: 1px solid var(--border);
   padding-bottom: 8px;
