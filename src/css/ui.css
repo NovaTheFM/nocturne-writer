@@ -9777,8 +9777,10 @@ body.sortable-active .doc-item {
   -webkit-app-region: drag;
   
   /* Core Application Styles */
-  background: var(--bg-panel);
+  background: linear-gradient(to bottom, var(--bg-panel), rgba(18, 18, 22, 0.96));
   border-bottom: 1px solid var(--border-light);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease;
 }
 
 /* Accent Line at top of window */
@@ -9788,9 +9790,10 @@ body.sortable-active .doc-item {
   top: 0; left: 0; right: 0;
   height: 1px;
   background: var(--accent);
-  box-shadow: 0 0 8px var(--accent-glow);
+  box-shadow: 0 1px 4px var(--accent-glow), 0 0 8px var(--accent);
   z-index: 10;
   opacity: 0.85;
+  transition: opacity 0.3s ease, background-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 /* Blur / Material Switch */
@@ -9813,15 +9816,15 @@ html.theme-paper body.material #electron-titlebar { background: rgba(244, 236, 2
 .titlebar-content {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding-left: 14px;
+  gap: 12px;
+  padding-left: 16px;
   z-index: 2;
   pointer-events: none;
 }
 
 .titlebar-logo {
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
   background-color: var(--accent);
   -webkit-mask-image: url('../assets/in_app_icon.png');
   mask-image: url('../assets/in_app_icon.png');
@@ -9829,14 +9832,59 @@ html.theme-paper body.material #electron-titlebar { background: rgba(244, 236, 2
   mask-size: contain;
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
+  filter: drop-shadow(0 0 5px var(--accent-glow));
+  transition: background-color 0.3s ease, filter 0.3s ease, transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.3s ease;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.titlebar-logo:hover {
+  transform: rotate(15deg) scale(1.12);
+  filter: drop-shadow(0 0 8px var(--accent));
 }
 
 .titlebar-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-family: var(--font-ui);
-  font-size: 11.5px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 500;
   color: var(--text-muted);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
+  transition: color 0.3s ease, opacity 0.3s ease;
+}
+
+.titlebar-title .app-name {
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  opacity: 0.8;
+  font-size: 10px;
+  transition: color 0.3s ease, opacity 0.3s ease;
+}
+
+.titlebar-title .title-separator {
+  color: var(--border);
+  font-weight: 300;
+  opacity: 0.4;
+  font-size: 11px;
+  margin: 0 1px;
+}
+
+.titlebar-title .project-name {
+  color: var(--accent);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-shadow: 0 0 6px var(--accent-glow);
+  transition: color 0.3s ease, text-shadow 0.3s ease;
+}
+
+.titlebar-title .doc-name {
+  color: var(--text-main);
+  font-weight: 500;
+  transition: color 0.3s ease;
 }
 
 .titlebar-controls {
@@ -9856,14 +9904,16 @@ html.theme-paper body.material #electron-titlebar { background: rgba(244, 236, 2
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 160ms ease, color 160ms ease;
   padding: 0;
   outline: none;
   border-radius: 0;
+  transition: background-color 0.2s cubic-bezier(0.25, 0.8, 0.25, 1),
+              color 0.2s cubic-bezier(0.25, 0.8, 0.25, 1),
+              opacity 0.3s ease;
 }
 
-.titlebar-btn i {
-  font-size: 16px;
+.titlebar-btn svg {
+  transition: transform 0.2s cubic-bezier(0.25, 0.8, 0.25, 1), stroke 0.2s ease;
 }
 
 .titlebar-btn:hover {
@@ -9871,9 +9921,89 @@ html.theme-paper body.material #electron-titlebar { background: rgba(244, 236, 2
   color: var(--button-text-strong);
 }
 
+.titlebar-btn:hover svg {
+  transform: scale(1.08);
+}
+
+.titlebar-btn:active svg {
+  transform: scale(0.85);
+}
+
+.titlebar-btn.minimize:hover svg,
+.titlebar-btn.maximize:hover svg {
+  color: var(--accent);
+  filter: drop-shadow(0 0 3px var(--accent-glow));
+}
+
 .titlebar-btn.close:hover {
-  background: #e81123;
-  color: #fff;
+  background: linear-gradient(135deg, #e01b2f, #a60917);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 4px 12px rgba(224, 27, 47, 0.3);
+  color: #fff !important;
+}
+
+.titlebar-btn.close:hover svg {
+  transform: rotate(90deg) scale(1.08);
+}
+
+.titlebar-btn.close:active svg {
+  transform: rotate(90deg) scale(0.85);
+}
+
+/* Window Blur/Focus States */
+body.window-blurred #electron-titlebar {
+  opacity: 0.95;
+  box-shadow: none;
+}
+
+body.window-blurred #electron-titlebar::before {
+  opacity: 0.15;
+  box-shadow: none;
+}
+
+body.window-blurred .titlebar-logo {
+  filter: grayscale(100%) opacity(0.4);
+}
+
+body.window-blurred .titlebar-title .app-name,
+body.window-blurred .titlebar-title .project-name,
+body.window-blurred .titlebar-title .doc-name {
+  color: var(--text-muted) !important;
+  text-shadow: none !important;
+  opacity: 0.45;
+}
+
+body.window-blurred .titlebar-btn {
+  opacity: 0.45;
+}
+
+body.window-blurred .titlebar-btn:hover {
+  opacity: 1;
+}
+
+/* Experimental Theme override */
+body.theme-experimental #electron-titlebar {
+  background: rgba(3, 3, 6, 0.88) !important;
+  backdrop-filter: blur(40px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(40px) saturate(180%) !important;
+  border-bottom: 1px solid rgba(var(--accent-rgb, 139, 92, 246), 0.16) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+body.theme-experimental #electron-titlebar::before {
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  box-shadow: 0 0 12px var(--accent);
+  height: 1.5px;
+}
+
+body.theme-experimental .titlebar-title .project-name {
+  text-shadow: 0 0 12px var(--accent);
+  font-family: 'Courier New', Courier, monospace;
+  font-weight: 800;
+}
+
+body.theme-experimental .titlebar-title .app-name {
+  font-family: 'Courier New', Courier, monospace;
+  letter-spacing: 0.08em;
 }
 
 /* Electron layout adjustments */

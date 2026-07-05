@@ -29,4 +29,10 @@ contextBridge.exposeInMainWorld('nocturneElectron', {
   windowMinimize: () => ipcRenderer.invoke('nocturne:window-minimize'),
   windowToggleMaximize: () => ipcRenderer.invoke('nocturne:window-maximize'),
   windowClose: () => ipcRenderer.invoke('nocturne:window-close'),
+  windowIsMaximized: () => ipcRenderer.invoke('nocturne:window-is-maximized'),
+  onWindowMaximizedState: (callback) => {
+    const listener = (_event, isMaximized) => callback(isMaximized);
+    ipcRenderer.on('nocturne:window-maximized-state', listener);
+    return () => ipcRenderer.removeListener('nocturne:window-maximized-state', listener);
+  },
 });

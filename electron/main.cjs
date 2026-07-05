@@ -300,6 +300,14 @@ function createWindow() {
   win.maximize();
   if (typeof win.removeMenu === 'function') win.removeMenu();
 
+  // Send window maximize states to the renderer
+  win.on('maximize', () => {
+    win.webContents.send('nocturne:window-maximized-state', true);
+  });
+  win.on('unmaximize', () => {
+    win.webContents.send('nocturne:window-maximized-state', false);
+  });
+
   if (devUrl) {
     win.loadURL(devUrl);
   } else {
@@ -373,12 +381,12 @@ ipcMain.handle('nocturne:sync-server-stop', () => stopSyncServer());
 ipcMain.handle('nocturne:sync-server-refresh-token', () => refreshSyncToken());
 ipcMain.handle('nocturne:sync-server-connection-info', () => syncStatusPayload());
 
-ipcMain.handle('nocturne:window-minimize', () => {
-  const win = BrowserWindow.getFocusedWindow();
+ipcMain.handle('nocturne:window-minimize', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
   if (win) win.minimize();
 });
-ipcMain.handle('nocturne:window-maximize', () => {
-  const win = BrowserWindow.getFocusedWindow();
+ipcMain.handle('nocturne:window-maximize', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
   if (win) {
     if (win.isMaximized()) {
       win.unmaximize();
@@ -390,7 +398,11 @@ ipcMain.handle('nocturne:window-maximize', () => {
   }
   return false;
 });
-ipcMain.handle('nocturne:window-close', () => {
-  const win = BrowserWindow.getFocusedWindow();
+ipcMain.handle('nocturne:window-close', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
   if (win) win.close();
+});
+ipcMain.handle('nocturne:window-is-maximized', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  return win ? win.isMaximized() : false;
 });

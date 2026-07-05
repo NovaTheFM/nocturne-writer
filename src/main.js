@@ -924,16 +924,85 @@ class NocturneWriter {
     titlebar.style.display = 'flex';
     document.body.classList.add('is-electron');
 
+    // Add focus/blur listeners to add styling classes
+    window.addEventListener('focus', () => {
+      document.body.classList.add('window-focused');
+      document.body.classList.remove('window-blurred');
+    });
+    window.addEventListener('blur', () => {
+      document.body.classList.remove('window-focused');
+      document.body.classList.add('window-blurred');
+    });
+    if (document.hasFocus()) {
+      document.body.classList.add('window-focused');
+      document.body.classList.remove('window-blurred');
+    } else {
+      document.body.classList.remove('window-focused');
+      document.body.classList.add('window-blurred');
+    }
+
     const minBtn = document.getElementById('titlebar-minimize');
     const maxBtn = document.getElementById('titlebar-maximize');
     const closeBtn = document.getElementById('titlebar-close');
 
     if (minBtn) minBtn.addEventListener('click', () => window.nocturneElectron.windowMinimize());
-    if (maxBtn) maxBtn.addEventListener('click', async () => {
-      const isMaximized = await window.nocturneElectron.windowToggleMaximize();
-      maxBtn.innerHTML = isMaximized ? '<i class="bx bx-window"></i>' : '<i class="bx bx-square"></i>';
-    });
+    
+    const updateMaxIcon = (isMaximized) => {
+      if (maxBtn) {
+        maxBtn.title = isMaximized ? 'Восстановить' : 'Развернуть';
+        maxBtn.innerHTML = isMaximized 
+          ? `<svg width="12" height="12" viewBox="0 0 12 12" id="titlebar-maximize-icon"><path d="M3.5,1.5 h7 v7 h-7 z M1.5,3.5 h7 v7 h-7 z" fill="none" stroke="currentColor" stroke-width="1.2" fill-rule="evenodd"/></svg>`
+          : `<svg width="12" height="12" viewBox="0 0 12 12" id="titlebar-maximize-icon"><rect x="2" y="2" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>`;
+      }
+    };
+
+    if (maxBtn) {
+      maxBtn.addEventListener('click', async () => {
+        const isMaximized = await window.nocturneElectron.windowToggleMaximize();
+        updateMaxIcon(isMaximized);
+      });
+    }
+
+    if (window.nocturneElectron.windowIsMaximized) {
+      window.nocturneElectron.windowIsMaximized().then(updateMaxIcon);
+    }
+    if (window.nocturneElectron.onWindowMaximizedState) {
+      window.nocturneElectron.onWindowMaximizedState(updateMaxIcon);
+    }
+
     if (closeBtn) closeBtn.addEventListener('click', () => window.nocturneElectron.windowClose());
+
+    this.updateElectronTitlebarTitle();
+  }
+
+  updateElectronTitlebarTitle() {
+    if (!window.nocturneElectron) return;
+    const titlebar = document.getElementById('electron-titlebar');
+    if (!titlebar) return;
+
+    const activeId = this.state.activeLoreId || 'world';
+    const project = this.state.kbProjects?.find(p => p.id === activeId);
+    const projectTitle = project ? project.title : (activeId === 'world' ? 'Основное' : 'Произведение ' + activeId);
+
+    const activeDoc = this.state.docs?.find(d => d.id === this.state.activeDocId);
+    const docTitle = activeDoc ? activeDoc.title : '';
+
+    const projectSpan = titlebar.querySelector('.project-name');
+    const docSpan = titlebar.querySelector('.doc-name');
+    const separators = titlebar.querySelectorAll('.title-separator');
+
+    if (projectSpan) {
+      projectSpan.textContent = projectTitle;
+    }
+
+    if (docSpan) {
+      docSpan.textContent = docTitle;
+      docSpan.style.display = docTitle ? 'inline' : 'none';
+    }
+
+    if (separators && separators.length >= 2) {
+      separators[1].style.display = docTitle ? 'inline' : 'none';
+    }
   }
 
   initWorkspace() {
@@ -1384,6 +1453,7 @@ class NocturneWriter {
     this.clearSuggestionIfStale();
     this.updateAssistantPanelState();
     this.updateSplitMenuState();
+    this.updateElectronTitlebarTitle();
   }
 
   renderWorkspacePane(paneId) {
@@ -1397,6 +1467,7 @@ class NocturneWriter {
     this.disableBrowserSpellcheck();
     this.clearSuggestionIfStale();
     this.updateAssistantPanelState();
+    this.updateElectronTitlebarTitle();
   }
 
   renderPane(paneId) {
@@ -16737,6 +16808,7 @@ class NocturneWriter {
     shell.classList.toggle('compact', s.compactPanels);
     shell.classList.toggle('glow-enabled', s.cursorGlow);
     shell.classList.toggle('theme-experimental', !!s.experimentalDesign);
+    document.body.classList.toggle('theme-experimental', !!s.experimentalDesign);
     shell.classList.toggle('indent-paragraphs', s.paragraphIndent);
     shell.classList.toggle('baseline-grid', s.baselineGrid);
     shell.classList.toggle('flexible-pages', !s.autoPaginate);

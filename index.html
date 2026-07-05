@@ -202,12 +202,24 @@
     <div class="titlebar-drag-region"></div>
     <div class="titlebar-content">
       <div class="titlebar-logo"></div>
-      <div class="titlebar-title">Nocturne Writer</div>
+      <div class="titlebar-title">
+        <span class="app-name">Nocturne Writer</span>
+        <span class="title-separator">/</span>
+        <span class="project-name"></span>
+        <span class="title-separator" style="display: none;">/</span>
+        <span class="doc-name" style="display: none;"></span>
+      </div>
     </div>
     <div class="titlebar-controls">
-      <button class="titlebar-btn minimize" id="titlebar-minimize"><i class="bx bx-minus"></i></button>
-      <button class="titlebar-btn maximize" id="titlebar-maximize"><i class="bx bx-square"></i></button>
-      <button class="titlebar-btn close" id="titlebar-close"><i class="bx bx-x"></i></button>
+      <button class="titlebar-btn minimize" id="titlebar-minimize" title="Свернуть">
+        <svg width="12" height="12" viewBox="0 0 12 12"><rect x="1.5" y="5.5" width="9" height="1" fill="currentColor"/></svg>
+      </button>
+      <button class="titlebar-btn maximize" id="titlebar-maximize" title="Развернуть">
+        <svg width="12" height="12" viewBox="0 0 12 12" id="titlebar-maximize-icon"><rect x="2" y="2" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+      </button>
+      <button class="titlebar-btn close" id="titlebar-close" title="Закрыть">
+        <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2.5,2.5 L9.5,9.5 M9.5,2.5 L2.5,9.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+      </button>
     </div>
   </div>
   <div id="app"></div>
