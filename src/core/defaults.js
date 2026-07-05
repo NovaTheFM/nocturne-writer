@@ -50,6 +50,7 @@ export const defaultSettings = {
   e2e: false,
   watermark: true,
   authorName: 'Автор',
+  lastSeenVersion: '',
   liveSave: true,
   autoPaginate: false,
   showPageRulers: false,

@@ -155,6 +155,41 @@ npm run smoke:desktop
 
 ---
 
+## Release and Update Pipeline
+
+To ensure version tracking and seamless update delivery, the application tracks changes via `updates.md` and displays a "What's New" (Что нового) modal to desktop (Electron) users on first launch after an update.
+
+### Rule 1: Log Every Change in `updates.md`
+Whenever you edit code or fix bugs, you MUST log your changes in [updates.md](file:///c:/today%20we%20steal%20the%20code%202/updates.md) at the root of the project.
+Format:
+```markdown
+## [YYYY-MM-DD HH:MM] Версия X.Y.Z — Short Release Header
+### Новые функции
+- **Компонент**: Описание нововведения.
+
+### Исправления ошибок
+- **Компонент**: Описание исправленного бага.
+```
+
+### Rule 2: Release Workflow on "Обновляем" Command
+When the user gives the command `"Обновляем"` (or similar release/update command), you must execute the following sequence:
+1. **Read `updates.md`**: Collect all changes logged since the last version change.
+2. **Compile "What's New" Content**:
+   - Update the HTML content inside the `openWhatsNewModal()` method in [main.js](file:///c:/today%20we%20steal%20the%20code%202/src/main.js) to list the newly added features and fixes, keeping it clear, neat, and structured.
+3. **Increment Version**:
+   - Determine the next version number (e.g. increment from `1.0.1` to `1.0.2`).
+   - Update the version in:
+     - `package.json` (`"version": "X.Y.Z"`)
+     - `src/main.js` (update `currentVersion = 'X.Y.Z'` in the check and `appVersion: 'X.Y.Z'` inside `exportDataDump`)
+     - `index.html` (update assets cache-busting query strings, e.g. `src/main.js?v=X.Y.Z`, `ui.css?v=X.Y.Z`)
+4. **Compile / Package App**:
+   - Run the packaging command `python web2exe_fixed.py` to compile the app to executable.
+   - Wait for the build process to finish.
+5. **Log Release**:
+   - Ensure the new release is logged as a version section in `updates.md`.
+
+---
+
 ## Contact / Ownership
 
 Repository maintained by **BebraNova**.  
