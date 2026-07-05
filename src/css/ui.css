@@ -9780,11 +9780,19 @@ body.sortable-active .doc-item {
   justify-content: space-between;
   user-select: none;
   -webkit-app-region: drag;
-  background: var(--bg-deep);
+  background: linear-gradient(90deg, var(--bg-panel) 260px, var(--bg-deep) 260px);
   border-bottom: 1px solid var(--border-light);
   border-top: 1px solid rgba(255, 255, 255, 0.015);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
   transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease;
+}
+
+body.compact #electron-titlebar {
+  background: linear-gradient(90deg, var(--bg-panel) 224px, var(--bg-deep) 224px);
+}
+
+body.zen-mode #electron-titlebar {
+  background: var(--bg-deep);
 }
 
 body.theme-paper #electron-titlebar {
@@ -9798,10 +9806,10 @@ body.theme-paper #electron-titlebar {
   align-items: center;
   gap: 10px;
   padding-left: 20px;
-  background: var(--bg-panel);
+  background: transparent;
   border-right: 1px solid var(--border);
   box-sizing: border-box;
-  transition: width 220ms ease, background-color 0.3s ease, border-color 0.3s ease;
+  transition: width 220ms ease, border-color 0.3s ease;
   flex-shrink: 0;
   -webkit-app-region: drag;
   position: relative;
@@ -9813,40 +9821,31 @@ body.compact .titlebar-brand {
 }
 
 body.zen-mode .titlebar-brand {
-  background: transparent;
   border-right: none;
   width: auto;
 }
 
 body.material #electron-titlebar {
-  background: rgba(18, 18, 22, 0.78);
+  background: linear-gradient(90deg, var(--bg-panel) 260px, var(--bg-glass) 260px);
   backdrop-filter: blur(28px) saturate(1.4);
   -webkit-backdrop-filter: blur(28px) saturate(1.4);
 }
 
+body.compact.material #electron-titlebar {
+  background: linear-gradient(90deg, var(--bg-panel) 224px, var(--bg-glass) 224px);
+}
+
+body.zen-mode.material #electron-titlebar {
+  background: var(--bg-glass);
+}
+
 body.material .titlebar-brand {
-  background: rgba(18, 18, 22, 0.84);
+  background: transparent;
   border-right-color: rgba(255, 255, 255, 0.07);
 }
 
 body.material.theme-paper .titlebar-brand {
   border-right-color: var(--border);
-}
-
-html.theme-midnight body.material #electron-titlebar {
-  background: rgba(11, 16, 32, 0.78) !important;
-}
-
-html.theme-midnight body.material .titlebar-brand {
-  background: rgba(11, 16, 32, 0.84) !important;
-}
-
-html.theme-paper body.material #electron-titlebar {
-  background: rgba(244, 236, 221, 0.88) !important;
-}
-
-html.theme-paper body.material .titlebar-brand {
-  background: rgba(235, 225, 207, 0.92) !important;
 }
 
 .titlebar-drag-region {
