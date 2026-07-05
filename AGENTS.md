@@ -177,11 +177,8 @@ When the user gives the command `"Обновляем"` (or similar release/updat
 2. **Compile "What's New" Content**:
    - Update the HTML content inside the `openWhatsNewModal()` method in [main.js](file:///c:/today%20we%20steal%20the%20code%202/src/main.js) to list the newly added features and fixes, keeping it clear, neat, and structured.
 3. **Increment Version**:
-   - Determine the next version number (e.g. increment from `1.0.1` to `1.0.2`).
-   - Update the version in:
-     - `package.json` (`"version": "X.Y.Z"`)
-     - `src/main.js` (update `currentVersion = 'X.Y.Z'` in the check and `appVersion: 'X.Y.Z'` inside `exportDataDump`)
-     - `index.html` (update assets cache-busting query strings, e.g. `src/main.js?v=X.Y.Z`, `ui.css?v=X.Y.Z`)
+   - Run the automated version bumping script: `python bump_version.py [X.Y.Z]` (where `[X.Y.Z]` is the target version, e.g. `1.0.3`). If no version is specified, it will auto-increment the patch number.
+   - This script automatically updates versions in `package.json`, `src/main.js` (`currentVersion` and `appVersion`), and all query-string cache-busters in `index.html`.
 4. **Compile / Package App**:
    - Run the packaging command `python web2exe_fixed.py` to compile the app to executable.
    - Wait for the build process to finish.
