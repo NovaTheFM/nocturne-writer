@@ -248,7 +248,7 @@ function executeRuleAction(view, rule, from, to, isEnter = false) {
       if (node && (node.type.name === 'paragraph' || node.type.name === 'heading')) {
         tr.setNodeMarkup($pos.before(depth), null, {
           ...node.attrs,
-          align: rule.action === 'center' ? 'center' : 'right'
+          textAlign: rule.action === 'center' ? 'center' : 'right'
         });
         
         if (isEnter) {
@@ -318,7 +318,7 @@ function executeRuleAction(view, rule, from, to, isEnter = false) {
       const blockEnd = $pos.after(depth);
       const pType = state.schema.nodes.paragraph;
       const separatorParagraph = pType.create(
-        { align: 'center' },
+        { textAlign: 'center' },
         rule.customText ? state.schema.text(rule.customText) : []
       );
       const nextParagraph = pType.create();
