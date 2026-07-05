@@ -989,7 +989,7 @@ class NocturneWriter {
 
     const projectSpan = titlebar.querySelector('.project-name');
     const docSpan = titlebar.querySelector('.doc-name');
-    const separators = titlebar.querySelectorAll('.title-separator');
+    const separator = titlebar.querySelector('.title-separator');
 
     if (projectSpan) {
       projectSpan.textContent = projectTitle;
@@ -1000,8 +1000,8 @@ class NocturneWriter {
       docSpan.style.display = docTitle ? 'inline' : 'none';
     }
 
-    if (separators && separators.length >= 2) {
-      separators[1].style.display = docTitle ? 'inline' : 'none';
+    if (separator) {
+      separator.style.display = docTitle ? 'inline' : 'none';
     }
   }
 
