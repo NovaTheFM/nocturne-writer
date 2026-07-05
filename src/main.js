@@ -16806,6 +16806,7 @@ class NocturneWriter {
     document.body.classList.toggle('theme-crimson', s.theme === 'crimson');
     document.body.classList.toggle('reduce-mobile-animations', !!s.reduceMobileAnimations);
     shell.classList.toggle('compact', s.compactPanels);
+    document.body.classList.toggle('compact', s.compactPanels);
     shell.classList.toggle('glow-enabled', s.cursorGlow);
     shell.classList.toggle('theme-experimental', !!s.experimentalDesign);
     document.body.classList.toggle('theme-experimental', !!s.experimentalDesign);

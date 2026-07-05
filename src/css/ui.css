@@ -9765,7 +9765,7 @@ body.sortable-active .doc-item {
 /* --- Electron Custom Title Bar --- */
 #electron-titlebar {
   display: none;
-  height: 32px;
+  height: 38px;
   width: 100%;
   flex-shrink: 0;
   box-sizing: border-box;
@@ -9777,23 +9777,36 @@ body.sortable-active .doc-item {
   -webkit-app-region: drag;
   
   /* Core Application Styles */
-  background: linear-gradient(to bottom, var(--bg-panel), rgba(18, 18, 22, 0.96));
+  background: var(--bg-deep);
   border-bottom: 1px solid var(--border-light);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  border-top: 1px solid rgba(255, 255, 255, 0.015);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
   transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease;
 }
 
-/* Accent Line at top of window */
-#electron-titlebar::before {
+/* Sidebar column integration in Titlebar */
+#electron-titlebar::after {
   content: '';
   position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 1px;
-  background: var(--accent);
-  box-shadow: 0 1px 4px var(--accent-glow), 0 0 8px var(--accent);
-  z-index: 10;
-  opacity: 0.85;
-  transition: opacity 0.3s ease, background-color 0.3s ease, box-shadow 0.3s ease;
+  top: 0;
+  left: 0;
+  width: 260px;
+  height: 100%;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  z-index: -1;
+  box-sizing: border-box;
+  transition: width 220ms ease;
+}
+
+/* Compact sidebar width */
+body.compact #electron-titlebar::after {
+  width: 224px;
+}
+
+/* Hide sidebar integration in Zen mode */
+body.zen-mode #electron-titlebar::after {
+  display: none;
 }
 
 /* Blur / Material Switch */
@@ -9817,7 +9830,7 @@ html.theme-paper body.material #electron-titlebar { background: rgba(244, 236, 2
   display: flex;
   align-items: center;
   gap: 12px;
-  padding-left: 16px;
+  padding-left: 20px; /* Align with sidebar padding-left */
   z-index: 2;
   pointer-events: none;
 }
@@ -9832,7 +9845,7 @@ html.theme-paper body.material #electron-titlebar { background: rgba(244, 236, 2
   mask-size: contain;
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
-  filter: drop-shadow(0 0 5px var(--accent-glow));
+  filter: drop-shadow(0 0 4px var(--accent-glow));
   transition: background-color 0.3s ease, filter 0.3s ease, transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.3s ease;
   pointer-events: auto;
   cursor: pointer;
@@ -9856,112 +9869,132 @@ html.theme-paper body.material #electron-titlebar { background: rgba(244, 236, 2
 }
 
 .titlebar-title .app-name {
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  opacity: 0.8;
-  font-size: 10px;
+  font-family: 'Lora', serif;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-main);
+  opacity: 0.95;
   transition: color 0.3s ease, opacity 0.3s ease;
 }
 
 .titlebar-title .title-separator {
-  color: var(--border);
-  font-weight: 300;
-  opacity: 0.4;
-  font-size: 11px;
-  margin: 0 1px;
+  color: var(--text-muted);
+  opacity: 0.25;
+  font-size: 10px;
+  margin: 0 4px;
+  font-family: var(--font-ui);
 }
 
 .titlebar-title .project-name {
   color: var(--accent);
   font-weight: 600;
+  font-size: 10.5px;
   letter-spacing: 0.01em;
+  background: rgba(var(--accent-rgb, 139, 92, 246), 0.05);
+  padding: 1px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(var(--accent-rgb, 139, 92, 246), 0.12);
   text-shadow: 0 0 6px var(--accent-glow);
-  transition: color 0.3s ease, text-shadow 0.3s ease;
+  transition: all 0.25s ease;
+}
+
+.titlebar-title .project-name:hover {
+  background: rgba(var(--accent-rgb, 139, 92, 246), 0.12);
+  border-color: rgba(var(--accent-rgb, 139, 92, 246), 0.25);
+  box-shadow: 0 0 10px rgba(var(--accent-rgb, 139, 92, 246), 0.15);
 }
 
 .titlebar-title .doc-name {
-  color: var(--text-main);
+  color: var(--text-muted);
   font-weight: 500;
+  font-size: 10.5px;
   transition: color 0.3s ease;
 }
 
 .titlebar-controls {
   display: flex;
+  align-items: center;
+  gap: 7px;
+  padding-right: 14px;
   height: 100%;
   z-index: 2;
   -webkit-app-region: no-drag;
 }
 
 .titlebar-btn {
-  background: transparent;
-  border: none;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
   color: var(--text-muted);
-  width: 46px;
-  height: 100%;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   padding: 0;
   outline: none;
-  border-radius: 0;
-  transition: background-color 0.2s cubic-bezier(0.25, 0.8, 0.25, 1),
-              color 0.2s cubic-bezier(0.25, 0.8, 0.25, 1),
-              opacity 0.3s ease;
+  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
 .titlebar-btn svg {
+  width: 10px;
+  height: 10px;
+  stroke-width: 1.3;
   transition: transform 0.2s cubic-bezier(0.25, 0.8, 0.25, 1), stroke 0.2s ease;
 }
 
-.titlebar-btn:hover {
-  background: var(--hover-soft);
-  color: var(--button-text-strong);
+.titlebar-btn:active {
+  transform: scale(0.9);
 }
 
-.titlebar-btn:hover svg {
-  transform: scale(1.08);
-}
-
-.titlebar-btn:active svg {
-  transform: scale(0.85);
-}
-
-.titlebar-btn.minimize:hover svg,
-.titlebar-btn.maximize:hover svg {
+.titlebar-btn.minimize:hover {
+  background: rgba(var(--accent-rgb, 139, 92, 246), 0.12);
+  border-color: rgba(var(--accent-rgb, 139, 92, 246), 0.3);
   color: var(--accent);
-  filter: drop-shadow(0 0 3px var(--accent-glow));
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+
+.titlebar-btn.maximize:hover {
+  background: rgba(var(--accent-rgb, 139, 92, 246), 0.12);
+  border-color: rgba(var(--accent-rgb, 139, 92, 246), 0.3);
+  color: var(--accent);
+  box-shadow: 0 0 10px var(--accent-glow);
 }
 
 .titlebar-btn.close:hover {
-  background: linear-gradient(135deg, #e01b2f, #a60917);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 4px 12px rgba(224, 27, 47, 0.3);
-  color: #fff !important;
+  background: rgba(255, 71, 87, 0.12);
+  border-color: rgba(255, 71, 87, 0.3);
+  color: #ff4757;
+  box-shadow: 0 0 10px rgba(255, 71, 87, 0.3);
 }
 
-.titlebar-btn.close:hover svg {
-  transform: rotate(90deg) scale(1.08);
+/* Theme Paper overrides for title bar */
+body.theme-paper #electron-titlebar {
+  border-top: 1px solid rgba(0, 0, 0, 0.015);
 }
 
-.titlebar-btn.close:active svg {
-  transform: rotate(90deg) scale(0.85);
+body.theme-paper .titlebar-title .title-separator {
+  color: rgba(0, 0, 0, 0.2);
+}
+
+body.theme-paper .titlebar-btn {
+  background: rgba(0, 0, 0, 0.025);
+  border-color: rgba(0, 0, 0, 0.05);
 }
 
 /* Window Blur/Focus States */
 body.window-blurred #electron-titlebar {
-  opacity: 0.95;
+  opacity: 0.98;
   box-shadow: none;
 }
 
-body.window-blurred #electron-titlebar::before {
-  opacity: 0.15;
-  box-shadow: none;
+body.window-blurred #electron-titlebar::after {
+  opacity: 0.95;
 }
 
 body.window-blurred .titlebar-logo {
-  filter: grayscale(100%) opacity(0.4);
+  filter: grayscale(100%) opacity(0.35);
 }
 
 body.window-blurred .titlebar-title .app-name,
@@ -9969,11 +10002,21 @@ body.window-blurred .titlebar-title .project-name,
 body.window-blurred .titlebar-title .doc-name {
   color: var(--text-muted) !important;
   text-shadow: none !important;
-  opacity: 0.45;
+  opacity: 0.55;
+}
+
+body.window-blurred .titlebar-title .project-name {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+body.theme-paper.window-blurred .titlebar-title .project-name {
+  background: rgba(0, 0, 0, 0.015);
+  border-color: rgba(0, 0, 0, 0.04);
 }
 
 body.window-blurred .titlebar-btn {
-  opacity: 0.45;
+  opacity: 0.35;
 }
 
 body.window-blurred .titlebar-btn:hover {
@@ -9989,10 +10032,8 @@ body.theme-experimental #electron-titlebar {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
-body.theme-experimental #electron-titlebar::before {
-  background: linear-gradient(90deg, transparent, var(--accent), transparent);
-  box-shadow: 0 0 12px var(--accent);
-  height: 1.5px;
+body.theme-experimental #electron-titlebar::after {
+  background: rgba(10, 10, 15, 0.9) !important;
 }
 
 body.theme-experimental .titlebar-title .project-name {
@@ -10018,7 +10059,7 @@ body.is-electron {
 
 body.is-electron #app {
   flex: 1;
-  height: calc(100vh - 32px);
+  height: calc(100vh - 38px);
   position: relative;
   overflow: hidden;
 }
