@@ -10183,6 +10183,7 @@ body.is-electron .side-panel {
   flex-direction: column;
   gap: 6px;
   width: 100%;
+  min-width: 0;
 }
 
 .formatting-add-card .form-control {
