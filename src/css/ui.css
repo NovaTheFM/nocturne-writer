@@ -10165,3 +10165,22 @@ body.is-electron .side-panel {
 .formatting-settings .nocturne-select {
   width: 100% !important;
 }
+
+.formatting-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr auto;
+  gap: 16px;
+  align-items: end;
+  width: 100%;
+}
+
+.formatting-form-grid.has-custom-text {
+  grid-template-columns: 1fr 1.2fr 1.2fr auto;
+}
+
+.formatting-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
