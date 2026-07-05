@@ -244,6 +244,9 @@ function executeRuleAction(view, rule, from, to, isEnter = false) {
   const { state, dispatch } = view;
   const tr = state.tr;
   
+  // ALWAYS delete the trigger first for ALL rules
+  tr.delete(from, to);
+  
   if (rule.action === 'center' || rule.action === 'align-right') {
     const $pos = tr.doc.resolve(from);
     const depth = $pos.depth;
@@ -254,24 +257,11 @@ function executeRuleAction(view, rule, from, to, isEnter = false) {
           ...node.attrs,
           align: rule.action === 'center' ? 'center' : 'right'
         });
-        
-        if (isEnter) {
-          const blockEnd = $pos.after(depth);
-          const pType = state.schema.nodes.paragraph;
-          const nextParagraph = pType.create();
-          tr.insert(blockEnd, nextParagraph);
-          const $resolved = tr.doc.resolve(blockEnd + 1);
-          const sel = view.state.selection.constructor.near($resolved);
-          tr.setSelection(sel);
-        }
       }
     }
     dispatch(tr);
     return true;
   }
-  
-  // For other actions (headings, separators), delete the trigger first
-  tr.delete(from, to);
   
   if (rule.action === 'heading-2' || rule.action === 'heading-3') {
     const type = state.schema.nodes.heading;
