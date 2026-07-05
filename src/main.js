@@ -12897,8 +12897,8 @@ class NocturneWriter {
     const editable = document.activeElement?.closest?.('.page-content');
     if (!editable) return null;
     const node = range.startContainer;
-    const block = (node.nodeType === Node.TEXT_NODE ? node.parentElement : node)?.closest?.('[data-block-id]');
-    if (!block || !editable.contains(block) || block.dataset.blockId !== this.softEmptyLine.blockId) return null;
+    const block = (node.nodeType === Node.TEXT_NODE ? node.parentElement : node)?.closest?.('[data-block-id]') || (node.nodeType === Node.TEXT_NODE ? node.parentElement : node)?.closest?.('p, h1, h2, h3, h4, h5, h6, blockquote, pre, li');
+    if (!block || !editable.contains(block) || (block.dataset.blockId && block.dataset.blockId !== this.softEmptyLine.blockId)) return null;
     const caretOffset = this.caretOffsetInBlock(block, range);
     if (!this.isCaretOnSoftEmptyLine(block, caretOffset)) return null;
 
@@ -12927,7 +12927,7 @@ class NocturneWriter {
     const editable = document.activeElement?.closest?.('.page-content');
     if (!editable) return null;
     const node = range.startContainer;
-    const block = (node.nodeType === Node.TEXT_NODE ? node.parentElement : node)?.closest?.('[data-block-id]');
+    const block = (node.nodeType === Node.TEXT_NODE ? node.parentElement : node)?.closest?.('[data-block-id]') || (node.nodeType === Node.TEXT_NODE ? node.parentElement : node)?.closest?.('p, h1, h2, h3, h4, h5, h6, blockquote, pre, li');
     if (!block || !editable.contains(block)) return null;
     const styles = getComputedStyle(block);
     const lineHeight = Number.parseFloat(styles.lineHeight) || this.state.settings.fontSize * this.state.settings.lineHeight;
@@ -13038,7 +13038,7 @@ class NocturneWriter {
     if (!editable) return null;
     const node = range.startContainer;
     const element = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
-    const block = element?.closest?.('[data-block-id]') || (element === editable ? this.editorBlocks(editable)[0] : null);
+    const block = element?.closest?.('[data-block-id]') || element?.closest?.('p, h1, h2, h3, h4, h5, h6, blockquote, pre, li') || (element === editable ? this.editorBlocks(editable)[0] : null);
     if (!block || !editable.contains(block) || this.blockPlainText(block) || !this.isPlaceholderEmptyBlock(block)) return null;
     const rect = block.getBoundingClientRect();
     const styles = getComputedStyle(block);
