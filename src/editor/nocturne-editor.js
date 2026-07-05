@@ -204,11 +204,9 @@ const NocturneInputRules = Extension.create({
             const parent = $from.parent;
             const textBefore = parent.textBetween(0, $from.parentOffset, null, '\0');
             const rules = extension.options.getRules() || [];
-            console.log("[NocturneInputRules] handleTextInput text:", JSON.stringify(text), "textBefore:", JSON.stringify(textBefore), "rules:", JSON.stringify(rules));
             for (const rule of rules) {
               if (!rule.enabled || !rule.trigger) continue;
               if (textBefore === rule.trigger) {
-                console.log("[NocturneInputRules] Matched rule:", rule);
                 const start = $from.pos - rule.trigger.length;
                 return executeRuleAction(view, rule, start, $from.pos, false);
               }
@@ -223,11 +221,9 @@ const NocturneInputRules = Extension.create({
             const parent = $from.parent;
             const textBefore = parent.textBetween(0, $from.parentOffset, null, '\0');
             const rules = extension.options.getRules() || [];
-            console.log("[NocturneInputRules] handleKeyDown key:", event.key, "textBefore:", JSON.stringify(textBefore), "rules:", JSON.stringify(rules));
             for (const rule of rules) {
               if (!rule.enabled || !rule.trigger) continue;
               if (textBefore === rule.trigger) {
-                console.log("[NocturneInputRules] Matched rule on Enter:", rule);
                 const start = $from.pos - rule.trigger.length;
                 return executeRuleAction(view, rule, start, $from.pos, true);
               }
@@ -244,9 +240,6 @@ function executeRuleAction(view, rule, from, to, isEnter = false) {
   const { state, dispatch } = view;
   const tr = state.tr;
   
-  // ALWAYS delete the trigger first for ALL rules
-  tr.delete(from, to);
-  
   if (rule.action === 'center' || rule.action === 'align-right') {
     const $pos = tr.doc.resolve(from);
     const depth = $pos.depth;
@@ -257,11 +250,25 @@ function executeRuleAction(view, rule, from, to, isEnter = false) {
           ...node.attrs,
           align: rule.action === 'center' ? 'center' : 'right'
         });
+        
+        if (isEnter) {
+          const blockEnd = $pos.after(depth);
+          const pType = state.schema.nodes.paragraph;
+          const nextParagraph = pType.create();
+          tr.insert(blockEnd, nextParagraph);
+          const targetPos = Math.min(blockEnd + 1, tr.doc.content.size - 1);
+          const $resolved = tr.doc.resolve(targetPos);
+          const sel = view.state.selection.constructor.near($resolved);
+          tr.setSelection(sel);
+        }
       }
     }
     dispatch(tr);
     return true;
   }
+  
+  // For other actions (headings, separators), delete the trigger first
+  tr.delete(from, to);
   
   if (rule.action === 'heading-2' || rule.action === 'heading-3') {
     const type = state.schema.nodes.heading;
@@ -293,7 +300,8 @@ function executeRuleAction(view, rule, from, to, isEnter = false) {
         const pType = state.schema.nodes.paragraph;
         const nextParagraph = pType.create();
         tr.replaceWith(blockStart, blockEnd, [pmNode, nextParagraph]);
-        const $resolved = tr.doc.resolve(blockStart + pmNode.nodeSize + 1);
+        const targetPos = Math.min(blockStart + pmNode.nodeSize + 1, tr.doc.content.size - 1);
+        const $resolved = tr.doc.resolve(targetPos);
         const sel = view.state.selection.constructor.near($resolved);
         tr.setSelection(sel);
       }
@@ -315,7 +323,8 @@ function executeRuleAction(view, rule, from, to, isEnter = false) {
       );
       const nextParagraph = pType.create();
       tr.replaceWith(blockStart, blockEnd, [separatorParagraph, nextParagraph]);
-      const $resolved = tr.doc.resolve(blockStart + separatorParagraph.nodeSize + 1);
+      const targetPos = Math.min(blockStart + separatorParagraph.nodeSize + 1, tr.doc.content.size - 1);
+      const $resolved = tr.doc.resolve(targetPos);
       const sel = view.state.selection.constructor.near($resolved);
       tr.setSelection(sel);
     }
