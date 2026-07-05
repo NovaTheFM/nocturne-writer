@@ -203,7 +203,25 @@ createServer(async (req, res) => {
       res.end('Forbidden');
       return;
     }
-    const data = await readFile(file);
+    let data = await readFile(file);
+    if (requested.endsWith('.html')) {
+      let content = data.toString('utf8');
+      const killer = `<script>
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then(function(regs) {
+            for (let r of regs) { r.unregister(); }
+          });
+        }
+      </script>`;
+      if (content.includes('<head>')) {
+        content = content.replace('<head>', '<head>' + killer);
+      } else if (content.includes('<body>')) {
+        content = content.replace('<body>', '<body>' + killer);
+      } else {
+        content = killer + content;
+      }
+      data = Buffer.from(content, 'utf8');
+    }
     res.writeHead(200, {
       'Content-Type': types[extname(file)] || 'application/octet-stream',
       'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
