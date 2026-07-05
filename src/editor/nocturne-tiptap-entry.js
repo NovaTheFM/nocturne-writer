@@ -4,5 +4,5 @@ export { default as Underline } from '@tiptap/extension-underline';
 export { default as TextAlign } from '@tiptap/extension-text-align';
 export { default as Placeholder } from '@tiptap/extension-placeholder';
 export { default as HorizontalRule } from '@tiptap/extension-horizontal-rule';
-export { Plugin, PluginKey } from 'prosemirror-state';
+export { Plugin, PluginKey, TextSelection } from 'prosemirror-state';
 export { Decoration, DecorationSet } from 'prosemirror-view';

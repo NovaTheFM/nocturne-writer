@@ -1,4 +1,4 @@
-import { Editor, Extension, StarterKit, TextAlign, Underline, Placeholder, Plugin, PluginKey, Decoration, DecorationSet, HorizontalRule } from '../vendor/tiptap/nocturne-tiptap.bundle.js';
+import { Editor, Extension, StarterKit, TextAlign, Underline, Placeholder, Plugin, PluginKey, Decoration, DecorationSet, HorizontalRule, TextSelection } from '../vendor/tiptap/nocturne-tiptap.bundle.js';
 import { ensureTiptapBlockIds, legacyAstToHtml, tiptapJsonToLegacyAst } from './document-adapter.js';
 import { calculateVisualPages, updateActivePageHighlight } from './visual-pagination.js';
 import { normalizeTypoToken } from '../core/typos.js';
@@ -257,9 +257,7 @@ function executeRuleAction(view, rule, from, to, isEnter = false) {
           const nextParagraph = pType.create();
           tr.insert(blockEnd, nextParagraph);
           const targetPos = Math.min(blockEnd + 1, tr.doc.content.size - 1);
-          const $resolved = tr.doc.resolve(targetPos);
-          const sel = view.state.selection.constructor.near($resolved);
-          tr.setSelection(sel);
+          tr.setSelection(TextSelection.create(tr.doc, targetPos));
         }
       }
     }
@@ -301,9 +299,7 @@ function executeRuleAction(view, rule, from, to, isEnter = false) {
         const nextParagraph = pType.create();
         tr.replaceWith(blockStart, blockEnd, [pmNode, nextParagraph]);
         const targetPos = Math.min(blockStart + pmNode.nodeSize + 1, tr.doc.content.size - 1);
-        const $resolved = tr.doc.resolve(targetPos);
-        const sel = view.state.selection.constructor.near($resolved);
-        tr.setSelection(sel);
+        tr.setSelection(TextSelection.create(tr.doc, targetPos));
       }
     }
     dispatch(tr);
@@ -324,9 +320,7 @@ function executeRuleAction(view, rule, from, to, isEnter = false) {
       const nextParagraph = pType.create();
       tr.replaceWith(blockStart, blockEnd, [separatorParagraph, nextParagraph]);
       const targetPos = Math.min(blockStart + separatorParagraph.nodeSize + 1, tr.doc.content.size - 1);
-      const $resolved = tr.doc.resolve(targetPos);
-      const sel = view.state.selection.constructor.near($resolved);
-      tr.setSelection(sel);
+      tr.setSelection(TextSelection.create(tr.doc, targetPos));
     }
     dispatch(tr);
     return true;
