@@ -9019,17 +9019,17 @@ input:-webkit-autofill:active {
 }
 @keyframes new-item-glow-anim {
   0% {
-    border-color: rgba(var(--accent-rgb, 139, 92, 246), 0.8) !important;
-    box-shadow: 0 0 12px rgba(var(--accent-rgb, 139, 92, 246), 0.3) !important;
+    border-color: rgba(var(--accent-rgb, 139, 92, 246), 0.8);
+    box-shadow: 0 0 12px rgba(var(--accent-rgb, 139, 92, 246), 0.3);
   }
   100% {
-    border-color: var(--border) !important;
-    box-shadow: none !important;
+    border-color: var(--border);
+    box-shadow: none;
   }
 }
 .new-doc-entrance, .new-card-entrance:not(.timeline-item) {
   animation: new-item-entrance-anim 0.45s cubic-bezier(0.16, 1, 0.3, 1) both,
-             new-item-glow-anim 1.2s cubic-bezier(0.16, 1, 0.3, 1) both !important;
+             new-item-glow-anim 1.2s cubic-bezier(0.16, 1, 0.3, 1) both;
   will-change: transform, opacity, border-color, box-shadow;
 }
 
@@ -9041,12 +9041,12 @@ input:-webkit-autofill:active {
 }
 .timeline-item.new-card-entrance .timeline-content {
   animation: new-item-entrance-anim 0.45s cubic-bezier(0.16, 1, 0.3, 1) both,
-             new-item-glow-anim 1.2s cubic-bezier(0.16, 1, 0.3, 1) both !important;
+             new-item-glow-anim 1.2s cubic-bezier(0.16, 1, 0.3, 1) both;
   will-change: transform, opacity, border-color, box-shadow;
 }
 .timeline-item.new-card-entrance .timeline-date,
 .timeline-item.new-card-entrance .timeline-dot {
-  animation: new-item-entrance-anim 0.45s cubic-bezier(0.16, 1, 0.3, 1) both !important;
+  animation: new-item-entrance-anim 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
   will-change: transform, opacity;
 }
 
