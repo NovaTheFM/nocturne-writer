@@ -10184,3 +10184,11 @@ body.is-electron .side-panel {
   gap: 6px;
   width: 100%;
 }
+
+.formatting-add-card .form-control {
+  min-width: 0 !important;
+}
+
+.formatting-add-card .nocturne-select {
+  min-width: 0 !important;
+}
