@@ -10161,3 +10161,7 @@ body.is-electron .side-panel {
   top: 102px;
   height: calc(100% - 102px);
 }
+
+.formatting-settings .nocturne-select {
+  width: 100% !important;
+}
