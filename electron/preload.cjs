@@ -26,4 +26,7 @@ contextBridge.exposeInMainWorld('nocturneElectron', {
     if (typeof data !== 'string') return Promise.resolve(false);
     return ipcRenderer.invoke('nocturne:git-commit', data, safeSuggestedName(projectName));
   },
+  windowMinimize: () => ipcRenderer.invoke('nocturne:window-minimize'),
+  windowToggleMaximize: () => ipcRenderer.invoke('nocturne:window-maximize'),
+  windowClose: () => ipcRenderer.invoke('nocturne:window-close'),
 });

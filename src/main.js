@@ -415,6 +415,7 @@ class NocturneWriter {
     this.validateLoadedState();
     this.initWorkspace();
     this.renderShell();
+    this.initElectronTitlebar();
     this.showStorageWarnings();
     this.applySettings();
     this.renderAll();
@@ -914,6 +915,25 @@ class NocturneWriter {
       if (seen.has(pane.docId)) Object.assign(pane, this.emptyPaneDescriptor(pane.id));
       else seen.set(pane.docId, pane.id);
     });
+  }
+
+  initElectronTitlebar() {
+    if (!window.nocturneElectron) return;
+    const titlebar = document.getElementById('electron-titlebar');
+    if (!titlebar) return;
+    titlebar.style.display = 'flex';
+    document.body.classList.add('is-electron');
+
+    const minBtn = document.getElementById('titlebar-minimize');
+    const maxBtn = document.getElementById('titlebar-maximize');
+    const closeBtn = document.getElementById('titlebar-close');
+
+    if (minBtn) minBtn.addEventListener('click', () => window.nocturneElectron.windowMinimize());
+    if (maxBtn) maxBtn.addEventListener('click', async () => {
+      const isMaximized = await window.nocturneElectron.windowToggleMaximize();
+      maxBtn.innerHTML = isMaximized ? '<i class="bx bx-window"></i>' : '<i class="bx bx-square"></i>';
+    });
+    if (closeBtn) closeBtn.addEventListener('click', () => window.nocturneElectron.windowClose());
   }
 
   initWorkspace() {

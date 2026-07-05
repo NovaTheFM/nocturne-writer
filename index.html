@@ -198,6 +198,18 @@
       }
     }, 50);
   </script>
+  <div id="electron-titlebar" style="display: none;">
+    <div class="titlebar-drag-region"></div>
+    <div class="titlebar-content">
+      <div class="titlebar-logo"></div>
+      <div class="titlebar-title">Nocturne Writer</div>
+    </div>
+    <div class="titlebar-controls">
+      <button class="titlebar-btn minimize" id="titlebar-minimize"><i class="bx bx-minus"></i></button>
+      <button class="titlebar-btn maximize" id="titlebar-maximize"><i class="bx bx-square"></i></button>
+      <button class="titlebar-btn close" id="titlebar-close"><i class="bx bx-x"></i></button>
+    </div>
+  </div>
   <div id="app"></div>
   <script src="./src/vendor/jszip/jszip.min.js"></script>
   <script>

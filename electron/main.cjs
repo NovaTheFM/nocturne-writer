@@ -285,6 +285,7 @@ function createWindow() {
     title: 'Nocturne Writer',
     icon: iconPath,
     backgroundColor: '#08080a',
+    frame: false,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -371,3 +372,25 @@ ipcMain.handle('nocturne:sync-server-start', () => startSyncServer());
 ipcMain.handle('nocturne:sync-server-stop', () => stopSyncServer());
 ipcMain.handle('nocturne:sync-server-refresh-token', () => refreshSyncToken());
 ipcMain.handle('nocturne:sync-server-connection-info', () => syncStatusPayload());
+
+ipcMain.handle('nocturne:window-minimize', () => {
+  const win = BrowserWindow.getFocusedWindow();
+  if (win) win.minimize();
+});
+ipcMain.handle('nocturne:window-maximize', () => {
+  const win = BrowserWindow.getFocusedWindow();
+  if (win) {
+    if (win.isMaximized()) {
+      win.unmaximize();
+      return false;
+    } else {
+      win.maximize();
+      return true;
+    }
+  }
+  return false;
+});
+ipcMain.handle('nocturne:window-close', () => {
+  const win = BrowserWindow.getFocusedWindow();
+  if (win) win.close();
+});

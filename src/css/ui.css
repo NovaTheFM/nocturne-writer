@@ -9559,6 +9559,201 @@ body.sortable-active .doc-item {
 .workspace-empty, 
 .workspace-single-empty,
 .search-empty,
+  cursor: pointer;
+  transition: all 150ms ease;
+  flex-shrink: 0;
+  padding: 0;
+}
+.kb-project-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.kb-project-btn.danger-btn:hover {
+  border-color: #ef4444;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+.kb-project-btn i {
+  font-size: 16px;
+}
+.mini-icon-btn.danger-btn:hover {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #ef4444;
+}
+.nocturne-select-trigger span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+.kb-project-select-row .nocturne-select {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+.kb-project-select-row .nocturne-select-trigger {
+  min-height: 28px;
+  padding: 0 8px 0 10px;
+  border-radius: var(--radius-sm, 4px);
+  background: rgba(0, 0, 0, 0.3);
+  font-weight: 500;
+  border-color: rgba(255, 255, 255, 0.1);
+  min-width: 0;
+  width: 100%;
+}
+.kb-project-select-row .nocturne-select-trigger span {
+  font-size: 13px;
+}
+.kb-project-select-row .nocturne-select-trigger i {
+  font-size: 14px;
+}
+.kb-project-select-row .nocturne-select-menu {
+  left: 0;
+  right: auto;
+  transform-origin: top left;
+  min-width: 220px;
+  width: auto;
+}
+
+/* Mobile specific overrides */
+.mobile-project-selector {
+  margin: 0 0 12px 0;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-md, 6px);
+}
+
+/* Workspace Switcher Header & Popover Dropdown */
+.kb-sidebar-header {
+  padding: 10px 0 0 0;
+}
+.kb-project-switcher {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin: 0 16px 20px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md, 8px);
+  cursor: pointer;
+  user-select: none;
+  transition: background 180ms ease, border-color 180ms ease;
+  z-index: 2000;
+}
+.kb-project-switcher:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+.kb-project-switcher i:first-child {
+  font-size: 18px;
+  color: var(--accent);
+}
+.kb-project-switcher span {
+  font-size: 14px;
+  font-weight: 500;
+  color: white;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kb-project-switcher i:last-child {
+  font-size: 14px;
+  color: var(--text-muted);
+  transition: transform 180ms ease;
+}
+.kb-project-switcher.open i:last-child {
+  transform: rotate(180deg);
+}
+
+.kb-project-switcher-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 100%;
+  z-index: 3000;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: var(--shadow-float, 0 10px 30px rgba(0, 0, 0, 0.5));
+  padding: 6px;
+  display: none;
+  flex-direction: column;
+  animation: popover-rise 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.kb-project-switcher.open .kb-project-switcher-dropdown {
+  display: flex;
+}
+.kb-project-item, .kb-project-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.kb-project-item:hover, .kb-project-action:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: white;
+}
+.kb-project-item.active {
+  background: rgba(var(--accent-rgb, 139, 92, 246), 0.12);
+  color: var(--accent);
+  font-weight: 500;
+}
+.kb-project-item .check-icon {
+  margin-left: auto;
+  font-size: 14px;
+}
+.kb-project-switcher-dropdown .dropdown-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 6px 0;
+}
+.kb-project-action i {
+  font-size: 16px;
+  color: var(--text-muted);
+}
+.kb-project-action:hover i {
+  color: white;
+}
+.kb-project-switcher-mobile-wrap {
+  padding: 0 16px 12px 16px;
+}
+.kb-project-switcher-mobile-wrap .kb-project-switcher {
+  margin: 0;
+}
+
+/* Cross-fade and transition utilities for KB Main pane */
+.kb-main-fade-out {
+  opacity: 0 !important;
+  transform: translateY(-4px) !important;
+  transition: opacity 120ms ease, transform 120ms ease !important;
+}
+.kb-main-fade-in {
+  animation: kb-pane-fade-in 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes kb-pane-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Disable dragging and cursor selection for empty state cards/placeholders */
+.empty-card, 
+.mobile-empty-card, 
+.doc-folder-empty, 
+.workspace-empty, 
+.workspace-single-empty,
+.search-empty,
 .command-empty,
 .macros-empty-state,
 .settings-search-empty {
@@ -9567,4 +9762,137 @@ body.sortable-active .doc-item {
   user-drag: none;
 }
 
+/* --- Electron Custom Title Bar --- */
+#electron-titlebar {
+  display: none;
+  height: 32px;
+  width: 100%;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  position: relative;
+  z-index: 10000;
+  align-items: center;
+  justify-content: space-between;
+  user-select: none;
+  -webkit-app-region: drag;
+  
+  /* Core Application Styles */
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-light);
+}
 
+/* Accent Line at top of window */
+#electron-titlebar::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow);
+  z-index: 10;
+  opacity: 0.85;
+}
+
+/* Blur / Material Switch */
+body.material #electron-titlebar {
+  background: var(--bg-glass);
+  backdrop-filter: blur(28px) saturate(1.4);
+  -webkit-backdrop-filter: blur(28px) saturate(1.4);
+}
+
+html.theme-midnight body.material #electron-titlebar { background: rgba(11, 16, 32, .66); }
+html.theme-paper body.material #electron-titlebar { background: rgba(244, 236, 221, .76); }
+
+.titlebar-drag-region {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  -webkit-app-region: drag;
+  z-index: 1;
+}
+
+.titlebar-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 14px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.titlebar-logo {
+  width: 14px;
+  height: 14px;
+  background-color: var(--accent);
+  -webkit-mask-image: url('../assets/in_app_icon.png');
+  mask-image: url('../assets/in_app_icon.png');
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+.titlebar-title {
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+.titlebar-controls {
+  display: flex;
+  height: 100%;
+  z-index: 2;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  width: 46px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
+  padding: 0;
+  outline: none;
+  border-radius: 0;
+}
+
+.titlebar-btn i {
+  font-size: 16px;
+}
+
+.titlebar-btn:hover {
+  background: var(--hover-soft);
+  color: var(--button-text-strong);
+}
+
+.titlebar-btn.close:hover {
+  background: #e81123;
+  color: #fff;
+}
+
+/* Electron layout adjustments */
+body.is-electron {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+body.is-electron #app {
+  flex: 1;
+  height: calc(100vh - 32px);
+  position: relative;
+  overflow: hidden;
+}
+
+body.is-electron .app-shell {
+  height: 100%;
+}
