@@ -9769,7 +9769,10 @@ body.sortable-active .doc-item {
   width: 100%;
   flex-shrink: 0;
   box-sizing: border-box;
-  position: relative;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
   z-index: 10000;
   align-items: center;
   justify-content: space-between;
@@ -9799,6 +9802,7 @@ body.theme-paper #electron-titlebar {
   transition: width 220ms ease, background-color 0.3s ease, border-color 0.3s ease;
   flex-shrink: 0;
   -webkit-app-region: drag;
+  z-index: 6;
 }
 
 body.compact .titlebar-brand {
@@ -9819,8 +9823,6 @@ body.material #electron-titlebar {
 
 body.material .titlebar-brand {
   background: var(--bg-panel);
-  backdrop-filter: blur(28px) saturate(1.4);
-  -webkit-backdrop-filter: blur(28px) saturate(1.4);
   border-right-color: rgba(255, 255, 255, 0.07);
 }
 
@@ -9873,29 +9875,39 @@ html.theme-paper body.material #electron-titlebar { background: rgba(244, 236, 2
 .titlebar-settings-btn {
   -webkit-app-region: no-drag;
   pointer-events: auto;
-  background: transparent;
-  border: none;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   color: var(--text-muted);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
   margin-left: auto;
-  margin-right: 12px;
-  transition: all 0.2s ease;
+  margin-right: 16px;
+  transition: all 0.22s cubic-bezier(0.25, 0.8, 0.25, 1);
   z-index: 2;
 }
 
 .titlebar-settings-btn:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text-main);
+  background: rgba(var(--accent-rgb, 139, 92, 246), 0.12);
+  border-color: rgba(var(--accent-rgb, 139, 92, 246), 0.3);
+  color: var(--accent);
+  box-shadow: 0 0 10px var(--accent-glow);
+  transform: rotate(25deg) scale(1.05);
+}
+
+body.theme-paper .titlebar-settings-btn {
+  background: rgba(0, 0, 0, 0.02);
+  border-color: rgba(0, 0, 0, 0.04);
 }
 
 body.theme-paper .titlebar-settings-btn:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: rgba(var(--accent-rgb, 139, 92, 246), 0.08);
+  border-color: rgba(var(--accent-rgb, 139, 92, 246), 0.2);
+  color: var(--accent);
 }
 
 /* Absolute centering of project and document titles in workspace */
@@ -10107,11 +10119,24 @@ body.is-electron {
 
 body.is-electron #app {
   flex: 1;
-  height: calc(100vh - 38px);
+  height: 100vh;
   position: relative;
   overflow: hidden;
 }
 
 body.is-electron .app-shell {
   height: 100%;
+}
+
+body.is-electron .sidebar {
+  padding-top: 38px;
+}
+
+body.is-electron .main-workspace {
+  padding-top: 38px;
+}
+
+body.is-electron .side-panel {
+  top: 102px;
+  height: calc(100% - 102px);
 }
