@@ -183,6 +183,110 @@ const NocturneEntityMentions = Extension.create({
   },
 });
 
+const NocturneInputRules = Extension.create({
+  name: 'nocturneInputRules',
+  addOptions() {
+    return {
+      getRules: () => [],
+    };
+  },
+  addProseMirrorPlugins() {
+    const extension = this;
+    return [
+      new Plugin({
+        key: new PluginKey('nocturneInputRules'),
+        props: {
+          handleTextInput(view, from, to, text) {
+            if (text !== ' ') return false;
+            const state = view.state;
+            const $from = state.selection.$from;
+            if ($from.depth === 0) return false;
+            const parent = $from.parent;
+            const textBefore = parent.textBetween(0, $from.parentOffset, null, '\0');
+            const rules = extension.options.getRules() || [];
+            for (const rule of rules) {
+              if (!rule.enabled || !rule.trigger) continue;
+              if (textBefore === rule.trigger) {
+                const start = $from.pos - rule.trigger.length;
+                return executeRuleAction(view, rule, start, $from.pos, false);
+              }
+            }
+            return false;
+          },
+          handleKeyDown(view, event) {
+            if (event.key !== 'Enter' || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return false;
+            const state = view.state;
+            const $from = state.selection.$from;
+            if ($from.depth === 0) return false;
+            const parent = $from.parent;
+            const textBefore = parent.textBetween(0, $from.parentOffset, null, '\0');
+            const rules = extension.options.getRules() || [];
+            for (const rule of rules) {
+              if (!rule.enabled || !rule.trigger) continue;
+              if (textBefore === rule.trigger) {
+                const start = $from.pos - rule.trigger.length;
+                return executeRuleAction(view, rule, start, $from.pos, true);
+              }
+            }
+            return false;
+          }
+        }
+      })
+    ];
+  }
+});
+
+function executeRuleAction(view, rule, from, to, isEnter = false) {
+  const { state, dispatch } = view;
+  const tr = state.tr;
+  if (rule.action === 'center') {
+    const $pos = tr.doc.resolve(from);
+    const depth = $pos.depth;
+    if (depth > 0) {
+      const node = $pos.node(depth);
+      if (node && (node.type.name === 'paragraph' || node.type.name === 'heading')) {
+        tr.setNodeMarkup($pos.before(depth), null, {
+          ...node.attrs,
+          align: 'center'
+        });
+        if (isEnter) {
+          const blockEnd = $pos.after(depth);
+          const pType = state.schema.nodes.paragraph;
+          const nextParagraph = pType.create();
+          tr.insert(blockEnd, nextParagraph);
+          const $resolved = tr.doc.resolve(blockEnd + 1);
+          const sel = view.state.selection.constructor.near($resolved);
+          tr.setSelection(sel);
+        }
+      }
+    }
+    dispatch(tr);
+    return true;
+  }
+  if (rule.action === 'separator') {
+    tr.delete(from, to);
+    const type = state.schema.nodes.horizontalRule;
+    if (type) {
+      const $pos = tr.doc.resolve(from);
+      const depth = $pos.depth;
+      if (depth > 0) {
+        const blockStart = $pos.before(depth);
+        const blockEnd = $pos.after(depth);
+        const pmNode = type.create();
+        const pType = state.schema.nodes.paragraph;
+        const nextParagraph = pType.create();
+        tr.replaceWith(blockStart, blockEnd, [pmNode, nextParagraph]);
+        const $resolved = tr.doc.resolve(blockStart + pmNode.nodeSize + 1);
+        const sel = view.state.selection.constructor.near($resolved);
+        tr.setSelection(sel);
+      }
+    }
+    dispatch(tr);
+    return true;
+  }
+  return false;
+}
+
 export class NocturneEditorBridge {
   constructor({ onChange, onFocus, onSelectionUpdate, getSettings, getMentionIndex, onKeydown }) {
     this.instances = new Map();
@@ -204,6 +308,12 @@ export class NocturneEditorBridge {
       editable: !readOnly,
       content: doc.pmJson || legacyAstToHtml(doc.ast),
       extensions: [
+        NocturneInputRules.configure({
+          getRules: () => {
+            const settings = this.getSettings?.() || {};
+            return settings.customInputRules || [];
+          }
+        }),
         StarterKit.configure({
           heading: { levels: [1, 2, 3] },
           history: { depth: 100 },

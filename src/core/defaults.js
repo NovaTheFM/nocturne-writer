@@ -66,6 +66,12 @@ export const defaultSettings = {
     activeLoreId: 'world',
     kbProjects: [{ id: 'world', title: 'Основное' }],
     customAiProviders: [],
+    customInputRules: [
+      { trigger: '***', action: 'center', enabled: true },
+      { trigger: '---', action: 'separator', enabled: true },
+      { trigger: '___', action: 'separator', enabled: true }
+    ],
+    newRuleAction: 'center',
   };
 
 export const seedFolders = [

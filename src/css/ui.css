@@ -1582,6 +1582,12 @@ body.resizing-workspace {
 }
 .page-content h1, .page-content h2, .page-content h3 { white-space: pre-wrap; }
 .indent-paragraphs .page-content p { text-indent: 2.2em; }
+.indent-paragraphs .page-content p[style*="text-align: center"],
+.indent-paragraphs .page-content p[style*="text-align: right"],
+.indent-paragraphs .page-content p.has-text-align-center,
+.indent-paragraphs .page-content p.has-text-align-right {
+  text-indent: 0 !important;
+}
 .baseline-grid .page-content p,
 .baseline-grid .page-content blockquote {
   background-image: linear-gradient(to bottom, var(--baseline-grid-color) 1px, transparent 1px);

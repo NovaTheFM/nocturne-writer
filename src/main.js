@@ -518,6 +518,12 @@ class NocturneWriter {
     } else {
       merged.macros = merged.macros.filter((m) => m && typeof m.keys === 'string' && typeof m.value === 'string');
     }
+    if (!Array.isArray(merged.customInputRules)) {
+      merged.customInputRules = defaultSettings.customInputRules || [];
+    } else {
+      merged.customInputRules = merged.customInputRules.filter((r) => r && typeof r.trigger === 'string' && typeof r.action === 'string');
+    }
+    merged.newRuleAction = String(merged.newRuleAction || 'center');
     ['aiEndpoint', 'aiKey', 'aiModel', 'authorName'].forEach((key) => { merged[key] = String(merged[key] ?? defaultSettings[key] ?? ''); });
     clamp('caretBlink', 250, 1800);
     clamp('textContrast', 0, 100);
@@ -6596,6 +6602,47 @@ class NocturneWriter {
           this.persistSettings();
           this.renderMacrosListOnly();
           this.toast('Макрос удален.');
+        }
+      },
+      'formatting-save-new': () => {
+        const trigger = (document.getElementById('new-rule-trigger')?.value || '').trim();
+        const action = this.state.settings.newRuleAction || 'center';
+        if (!trigger) {
+          this.toast('Укажите триггер при вводе.');
+          return;
+        }
+        this.state.settings.customInputRules = this.state.settings.customInputRules || [];
+        const existingIdx = this.state.settings.customInputRules.findIndex(r => r.trigger === trigger);
+        if (existingIdx !== -1) {
+          this.state.settings.customInputRules[existingIdx].action = action;
+        } else {
+          this.state.settings.customInputRules.push({ trigger, action, enabled: true });
+        }
+        const triggerInput = document.getElementById('new-rule-trigger');
+        if (triggerInput) triggerInput.value = '';
+        this.persistSettings();
+        this.renderFormattingListOnly();
+        this.toast(existingIdx !== -1 ? 'Правило автозамены обновлено.' : 'Правило автозамены успешно добавлено.');
+      },
+      'formatting-delete': () => {
+        const btn = event.target.closest('[data-rule-idx]');
+        const idx = parseInt(btn?.dataset.ruleIdx, 10);
+        if (Number.isFinite(idx) && this.state.settings.customInputRules) {
+          this.state.settings.customInputRules.splice(idx, 1);
+          this.persistSettings();
+          this.renderFormattingListOnly();
+          this.toast('Правило автозамены удалено.');
+        }
+      },
+      'formatting-toggle-rule': () => {
+        const btn = event.target.closest('[data-rule-idx]');
+        const idx = parseInt(btn?.dataset.ruleIdx, 10);
+        if (Number.isFinite(idx) && this.state.settings.customInputRules) {
+          const rule = this.state.settings.customInputRules[idx];
+          rule.enabled = !rule.enabled;
+          btn.classList.toggle('on', rule.enabled);
+          this.persistSettings();
+          this.renderFormattingListOnly();
         }
       },
       'open-settings': () => { this.closeAllFloatingMenus(); document.getElementById('settings-overlay').classList.add('active'); },
@@ -15681,6 +15728,7 @@ class NocturneWriter {
       ['review', 'bx-edit-alt', 'Редактура'],
       ['focus', 'bx-target-lock', 'Фокус и продуктивность'],
       ['macros', 'bx-code-alt', 'Макросы'],
+      ['formatting', 'bx-paint-roll', 'Разделители / Автоформат'],
       ['ai', 'bx-bot', 'Продвинутый ИИ'],
       ['data', 'bx-shield-quarter', 'Данные'],
       ['export', 'bx-export', 'Экспорт'],
@@ -15718,7 +15766,7 @@ class NocturneWriter {
     this.state.activeSettingsTab = tab;
     this.closeAllFloatingMenus();
     if (this.isMobileLayout()) {
-      this.state.mobile.settingsTab = ['visual', 'editor', 'dictionary', 'review', 'focus', 'macros', 'ai', 'data', 'export', 'misc', 'search'].includes(tab) ? tab : null;
+      this.state.mobile.settingsTab = ['visual', 'editor', 'dictionary', 'review', 'focus', 'macros', 'formatting', 'ai', 'data', 'export', 'misc', 'search'].includes(tab) ? tab : null;
       this.openMobilePanel('settings', 'more');
       return;
     }
@@ -15995,6 +16043,7 @@ class NocturneWriter {
         </div>`,
 
       macros: this.macrosSettingsContent(),
+      formatting: this.formattingSettingsContent(),
       export: this.exportSettingsContent(row, toggle, input),
       search: this.searchSettingsContent(),
     };
@@ -16402,6 +16451,78 @@ class NocturneWriter {
             <div class="macro-arrow"><i class="bx bx-right-arrow-alt"></i></div>
             <div class="macro-value-badge">${escapeHtml(macro.value)}</div>
             <button class="btn-icon delete-btn" data-action="macro-delete" data-macro-idx="${idx}" title="Удалить"><i class="bx bx-trash"></i></button>
+          </div>`).join('');
+  }
+
+  formattingSettingsContent() {
+    const s = this.state.settings;
+    const rules = s.customInputRules || [];
+    return `
+      <div class="tab-content active formatting-settings">
+        <p class="settings-tab-desc" style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px; line-height: 1.5;">Настройте динамические правила автозамены в редакторе. Например, ввод трех звездочек и нажатие клавиши Enter или Пробел может применить центрирование текста вместо вставки стандартного разделителя.</p>
+
+        <section class="formatting-add-card" style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); padding: 18px; border-radius: var(--radius-md); margin-bottom: 24px;">
+          <h4 style="margin: 0 0 14px; font-size: 15px; font-weight: 600;">Добавить новое правило</h4>
+          <div style="display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 160px; display: flex; flex-direction: column; gap: 6px;">
+              <label style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px;">Триггер при вводе</label>
+              <input class="form-control" type="text" id="new-rule-trigger" placeholder="Например, *** или ---" maxlength="15">
+            </div>
+            <div style="flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 6px;">
+              <label style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px;">Действие</label>
+              ${this.renderSettingsSelect('newRuleAction', [['center', 'Выравнивание по центру'], ['separator', 'Вставить разделитель (<hr>)']])}
+            </div>
+            <button class="pill-btn ai-btn" data-action="formatting-save-new" style="height: 38px; display: inline-flex; align-items: center; gap: 6px;"><i class="bx bx-plus"></i> Добавить</button>
+          </div>
+        </section>
+
+        <section class="formatting-list-section">
+          <h4 style="margin: 0 0 14px; font-size: 15px; font-weight: 600;">Список правил (${rules.length})</h4>
+          <div class="formatting-list" style="display: flex; flex-direction: column; gap: 10px;">
+            ${rules.length === 0 ? `
+              <div class="formatting-empty-state" style="text-align: center; padding: 40px 20px; border: 1px dashed var(--border); border-radius: var(--radius-md); color: var(--text-muted);">
+                <i class="bx bx-list-check" style="font-size: 48px; margin-bottom: 8px; opacity: 0.4;"></i>
+                <p style="margin: 0;">У вас пока нет настроенных правил автозамены. Добавьте первое правило выше!</p>
+              </div>
+            ` : rules.map((rule, idx) => `
+              <div class="formatting-item" style="display: flex; align-items: center; justify-content: space-between; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); padding: 12px 18px; border-radius: 8px; gap: 16px;">
+                <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
+                  <span style="font-family: monospace; background: rgba(255, 255, 255, 0.05); padding: 4px 8px; border-radius: 4px; font-size: 14px; border: 1px solid rgba(255, 255, 255, 0.08); font-weight: bold; color: var(--accent);">${escapeHtml(rule.trigger)}</span>
+                  <i class="bx bx-right-arrow-alt" style="color: var(--text-muted);"></i>
+                  <span style="font-size: 13px; font-weight: 500;">${rule.action === 'center' ? 'Выравнивание по центру' : 'Вставить разделитель (<hr>)'}</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 16px;">
+                  <div class="toggle ${rule.enabled ? 'on' : ''}" data-action="formatting-toggle-rule" data-rule-idx="${idx}" data-kind="toggle"></div>
+                  <button class="btn-icon delete-btn" data-action="formatting-delete" data-rule-idx="${idx}" title="Удалить" style="color: var(--text-muted); cursor: pointer;"><i class="bx bx-trash"></i></button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </section>
+      </div>
+    `;
+  }
+
+  renderFormattingListOnly() {
+    const s = this.state.settings;
+    const rules = s.customInputRules || [];
+    const listEl = document.querySelector('.formatting-list');
+    if (!listEl) { this.renderSettings(); return; }
+    const countEl = document.querySelector('.formatting-list-section h4');
+    if (countEl) countEl.textContent = `Список правил (${rules.length})`;
+    listEl.innerHTML = rules.length === 0
+      ? `<div class="formatting-empty-state" style="text-align: center; padding: 40px 20px; border: 1px dashed var(--border); border-radius: var(--radius-md); color: var(--text-muted);"><i class="bx bx-list-check" style="font-size: 48px; margin-bottom: 8px; opacity: 0.4;"></i><p style="margin: 0;">У вас пока нет настроенных правил автозамены. Добавьте первое правило выше!</p></div>`
+      : rules.map((rule, idx) => `
+          <div class="formatting-item" style="display: flex; align-items: center; justify-content: space-between; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); padding: 12px 18px; border-radius: 8px; gap: 16px;">
+            <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
+              <span style="font-family: monospace; background: rgba(255, 255, 255, 0.05); padding: 4px 8px; border-radius: 4px; font-size: 14px; border: 1px solid rgba(255, 255, 255, 0.08); font-weight: bold; color: var(--accent);">${escapeHtml(rule.trigger)}</span>
+              <i class="bx bx-right-arrow-alt" style="color: var(--text-muted);"></i>
+              <span style="font-size: 13px; font-weight: 500;">${rule.action === 'center' ? 'Выравнивание по центру' : 'Вставить разделитель (<hr>)'}</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 16px;">
+              <div class="toggle ${rule.enabled ? 'on' : ''}" data-action="formatting-toggle-rule" data-rule-idx="${idx}" data-kind="toggle"></div>
+              <button class="btn-icon delete-btn" data-action="formatting-delete" data-rule-idx="${idx}" title="Удалить" style="color: var(--text-muted); cursor: pointer;"><i class="bx bx-trash"></i></button>
+            </div>
           </div>`).join('');
   }
 
