@@ -46,9 +46,18 @@ def copy_web_app():
 
 
 def write_package(app_name):
+    version = "1.0.0"
+    try:
+        main_pkg_path = ROOT / "package.json"
+        if main_pkg_path.exists():
+            with open(main_pkg_path, "r", encoding="utf-8") as f:
+                version = json.load(f).get("version", "1.0.0")
+    except Exception as e:
+        print(f"Could not read version from main package.json: {e}")
+
     package = {
         "name": safe_package_name(app_name),
-        "version": "1.0.0",
+        "version": version,
         "description": "Nocturne Writer standalone build",
         "author": "Nocturne Writer",
         "main": "electron/main.cjs",

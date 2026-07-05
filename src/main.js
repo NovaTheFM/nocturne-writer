@@ -426,7 +426,7 @@ class NocturneWriter {
     this.startGitAutosave();
 
     // Check if new version first run (specifically for Electron desktop users)
-    const currentVersion = '1.0.1';
+    const currentVersion = '1.0.2';
     if (this.runtime.isElectron && this.state.settings.lastSeenVersion !== currentVersion) {
       setTimeout(() => {
         this.openWhatsNewModal();
@@ -18231,7 +18231,7 @@ ${raw}`;
       format: 'nocturnedump',
       version: 1,
       appName: 'Nocturne Writer',
-      appVersion: '1.0.0',
+      appVersion: '1.0.2',
       schemaVersion: 3,
       exportedAt: new Date().toISOString(),
       encrypted: !!this.state.settings.e2e,
@@ -18546,25 +18546,30 @@ ${raw}`;
           <div class="cleaner-content" style="text-align: left;">
             <h2 style="text-align: center; margin: 0 0 16px; font-size: 22px; color: var(--text-main); font-weight: 700;">Что нового</h2>
             <div class="whats-new-body" style="max-height: 280px; overflow-y: auto; padding-right: 8px; font-size: 14px; line-height: 1.6; color: var(--text-main);">
-              <p style="margin: 0 0 16px; font-weight: 600; color: var(--accent);">Версия 1.0.1</p>
+              <p style="margin: 0 0 16px; font-weight: 600; color: var(--accent);">Версия 1.0.2</p>
               
-              <p style="margin: 0 0 4px; font-weight: 600;">🛠️ Движок разделителей (Автоформат):</p>
+              <p style="margin: 0 0 4px; font-weight: 600;">✍️ Настройка разделителей и автоформата:</p>
               <ul style="margin: 0 0 12px; padding-left: 20px;">
-                <li>Добавлена новая вкладка настроек «Разделители / Автоформат» для гибкого управления правилами ввода.</li>
-                <li>Поддерживается выравнивание текста по центру/краю, вставка линий и кастомного текста (например, ✦ ✦ ✦).</li>
-                <li>Исправлено центрирование и переход на новую строку по нажатию Enter.</li>
-                <li>Устранено зависание динамической каретки на пустых строках.</li>
+                <li>Добавлена новая вкладка в настройки: «Разделители / Автоформат».</li>
+                <li>Теперь вы можете сами создавать и настраивать правила: например, автоматическое выравнивание по центру при вводе <b>***</b> или появление линии при вводе <b>---</b>.</li>
+                <li>Можно настроить вставку красивого кастомного текста (например, <b>✦ ✦ ✦</b>) или быстрое создание заголовков.</li>
               </ul>
               
-              <p style="margin: 0 0 4px; font-weight: 600;">🚀 Оптимизация локального запуска:</p>
+              <p style="margin: 0 0 4px; font-weight: 600;">⌨️ Исправлен перенос текста и курсор:</p>
               <ul style="margin: 0 0 12px; padding-left: 20px;">
-                <li>Скрипт openlocal.bat переведен на Node-сервер с обходом кэша Service Worker.</li>
-                <li>Настроен запуск браузера Vivaldi в режиме инкогнито для мгновенного обновления изменений по F5.</li>
+                <li>Нажатие Enter на строке с разделителями теперь работает гладко: разделитель центрируется, а вы сразу переходите к написанию текста на новой строчке.</li>
+                <li>Исправлено «залипание» курсора — теперь он следует за переносом строки и не зависает на месте.</li>
               </ul>
               
-              <p style="margin: 0 0 4px; font-weight: 600;">✨ Оформление интерфейса:</p>
+              <p style="margin: 0 0 4px; font-weight: 600;">🚀 Быстрый запуск и обновление:</p>
+              <ul style="margin: 0 0 12px; padding-left: 20px;">
+                <li>Исправлена работа скрипта быстрого запуска приложения (openlocal.bat).</li>
+                <li>Изменения в коде теперь применяются мгновенно при обычном обновлении страницы (F5) в браузере.</li>
+              </ul>
+              
+              <p style="margin: 0 0 4px; font-weight: 600;">✨ Внешний вид настроек:</p>
               <ul style="margin: 0 0 0; padding-left: 20px;">
-                <li>Исправлено наложение полей в сетке настроек и добавлены плавные CSS-анимации.</li>
+                <li>Сетка полей в настройках стала ровнее и аккуратнее, добавлены плавные анимации при раскрытии списков и переключении тумблеров.</li>
               </ul>
             </div>
             <div class="form-actions" style="justify-content: center; gap: 12px; margin-top: 24px;">
