@@ -10166,16 +10166,11 @@ body.is-electron .side-panel {
   width: 100% !important;
 }
 
-.formatting-form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1.2fr auto;
+.formatting-form-flex {
+  display: flex;
   gap: 16px;
   align-items: end;
   width: 100%;
-}
-
-.formatting-form-grid.has-custom-text {
-  grid-template-columns: 1fr 1.2fr 1.2fr auto;
 }
 
 .formatting-field-group {
@@ -10184,6 +10179,30 @@ body.is-electron .side-panel {
   gap: 6px;
   width: 100%;
   min-width: 0;
+}
+
+.custom-text-anim {
+  flex: 0;
+  max-width: 0;
+  opacity: 0;
+  transform: translateY(-10px);
+  overflow: hidden;
+  transition: flex 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              max-width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.2s ease,
+              transform 0.2s ease,
+              margin-left 0.25s ease;
+  margin-left: -16px;
+  pointer-events: none;
+}
+
+.custom-text-anim.show {
+  flex: 1.2;
+  max-width: 500px;
+  opacity: 1;
+  transform: translateY(0);
+  margin-left: 0;
+  pointer-events: auto;
 }
 
 .formatting-add-card .form-control {

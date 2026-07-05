@@ -16491,12 +16491,12 @@ class NocturneWriter {
 
         <section class="formatting-add-card" style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); padding: 18px; border-radius: var(--radius-md); margin-bottom: 24px;">
           <h4 style="margin: 0 0 14px; font-size: 15px; font-weight: 600;">Добавить новое правило</h4>
-          <div id="formatting-form-container" class="formatting-form-grid ${s.newRuleAction === 'custom-text' ? 'has-custom-text' : ''}">
-            <div class="formatting-field-group">
+          <div id="formatting-form-container" class="formatting-form-flex">
+            <div class="formatting-field-group" style="flex: 1;">
               <label style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px;">Триггер при вводе</label>
               <input class="form-control" type="text" id="new-rule-trigger" placeholder="Например, *** или ---" maxlength="15">
             </div>
-            <div class="formatting-field-group">
+            <div class="formatting-field-group" style="flex: 1.2;">
               <label style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px;">Действие</label>
               ${this.renderSettingsSelect('newRuleAction', [
                 ['center', 'Выравнивание по центру'],
@@ -16507,11 +16507,11 @@ class NocturneWriter {
                 ['custom-text', 'Кастомный текст']
               ])}
             </div>
-            <div id="custom-text-wrapper" class="formatting-field-group" style="display: ${s.newRuleAction === 'custom-text' ? 'flex' : 'none'}; opacity: ${s.newRuleAction === 'custom-text' ? '1' : '0'}; transform: ${s.newRuleAction === 'custom-text' ? 'translateY(0)' : 'translateY(-10px)'}; transition: all 0.2s ease;">
+            <div id="custom-text-wrapper" class="formatting-field-group custom-text-anim ${s.newRuleAction === 'custom-text' ? 'show' : ''}">
               <label style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px;">Символы разделителя</label>
               <input class="form-control" type="text" id="new-rule-custom-text" placeholder="Например, ✦ ✦ ✦ или * * *" maxlength="30">
             </div>
-            <button class="pill-btn ai-btn" data-action="formatting-save-new" style="height: 42px; display: inline-flex; align-items: center; gap: 6px; padding: 0 18px;"><i class="bx bx-plus"></i> Добавить</button>
+            <button class="pill-btn ai-btn" data-action="formatting-save-new" style="height: 42px; display: inline-flex; align-items: center; gap: 6px; padding: 0 18px; flex-shrink: 0;"><i class="bx bx-plus"></i> Добавить</button>
           </div>
         </section>
 
@@ -16795,27 +16795,10 @@ class NocturneWriter {
 
   applySettingSideEffects(key, control = null) {
     if (key === 'newRuleAction') {
-      const container = document.getElementById('formatting-form-container');
       const wrapper = document.getElementById('custom-text-wrapper');
       if (wrapper) {
         const isCustomText = this.state.settings.newRuleAction === 'custom-text';
-        if (isCustomText) {
-          container?.classList.add('has-custom-text');
-          wrapper.style.display = 'flex';
-          requestAnimationFrame(() => {
-            wrapper.style.opacity = '1';
-            wrapper.style.transform = 'translateY(0)';
-          });
-        } else {
-          wrapper.style.opacity = '0';
-          wrapper.style.transform = 'translateY(-10px)';
-          setTimeout(() => {
-            if (this.state.settings.newRuleAction !== 'custom-text') {
-              wrapper.style.display = 'none';
-              container?.classList.remove('has-custom-text');
-            }
-          }, 200);
-        }
+        wrapper.classList.toggle('show', isCustomText);
       }
     }
     if (key === 'activeLoreId') {
