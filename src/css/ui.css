@@ -9764,7 +9764,7 @@ body.sortable-active .doc-item {
 
 /* --- Electron Custom Title Bar --- */
 #electron-titlebar {
-  display: flex; /* Active titlebar layout */
+  display: flex;
   height: 38px;
   width: 100%;
   flex-shrink: 0;
@@ -9775,23 +9775,26 @@ body.sortable-active .doc-item {
   justify-content: space-between;
   user-select: none;
   -webkit-app-region: drag;
-  
-  /* Core Application Styles */
-  background: var(--bg-deep);
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--border-light);
   border-top: 1px solid rgba(255, 255, 255, 0.015);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
   transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease;
 }
 
-/* Sidebar Column Integration */
+body.theme-paper #electron-titlebar {
+  border-top: 1px solid rgba(0, 0, 0, 0.015);
+}
+
 .titlebar-brand {
   width: 260px;
   height: 100%;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding-left: 20px; /* Align with sidebar padding-left */
+  padding-left: 20px;
   background: var(--bg-panel);
   border-right: 1px solid var(--border);
   box-sizing: border-box;
@@ -9800,19 +9803,16 @@ body.sortable-active .doc-item {
   -webkit-app-region: drag;
 }
 
-/* Compact sidebar width support */
 body.compact .titlebar-brand {
   width: 224px;
 }
 
-/* Zen mode sidebar hide support */
 body.zen-mode .titlebar-brand {
   background: transparent;
   border-right: none;
   width: auto;
 }
 
-/* Blur / Material Switch */
 body.material #electron-titlebar {
   background: var(--bg-glass);
   backdrop-filter: blur(28px) saturate(1.4);
@@ -9820,7 +9820,7 @@ body.material #electron-titlebar {
 }
 
 body.material .titlebar-brand {
-  background: transparent; /* Let the glass blend through */
+  background: transparent;
 }
 
 html.theme-midnight body.material #electron-titlebar { background: rgba(11, 16, 32, .66); }
@@ -9834,8 +9834,8 @@ html.theme-paper body.material #electron-titlebar { background: rgba(244, 236, 2
 }
 
 .titlebar-logo {
-  width: 15px;
-  height: 15px;
+  width: 18px;
+  height: 18px;
   background-color: var(--accent);
   -webkit-mask-image: url('../assets/in_app_icon.png');
   mask-image: url('../assets/in_app_icon.png');
@@ -9896,6 +9896,10 @@ html.theme-paper body.material #electron-titlebar { background: rgba(244, 236, 2
   font-family: var(--font-ui);
 }
 
+body.theme-paper .titlebar-title .title-separator {
+  color: rgba(0, 0, 0, 0.2);
+}
+
 .titlebar-title .project-name {
   color: var(--accent);
   font-weight: 600;
@@ -9950,6 +9954,11 @@ html.theme-paper body.material #electron-titlebar { background: rgba(244, 236, 2
   transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
+body.theme-paper .titlebar-btn {
+  background: rgba(0, 0, 0, 0.025);
+  border-color: rgba(0, 0, 0, 0.05);
+}
+
 .titlebar-btn svg {
   width: 10px;
   height: 10px;
@@ -9980,20 +9989,6 @@ html.theme-paper body.material #electron-titlebar { background: rgba(244, 236, 2
   border-color: rgba(255, 71, 87, 0.3);
   color: #ff4757;
   box-shadow: 0 0 10px rgba(255, 71, 87, 0.3);
-}
-
-/* Theme Paper overrides for title bar */
-body.theme-paper #electron-titlebar {
-  border-top: 1px solid rgba(0, 0, 0, 0.015);
-}
-
-body.theme-paper .titlebar-title .title-separator {
-  color: rgba(0, 0, 0, 0.2);
-}
-
-body.theme-paper .titlebar-btn {
-  background: rgba(0, 0, 0, 0.025);
-  border-color: rgba(0, 0, 0, 0.05);
 }
 
 /* Window Blur/Focus States */
@@ -10061,6 +10056,10 @@ body.theme-experimental .titlebar-title .project-name {
 body.theme-experimental .titlebar-app-name {
   font-family: 'Courier New', Courier, monospace;
   letter-spacing: 0.08em;
+}
+
+body.is-electron .sidebar-header .brand {
+  display: none;
 }
 
 /* Electron layout adjustments */

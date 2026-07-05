@@ -921,10 +921,8 @@ class NocturneWriter {
     if (!window.nocturneElectron) return;
     const titlebar = document.getElementById('electron-titlebar');
     if (!titlebar) return;
-    titlebar.style.display = 'flex';
     document.body.classList.add('is-electron');
 
-    // Add focus/blur listeners to add styling classes
     window.addEventListener('focus', () => {
       document.body.classList.add('window-focused');
       document.body.classList.remove('window-blurred');
@@ -3057,6 +3055,10 @@ class NocturneWriter {
       if (preloader) preloader.classList.add('hidden');
       const appShell = document.getElementById('app-shell');
       if (appShell) appShell.classList.add('ready');
+      if (window.nocturneElectron) {
+        const titlebar = document.getElementById('electron-titlebar');
+        if (titlebar) titlebar.style.display = 'flex';
+      }
       if (!this.isMobileLayout()) document.querySelector('.page-content')?.focus();
     }, 1800);
   }
