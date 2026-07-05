@@ -358,18 +358,20 @@ button { color: inherit; }
   transition: opacity 600ms ease;
 }
 .app-shell.ready { opacity: 1; }
-.app-shell.material {
+body.material {
   --bg-panel: rgba(18, 18, 22, .62);
   --bg-glass: rgba(18, 18, 22, .45);
-  background: var(--workspace-bg);
 }
-.app-shell.material.theme-midnight {
+body.material.theme-midnight {
   --bg-panel: rgba(11, 16, 32, .66);
   --bg-glass: rgba(11, 16, 32, .52);
 }
-.app-shell.material.theme-paper {
+body.material.theme-paper {
   --bg-panel: rgba(235, 225, 207, .74);
   --bg-glass: rgba(244, 236, 221, .76);
+}
+.app-shell.material {
+  background: var(--workspace-bg);
 }
 .material .sidebar {
   backdrop-filter: blur(28px) saturate(1.4);
@@ -9802,6 +9804,7 @@ body.theme-paper #electron-titlebar {
   transition: width 220ms ease, background-color 0.3s ease, border-color 0.3s ease;
   flex-shrink: 0;
   -webkit-app-region: drag;
+  position: relative;
   z-index: 6;
 }
 
@@ -9816,13 +9819,13 @@ body.zen-mode .titlebar-brand {
 }
 
 body.material #electron-titlebar {
-  background: var(--bg-glass);
+  background: rgba(18, 18, 22, 0.78);
   backdrop-filter: blur(28px) saturate(1.4);
   -webkit-backdrop-filter: blur(28px) saturate(1.4);
 }
 
 body.material .titlebar-brand {
-  background: var(--bg-panel);
+  background: rgba(18, 18, 22, 0.84);
   border-right-color: rgba(255, 255, 255, 0.07);
 }
 
@@ -9830,8 +9833,21 @@ body.material.theme-paper .titlebar-brand {
   border-right-color: var(--border);
 }
 
-html.theme-midnight body.material #electron-titlebar { background: rgba(11, 16, 32, .52); }
-html.theme-paper body.material #electron-titlebar { background: rgba(244, 236, 221, .76); }
+html.theme-midnight body.material #electron-titlebar {
+  background: rgba(11, 16, 32, 0.78) !important;
+}
+
+html.theme-midnight body.material .titlebar-brand {
+  background: rgba(11, 16, 32, 0.84) !important;
+}
+
+html.theme-paper body.material #electron-titlebar {
+  background: rgba(244, 236, 221, 0.88) !important;
+}
+
+html.theme-paper body.material .titlebar-brand {
+  background: rgba(235, 225, 207, 0.92) !important;
+}
 
 .titlebar-drag-region {
   position: absolute;
