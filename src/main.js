@@ -358,7 +358,18 @@ class NocturneWriter {
     this.syncClient = new LocalSyncClient(this);
                     this.lastAiContext = null;
     this.mobileResizeDebounced = debounce(() => this.handleMobileViewportChange(), 120);
+
+    this.lastDragMousePos = null;
+    this.dragClickOffset = null;
+    window.addEventListener('mousemove', (e) => {
+      this.lastDragMousePos = { x: e.clientX, y: e.clientY };
+    });
+    window.addEventListener('touchmove', (e) => {
+      if (e.touches && e.touches[0]) {
+        this.lastDragMousePos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
       }
+    });
+  }
 
   async init() {
     const fill = document.querySelector('.preloader-progress-fill');
@@ -8593,6 +8604,36 @@ class NocturneWriter {
     });
   }
 
+  animateSortableDrop(item, lastMousePos, clickOffset) {
+    if (!item || !lastMousePos || !clickOffset) return;
+    const finalRect = item.getBoundingClientRect();
+    const startX = lastMousePos.x - clickOffset.x;
+    const startY = lastMousePos.y - clickOffset.y;
+    const dx = startX - finalRect.left;
+    const dy = startY - finalRect.top;
+    
+    // Invert stage: position card exactly where it was under the cursor
+    item.style.transition = 'none';
+    item.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(1.015)`;
+    item.style.boxShadow = '0 20px 40px rgba(0,0,0,.6), 0 0 20px var(--accent-glow)';
+    item.style.zIndex = '9999';
+    
+    // Play stage: transition smoothly back to its natural place in the list
+    requestAnimationFrame(() => {
+      // Force layout repaint
+      item.offsetHeight;
+      item.style.transition = 'transform 0.42s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.42s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.42s cubic-bezier(0.16, 1, 0.3, 1)';
+      item.style.transform = 'translate3d(0, 0, 0) scale(1)';
+      item.style.boxShadow = '';
+      
+      setTimeout(() => {
+        item.style.transition = '';
+        item.style.transform = '';
+        item.style.zIndex = '';
+      }, 450);
+    });
+  }
+
   setupDocSortables() {
     this.docSortables?.forEach((sortable) => sortable.destroy?.());
     this.docSortables = [];
@@ -8622,6 +8663,17 @@ class NocturneWriter {
           document.body.classList.add('sortable-active');
           window.getSelection()?.removeAllRanges();
           event.from.classList.add('is-dragging');
+          
+          // Remove entrance animation classes immediately on drag start to prevent style/ghost glitches
+          event.item.classList.remove('new-card-entrance', 'new-doc-entrance');
+
+          // Store click offset for FLIP animation
+          const rect = event.item.getBoundingClientRect();
+          this.dragClickOffset = {
+            x: (event.originalEvent?.clientX || rect.left + rect.width / 2) - rect.left,
+            y: (event.originalEvent?.clientY || rect.top + rect.height / 2) - rect.top,
+          };
+
           this.captureDocDragSnapshot(event);
           this.beginDocPaneDrag(event.item?.dataset.docId);
         },
@@ -8631,12 +8683,9 @@ class NocturneWriter {
           event.from.classList.remove('is-dragging');
           event.to.classList.remove('is-dragging');
           
-          // Add drop landing animation
-          if (event.item) {
-            event.item.classList.add('sortable-drop-landing');
-            setTimeout(() => {
-              event.item?.classList.remove('sortable-drop-landing');
-            }, 460);
+          // Trigger FLIP landing animation
+          if (event.item && this.lastDragMousePos && this.dragClickOffset) {
+            this.animateSortableDrop(event.item, this.lastDragMousePos, this.dragClickOffset);
           }
 
           if (paneDrop) {
@@ -14646,6 +14695,17 @@ class NocturneWriter {
           window.Capacitor.Plugins.Haptics.impact({ style: 'light' }).catch(() => {});
         }
         window.getSelection()?.removeAllRanges();
+
+        // Remove entrance animation classes immediately on drag start to prevent style/ghost glitches
+        event.item.classList.remove('new-card-entrance', 'new-doc-entrance');
+
+        // Store click offset for FLIP animation
+        const rect = event.item.getBoundingClientRect();
+        this.dragClickOffset = {
+          x: (event.originalEvent?.clientX || rect.left + rect.width / 2) - rect.left,
+          y: (event.originalEvent?.clientY || rect.top + rect.height / 2) - rect.top,
+        };
+
         this.kbDragState = {
           id: event.item.dataset.loreId,
           type: zoneType,
@@ -14661,12 +14721,9 @@ class NocturneWriter {
         this.updateTimelineConnectors(event.to);
         this.kbSuppressClickUntil = Date.now() + 260;
         
-        // Add drop landing animation
-        if (event.item) {
-          event.item.classList.add('sortable-drop-landing');
-          setTimeout(() => {
-            event.item?.classList.remove('sortable-drop-landing');
-          }, 460);
+        // Trigger FLIP landing animation
+        if (event.item && this.lastDragMousePos && this.dragClickOffset) {
+          this.animateSortableDrop(event.item, this.lastDragMousePos, this.dragClickOffset);
         }
 
         if (event.oldIndex !== event.newIndex) {
