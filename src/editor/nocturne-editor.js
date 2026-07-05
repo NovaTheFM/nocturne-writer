@@ -1,4 +1,4 @@
-import { Editor, Extension, StarterKit, TextAlign, Underline, Placeholder, Plugin, PluginKey, Decoration, DecorationSet } from '../vendor/tiptap/nocturne-tiptap.bundle.js';
+import { Editor, Extension, StarterKit, TextAlign, Underline, Placeholder, Plugin, PluginKey, Decoration, DecorationSet, HorizontalRule } from '../vendor/tiptap/nocturne-tiptap.bundle.js';
 import { ensureTiptapBlockIds, legacyAstToHtml, tiptapJsonToLegacyAst } from './document-adapter.js';
 import { calculateVisualPages, updateActivePageHighlight } from './visual-pagination.js';
 import { normalizeTypoToken } from '../core/typos.js';
@@ -365,6 +365,12 @@ export class NocturneEditorBridge {
         StarterKit.configure({
           heading: { levels: [1, 2, 3] },
           history: { depth: 100 },
+          horizontalRule: false,
+        }),
+        HorizontalRule.extend({
+          addInputRules() {
+            return [];
+          }
         }),
         Underline,
         TextAlign.configure({ types: ['heading', 'paragraph'] }),
