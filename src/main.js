@@ -521,7 +521,15 @@ class NocturneWriter {
     if (!Array.isArray(merged.customInputRules)) {
       merged.customInputRules = defaultSettings.customInputRules || [];
     } else {
-      merged.customInputRules = merged.customInputRules.filter((r) => r && typeof r.trigger === 'string' && typeof r.action === 'string');
+      merged.customInputRules = merged.customInputRules
+        .filter((r) => r && typeof r.trigger === 'string' && typeof r.action === 'string')
+        .map((r) => {
+          const rule = { trigger: r.trigger, action: r.action, enabled: !!r.enabled };
+          if (r.customText && typeof r.customText === 'string') {
+            rule.customText = r.customText;
+          }
+          return rule;
+        });
     }
     merged.newRuleAction = String(merged.newRuleAction || 'center');
     ['aiEndpoint', 'aiKey', 'aiModel', 'authorName'].forEach((key) => { merged[key] = String(merged[key] ?? defaultSettings[key] ?? ''); });
@@ -6607,19 +6615,30 @@ class NocturneWriter {
       'formatting-save-new': () => {
         const trigger = (document.getElementById('new-rule-trigger')?.value || '').trim();
         const action = this.state.settings.newRuleAction || 'center';
+        const customText = (document.getElementById('new-rule-custom-text')?.value || '').trim();
         if (!trigger) {
           this.toast('Укажите триггер при вводе.');
           return;
         }
+        if (action === 'custom-text' && !customText) {
+          this.toast('Укажите символы разделителя.');
+          return;
+        }
         this.state.settings.customInputRules = this.state.settings.customInputRules || [];
         const existingIdx = this.state.settings.customInputRules.findIndex(r => r.trigger === trigger);
+        const ruleData = { trigger, action, enabled: true };
+        if (action === 'custom-text') {
+          ruleData.customText = customText;
+        }
         if (existingIdx !== -1) {
-          this.state.settings.customInputRules[existingIdx].action = action;
+          this.state.settings.customInputRules[existingIdx] = ruleData;
         } else {
-          this.state.settings.customInputRules.push({ trigger, action, enabled: true });
+          this.state.settings.customInputRules.push(ruleData);
         }
         const triggerInput = document.getElementById('new-rule-trigger');
         if (triggerInput) triggerInput.value = '';
+        const customTextInput = document.getElementById('new-rule-custom-text');
+        if (customTextInput) customTextInput.value = '';
         this.persistSettings();
         this.renderFormattingListOnly();
         this.toast(existingIdx !== -1 ? 'Правило автозамены обновлено.' : 'Правило автозамены успешно добавлено.');
@@ -6642,7 +6661,6 @@ class NocturneWriter {
           rule.enabled = !rule.enabled;
           btn.classList.toggle('on', rule.enabled);
           this.persistSettings();
-          this.renderFormattingListOnly();
         }
       },
       'open-settings': () => { this.closeAllFloatingMenus(); document.getElementById('settings-overlay').classList.add('active'); },
@@ -16454,6 +16472,16 @@ class NocturneWriter {
           </div>`).join('');
   }
 
+  getFormattingActionLabel(action, customText = '') {
+    if (action === 'center') return 'Выравнивание по центру';
+    if (action === 'align-right') return 'Выравнивание по правому краю';
+    if (action === 'heading-2') return 'Заголовок H2';
+    if (action === 'heading-3') return 'Заголовок H3';
+    if (action === 'separator') return 'Разделительная линия';
+    if (action === 'custom-text') return `Текстовый разделитель (${escapeHtml(customText)})`;
+    return action;
+  }
+
   formattingSettingsContent() {
     const s = this.state.settings;
     const rules = s.customInputRules || [];
@@ -16470,7 +16498,18 @@ class NocturneWriter {
             </div>
             <div style="flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 6px;">
               <label style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px;">Действие</label>
-              ${this.renderSettingsSelect('newRuleAction', [['center', 'Выравнивание по центру'], ['separator', 'Вставить разделитель (<hr>)']])}
+              ${this.renderSettingsSelect('newRuleAction', [
+                ['center', 'Выравнивание по центру'],
+                ['align-right', 'Выравнивание по правому краю'],
+                ['heading-2', 'Превратить в заголовок H2'],
+                ['heading-3', 'Превратить в заголовок H3'],
+                ['separator', 'Вставить разделитель (линия)'],
+                ['custom-text', 'Кастомный текст']
+              ])}
+            </div>
+            <div id="custom-text-wrapper" style="flex: 1; min-width: 200px; display: ${s.newRuleAction === 'custom-text' ? 'flex' : 'none'}; opacity: ${s.newRuleAction === 'custom-text' ? '1' : '0'}; transform: ${s.newRuleAction === 'custom-text' ? 'translateY(0)' : 'translateY(-10px)'}; flex-direction: column; gap: 6px; transition: all 0.2s ease;">
+              <label style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px;">Символы разделителя</label>
+              <input class="form-control" type="text" id="new-rule-custom-text" placeholder="Например, ✦ ✦ ✦ или * * *" maxlength="30">
             </div>
             <button class="pill-btn ai-btn" data-action="formatting-save-new" style="height: 38px; display: inline-flex; align-items: center; gap: 6px;"><i class="bx bx-plus"></i> Добавить</button>
           </div>
@@ -16489,7 +16528,7 @@ class NocturneWriter {
                 <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
                   <span style="font-family: monospace; background: rgba(255, 255, 255, 0.05); padding: 4px 8px; border-radius: 4px; font-size: 14px; border: 1px solid rgba(255, 255, 255, 0.08); font-weight: bold; color: var(--accent);">${escapeHtml(rule.trigger)}</span>
                   <i class="bx bx-right-arrow-alt" style="color: var(--text-muted);"></i>
-                  <span style="font-size: 13px; font-weight: 500;">${rule.action === 'center' ? 'Выравнивание по центру' : 'Вставить разделитель (<hr>)'}</span>
+                  <span style="font-size: 13px; font-weight: 500;">${this.getFormattingActionLabel(rule.action, rule.customText)}</span>
                 </div>
                 <div style="display: flex; align-items: center; gap: 16px;">
                   <div class="toggle ${rule.enabled ? 'on' : ''}" data-action="formatting-toggle-rule" data-rule-idx="${idx}" data-kind="toggle"></div>
@@ -16517,7 +16556,7 @@ class NocturneWriter {
             <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
               <span style="font-family: monospace; background: rgba(255, 255, 255, 0.05); padding: 4px 8px; border-radius: 4px; font-size: 14px; border: 1px solid rgba(255, 255, 255, 0.08); font-weight: bold; color: var(--accent);">${escapeHtml(rule.trigger)}</span>
               <i class="bx bx-right-arrow-alt" style="color: var(--text-muted);"></i>
-              <span style="font-size: 13px; font-weight: 500;">${rule.action === 'center' ? 'Выравнивание по центру' : 'Вставить разделитель (<hr>)'}</span>
+              <span style="font-size: 13px; font-weight: 500;">${this.getFormattingActionLabel(rule.action, rule.customText)}</span>
             </div>
             <div style="display: flex; align-items: center; gap: 16px;">
               <div class="toggle ${rule.enabled ? 'on' : ''}" data-action="formatting-toggle-rule" data-rule-idx="${idx}" data-kind="toggle"></div>
@@ -16755,6 +16794,27 @@ class NocturneWriter {
   }
 
   applySettingSideEffects(key, control = null) {
+    if (key === 'newRuleAction') {
+      const wrapper = document.getElementById('custom-text-wrapper');
+      if (wrapper) {
+        const isCustomText = this.state.settings.newRuleAction === 'custom-text';
+        if (isCustomText) {
+          wrapper.style.display = 'flex';
+          requestAnimationFrame(() => {
+            wrapper.style.opacity = '1';
+            wrapper.style.transform = 'translateY(0)';
+          });
+        } else {
+          wrapper.style.opacity = '0';
+          wrapper.style.transform = 'translateY(-10px)';
+          setTimeout(() => {
+            if (this.state.settings.newRuleAction !== 'custom-text') {
+              wrapper.style.display = 'none';
+            }
+          }, 200);
+        }
+      }
+    }
     if (key === 'activeLoreId') {
       const val = this.state.settings.activeLoreId;
       this.state.activeLoreId = val;

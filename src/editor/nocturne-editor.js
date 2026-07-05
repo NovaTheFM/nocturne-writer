@@ -239,7 +239,7 @@ const NocturneInputRules = Extension.create({
 function executeRuleAction(view, rule, from, to, isEnter = false) {
   const { state, dispatch } = view;
   const tr = state.tr;
-  if (rule.action === 'center') {
+  if (rule.action === 'center' || rule.action === 'align-right') {
     const $pos = tr.doc.resolve(from);
     const depth = $pos.depth;
     if (depth > 0) {
@@ -247,7 +247,34 @@ function executeRuleAction(view, rule, from, to, isEnter = false) {
       if (node && (node.type.name === 'paragraph' || node.type.name === 'heading')) {
         tr.setNodeMarkup($pos.before(depth), null, {
           ...node.attrs,
-          align: 'center'
+          align: rule.action === 'center' ? 'center' : 'right'
+        });
+        if (isEnter) {
+          const blockEnd = $pos.after(depth);
+          const pType = state.schema.nodes.paragraph;
+          const nextParagraph = pType.create();
+          tr.insert(blockEnd, nextParagraph);
+          const $resolved = tr.doc.resolve(blockEnd + 1);
+          const sel = view.state.selection.constructor.near($resolved);
+          tr.setSelection(sel);
+        }
+      }
+    }
+    dispatch(tr);
+    return true;
+  }
+  if (rule.action === 'heading-2' || rule.action === 'heading-3') {
+    tr.delete(from, to);
+    const type = state.schema.nodes.heading;
+    if (type) {
+      const level = rule.action === 'heading-2' ? 2 : 3;
+      const $pos = tr.doc.resolve(from);
+      const depth = $pos.depth;
+      if (depth > 0) {
+        const node = $pos.node(depth);
+        tr.setNodeMarkup($pos.before(depth), type, {
+          ...node.attrs,
+          level
         });
         if (isEnter) {
           const blockEnd = $pos.after(depth);
@@ -280,6 +307,27 @@ function executeRuleAction(view, rule, from, to, isEnter = false) {
         const sel = view.state.selection.constructor.near($resolved);
         tr.setSelection(sel);
       }
+    }
+    dispatch(tr);
+    return true;
+  }
+  if (rule.action === 'custom-text') {
+    tr.delete(from, to);
+    const $pos = tr.doc.resolve(from);
+    const depth = $pos.depth;
+    if (depth > 0) {
+      const blockStart = $pos.before(depth);
+      const blockEnd = $pos.after(depth);
+      const pType = state.schema.nodes.paragraph;
+      const separatorParagraph = pType.create(
+        { align: 'center' },
+        rule.customText ? state.schema.text(rule.customText) : []
+      );
+      const nextParagraph = pType.create();
+      tr.replaceWith(blockStart, blockEnd, [separatorParagraph, nextParagraph]);
+      const $resolved = tr.doc.resolve(blockStart + separatorParagraph.nodeSize + 1);
+      const sel = view.state.selection.constructor.near($resolved);
+      tr.setSelection(sel);
     }
     dispatch(tr);
     return true;
