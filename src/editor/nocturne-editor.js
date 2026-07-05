@@ -204,9 +204,11 @@ const NocturneInputRules = Extension.create({
             const parent = $from.parent;
             const textBefore = parent.textBetween(0, $from.parentOffset, null, '\0');
             const rules = extension.options.getRules() || [];
+            console.log("[NocturneInputRules] handleTextInput text:", JSON.stringify(text), "textBefore:", JSON.stringify(textBefore), "rules:", JSON.stringify(rules));
             for (const rule of rules) {
               if (!rule.enabled || !rule.trigger) continue;
               if (textBefore === rule.trigger) {
+                console.log("[NocturneInputRules] Matched rule:", rule);
                 const start = $from.pos - rule.trigger.length;
                 return executeRuleAction(view, rule, start, $from.pos, false);
               }
@@ -221,9 +223,11 @@ const NocturneInputRules = Extension.create({
             const parent = $from.parent;
             const textBefore = parent.textBetween(0, $from.parentOffset, null, '\0');
             const rules = extension.options.getRules() || [];
+            console.log("[NocturneInputRules] handleKeyDown key:", event.key, "textBefore:", JSON.stringify(textBefore), "rules:", JSON.stringify(rules));
             for (const rule of rules) {
               if (!rule.enabled || !rule.trigger) continue;
               if (textBefore === rule.trigger) {
+                console.log("[NocturneInputRules] Matched rule on Enter:", rule);
                 const start = $from.pos - rule.trigger.length;
                 return executeRuleAction(view, rule, start, $from.pos, true);
               }
