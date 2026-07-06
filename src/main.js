@@ -427,7 +427,7 @@ class NocturneWriter {
     this.startGitAutosave();
 
     // Check if new version first run (specifically for Electron desktop users)
-    const currentVersion = '1.0.4';
+    const currentVersion = '1.0.5';
     if (this.runtime.isElectron && this.state.settings.lastSeenVersion !== currentVersion) {
       setTimeout(() => {
         this.openWhatsNewModal();
@@ -13179,13 +13179,34 @@ class NocturneWriter {
 
   startCaretUpdateLoop() {
     if (this.caretLoopId) cancelAnimationFrame(this.caretLoopId);
-    const loop = () => {
-      if (document.hasFocus()) {
-        this.updateCustomCaret();
+    this._caretRafPending = false;
+
+    const scheduleCaretUpdate = (doubleRaf = false) => {
+      if (this._caretRafPending) return;
+      this._caretRafPending = true;
+      const doUpdate = () => {
+        this._caretRafPending = false;
+        if (document.hasFocus()) this.updateCustomCaret();
+      };
+      if (doubleRaf) {
+        requestAnimationFrame(() => requestAnimationFrame(doUpdate));
+      } else {
+        requestAnimationFrame(doUpdate);
       }
-      this.caretLoopId = requestAnimationFrame(loop);
     };
-    this.caretLoopId = requestAnimationFrame(loop);
+
+    document.addEventListener('selectionchange', () => scheduleCaretUpdate(), { passive: true });
+    window.addEventListener('resize', () => scheduleCaretUpdate(), { passive: true });
+    document.addEventListener('scroll', () => scheduleCaretUpdate(), { capture: true, passive: true });
+
+    document.addEventListener('input', () => scheduleCaretUpdate(true), { passive: true });
+    document.addEventListener('keyup', () => scheduleCaretUpdate(true), { passive: true });
+    document.addEventListener('mouseup', () => scheduleCaretUpdate(), { passive: true });
+    document.addEventListener('touchend', () => scheduleCaretUpdate(), { passive: true });
+    document.addEventListener('focusin', () => scheduleCaretUpdate(), { passive: true });
+    document.addEventListener('focusout', () => scheduleCaretUpdate(), { passive: true });
+
+    scheduleCaretUpdate();
   }
 
   expandRangeToWord(range) {
@@ -18335,7 +18356,7 @@ ${raw}`;
       format: 'nocturnedump',
       version: 1,
       appName: 'Nocturne Writer',
-      appVersion: '1.0.4',
+      appVersion: '1.0.5',
       schemaVersion: 3,
       exportedAt: new Date().toISOString(),
       encrypted: !!this.state.settings.e2e,
@@ -18701,28 +18722,13 @@ ${raw}`;
             <h2 style="text-align: center; margin: 0 0 4px; font-size: 22px; color: var(--text-main); font-weight: 700;">Что нового</h2>
             <p style="text-align: center; margin: 0 0 20px; font-size: 13px; color: var(--text-muted, #a1a1aa);">Луна хочет рассказать вам о новинках!</p>
             <div class="whats-new-body" style="max-height: 280px; overflow-y: auto; padding-right: 8px; font-size: 14px; line-height: 1.6; color: var(--text-main);">
-              <p style="margin: 0 0 16px; font-weight: 600; color: var(--accent);">Версия 1.0.4</p>
+              <p style="margin: 0 0 16px; font-weight: 600; color: var(--accent);">Версия 1.0.5</p>
               
-              <p style="margin: 0 0 4px; font-weight: 600;">🧹 Интеллектуальный «Чистильщик»:</p>
-              <ul style="margin: 0 0 12px; padding-left: 20px;">
-                <li>Исправлено распознавание времени с одной цифрой часов (например, 7:24).</li>
-                <li>Добавлена поддержка русских ников и любых смайликов/спецсимволов в юзернеймах Telegram.</li>
-                <li>Исключены ложные срабатывания чистильщика на заголовки списков, главы и другие заметки (например, «Ингредиенты:», «Глава 1:», «Важно:»).</li>
-                <li>Исправлен пропуск сообщений с лидирующими пробелами или отступами в начале строки.</li>
-              </ul>
-              
-              <p style="margin: 0 0 4px; font-weight: 600;">📝 Режимы Редактирования и Финализации:</p>
-              <ul style="margin: 0 0 12px; padding-left: 20px;">
-                <li>Исправлен баг, из-за которого нельзя было комментировать или править последний только что написанный абзац сцены.</li>
-                <li>Принятие замен в режиме Финализации переведено на надёжные внутренние транзакции ProseMirror, что исключает сбои редактора.</li>
-                <li>Подсветка правок больше не пропадает при вводе текста или перемещении курсора.</li>
-              </ul>
-              
-              <p style="margin: 0 0 4px; font-weight: 600;">✨ Новые премиум-эффекты набора текста:</p>
+              <p style="margin: 0 0 4px; font-weight: 600;">⚡ Оптимизация каретки (Caret Loop):</p>
               <ul style="margin: 0 0 0; padding-left: 20px;">
-                <li>Устранено двоение и смещение букв при печати благодаря попиксельному измерению.</li>
-                <li><b>Искры</b> заменены на элегантный разлет звёздочек, не перекрывающий текст.</li>
-                <li><b>Волна</b> сделана полупрозрачной и плавной, а <b>Туман</b> — невесомым и едва заметным.</li>
+                <li>Убран бесконечный фоновый цикл каретки; теперь она обновляется только при вводе, кликах и скролле.</li>
+                <li>Это снижает нагрузку на процессор (CPU) и графику (GPU) в фоновом режиме до нуля.</li>
+                <li>Все оригинальные визуальные эффекты и плавное дыхание каретки сохранены без каких-либо изменений!</li>
               </ul>
             </div>
             <div class="form-actions" style="justify-content: center; gap: 12px; margin-top: 24px;">
