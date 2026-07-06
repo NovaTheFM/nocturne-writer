@@ -13179,13 +13179,44 @@ class NocturneWriter {
 
   startCaretUpdateLoop() {
     if (this.caretLoopId) cancelAnimationFrame(this.caretLoopId);
-    const loop = () => {
-      if (document.hasFocus()) {
-        this.updateCustomCaret();
+
+    // --- Event-driven caret: update only when something changes ---
+    this._caretRafPending = false;
+
+    const scheduleCaretUpdate = (doubleRaf = false) => {
+      if (this._caretRafPending) return;
+      this._caretRafPending = true;
+      const doUpdate = () => {
+        this._caretRafPending = false;
+        if (document.hasFocus()) this.updateCustomCaret();
+      };
+      if (doubleRaf) {
+        // Two rAFs let the browser settle layout after Enter / paste / IME —
+        // this prevents the "phantom caret" stuck on the previous line.
+        requestAnimationFrame(() => requestAnimationFrame(doUpdate));
+      } else {
+        requestAnimationFrame(doUpdate);
       }
-      this.caretLoopId = requestAnimationFrame(loop);
     };
-    this.caretLoopId = requestAnimationFrame(loop);
+
+    // Events that move the caret or change its visual position
+    document.addEventListener('selectionchange', () => scheduleCaretUpdate(), { passive: true });
+    const scrollTargets = document.querySelectorAll('.editor-scroll-area, #workspace-stage, .workspace-pane');
+    scrollTargets.forEach(el => el.addEventListener('scroll', () => scheduleCaretUpdate(), { passive: true }));
+    window.addEventListener('resize', () => scheduleCaretUpdate(), { passive: true });
+
+    // Input-class events use doubleRaf so the browser has time to reflow
+    // new lines / blocks before we sample caret coordinates.
+    const editorArea = document.getElementById('workspace-stage') || document.body;
+    editorArea.addEventListener('input', () => scheduleCaretUpdate(true), { passive: true });
+    editorArea.addEventListener('keyup', () => scheduleCaretUpdate(true), { passive: true });
+    editorArea.addEventListener('mouseup', () => scheduleCaretUpdate(), { passive: true });
+    editorArea.addEventListener('touchend', () => scheduleCaretUpdate(), { passive: true });
+    editorArea.addEventListener('focus', () => scheduleCaretUpdate(), { capture: true, passive: true });
+    editorArea.addEventListener('blur', () => scheduleCaretUpdate(), { capture: true, passive: true });
+
+    // Initial positioning
+    scheduleCaretUpdate();
   }
 
   expandRangeToWord(range) {
