@@ -135,14 +135,17 @@
 }
 
 @keyframes mascot-sway-float {
-  0%, 100% {
-    transform: translateX(calc(-50% - 10px)) rotate(-1.5deg);
+  0%, 50%, 100% {
+    transform: translateX(-50%) rotate(0deg);
   }
-  50% {
-    transform: translateX(calc(-50% + 10px)) rotate(1.5deg);
+  25% {
+    transform: translateX(calc(-50% + 12px)) rotate(1.5deg);
+  }
+  75% {
+    transform: translateX(calc(-50% - 12px)) rotate(-1.5deg);
   }
 }
 
 .whats-new-reaper-wrapper.floating {
-  animation: mascot-sway-float 3.5s ease-in-out infinite;
+  animation: mascot-sway-float 6s ease-in-out infinite;
 }
