@@ -146,3 +146,11 @@
 .whats-new-reaper-wrapper.floating {
   animation: mascot-sway-float 8s ease-in-out infinite;
 }
+
+.whats-new-reaper-wrapper {
+  filter: drop-shadow(0 0 20px rgba(var(--accent-rgb, 139, 92, 246), 0.25));
+}
+
+.whats-new-reaper-wrapper .cleaner-reaper-img {
+  filter: none !important;
+}
