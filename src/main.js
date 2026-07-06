@@ -13302,26 +13302,66 @@ class NocturneWriter {
     if (!['sparkles', 'ripple', 'mist'].includes(anim) || !char.trim()) return;
     const sel = getSelection();
     if (!sel.rangeCount) return;
-    const rect = this.rangeRect(sel.getRangeAt(0).cloneRange());
-    if (!rect) return;
+    
+    // Append to page shell instead of body so it scrolls with the text
+    const pageShell = sel.anchorNode?.parentElement?.closest('.visual-page-shell') || sel.anchorNode?.parentElement?.closest('.page');
+    if (!pageShell) return;
+
+    let left = 0;
+    let top = 0;
+    let width = 0;
+    let measured = false;
+
+    // Pixel-accurate alignment by measuring the bounding rect of the typed letter
+    if (sel.anchorNode.nodeType === Node.TEXT_NODE && sel.anchorOffset > 0) {
+      try {
+        const charRange = document.createRange();
+        charRange.setStart(sel.anchorNode, sel.anchorOffset - 1);
+        charRange.setEnd(sel.anchorNode, sel.anchorOffset);
+        const charRect = charRange.getBoundingClientRect();
+        if (charRect && charRect.width > 0 && charRect.height > 0) {
+          const shellRect = pageShell.getBoundingClientRect();
+          left = charRect.left - shellRect.left;
+          top = charRect.top - shellRect.top;
+          width = charRect.width;
+          measured = true;
+        }
+      } catch (e) {
+        console.error('Failed to measure character range rect:', e);
+      }
+    }
+
+    // Fallback if measurement failed (e.g. not a text node)
+    if (!measured) {
+      const rect = this.rangeRect(sel.getRangeAt(0).cloneRange());
+      if (!rect) return;
+      const shellRect = pageShell.getBoundingClientRect();
+      const estWidth = this.state.settings.fontSize * 0.55;
+      left = rect.left - shellRect.left - estWidth;
+      top = rect.top - shellRect.top;
+      width = estWidth;
+    }
 
     const letter = document.createElement('span');
     letter.className = `anim-letter type-${anim}`;
     letter.textContent = char;
-    
-    // Append to page shell instead of body so it scrolls with the text
-    const pageShell = sel.anchorNode?.parentElement?.closest('.visual-page-shell') || sel.anchorNode?.parentElement?.closest('.page');
-    if (pageShell) {
-      pageShell.style.position = 'relative';
-      const shellRect = pageShell.getBoundingClientRect();
-      letter.style.position = 'absolute';
-      letter.style.left = `${Math.max(0, rect.left - shellRect.left - this.state.settings.fontSize * 0.55)}px`;
-      letter.style.top = `${Math.max(0, rect.top - shellRect.top)}px`;
-      letter.style.fontFamily = this.state.settings.fontFamily;
-      letter.style.fontSize = `${this.state.settings.fontSize}px`;
-      pageShell.appendChild(letter);
-      setTimeout(() => letter.remove(), 520);
+    letter.style.position = 'absolute';
+    letter.style.left = `${left}px`;
+    letter.style.top = `${top}px`;
+    if (width > 0) {
+      letter.style.width = `${width}px`;
     }
+    letter.style.fontFamily = this.state.settings.fontFamily;
+    letter.style.fontSize = `${this.state.settings.fontSize}px`;
+    letter.style.lineHeight = '1';
+    
+    if (window.getComputedStyle(pageShell).position === 'static') {
+      pageShell.style.position = 'relative';
+    }
+    
+    pageShell.appendChild(letter);
+    const duration = anim === 'sparkles' ? 340 : anim === 'ripple' ? 380 : 420;
+    setTimeout(() => letter.remove(), duration);
   }
 
   updateActiveBlock() {

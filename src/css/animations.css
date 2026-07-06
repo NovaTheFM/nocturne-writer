@@ -106,19 +106,19 @@
 }
 
 @keyframes letter-pop {
-  0% { transform: scale(1.18) translateY(-3px); opacity: .55; filter: blur(1px); }
-  100% { transform: scale(1) translateY(0); opacity: 0; filter: blur(0); }
+  0% { transform: scale(1) translateY(0); opacity: 0.95; filter: none; }
+  50% { opacity: 0.8; }
+  100% { transform: scale(1.45) translateY(-6px); opacity: 0; filter: blur(1.5px); }
 }
 
-
 @keyframes letter-glow {
-  0% { text-shadow: 0 0 14px var(--accent); opacity: .55; filter: blur(.5px); }
-  100% { text-shadow: 0 0 0 transparent; opacity: 0; filter: blur(0); }
+  0% { transform: scale(1); opacity: 0.9; filter: none; text-shadow: 0 0 6px var(--accent), 0 0 12px var(--accent); }
+  100% { transform: scale(1.6); opacity: 0; filter: blur(1px); text-shadow: 0 0 0 transparent; }
 }
 
 @keyframes letter-slide {
-  0% { transform: translateY(5px); opacity: .5; filter: blur(2px); }
-  100% { transform: translateY(-7px); opacity: 0; filter: blur(0); }
+  0% { transform: translateY(0) scale(1); opacity: 0.8; filter: none; }
+  100% { transform: translateY(-16px) scale(1.1); opacity: 0; filter: blur(3px); }
 }
 
 /* KB Fixes */
