@@ -255,7 +255,9 @@ body.theme-experimental:hover .sidebar,
 }
 
 .theme-experimental .sidebar-footer {
-  background: transparent !important;
+  background: rgba(10, 10, 15, 0.6) !important;
+  backdrop-filter: blur(35px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(35px) saturate(180%) !important;
   border-top: 1px solid rgba(255, 255, 255, 0.05) !important;
 }
 
@@ -577,10 +579,7 @@ body.theme-experimental:hover .sidebar,
   box-shadow: 0 0 8px var(--accent);
 }
 
-/* Show settings button in the toolbar/dock only in experimental mode */
-.theme-experimental .toolbar-settings-btn {
-  display: flex !important;
-}
+
 
 /* Macros Tab Styling */
 .macro-add-card {

@@ -601,10 +601,22 @@ body.material .floating-menu-portal .popover-surface {
 .sidebar-footer {
   position: absolute;
   bottom: 0;
-  width: 260px;
+  left: 0;
+  right: 0;
   padding: 14px 14px 18px;
   border-top: 1px solid var(--border-light);
   background: var(--bg-panel);
+  box-sizing: border-box;
+}
+.material .sidebar-footer {
+  backdrop-filter: blur(28px) saturate(1.4);
+  -webkit-backdrop-filter: blur(28px) saturate(1.4);
+}
+.compact .sidebar-footer {
+  padding: 8px 12px 10px;
+}
+.compact .goal-label {
+  margin-bottom: 4px;
 }
 .goal-label { display: flex; justify-content: space-between; color: var(--text-muted); font-size: 11px; margin-bottom: 8px; }
 .goal-track { height: 5px; background: #25252f; border-radius: 20px; overflow: hidden; }

@@ -996,6 +996,44 @@ class NocturneWriter {
     if (closeBtn) closeBtn.addEventListener('click', () => window.nocturneElectron.windowClose());
 
     this.updateElectronTitlebarTitle();
+    this.updateTitlebarLayout();
+    window.addEventListener('resize', () => this.updateTitlebarLayout(), { passive: true });
+  }
+
+  updateTitlebarLayout() {
+    if (!window.nocturneElectron) return;
+    const titlebarBrand = document.querySelector('.titlebar-brand');
+    const sidebar = document.getElementById('sidebar');
+    const docsContainer = document.getElementById('docs-container');
+    const titlebar = document.getElementById('electron-titlebar');
+    if (!titlebarBrand || !sidebar) return;
+
+    const baseWidth = sidebar.getBoundingClientRect().width;
+    if (baseWidth === 0) {
+      titlebarBrand.style.display = 'none';
+      if (titlebar) titlebar.style.background = '';
+      return;
+    }
+    titlebarBrand.style.display = '';
+
+    let scrollbarWidth = 0;
+    if (docsContainer) {
+      const hasScrollbar = docsContainer.scrollHeight > docsContainer.clientHeight;
+      if (hasScrollbar) {
+        scrollbarWidth = 6;
+      }
+    }
+
+    const targetWidth = baseWidth - scrollbarWidth;
+    titlebarBrand.style.width = `${targetWidth}px`;
+
+    if (titlebar && document.body.classList.contains('material')) {
+      const panelColor = getComputedStyle(document.body).getPropertyValue('--bg-panel').trim();
+      const glassColor = getComputedStyle(document.body).getPropertyValue('--bg-glass').trim();
+      titlebar.style.background = `linear-gradient(90deg, ${panelColor} ${targetWidth}px, ${glassColor} ${targetWidth}px)`;
+    } else if (titlebar) {
+      titlebar.style.background = '';
+    }
   }
 
   updateElectronTitlebarTitle() {
@@ -2906,7 +2944,6 @@ class NocturneWriter {
               <div class="floating-note-menu-wrap" id="floating-note-menu-wrap">
                 <button class="tool-btn" data-action="toggle-floating-note-menu" data-floating-note-menu-anchor title="Плавающие заметки"><i class="bx bx-note"></i></button>
               </div>
-                            <button class="tool-btn toolbar-settings-btn" data-action="open-settings" title="Настройки" aria-label="Настройки"><i class="bx bx-cog"></i></button>
               ${this.state.settings.showZenButton ? '<button class="tool-btn zen-toggle-btn" data-action="toggle-zen" aria-pressed="false" title="Режим Дзен"><i class="bx bx-target-lock"></i></button>' : ''}
               <button class="pill-btn" data-action="toggle-notes"><i class="bx bx-notepad"></i> <span>Заметки</span></button>
               <button class="pill-btn" data-action="import-doc"><i class="bx bx-import"></i> <span>Импорт</span></button>
@@ -7434,6 +7471,8 @@ class NocturneWriter {
         }
       }, 1000);
     }
+
+    this.updateTitlebarLayout();
   }
 
   folderEmptyState(folderId, isSearch = false) {
@@ -17168,6 +17207,7 @@ class NocturneWriter {
       button.setAttribute('aria-pressed', this.state.zenActive ? 'true' : 'false');
       button.title = this.state.zenActive ? 'Выйти из режима Дзен' : 'Режим Дзен';
     });
+    this.updateTitlebarLayout();
   }
 
   async persistSettings() {
