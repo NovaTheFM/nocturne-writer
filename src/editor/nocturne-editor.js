@@ -2,6 +2,7 @@ import { Editor, Extension, StarterKit, TextAlign, Underline, Placeholder, Plugi
 import { ensureTiptapBlockIds, legacyAstToHtml, tiptapJsonToLegacyAst } from './document-adapter.js';
 import { calculateVisualPages, updateActivePageHighlight } from './visual-pagination.js';
 import { normalizeTypoToken } from '../core/typos.js';
+import { uid } from '../core/utils.js';
 
 export const paginationPluginKey = new PluginKey('nocturnePagination');
 
@@ -82,6 +83,34 @@ const BlockIdentity = Extension.create({
           },
         },
       },
+    ];
+  },
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey('nocturneBlockIdentity'),
+        appendTransaction(transactions, oldState, newState) {
+          if (!transactions.some(tr => tr.docChanged)) {
+            return;
+          }
+          let tr = newState.tr;
+          let modified = false;
+          newState.doc.descendants((node, pos) => {
+            if (['paragraph', 'heading', 'blockquote'].includes(node.type.name)) {
+              if (!node.attrs.blockId) {
+                tr = tr.setNodeMarkup(pos, undefined, {
+                  ...node.attrs,
+                  blockId: uid('block'),
+                });
+                modified = true;
+              }
+            }
+          });
+          if (modified) {
+            return tr;
+          }
+        },
+      }),
     ];
   },
 });
