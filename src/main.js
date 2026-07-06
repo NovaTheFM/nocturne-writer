@@ -7290,6 +7290,7 @@ class NocturneWriter {
       'clear-temp-notes': () => this.clearTemporaryNotes(),
       'clear-current-review-marks': () => this.clearCurrentDocumentReviewMarks(),
       'reset-hidden-floating-notes': () => this.resetHiddenFloatingNotes(),
+      'show-whats-new': () => this.openWhatsNewModal(),
       'note-divider': () => this.insertNoteSnippet('\n\n---\n\n'),
       'note-checklist': () => this.insertNoteSnippet('\n- [ ] '),
       'note-toggle-check': () => this.toggleNoteChecklist(),
@@ -12613,6 +12614,7 @@ class NocturneWriter {
             ${action('bx-eraser', 'Очистить временные заметки', 'clear-temp-notes', true)}
             ${action('bx-comment-x', 'Очистить редакторские правки текущего документа', 'clear-current-review-marks', true)}
             ${action('bx-show', 'Сбросить скрытые окна заметок', 'reset-hidden-floating-notes')}
+            ${action('bx-info-circle', 'Что нового?', 'show-whats-new')}
           </div>
         </section>
         <section class="misc-card">
@@ -18528,6 +18530,62 @@ ${raw}`;
     }
   }
 
+  async transitionLunaImage(imgEl, stateName, options = {}) {
+    const { duration = 250 } = options;
+    const wrapper = imgEl.closest('.whats-new-reaper-wrapper');
+    const tint = wrapper ? wrapper.querySelector('.cleaner-reaper-tint') : null;
+    const glowImg = wrapper ? wrapper.querySelector('#cleaner-reaper-glow-img') : null;
+    const glowTint = wrapper ? wrapper.querySelector('.cleaner-reaper-glow-tint') : null;
+    
+    if (glowImg && glowTint) {
+      const src = `./reaper_photo/${stateName}.png`;
+      glowImg.src = src;
+      glowTint.style.webkitMaskImage = `url(${src})`;
+      glowTint.style.maskImage = `url(${src})`;
+      
+      // Decode overlay image on GPU before transition
+      await glowImg.decode().catch(() => {});
+      
+      // Coordinated cross-fade
+      imgEl.style.transition = `opacity ${duration}ms ease`;
+      if (tint) tint.style.transition = `opacity ${duration}ms ease`;
+      glowImg.style.transition = `opacity ${duration}ms ease`;
+      glowTint.style.transition = `opacity ${duration}ms ease`;
+      
+      imgEl.style.opacity = '0';
+      if (tint) tint.style.opacity = '0';
+      glowImg.style.opacity = '1';
+      glowTint.style.opacity = '1';
+      
+      await new Promise(r => setTimeout(r, duration));
+      
+      // Update base layer image source
+      imgEl.src = src;
+      if (tint) {
+        tint.style.webkitMaskImage = `url(${src})`;
+        tint.style.maskImage = `url(${src})`;
+      }
+      
+      // Decode base image on GPU
+      await imgEl.decode().catch(() => {});
+      
+      // Wait two rendering frames to ensure the browser painted the base layer
+      await new Promise(r => requestAnimationFrame(r));
+      await new Promise(r => requestAnimationFrame(r));
+      
+      imgEl.style.transition = 'none';
+      if (tint) tint.style.transition = 'none';
+      imgEl.style.opacity = '1';
+      if (tint) tint.style.opacity = '1';
+      
+      glowImg.style.transition = 'none';
+      glowTint.style.transition = 'none';
+      glowImg.style.opacity = '0';
+      glowTint.style.opacity = '0';
+      glowImg.offsetHeight; // force reflow
+    }
+  }
+
   openWhatsNewModal() {
     let overlay = document.getElementById('whats-new-overlay');
     if (!overlay) {
@@ -18539,8 +18597,14 @@ ${raw}`;
     
     overlay.innerHTML = `
       <div class="cleaner-modal-container">
-        <div class="whats-new-reaper-wrapper floating" style="position: absolute; top: -270px; left: 50%; transform: translateX(-50%); width: 320px; height: 320px; pointer-events: none; z-index: 100;">
-          <img src="./reaper_photo/lil_mascot.png" class="cleaner-reaper-img" alt="Reaper">
+        <div class="whats-new-reaper-wrapper cleaner-reaper-wrapper floating" style="position: absolute; top: -270px; left: 50%; transform: translateX(-50%); width: 320px; height: 320px; pointer-events: none; z-index: 100;">
+          <!-- Base layers -->
+          <img src="./reaper_photo/lil_mascot.png" id="whats-new-reaper-img" class="cleaner-reaper-img" alt="Reaper">
+          <div class="cleaner-reaper-tint" style="-webkit-mask-image: url(./reaper_photo/lil_mascot.png); mask-image: url(./reaper_photo/lil_mascot.png);"></div>
+          
+          <!-- Glow overlay -->
+          <img src="./reaper_photo/luna_happy.png" id="cleaner-reaper-glow-img" class="cleaner-reaper-img" style="opacity: 0; z-index: 10;" alt="Reaper Glow">
+          <div class="cleaner-reaper-glow-tint" style="-webkit-mask-image: url(./reaper_photo/luna_happy.png); mask-image: url(./reaper_photo/luna_happy.png); opacity: 0; z-index: 11;"></div>
         </div>
         <div class="cleaner-modal" style="max-width: 480px; width: 90%; background: rgba(18, 18, 24, 0.85); box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 32px; backdrop-filter: blur(10px); position: relative; z-index: 101; overflow: hidden;">
           <div class="cleaner-content" style="text-align: left;">
@@ -18562,7 +18626,6 @@ ${raw}`;
                 <li>Исправлено «залипание» курсора — теперь он следует за переносом строки и не зависает на месте.</li>
               </ul>
               
-
               <p style="margin: 0 0 4px; font-weight: 600;">✨ Внешний вид настроек:</p>
               <ul style="margin: 0 0 0; padding-left: 20px;">
                 <li>Сетка полей в настройках стала ровнее и аккуратнее, добавлены плавные анимации при раскрытии списков и переключении тумблеров.</li>
@@ -18576,6 +18639,17 @@ ${raw}`;
       </div>
     `;
     
+    const imgEl = overlay.querySelector('#whats-new-reaper-img');
+    const btn = overlay.querySelector('[data-action="close-whats-new"]');
+    if (imgEl && btn) {
+      btn.addEventListener('mouseenter', () => {
+        this.transitionLunaImage(imgEl, 'luna_happy', { duration: 250 });
+      });
+      btn.addEventListener('mouseleave', () => {
+        this.transitionLunaImage(imgEl, 'lil_mascot', { duration: 250 });
+      });
+    }
+
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         overlay.classList.add('active');
