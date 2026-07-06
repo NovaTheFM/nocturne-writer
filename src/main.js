@@ -346,6 +346,7 @@ class NocturneWriter {
         this.updateActiveBlock();
         this.updateEditorSelectionState();
         this.updateToolbarState();
+        this.updateReviewHighlights();
       },
       onChange: ({ paneId, doc, transaction }) => this.handleRichEditorChange(paneId, doc, transaction),
       onKeydown: (event) => {
@@ -10417,9 +10418,28 @@ class NocturneWriter {
       }
       const range = resolved.range;
       const editable = resolved.block.closest('.page-content');
-      range.deleteContents();
-      range.insertNode(document.createTextNode(mark.suggestion || ''));
-      if (editable) this.editorInput(editable, { inputType: 'insertReplacementText' });
+      
+      const isTiptap = !!this.nocturneEditor?.getByElement(editable);
+      let applied = false;
+      if (isTiptap) {
+        try {
+          const pmEditor = this.nocturneEditor.getByElement(editable);
+          const { view } = pmEditor;
+          const from = view.posAtDOM(range.startContainer, range.startOffset);
+          const to = view.posAtDOM(range.endContainer, range.endOffset);
+          view.dispatch(view.state.tr.insertText(mark.suggestion || '', from, to));
+          applied = true;
+        } catch (e) {
+          console.error('ProseMirror posAtDOM failed, falling back to DOM replacement:', e);
+        }
+      }
+      
+      if (!applied) {
+        range.deleteContents();
+        range.insertNode(document.createTextNode(mark.suggestion || ''));
+        if (editable) this.editorInput(editable, { inputType: 'insertReplacementText' });
+      }
+      
       mark.status = 'accepted';
     } else if (action === 'review-reject') {
       mark.status = 'rejected';
@@ -10627,6 +10647,7 @@ class NocturneWriter {
     this.scheduleSyncForDoc(doc.id, { inputType: transaction?.getMeta?.('uiEvent') || 'prosemirrorTransaction' });
     if (this.searchSession?.docId === doc.id) this.searchRefreshDebounced();
     this.nocturneEditor?.scheduleVisualPages(paneId);
+    this.updateReviewHighlights();
   }
 
   editorInput(editable, inputEvent = null) {
