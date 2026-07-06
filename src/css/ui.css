@@ -1,8 +1,8 @@
 /* Main UI and Editor Styles */
 
 
-* { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; }
+* { box-sizing: border-box; scroll-behavior: smooth; }
+html, body { margin: 0; height: 100%; scroll-behavior: smooth; }
 body {
   font-family: 'Manrope', sans-serif;
   background: var(--bg-deep);

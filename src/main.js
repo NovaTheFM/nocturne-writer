@@ -432,7 +432,7 @@ class NocturneWriter {
         this.openWhatsNewModal();
         this.state.settings.lastSeenVersion = currentVersion;
         this.persistSettings();
-      }, 1000);
+      }, 2200);
     }
   }
 
@@ -18544,9 +18544,10 @@ ${raw}`;
         </div>
         <div class="cleaner-modal" style="max-width: 480px; width: 90%; background: rgba(18, 18, 24, 0.85); box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 32px; backdrop-filter: blur(10px); position: relative; z-index: 101; overflow: hidden;">
           <div class="cleaner-content" style="text-align: left;">
-            <h2 style="text-align: center; margin: 0 0 16px; font-size: 22px; color: var(--text-main); font-weight: 700;">Что нового</h2>
+            <h2 style="text-align: center; margin: 0 0 4px; font-size: 22px; color: var(--text-main); font-weight: 700;">Что нового</h2>
+            <p style="text-align: center; margin: 0 0 20px; font-size: 13px; color: var(--text-muted, #a1a1aa);">Луна хочет рассказать вам о новинках!</p>
             <div class="whats-new-body" style="max-height: 280px; overflow-y: auto; padding-right: 8px; font-size: 14px; line-height: 1.6; color: var(--text-main);">
-              <p style="margin: 0 0 16px; font-weight: 600; color: var(--accent);">Версия 1.0.2</p>
+              <p style="margin: 0 0 16px; font-weight: 600; color: var(--accent);">Версия 1.0.3</p>
               
               <p style="margin: 0 0 4px; font-weight: 600;">✍️ Настройка разделителей и автоформата:</p>
               <ul style="margin: 0 0 12px; padding-left: 20px;">
@@ -18573,14 +18574,18 @@ ${raw}`;
               </ul>
             </div>
             <div class="form-actions" style="justify-content: center; gap: 12px; margin-top: 24px;">
-              <button class="pill-btn ai-btn" data-action="close-whats-new" style="min-width: 160px; height: 38px; border-radius: 99px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;"><i class="bx bx-check" style="font-size: 18px;"></i> Понятно</button>
+              <button class="pill-btn ai-btn" data-action="close-whats-new" style="min-width: 160px; height: 38px; border-radius: 99px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;"><i class="bx bx-check" style="font-size: 18px;"></i> Спасибо, Луна</button>
             </div>
           </div>
         </div>
       </div>
     `;
     
-    overlay.classList.add('active');
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        overlay.classList.add('active');
+      });
+    });
   }
 
   openCleanerModal(noteId = null) {
