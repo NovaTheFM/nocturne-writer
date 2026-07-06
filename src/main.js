@@ -18328,8 +18328,8 @@ ${raw}`;
 
   findTelegramArtifacts(text) {
     const matches = [];
-    const pcRegex = /(^|\r?\n)(\[\d{2}\.\d{2}\.\d{2,4},?\s+\d{2}:\d{2}(:\d{2})?\]\s+([^:\n\s][a-zA-Z0-9_а-яА-ЯёЁ\s\-\.]{1,40}):\s*)/g;
-    const mobileRegex = /(^|\r?\n)(([^:\n\s\.\?!,][a-zA-Z0-9_а-яА-ЯёЁ\s\-]{1,30}):\s*)(?=\r?\n)/g;
+    const pcRegex = /(^|\r?\n)(\[(?:\d{1,4}[./-]\d{1,2}[./-]\d{2,4}(?:,\s+|\s+))?\d{1,2}:\d{2}(?::\d{2})?(?:\s*[APap][Mm])?\]\s+([^:\r\n\s][^:\r\n]{0,59}):\s*)/g;
+    const mobileRegex = /(^|\r?\n)(?!(?:[Гг]лава|[Сс]цена|[Зз]аметка|[Ии]дея|[Вв]опрос|[Оо]твет|[Оо]писание|[Вв]ажно|[Пп]римечание|[Вв]нимание|[Сс]уть|[Ии]тог|[Вв]ывод|[Пп]ример|[Шш]аг|[Ии]нгредиенты|[Пп]ерсонажи|[Кк]онтекст|[Сс]южет|[Cc]hapter|[Ss]cene|[Nn]ote|[Ii]dea|[Qq]uestion|[Aa]nswer|[Dd]escription|[Ii]mportant|[Aa]ttention|[Ss]ummary|[Cc]onclusion|[Ee]xample|[Ss]tep|[Ii]ngredients|[Cc]haracters|[Cc]ontext|[Pp]lot|[Ww]arning|[Ii]nfo|[Tt]odo|[Dd]raft|[Ff]ix|[Uu]pd|[Pp]\.[Ss])(?![a-zA-Z0-9_а-яА-ЯёЁ]))(?!\d+(?![a-zA-Z0-9_а-яА-ЯёЁ]))(([^:\r\n\s\.\?!,]+(?:\s+[^:\r\n\s\.\?!,]+)?):\s*\r?\n)/g;
     
     let match;
     pcRegex.lastIndex = 0;
@@ -18354,11 +18354,14 @@ ${raw}`;
   }
 
   cleanTelegramArtifacts(text) {
-    let cleaned = text.replace(/(^|\r?\n)\[\d{2}\.\d{2}\.\d{2,4},?\s+\d{2}:\d{2}(:\d{2})?\]\s+([^:\n\s][a-zA-Z0-9_а-яА-ЯёЁ\s\-\.]{1,40}):\s*/g, (match, p1) => {
+    const pcRegex = /(^|\r?\n)(\[(?:\d{1,4}[./-]\d{1,2}[./-]\d{2,4}(?:,\s+|\s+))?\d{1,2}:\d{2}(?::\d{2})?(?:\s*[APap][Mm])?\]\s+([^:\r\n\s][^:\r\n]{0,59}):\s*)/g;
+    const mobileRegex = /(^|\r?\n)(?!(?:[Гг]лава|[Сс]цена|[Зз]аметка|[Ии]дея|[Вв]опрос|[Оо]твет|[Оо]писание|[Вв]ажно|[Пп]римечание|[Вв]нимание|[Сс]уть|[Ии]тог|[Вв]ывод|[Пп]ример|[Шш]аг|[Ии]нгредиенты|[Пп]ерсонажи|[Кк]онтекст|[Сс]южет|[Cc]hapter|[Ss]cene|[Nn]ote|[Ii]dea|[Qq]uestion|[Aa]nswer|[Dd]escription|[Ii]mportant|[Aa]ttention|[Ss]ummary|[Cc]onclusion|[Ee]xample|[Ss]tep|[Ii]ngredients|[Cc]haracters|[Cc]ontext|[Pp]lot|[Ww]arning|[Ii]nfo|[Tt]odo|[Dd]raft|[Ff]ix|[Uu]pd|[Pp]\.[Ss])(?![a-zA-Z0-9_а-яА-ЯёЁ]))(?!\d+(?![a-zA-Z0-9_а-яА-ЯёЁ]))(([^:\r\n\s\.\?!,]+(?:\s+[^:\r\n\s\.\?!,]+)?):\s*\r?\n)/g;
+
+    let cleaned = text.replace(pcRegex, (match, p1) => {
       return p1;
     });
     
-    cleaned = cleaned.replace(/(^|\r?\n)([^:\n\s\.\?!,][a-zA-Z0-9_а-яА-ЯёЁ\s\-]{1,30}):\s*(?=\r?\n)/g, (match, p1) => {
+    cleaned = cleaned.replace(mobileRegex, (match, p1) => {
       return p1;
     });
     
