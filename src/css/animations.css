@@ -136,10 +136,10 @@
 
 @keyframes mascot-sway-float {
   0%, 100% {
-    transform: translateX(calc(-50% - 15px)) rotate(-1.5deg);
+    transform: translateX(calc(-50% - 32px)) rotate(-2.5deg);
   }
   50% {
-    transform: translateX(calc(-50% + 9px)) rotate(1.5deg);
+    transform: translateX(calc(-50% + 12px)) rotate(2.5deg);
   }
 }
 

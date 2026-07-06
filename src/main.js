@@ -18545,8 +18545,8 @@ ${raw}`;
       await glowImg.decode().catch(() => {});
       
       // Coordinated cross-fade
-      imgEl.style.transition = `opacity ${duration}ms ease`;
-      glowImg.style.transition = `opacity ${duration}ms ease`;
+      imgEl.style.setProperty('transition', `opacity ${duration}ms ease`, 'important');
+      glowImg.style.setProperty('transition', `opacity ${duration}ms ease`, 'important');
       
       imgEl.style.opacity = '0';
       glowImg.style.opacity = '1';
@@ -18563,12 +18563,17 @@ ${raw}`;
       await new Promise(r => requestAnimationFrame(r));
       await new Promise(r => requestAnimationFrame(r));
       
-      imgEl.style.transition = 'none';
+      // Instantly reset opacities and transitions using !important none
+      imgEl.style.setProperty('transition', 'none', 'important');
+      glowImg.style.setProperty('transition', 'none', 'important');
       imgEl.style.opacity = '1';
-      
-      glowImg.style.transition = 'none';
       glowImg.style.opacity = '0';
-      glowImg.offsetHeight; // force reflow
+      
+      // Request a frame before clearing inline styles so changes are painted instantly
+      requestAnimationFrame(() => {
+        imgEl.style.transition = '';
+        glowImg.style.transition = '';
+      });
     }
   }
 
