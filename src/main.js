@@ -18538,38 +18538,36 @@ ${raw}`;
     const glowImg = wrapper ? wrapper.querySelector('#cleaner-reaper-glow-img') : null;
     
     if (glowImg) {
-      const src = `./reaper_photo/${stateName}.png`;
-      glowImg.src = src;
+      const currentSrc = imgEl.src;
+      const targetSrc = `./reaper_photo/${stateName}.png`;
       
-      // Decode overlay image on GPU before transition
-      await glowImg.decode().catch(() => {});
+      if (currentSrc.includes(stateName)) return; // Already in target state
       
-      // Coordinated cross-fade
-      imgEl.style.setProperty('transition', `opacity ${duration}ms ease`, 'important');
-      glowImg.style.setProperty('transition', `opacity ${duration}ms ease`, 'important');
-      
-      imgEl.style.opacity = '0';
+      // 1. Put current image on the front layer (glowImg) at 100% opacity instantly
+      glowImg.src = currentSrc;
+      glowImg.style.setProperty('transition', 'none', 'important');
       glowImg.style.opacity = '1';
       
-      await new Promise(r => setTimeout(r, duration));
-      
-      // Update base layer image source
-      imgEl.src = src;
-      
-      // Decode base image on GPU
-      await imgEl.decode().catch(() => {});
-      
-      // Wait two rendering frames to ensure the browser painted the base layer
-      await new Promise(r => requestAnimationFrame(r));
-      await new Promise(r => requestAnimationFrame(r));
-      
-      // Instantly reset opacities and transitions using !important none
+      // 2. Put target image on the base layer (imgEl) at 100% opacity instantly
+      imgEl.src = targetSrc;
       imgEl.style.setProperty('transition', 'none', 'important');
-      glowImg.style.setProperty('transition', 'none', 'important');
       imgEl.style.opacity = '1';
+      
+      // Decode both images to ensure GPU has them painted
+      await Promise.all([imgEl.decode(), glowImg.decode()]).catch(() => {});
+      
+      // Wait two frames to ensure they are rendered by the browser
+      await new Promise(r => requestAnimationFrame(r));
+      await new Promise(r => requestAnimationFrame(r));
+      
+      // 3. Fade out the front layer (glowImg) to reveal the base layer (imgEl)
+      glowImg.style.setProperty('transition', `opacity ${duration}ms ease`, 'important');
       glowImg.style.opacity = '0';
       
-      // Request a frame before clearing inline styles so changes are painted instantly
+      // Wait for the fade to complete
+      await new Promise(r => setTimeout(r, duration));
+      
+      // Clean up transitions
       requestAnimationFrame(() => {
         imgEl.style.transition = '';
         glowImg.style.transition = '';
