@@ -13303,13 +13303,13 @@ class NocturneWriter {
     const sel = getSelection();
     if (!sel.rangeCount) return;
     
-    // Append to page shell instead of body so it scrolls with the text
     const pageShell = sel.anchorNode?.parentElement?.closest('.visual-page-shell') || sel.anchorNode?.parentElement?.closest('.page');
     if (!pageShell) return;
 
     let left = 0;
     let top = 0;
     let width = 0;
+    let height = 0;
     let measured = false;
 
     // Pixel-accurate alignment by measuring the bounding rect of the typed letter
@@ -13324,6 +13324,7 @@ class NocturneWriter {
           left = charRect.left - shellRect.left;
           top = charRect.top - shellRect.top;
           width = charRect.width;
+          height = charRect.height;
           measured = true;
         }
       } catch (e) {
@@ -13340,8 +13341,50 @@ class NocturneWriter {
       left = rect.left - shellRect.left - estWidth;
       top = rect.top - shellRect.top;
       width = estWidth;
+      height = this.state.settings.fontSize;
     }
 
+    // Ensure parent has relative position
+    if (window.getComputedStyle(pageShell).position === 'static') {
+      pageShell.style.position = 'relative';
+    }
+
+    // SPARKLES: Spawn tiny flying particles (star sparkles) instead of the letter itself!
+    if (anim === 'sparkles') {
+      const container = document.createElement('div');
+      container.className = 'sparkles-container';
+      container.style.position = 'absolute';
+      container.style.left = `${left + width / 2}px`;
+      container.style.top = `${top + height / 2}px`;
+      container.style.width = '0';
+      container.style.height = '0';
+      pageShell.appendChild(container);
+      
+      const numParticles = 4;
+      for (let i = 0; i < numParticles; i++) {
+        const particle = document.createElement('div');
+        particle.className = 'sparkle-particle';
+        particle.textContent = ['✦', '✧', '•'][Math.floor(Math.random() * 3)];
+        particle.style.color = 'var(--accent)';
+        particle.style.fontSize = `${this.state.settings.fontSize * 0.45}px`;
+        
+        // Fly in random directions
+        const angle = (Math.random() * 360) * (Math.PI / 180);
+        const velocity = 12 + Math.random() * 16;
+        const tx = Math.cos(angle) * velocity;
+        const ty = Math.sin(angle) * velocity - 6; // slightly drift upward
+        
+        particle.style.setProperty('--tx', `${tx}px`);
+        particle.style.setProperty('--ty', `${ty}px`);
+        
+        container.appendChild(particle);
+      }
+      
+      setTimeout(() => container.remove(), 400);
+      return;
+    }
+
+    // RIPPLE & MIST: Spawn the letter animation
     const letter = document.createElement('span');
     letter.className = `anim-letter type-${anim}`;
     letter.textContent = char;
@@ -13355,12 +13398,8 @@ class NocturneWriter {
     letter.style.fontSize = `${this.state.settings.fontSize}px`;
     letter.style.lineHeight = '1';
     
-    if (window.getComputedStyle(pageShell).position === 'static') {
-      pageShell.style.position = 'relative';
-    }
-    
     pageShell.appendChild(letter);
-    const duration = anim === 'sparkles' ? 340 : anim === 'ripple' ? 380 : 420;
+    const duration = anim === 'ripple' ? 380 : 420;
     setTimeout(() => letter.remove(), duration);
   }
 

@@ -5728,22 +5728,32 @@ body.theme-paper .mini-text-btn:hover {
 }
 
 .anim-letter.type-sparkles {
-  animation: letter-pop 0.34s cubic-bezier(0.25, 1, 0.5, 1) forwards;
-  color: var(--accent);
-  text-shadow: 0 0 8px var(--accent-glow), 0 0 16px var(--accent-glow);
+  display: none;
 }
 
 
 .anim-letter.type-ripple {
   animation: letter-glow 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  color: var(--accent);
+  color: inherit;
 }
 
 
 .anim-letter.type-mist {
   animation: letter-slide 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-  color: var(--text-muted);
-  text-shadow: 0 0 4px var(--text-muted);
+  color: inherit;
+}
+
+.sparkles-container {
+  pointer-events: none;
+  z-index: 999;
+}
+
+.sparkle-particle {
+  position: absolute;
+  pointer-events: none;
+  animation: sparkle-fly 0.4s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  opacity: 0;
+  line-height: 1;
 }
 
 
