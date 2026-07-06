@@ -12947,6 +12947,8 @@ class NocturneWriter {
 
     const styles = getComputedStyle(block);
     const lineHeight = Number.parseFloat(styles.lineHeight) || this.state.settings.fontSize * this.state.settings.lineHeight;
+    const fontSize = Number.parseFloat(styles.fontSize) || this.state.settings.fontSize;
+    const halfLeading = (lineHeight - fontSize) / 2;
     const blockRect = block.getBoundingClientRect();
     const align = styles.textAlign || 'left';
     let leftOffset = (Number.parseFloat(styles.paddingLeft) || 0) + (Number.parseFloat(styles.textIndent) || 0);
@@ -12961,8 +12963,8 @@ class NocturneWriter {
     const left = blockRect.left + leftOffset;
     const previousPosition = this.blockTextPosition(block, Math.max(0, this.softEmptyLine.offset - 1));
     const previousRect = previousPosition ? this.textCaretRect(previousPosition.node, previousPosition.offset) : null;
-    const top = previousRect ? previousRect.top + lineHeight : blockRect.top + lineHeight;
-    return this.rectLike(left, top, lineHeight);
+    const top = previousRect ? previousRect.top + lineHeight : blockRect.top + lineHeight + halfLeading;
+    return this.rectLike(left, top, fontSize);
   }
 
   caretRectFromContext(range) {
@@ -12974,6 +12976,8 @@ class NocturneWriter {
     if (!block || !editable.contains(block)) return null;
     const styles = getComputedStyle(block);
     const lineHeight = Number.parseFloat(styles.lineHeight) || this.state.settings.fontSize * this.state.settings.lineHeight;
+    const fontSize = Number.parseFloat(styles.fontSize) || this.state.settings.fontSize;
+    const halfLeading = (lineHeight - fontSize) / 2;
     const blockRect = block.getBoundingClientRect();
     const blockLeft = blockRect.left + (Number.parseFloat(styles.paddingLeft) || 0) + (Number.parseFloat(styles.textIndent) || 0);
 
@@ -12986,18 +12990,18 @@ class NocturneWriter {
     const previous = children[range.startOffset - 1] || null;
     const next = children[range.startOffset] || null;
     const nextRect = this.nodeStartRect(next);
-    if (nextRect) return this.rectLike(nextRect.left, nextRect.top, nextRect.height || lineHeight);
+    if (nextRect) return this.rectLike(nextRect.left, nextRect.top, nextRect.height || fontSize);
 
     const previousRect = this.nodeEndRect(previous);
     if (previousRect) {
       if (previous?.nodeType === Node.ELEMENT_NODE && previous.tagName === 'BR') {
         const beforeBreakRect = this.previousContentRect(previous);
-        const top = beforeBreakRect ? beforeBreakRect.top + lineHeight : blockRect.top;
-        return this.rectLike(blockLeft, top, lineHeight);
+        const top = beforeBreakRect ? beforeBreakRect.top + lineHeight : blockRect.top + halfLeading;
+        return this.rectLike(blockLeft, top, fontSize);
       }
-      return this.rectLike(previousRect.right, previousRect.top, previousRect.height || lineHeight);
+      return this.rectLike(previousRect.right, previousRect.top, previousRect.height || fontSize);
     }
-    return this.rectLike(blockLeft, blockRect.top, lineHeight);
+    return this.rectLike(blockLeft, blockRect.top + halfLeading, fontSize);
   }
 
   textCaretRect(node, offset) {
@@ -13086,6 +13090,8 @@ class NocturneWriter {
     const rect = block.getBoundingClientRect();
     const styles = getComputedStyle(block);
     const lineHeight = Number.parseFloat(styles.lineHeight) || this.state.settings.fontSize * this.state.settings.lineHeight;
+    const fontSize = Number.parseFloat(styles.fontSize) || this.state.settings.fontSize;
+    const halfLeading = (lineHeight - fontSize) / 2;
     const paddingTop = Number.parseFloat(styles.paddingTop) || 0;
     const paddingLeft = Number.parseFloat(styles.paddingLeft) || 0;
     const textIndent = Number.parseFloat(styles.textIndent) || 0;
@@ -13098,15 +13104,16 @@ class NocturneWriter {
       const paddingRight = Number.parseFloat(styles.paddingRight) || 0;
       leftOffset = rect.width - paddingRight;
     }
+    const caretTop = rect.top + paddingTop + halfLeading;
     return {
       left: rect.left + leftOffset,
       right: rect.left + leftOffset,
-      top: rect.top + paddingTop,
-      bottom: rect.top + paddingTop + lineHeight,
+      top: caretTop,
+      bottom: caretTop + fontSize,
       width: 0,
-      height: lineHeight,
+      height: fontSize,
       x: rect.left + leftOffset,
-      y: rect.top + paddingTop,
+      y: caretTop,
       toJSON() { return this; },
     };
   }
@@ -13178,35 +13185,55 @@ class NocturneWriter {
   }
 
   startCaretUpdateLoop() {
-    if (this.caretLoopId) cancelAnimationFrame(this.caretLoopId);
-    this._caretRafPending = false;
+    if (this.caretLoopId) {
+      cancelAnimationFrame(this.caretLoopId);
+      this.caretLoopId = null;
+    }
+    this._lastCaretActivity = 0;
+    this._caretLoopRunning = false;
 
-    const scheduleCaretUpdate = (doubleRaf = false) => {
-      if (this._caretRafPending) return;
-      this._caretRafPending = true;
-      const doUpdate = () => {
-        this._caretRafPending = false;
-        if (document.hasFocus()) this.updateCustomCaret();
-      };
-      if (doubleRaf) {
-        requestAnimationFrame(() => requestAnimationFrame(doUpdate));
+    const runLoop = () => {
+      if (Date.now() - this._lastCaretActivity < 3000) {
+        if (document.hasFocus()) {
+          this.updateCustomCaret();
+        }
+        this.caretLoopId = requestAnimationFrame(runLoop);
       } else {
-        requestAnimationFrame(doUpdate);
+        this._caretLoopRunning = false;
+        this.caretLoopId = null;
       }
     };
 
-    document.addEventListener('selectionchange', () => scheduleCaretUpdate(), { passive: true });
-    window.addEventListener('resize', () => scheduleCaretUpdate(), { passive: true });
-    document.addEventListener('scroll', () => scheduleCaretUpdate(), { capture: true, passive: true });
+    const triggerActivity = () => {
+      this._lastCaretActivity = Date.now();
+      if (!this._caretLoopRunning) {
+        this._caretLoopRunning = true;
+        if (this.caretLoopId) cancelAnimationFrame(this.caretLoopId);
+        this.caretLoopId = requestAnimationFrame(runLoop);
+      }
+    };
 
-    document.addEventListener('input', () => scheduleCaretUpdate(true), { passive: true });
-    document.addEventListener('keyup', () => scheduleCaretUpdate(true), { passive: true });
-    document.addEventListener('mouseup', () => scheduleCaretUpdate(), { passive: true });
-    document.addEventListener('touchend', () => scheduleCaretUpdate(), { passive: true });
-    document.addEventListener('focusin', () => scheduleCaretUpdate(), { passive: true });
-    document.addEventListener('focusout', () => scheduleCaretUpdate(), { passive: true });
+    // DOM Mutation Observer to capture any programmatic updates (like AI typing, undo, paste)
+    const observer = new MutationObserver(triggerActivity);
+    const editorEl = document.getElementById('app-shell');
+    if (editorEl) {
+      observer.observe(editorEl, { childList: true, subtree: true, characterData: true });
+    }
 
-    scheduleCaretUpdate();
+    // Standard event listeners
+    document.addEventListener('selectionchange', triggerActivity, { passive: true });
+    window.addEventListener('resize', triggerActivity, { passive: true });
+    document.addEventListener('scroll', triggerActivity, { capture: true, passive: true });
+    document.addEventListener('input', triggerActivity, { passive: true });
+    document.addEventListener('keydown', triggerActivity, { passive: true });
+    document.addEventListener('keyup', triggerActivity, { passive: true });
+    document.addEventListener('mousedown', triggerActivity, { passive: true });
+    document.addEventListener('mouseup', triggerActivity, { passive: true });
+    document.addEventListener('focusin', triggerActivity, { passive: true });
+    document.addEventListener('focusout', triggerActivity, { passive: true });
+
+    // Initial trigger
+    triggerActivity();
   }
 
   expandRangeToWord(range) {
