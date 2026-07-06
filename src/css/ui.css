@@ -9798,7 +9798,9 @@ body.sortable-active .doc-item {
   justify-content: space-between;
   user-select: none;
   -webkit-app-region: drag;
-  background: linear-gradient(90deg, var(--bg-panel) 260px, var(--bg-deep) 260px);
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--border-light);
   border-top: 1px solid rgba(255, 255, 255, 0.015);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
@@ -9806,7 +9808,7 @@ body.sortable-active .doc-item {
 }
 
 body.compact #electron-titlebar {
-  background: linear-gradient(90deg, var(--bg-panel) 224px, var(--bg-deep) 224px);
+  background: var(--bg-glass);
 }
 
 body.zen-mode #electron-titlebar {
