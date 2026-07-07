@@ -10129,15 +10129,17 @@ class NocturneWriter {
       const startPre = range.cloneRange();
       startPre.selectNodeContents(startBlock);
       startPre.setEnd(range.startContainer, range.startOffset);
-      start = startPre.toString().length;
+      start = Number(startBlock.dataset.fragmentStart || 0) + startPre.toString().length;
+    } else {
+      start = Number(startBlock.dataset.fragmentStart || 0);
     }
 
-    let end = startBlock.textContent.length;
+    let end = Number(endBlock.dataset.fragmentStart || 0) + endBlock.textContent.length;
     if (endBlock.contains(range.endContainer)) {
       const endPre = range.cloneRange();
-      endPre.selectNodeContents(startBlock);
+      endPre.selectNodeContents(endBlock);
       endPre.setEnd(range.endContainer, range.endOffset);
-      end = endPre.toString().length;
+      end = Number(endBlock.dataset.fragmentStart || 0) + endPre.toString().length;
     }
 
     const text = startBlock.textContent || '';
@@ -10299,19 +10301,22 @@ class NocturneWriter {
   }
 
   updateReviewHighlights() {
-    if (!CSS.highlights || typeof Highlight === 'undefined') return;
-    ['orthography', 'punctuation', 'grammar', 'style', 'repetition', 'lore', 'continuity', 'logic', 'plot', 'current'].forEach((key) => CSS.highlights.delete(`review-${key}`));
-    if (this.state.reviewMode === 'write') return;
-    const rangesByCategory = { orthography: [], punctuation: [], grammar: [], style: [], repetition: [], lore: [], continuity: [], logic: [], plot: [], current: [] };
-    this.state.reviewMarks.filter((mark) => mark.status === 'open').forEach((mark) => {
-      const resolved = this.resolveReviewRange(mark);
-      if (!resolved) return;
-      rangesByCategory[mark.category || 'style'].push(resolved.range);
-      if (mark.id === this.state.activeReviewMarkId) rangesByCategory.current.push(resolved.range.cloneRange());
-    });
-    Object.entries(rangesByCategory).forEach(([key, ranges]) => {
-      if (ranges.length) CSS.highlights.set(`review-${key}`, new Highlight(...ranges));
-    });
+    if (this._updateHighlightsTimer) clearTimeout(this._updateHighlightsTimer);
+    this._updateHighlightsTimer = setTimeout(() => {
+      if (!CSS.highlights || typeof Highlight === 'undefined') return;
+      ['orthography', 'punctuation', 'grammar', 'style', 'repetition', 'lore', 'continuity', 'logic', 'plot', 'current'].forEach((key) => CSS.highlights.delete(`review-${key}`));
+      if (this.state.reviewMode === 'write') return;
+      const rangesByCategory = { orthography: [], punctuation: [], grammar: [], style: [], repetition: [], lore: [], continuity: [], logic: [], plot: [], current: [] };
+      this.state.reviewMarks.filter((mark) => mark.status === 'open').forEach((mark) => {
+        const resolved = this.resolveReviewRange(mark);
+        if (!resolved) return;
+        rangesByCategory[mark.category || 'style'].push(resolved.range);
+        if (mark.id === this.state.activeReviewMarkId) rangesByCategory.current.push(resolved.range.cloneRange());
+      });
+      Object.entries(rangesByCategory).forEach(([key, ranges]) => {
+        if (ranges.length) CSS.highlights.set(`review-${key}`, new Highlight(...ranges));
+      });
+    }, 0);
   }
 
   reviewMarksForFocusedDoc() {
@@ -17490,15 +17495,17 @@ class NocturneWriter {
       const startPre = range.cloneRange();
       startPre.selectNodeContents(startBlock);
       startPre.setEnd(range.startContainer, range.startOffset);
-      start = startPre.toString().length;
+      start = Number(startBlock.dataset.fragmentStart || 0) + startPre.toString().length;
+    } else {
+      start = Number(startBlock.dataset.fragmentStart || 0);
     }
 
-    let end = startBlock.textContent.length;
+    let end = Number(endBlock.dataset.fragmentStart || 0) + endBlock.textContent.length;
     if (endBlock.contains(range.endContainer)) {
       const endPre = range.cloneRange();
-      endPre.selectNodeContents(startBlock);
+      endPre.selectNodeContents(endBlock);
       endPre.setEnd(range.endContainer, range.endOffset);
-      end = endPre.toString().length;
+      end = Number(endBlock.dataset.fragmentStart || 0) + endPre.toString().length;
     }
 
     const text = blockText(block);
