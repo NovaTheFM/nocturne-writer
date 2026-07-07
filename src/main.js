@@ -1004,26 +1004,14 @@ class NocturneWriter {
     if (!window.nocturneElectron) return;
     const titlebarBrand = document.querySelector('.titlebar-brand');
     const sidebar = document.getElementById('sidebar');
-    const titlebar = document.getElementById('electron-titlebar');
     if (!titlebarBrand || !sidebar) return;
 
     const baseWidth = sidebar.getBoundingClientRect().width;
     if (baseWidth === 0) {
       titlebarBrand.style.display = 'none';
-      if (titlebar) titlebar.style.background = '';
       return;
     }
     titlebarBrand.style.display = '';
-
-    titlebarBrand.style.width = `${baseWidth}px`;
-
-    if (titlebar && document.body.classList.contains('material')) {
-      const panelColor = getComputedStyle(document.body).getPropertyValue('--bg-panel').trim();
-      const glassColor = getComputedStyle(document.body).getPropertyValue('--bg-glass').trim();
-      titlebar.style.background = `linear-gradient(90deg, ${panelColor} ${baseWidth}px, ${glassColor} ${baseWidth}px)`;
-    } else if (titlebar) {
-      titlebar.style.background = '';
-    }
   }
 
   updateElectronTitlebarTitle() {
@@ -4999,8 +4987,15 @@ class NocturneWriter {
     const sel = getSelection();
     if (sel?.rangeCount && !sel.isCollapsed) {
       const range = sel.getRangeAt(0);
-      const startBlock = (range.startContainer.nodeType === Node.ELEMENT_NODE ? range.startContainer : range.startContainer.parentElement)?.closest?.('[data-block-id]');
-      const endBlock = (range.endContainer.nodeType === Node.ELEMENT_NODE ? range.endContainer : range.endContainer.parentElement)?.closest?.('[data-block-id]');
+      let startBlock = this.getBlockFromNode(range.startContainer, range.startOffset);
+      let endBlock = this.getBlockFromNode(range.endContainer, range.endOffset);
+      if (startBlock && endBlock && startBlock.dataset.blockId !== endBlock.dataset.blockId) {
+        if (range.endContainer === startBlock.parentElement && range.endContainer.childNodes[range.endOffset - 1] === startBlock) {
+          endBlock = startBlock;
+        } else if (range.startContainer === endBlock.parentElement && range.startContainer.childNodes[range.startOffset] === endBlock) {
+          startBlock = endBlock;
+        }
+      }
       if (startBlock && endBlock && startBlock !== endBlock) {
         this.toast('Смена стиля для выделения через несколько абзацев пока не поддерживается.');
         return;
@@ -10089,23 +10084,63 @@ class NocturneWriter {
     return range;
   }
 
+  getBlockFromNode(node, offset) {
+    if (!node) return null;
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      if (node.hasAttribute('data-block-id')) {
+        return node;
+      }
+      if (typeof offset === 'number') {
+        if (offset >= 0 && offset < node.childNodes.length) {
+          const child = node.childNodes[offset];
+          const block = child.nodeType === Node.ELEMENT_NODE ? child.closest?.('[data-block-id]') : child.parentElement?.closest?.('[data-block-id]');
+          if (block) return block;
+        }
+        if (offset > 0 && offset - 1 < node.childNodes.length) {
+          const child = node.childNodes[offset - 1];
+          const block = child.nodeType === Node.ELEMENT_NODE ? child.closest?.('[data-block-id]') : child.parentElement?.closest?.('[data-block-id]');
+          if (block) return block;
+        }
+      }
+    }
+    return (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement)?.closest?.('[data-block-id]') || null;
+  }
+
   serializeRangeToReviewAnchor(range, docId) {
     if (!range || !docId) return null;
-    const startBlock = (range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement)?.closest?.('[data-block-id]');
-    const endBlock = (range.endContainer.nodeType === 1 ? range.endContainer : range.endContainer.parentElement)?.closest?.('[data-block-id]');
+    let startBlock = this.getBlockFromNode(range.startContainer, range.startOffset);
+    let endBlock = this.getBlockFromNode(range.endContainer, range.endOffset);
+
+    if (startBlock && endBlock && startBlock.dataset.blockId !== endBlock.dataset.blockId) {
+      if (range.endContainer === startBlock.parentElement && range.endContainer.childNodes[range.endOffset - 1] === startBlock) {
+        endBlock = startBlock;
+      } else if (range.startContainer === endBlock.parentElement && range.startContainer.childNodes[range.startOffset] === endBlock) {
+        startBlock = endBlock;
+      }
+    }
+
     if (!startBlock || !endBlock || startBlock.dataset.blockId !== endBlock.dataset.blockId) {
       this.toast('Пока можно комментировать выделение внутри одного блока.');
       return null;
     }
-    const startPre = range.cloneRange();
-    startPre.selectNodeContents(startBlock);
-    startPre.setEnd(range.startContainer, range.startOffset);
-    const endPre = range.cloneRange();
-    endPre.selectNodeContents(endBlock);
-    endPre.setEnd(range.endContainer, range.endOffset);
+
+    let start = 0;
+    if (startBlock.contains(range.startContainer)) {
+      const startPre = range.cloneRange();
+      startPre.selectNodeContents(startBlock);
+      startPre.setEnd(range.startContainer, range.startOffset);
+      start = startPre.toString().length;
+    }
+
+    let end = startBlock.textContent.length;
+    if (endBlock.contains(range.endContainer)) {
+      const endPre = range.cloneRange();
+      endPre.selectNodeContents(startBlock);
+      endPre.setEnd(range.endContainer, range.endOffset);
+      end = endPre.toString().length;
+    }
+
     const text = startBlock.textContent || '';
-    const start = startPre.toString().length;
-    const end = endPre.toString().length;
     return {
       start: { blockId: startBlock.dataset.blockId, offset: start },
       end: { blockId: endBlock.dataset.blockId, offset: end },
@@ -17432,22 +17467,40 @@ class NocturneWriter {
   }
 
   assistantTargetFromRange(range, doc, paneId, selectedText) {
-    const startBlock = (range.startContainer.nodeType === Node.ELEMENT_NODE ? range.startContainer : range.startContainer.parentElement)?.closest?.('[data-block-id]');
-    const endBlock = (range.endContainer.nodeType === Node.ELEMENT_NODE ? range.endContainer : range.endContainer.parentElement)?.closest?.('[data-block-id]');
+    let startBlock = this.getBlockFromNode(range.startContainer, range.startOffset);
+    let endBlock = this.getBlockFromNode(range.endContainer, range.endOffset);
+
+    if (startBlock && endBlock && startBlock.dataset.blockId !== endBlock.dataset.blockId) {
+      if (range.endContainer === startBlock.parentElement && range.endContainer.childNodes[range.endOffset - 1] === startBlock) {
+        endBlock = startBlock;
+      } else if (range.startContainer === endBlock.parentElement && range.startContainer.childNodes[range.startOffset] === endBlock) {
+        startBlock = endBlock;
+      }
+    }
+
     if (!startBlock || !endBlock || startBlock.dataset.blockId !== endBlock.dataset.blockId) {
       this.toast('AI пока работает с выделением внутри одного абзаца.');
       return null;
     }
     const block = doc?.ast?.blocks?.find((item) => item.id === startBlock.dataset.blockId);
     if (!block) return null;
-    const startPre = range.cloneRange();
-    startPre.selectNodeContents(startBlock);
-    startPre.setEnd(range.startContainer, range.startOffset);
-    const endPre = range.cloneRange();
-    endPre.selectNodeContents(startBlock);
-    endPre.setEnd(range.endContainer, range.endOffset);
-    const start = startPre.toString().length;
-    const end = endPre.toString().length;
+
+    let start = 0;
+    if (startBlock.contains(range.startContainer)) {
+      const startPre = range.cloneRange();
+      startPre.selectNodeContents(startBlock);
+      startPre.setEnd(range.startContainer, range.startOffset);
+      start = startPre.toString().length;
+    }
+
+    let end = startBlock.textContent.length;
+    if (endBlock.contains(range.endContainer)) {
+      const endPre = range.cloneRange();
+      endPre.selectNodeContents(startBlock);
+      endPre.setEnd(range.endContainer, range.endOffset);
+      end = endPre.toString().length;
+    }
+
     const text = blockText(block);
     return {
       docId: doc.id,
@@ -18796,7 +18849,8 @@ ${raw}`;
               <p style="margin: 0 0 4px; font-weight: 600;">🔧 Исправления:</p>
               <ul style="margin: 0 0 0; padding-left: 20px;">
                 <li>Удален дубликат кнопки настроек в правой части тулбара.</li>
-                <li>Оптимизировано выравнивание разделителя заголовка в Title Bar.</li>
+                <li>Исправлен рассинхрон анимации Title Bar при переключении компактного режима.</li>
+                <li>Исправлена точность выделения и пометки абзацев в режиме Редактирования.</li>
               </ul>
             </div>
             <div class="form-actions" style="justify-content: center; gap: 12px; margin-top: 24px;">

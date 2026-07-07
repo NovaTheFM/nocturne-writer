@@ -9877,13 +9877,13 @@ body.zen-mode .titlebar-brand {
 }
 
 body.material #electron-titlebar {
-  background: linear-gradient(90deg, var(--bg-panel) 260px, var(--bg-glass) 260px);
+  background: var(--bg-glass);
   backdrop-filter: blur(28px) saturate(1.4);
   -webkit-backdrop-filter: blur(28px) saturate(1.4);
 }
 
 body.compact.material #electron-titlebar {
-  background: linear-gradient(90deg, var(--bg-panel) 224px, var(--bg-glass) 224px);
+  background: var(--bg-glass);
 }
 
 body.zen-mode.material #electron-titlebar {
@@ -9891,8 +9891,12 @@ body.zen-mode.material #electron-titlebar {
 }
 
 body.material .titlebar-brand {
-  background: transparent;
+  background: var(--bg-panel) !important;
   border-right-color: rgba(255, 255, 255, 0.07);
+}
+
+body.zen-mode.material .titlebar-brand {
+  background: transparent !important;
 }
 
 body.material.theme-paper .titlebar-brand {
@@ -10155,6 +10159,7 @@ body.theme-experimental #electron-titlebar {
 }
 
 body.theme-experimental .titlebar-brand {
+  width: 310px;
   background: rgba(10, 10, 15, 0.9) !important;
 }
 
