@@ -1004,7 +1004,6 @@ class NocturneWriter {
     if (!window.nocturneElectron) return;
     const titlebarBrand = document.querySelector('.titlebar-brand');
     const sidebar = document.getElementById('sidebar');
-    const docsContainer = document.getElementById('docs-container');
     const titlebar = document.getElementById('electron-titlebar');
     if (!titlebarBrand || !sidebar) return;
 
@@ -1016,21 +1015,12 @@ class NocturneWriter {
     }
     titlebarBrand.style.display = '';
 
-    let scrollbarWidth = 0;
-    if (docsContainer) {
-      const hasScrollbar = docsContainer.scrollHeight > docsContainer.clientHeight;
-      if (hasScrollbar) {
-        scrollbarWidth = 6;
-      }
-    }
-
-    const targetWidth = baseWidth - scrollbarWidth;
-    titlebarBrand.style.width = `${targetWidth}px`;
+    titlebarBrand.style.width = `${baseWidth}px`;
 
     if (titlebar && document.body.classList.contains('material')) {
       const panelColor = getComputedStyle(document.body).getPropertyValue('--bg-panel').trim();
       const glassColor = getComputedStyle(document.body).getPropertyValue('--bg-glass').trim();
-      titlebar.style.background = `linear-gradient(90deg, ${panelColor} ${targetWidth}px, ${glassColor} ${targetWidth}px)`;
+      titlebar.style.background = `linear-gradient(90deg, ${panelColor} ${baseWidth}px, ${glassColor} ${baseWidth}px)`;
     } else if (titlebar) {
       titlebar.style.background = '';
     }

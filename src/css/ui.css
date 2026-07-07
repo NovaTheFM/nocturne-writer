@@ -533,7 +533,13 @@ body.material .floating-menu-portal .popover-surface {
 
 
 .tool-btn.active { background: var(--border); }
-.docs-container { flex: 1; overflow-y: auto; padding: 20px 12px 90px; }
+.docs-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
 .section-title {
   padding-left: 8px;
   margin-bottom: 12px;
@@ -5560,7 +5566,20 @@ body.theme-paper .mini-text-btn:hover {
   grid-template-columns: minmax(0, 1fr) 32px;
   align-items: center;
   gap: 8px;
-  margin-bottom: 16px;
+  padding: 16px 12px 10px;
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--border-light);
+  box-sizing: border-box;
+}
+.docs-list-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 12px 90px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.docs-list-scroll::-webkit-scrollbar {
+  display: none;
 }
 .doc-search-field {
   position: relative;
