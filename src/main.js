@@ -427,7 +427,7 @@ class NocturneWriter {
     this.startGitAutosave();
 
     // Check if new version first run (specifically for Electron desktop users)
-    const currentVersion = '1.0.5';
+    const currentVersion = '1.0.6';
     if (this.runtime.isElectron && this.state.settings.lastSeenVersion !== currentVersion) {
       setTimeout(() => {
         this.openWhatsNewModal();
@@ -18413,7 +18413,7 @@ ${raw}`;
       format: 'nocturnedump',
       version: 1,
       appName: 'Nocturne Writer',
-      appVersion: '1.0.5',
+      appVersion: '1.0.6',
       schemaVersion: 3,
       exportedAt: new Date().toISOString(),
       encrypted: !!this.state.settings.e2e,
@@ -18779,13 +18779,24 @@ ${raw}`;
             <h2 style="text-align: center; margin: 0 0 4px; font-size: 22px; color: var(--text-main); font-weight: 700;">Что нового</h2>
             <p style="text-align: center; margin: 0 0 20px; font-size: 13px; color: var(--text-muted, #a1a1aa);">Луна хочет рассказать вам о новинках!</p>
             <div class="whats-new-body" style="max-height: 280px; overflow-y: auto; padding-right: 8px; font-size: 14px; line-height: 1.6; color: var(--text-main);">
-              <p style="margin: 0 0 16px; font-weight: 600; color: var(--accent);">Версия 1.0.5</p>
+              <p style="margin: 0 0 16px; font-weight: 600; color: var(--accent);">Версия 1.0.6</p>
               
-              <p style="margin: 0 0 4px; font-weight: 600;">⚡ Оптимизация каретки (Caret Loop):</p>
+              <p style="margin: 0 0 4px; font-weight: 600;">🔍 Улучшение поиска и сайдбара:</p>
+              <ul style="margin: 0 0 12px; padding-left: 20px;">
+                <li>Поиск документов теперь закреплен намертво вверху и виден всегда.</li>
+                <li>Визуально скрыт системный скроллбар списка документов.</li>
+              </ul>
+
+              <p style="margin: 0 0 4px; font-weight: 600;">🎯 Панель «Цель дня» и оформление:</p>
+              <ul style="margin: 0 0 12px; padding-left: 20px;">
+                <li>Добавлен красивый эффект размытия (blur) под панелью «Цель дня».</li>
+                <li>Исправлена верстка и отступы панели в компактном режиме.</li>
+              </ul>
+
+              <p style="margin: 0 0 4px; font-weight: 600;">🔧 Исправления:</p>
               <ul style="margin: 0 0 0; padding-left: 20px;">
-                <li>Убран бесконечный фоновый цикл каретки; теперь она обновляется только при вводе, кликах и скролле.</li>
-                <li>Это снижает нагрузку на процессор (CPU) и графику (GPU) в фоновом режиме до нуля.</li>
-                <li>Все оригинальные визуальные эффекты и плавное дыхание каретки сохранены без каких-либо изменений!</li>
+                <li>Удален дубликат кнопки настроек в правой части тулбара.</li>
+                <li>Оптимизировано выравнивание разделителя заголовка в Title Bar.</li>
               </ul>
             </div>
             <div class="form-actions" style="justify-content: center; gap: 12px; margin-top: 24px;">
