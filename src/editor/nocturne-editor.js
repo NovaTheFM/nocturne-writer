@@ -95,14 +95,20 @@ const BlockIdentity = Extension.create({
           }
           let tr = newState.tr;
           let modified = false;
+          const seenIds = new Set();
           newState.doc.descendants((node, pos) => {
             if (['paragraph', 'heading', 'blockquote'].includes(node.type.name)) {
-              if (!node.attrs.blockId) {
+              const id = node.attrs.blockId;
+              if (!id || seenIds.has(id)) {
+                const newId = uid('block');
                 tr = tr.setNodeMarkup(pos, undefined, {
                   ...node.attrs,
-                  blockId: uid('block'),
+                  blockId: newId,
                 });
                 modified = true;
+                seenIds.add(newId);
+              } else {
+                seenIds.add(id);
               }
             }
           });
@@ -373,6 +379,9 @@ export class NocturneEditorBridge {
   mount({ paneId, doc, host, pageShell, overlay, readOnly = false }) {
     if (!paneId || !doc || !host) return null;
     this.destroy(paneId);
+    if (doc.pmJson) {
+      doc.pmJson = ensureTiptapBlockIds(doc.pmJson);
+    }
 
     const editor = new Editor({
       element: host,

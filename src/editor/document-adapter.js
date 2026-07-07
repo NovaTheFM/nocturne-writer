@@ -35,11 +35,15 @@ export function ensureTiptapBlockIds(pmJson = null) {
   if (!pmJson || typeof pmJson !== 'object') return pmJson;
   const copy = structuredClone(pmJson);
   let index = 0;
+  const seenIds = new Set();
   const visit = (node) => {
     if (!node || typeof node !== 'object') return;
     if (['paragraph', 'heading', 'blockquote'].includes(node.type)) {
       node.attrs = { ...(node.attrs || {}) };
-      if (!node.attrs.blockId) node.attrs.blockId = uid('block');
+      if (!node.attrs.blockId || seenIds.has(node.attrs.blockId)) {
+        node.attrs.blockId = uid('block');
+      }
+      seenIds.add(node.attrs.blockId);
       node.attrs.blockOrder = index;
       index += 1;
     }
