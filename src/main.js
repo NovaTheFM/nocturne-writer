@@ -633,6 +633,7 @@ class NocturneWriter {
     doc.order = Number.isFinite(Number(doc.order)) ? Number(doc.order) : 0;
     doc.createdAt = Number(doc.createdAt || now);
     doc.updatedAt = Number(doc.updatedAt || now);
+    doc.bookmarks = Array.isArray(doc.bookmarks) ? doc.bookmarks : [];
     
     doc.docType = ['document', 'book-chapter'].includes(doc.docType) ? doc.docType : 'document';
     if (doc.docType === 'book-chapter') {
@@ -829,6 +830,7 @@ class NocturneWriter {
       body: String(item.body || '').trim(),
       order: Number.isFinite(item.order) ? item.order : index,
       completed: !!item.completed,
+      bookmarks: Array.isArray(item.bookmarks) ? item.bookmarks : [],
     };
   }
 
@@ -1511,7 +1513,12 @@ class NocturneWriter {
       this.nocturneEditor?.destroy(paneId);
       paneEl.innerHTML = this.renderPane(paneId);
       paneEl.__paneConfig = paneConfigStr;
-      if (pane?.type === 'document') this.renderEditor(paneId);
+      if (pane?.type === 'document') {
+        this.renderEditor(paneId);
+      } else {
+        this.triggerBookmarkAutoJump(paneId);
+        this.renderBookmarksMenu(paneId);
+      }
     });
     this.updateWorkspaceFocusClasses();
     this.disableBrowserSpellcheck();
@@ -1544,7 +1551,12 @@ class NocturneWriter {
     this.nocturneEditor?.destroy(paneId);
     paneEl.innerHTML = this.renderPane(paneId);
     paneEl.__paneConfig = paneConfigStr;
-    if (pane?.type === 'document') this.renderEditor(paneId);
+    if (pane?.type === 'document') {
+      this.renderEditor(paneId);
+    } else {
+      this.triggerBookmarkAutoJump(paneId);
+      this.renderBookmarksMenu(paneId);
+    }
     this.updateWorkspaceFocusClasses();
     this.disableBrowserSpellcheck();
     this.clearSuggestionIfStale();
@@ -1780,6 +1792,13 @@ class NocturneWriter {
     this.renderReviewNavigator();
     this.renderReviewToolbarSlot();
     this.toast(mode === 'editor' ? 'Режим редактора: текст защищён от ввода.' : mode === 'finalization' ? 'Режим финализации: правки видны и доступны.' : 'Режим письма.', 950);
+    
+    if (this.state.workspace?.panes) {
+      for (const paneId of Object.keys(this.state.workspace.panes)) {
+        this.triggerBookmarkAutoJump(paneId);
+        this.renderBookmarksMenu(paneId);
+      }
+    }
   }
 
   setSaveStatus(state, docId = this.getFocusedDoc()?.id || this.state.activeDocId, message = '') {
@@ -5696,7 +5715,8 @@ class NocturneWriter {
   handleContextMenu(event) {
     const editable = event.target.closest?.('.page-content');
     const entity = event.target.closest?.('.entity-link');
-    if (!editable && !entity) return;
+    const loreDetail = event.target.closest?.('.lore-detail.note-detail');
+    if (!editable && !entity && !loreDetail) return;
     if (event.target.closest?.('input, textarea, select, .form-modal, .settings-modal, .floating-note')) return;
     event.preventDefault();
     const sel = getSelection();
@@ -5710,8 +5730,9 @@ class NocturneWriter {
       x: event.clientX,
       y: event.clientY,
       selectedText,
-      paneId: surface?.dataset.paneId || this.state.workspace?.focusedPaneId || 'primary',
-      docId: surface?.dataset.docId || this.getFocusedDoc()?.id || null,
+      paneId: surface?.dataset.paneId || loreDetail?.closest('.workspace-pane')?.dataset.paneId || this.state.workspace?.focusedPaneId || 'primary',
+      docId: surface?.dataset.docId || null,
+      noteId: loreDetail?.dataset.loreId || null,
       reviewMode: this.state.reviewMode,
       entityPayload: entity ? {
         kind: entity.dataset.entityKind,
@@ -5794,6 +5815,7 @@ class NocturneWriter {
       ${item('context-copy', 'bx-copy', 'Копировать', !hasSelection)}
       ${item('context-cut', 'bx-cut', 'Вырезать', !hasSelection || !canEdit)}
       ${item('context-paste', 'bx-clipboard', 'Вставить', !canEdit)}
+      ${(ctx.docId || ctx.noteId) ? item('context-add-bookmark', 'bx-bookmark', 'Поставить закладку') : ''}
       ${hasSelection ? item('context-add-typo-rule', 'bx-book-add', 'Добавить в словарь ошибок') : ''}
       ${editorBlock}
     `;
@@ -5871,6 +5893,10 @@ class NocturneWriter {
       return;
     } else if (action === 'context-review-issue') {
       await this.createReviewMarkFromSelection('issue', button.dataset.reviewCategory || 'style');
+    } else if (action === 'context-add-bookmark') {
+      this.closeContextMenu();
+      await this.addBookmarkFromContext();
+      return;
     } else if (action.startsWith('context-entity')) {
       this.runEntityContextAction(action, ctx.entityPayload);
     }
@@ -9601,6 +9627,8 @@ class NocturneWriter {
     this.updateActiveBlock();
     this.disableBrowserSpellcheck();
     this.applyReviewMode();
+    this.triggerBookmarkAutoJump(paneId);
+    this.renderBookmarksMenu(paneId);
   }
 
   disableBrowserSpellcheck() {
@@ -10288,6 +10316,426 @@ class NocturneWriter {
     matches.sort((a, b) => b.score - a.score || a.distance - b.distance);
     if (matches.length > 1 && matches[0].score === matches[1].score && matches[0].score === 0) return -1;
     return matches[0].index;
+  }
+
+  serializeRangeToBookmarkAnchor(range, paneId, docId) {
+    if (!docId) return null;
+    
+    // If range is null, try to get selection from editor view
+    const editor = this.nocturneEditor?.get(paneId);
+    if (!range && editor) {
+      const { state } = editor;
+      const { selection } = state;
+      const pos = selection.from;
+      let blockNode = null;
+      let blockPos = 0;
+      state.doc.descendants((node, p) => {
+        if (node.attrs?.blockId && p <= pos && p + node.nodeSize >= pos) {
+          blockNode = node;
+          blockPos = p;
+          return false;
+        }
+      });
+      if (blockNode) {
+        const text = blockNode.textContent || '';
+        const offset = Math.max(0, Math.min(text.length, pos - blockPos - 1));
+        const quote = text.slice(offset, offset + 30).trim() || 'Закладка';
+        return {
+          start: { blockId: blockNode.attrs.blockId, offset: offset },
+          end: { blockId: blockNode.attrs.blockId, offset: offset + quote.length },
+          quote: quote,
+          prefix: text.slice(Math.max(0, offset - 36), offset),
+          suffix: text.slice(offset + quote.length, offset + quote.length + 36),
+        };
+      }
+      return null;
+    }
+
+    if (!range) return null;
+    
+    let startBlock = this.getBlockFromNode(range.startContainer, range.startOffset);
+    let endBlock = this.getBlockFromNode(range.endContainer, range.endOffset);
+    
+    if (startBlock && endBlock && startBlock.dataset.blockId !== endBlock.dataset.blockId) {
+      if (range.endContainer === startBlock.parentElement && range.endContainer.childNodes[range.endOffset - 1] === startBlock) {
+        endBlock = startBlock;
+      } else if (range.startContainer === endBlock.parentElement && range.startContainer.childNodes[range.startOffset] === endBlock) {
+        startBlock = endBlock;
+      }
+    }
+    
+    if (!startBlock) {
+      const editable = range.commonAncestorContainer?.parentElement?.closest?.('.page-content');
+      if (editable) {
+        startBlock = editable.querySelector('[data-block-id]');
+      }
+    }
+    if (!startBlock) return null;
+    if (!endBlock) endBlock = startBlock;
+    
+    let start = 0;
+    if (startBlock.contains(range.startContainer)) {
+      const startPre = range.cloneRange();
+      startPre.selectNodeContents(startBlock);
+      startPre.setEnd(range.startContainer, range.startOffset);
+      start = startPre.toString().length;
+    }
+    
+    let end = start;
+    if (endBlock.contains(range.endContainer)) {
+      const endPre = range.cloneRange();
+      endPre.selectNodeContents(endBlock);
+      endPre.setEnd(range.endContainer, range.endOffset);
+      end = endPre.toString().length;
+    }
+    
+    let quote = range.toString();
+    const text = startBlock.textContent || '';
+    if (!quote) {
+      quote = text.slice(start, start + 30).trim() || 'Закладка';
+    }
+    
+    return {
+      start: { blockId: startBlock.dataset.blockId, offset: start },
+      end: { blockId: endBlock.dataset.blockId, offset: end },
+      quote: quote,
+      prefix: text.slice(Math.max(0, start - 36), start),
+      suffix: text.slice(end, end + 36),
+    };
+  }
+
+  async addBookmarkFromContext() {
+    const ctx = this.state.contextMenu;
+    if (!ctx) return;
+    
+    const range = this.restoreContextRange();
+    
+    if (ctx.docId) {
+      const doc = this.state.docs.find(d => d.id === ctx.docId);
+      if (!doc) return;
+      
+      const bookmarkAnchor = this.serializeRangeToBookmarkAnchor(range, ctx.paneId, ctx.docId);
+      if (!bookmarkAnchor) return;
+      
+      doc.bookmarks = doc.bookmarks || [];
+      const bookmark = {
+        id: uid('bookmark'),
+        createdAt: Date.now(),
+        ...bookmarkAnchor
+      };
+      doc.bookmarks.push(bookmark);
+      
+      await this.db.put('docs', doc);
+      this.toast('Закладка установлена в документе.');
+      this.renderBookmarksMenu(ctx.paneId);
+    } else if (ctx.noteId) {
+      const note = (this.state.lore.notes || []).find(n => n.id === ctx.noteId);
+      if (!note) return;
+      
+      let quote = ctx.selectedText || '';
+      let offset = 0;
+      
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        const selRange = selection.getRangeAt(0);
+        const noteBodyEl = document.querySelector(`.workspace-pane[data-pane-id="${ctx.paneId}"] .lore-detail.note-detail .lore-detail-main p`);
+        if (noteBodyEl) {
+          const pre = selRange.cloneRange();
+          pre.selectNodeContents(noteBodyEl);
+          pre.setEnd(selRange.startContainer, selRange.startOffset);
+          offset = pre.toString().length;
+          if (!quote) {
+            const fullText = noteBodyEl.textContent || '';
+            quote = fullText.slice(offset, offset + 30).trim() || 'Закладка';
+          }
+        }
+      }
+      
+      if (!quote) quote = 'Закладка';
+      
+      note.bookmarks = note.bookmarks || [];
+      const bookmark = {
+        id: uid('bookmark'),
+        quote: quote,
+        offset: offset,
+        createdAt: Date.now()
+      };
+      note.bookmarks.push(bookmark);
+      
+      await this.saveLore();
+      this.toast('Закладка установлена в заметке.');
+      this.renderBookmarksMenu(ctx.paneId);
+    }
+  }
+
+  getAutoJumpBookmark(bookmarks, editorOrText, isDocument) {
+    if (!bookmarks || !bookmarks.length) return null;
+    
+    const behavior = this.state.settings?.bookmarkBehavior || 'text';
+    const sorted = [...bookmarks];
+    
+    if (behavior === 'time') {
+      sorted.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+      return sorted[sorted.length - 1];
+    }
+    
+    // Behavior is 'text'
+    if (isDocument && editorOrText) {
+      const blockOrder = [];
+      editorOrText.state.doc.descendants((node) => {
+        if (node.attrs?.blockId) blockOrder.push(node.attrs.blockId);
+      });
+      sorted.sort((a, b) => {
+        const idxA = blockOrder.indexOf(a.start?.blockId);
+        const idxB = blockOrder.indexOf(b.start?.blockId);
+        if (idxA !== idxB) return idxA - idxB;
+        return (a.start?.offset || 0) - (b.start?.offset || 0);
+      });
+      return sorted[sorted.length - 1];
+    } else if (!isDocument) {
+      sorted.sort((a, b) => (a.offset || 0) - (b.offset || 0));
+      return sorted[sorted.length - 1];
+    }
+    
+    sorted.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    return sorted[sorted.length - 1];
+  }
+
+  jumpToDocumentBookmark(paneId, bookmark) {
+    const editor = this.nocturneEditor?.get(paneId);
+    if (!editor) return;
+    
+    let targetPos = -1;
+    editor.state.doc.descendants((node, pos) => {
+      if (node.attrs?.blockId === bookmark.start?.blockId) {
+        const text = node.textContent || '';
+        let localOffset = bookmark.start?.offset || 0;
+        if (bookmark.quote) {
+          const found = this.findBestQuoteOffset(text, bookmark.quote, bookmark.prefix, bookmark.suffix);
+          if (found >= 0) localOffset = found;
+        }
+        targetPos = pos + 1 + Math.max(0, Math.min(text.length, localOffset));
+        return false;
+      }
+    });
+    
+    if (targetPos < 0 && bookmark.quote) {
+      editor.state.doc.descendants((node, pos) => {
+        if (node.isTextblock) {
+          const text = node.textContent || '';
+          const found = this.findBestQuoteOffset(text, bookmark.quote, bookmark.prefix, bookmark.suffix);
+          if (found >= 0) {
+            targetPos = pos + 1 + found;
+            return false;
+          }
+        }
+      });
+    }
+    
+    if (targetPos >= 0) {
+      editor.commands.focus(targetPos);
+      try {
+        editor.commands.scrollIntoView();
+      } catch (e) {
+        editor.view.dispatch(editor.view.state.tr.scrollIntoView());
+      }
+      
+      const blockEl = editor.view.dom.querySelector(`[data-block-id="${bookmark.start?.blockId}"]`);
+      if (blockEl) {
+        blockEl.classList.add('bookmark-flash-highlight');
+        setTimeout(() => blockEl.classList.remove('bookmark-flash-highlight'), 1800);
+      }
+    }
+  }
+
+  jumpToNoteBookmark(paneId, bookmark) {
+    const paneEl = document.querySelector(`.workspace-pane[data-pane-id="${paneId}"]`);
+    if (!paneEl) return;
+    
+    const noteBodyEl = paneEl.querySelector('.lore-detail.note-detail .lore-detail-main p');
+    if (!noteBodyEl) return;
+    
+    const text = noteBodyEl.textContent || '';
+    let foundIndex = text.indexOf(bookmark.quote);
+    if (foundIndex < 0 && bookmark.quote !== 'Закладка') {
+      foundIndex = text.toLowerCase().indexOf(bookmark.quote.toLowerCase());
+    }
+    
+    if (foundIndex >= 0) {
+      const originalHTML = noteBodyEl.innerHTML;
+      const escapedQuote = escapeHtml(bookmark.quote);
+      if (noteBodyEl.innerHTML.includes(escapedQuote)) {
+        noteBodyEl.innerHTML = noteBodyEl.innerHTML.replace(
+          escapedQuote, 
+          `<span class="bookmark-flash-highlight-inline">${escapedQuote}</span>`
+        );
+        const highlightedEl = noteBodyEl.querySelector('.bookmark-flash-highlight-inline');
+        if (highlightedEl) {
+          highlightedEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          setTimeout(() => {
+            if (noteBodyEl) noteBodyEl.innerHTML = originalHTML;
+          }, 1800);
+        }
+      } else {
+        noteBodyEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    } else {
+      noteBodyEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+
+  triggerBookmarkAutoJump(paneId) {
+    if (this.state.reviewMode !== 'editor') return;
+    
+    const pane = this.state.workspace?.panes?.[paneId];
+    if (!pane) return;
+    
+    if (pane.type === 'document' && pane.docId) {
+      const doc = this.state.docs.find(d => d.id === pane.docId);
+      if (doc && doc.bookmarks && doc.bookmarks.length) {
+        const editor = this.nocturneEditor?.get(paneId);
+        if (editor) {
+          const targetBookmark = this.getAutoJumpBookmark(doc.bookmarks, editor, true);
+          if (targetBookmark) {
+            this.jumpToDocumentBookmark(paneId, targetBookmark);
+          }
+        }
+      }
+    } else if (pane.type === 'note-detail' && pane.entityId) {
+      const note = (this.state.lore.notes || []).find(n => n.id === pane.entityId);
+      if (note && note.bookmarks && note.bookmarks.length) {
+        const targetBookmark = this.getAutoJumpBookmark(note.bookmarks, null, false);
+        if (targetBookmark) {
+          setTimeout(() => {
+            this.jumpToNoteBookmark(paneId, targetBookmark);
+          }, 100);
+        }
+      }
+    }
+  }
+
+  renderBookmarksMenu(paneId) {
+    const paneEl = document.querySelector(`.workspace-pane[data-pane-id="${paneId}"]`);
+    if (!paneEl) return;
+    
+    // Remove existing widget
+    paneEl.querySelector('.pane-bookmarks-widget')?.remove();
+    
+    const pane = this.getPane(paneId);
+    if (!pane?.type) return;
+    
+    let bookmarks = [];
+    let isDoc = false;
+    let doc = null;
+    let note = null;
+    
+    if (pane.type === 'document' && pane.docId) {
+      doc = this.state.docs.find(d => d.id === pane.docId);
+      if (doc) {
+        bookmarks = doc.bookmarks || [];
+        isDoc = true;
+      }
+    } else if (pane.type === 'note-detail' && pane.entityId) {
+      note = (this.state.lore.notes || []).find(n => n.id === pane.entityId);
+      if (note) {
+        bookmarks = note.bookmarks || [];
+        isDoc = false;
+      }
+    }
+    
+    if (!bookmarks.length) return;
+    
+    const widget = document.createElement('div');
+    widget.className = 'pane-bookmarks-widget';
+    
+    const button = document.createElement('button');
+    button.className = 'pane-bookmarks-btn btn-icon';
+    button.title = 'Закладки в тексте';
+    button.innerHTML = `<i class="bx bxs-bookmark"></i><span class="bookmarks-count">${bookmarks.length}</span>`;
+    
+    const dropdown = document.createElement('div');
+    dropdown.className = 'pane-bookmarks-dropdown';
+    
+    // Header
+    const header = document.createElement('div');
+    header.className = 'pane-bookmarks-header';
+    header.innerHTML = `<strong>Закладки (${bookmarks.length})</strong>`;
+    dropdown.appendChild(header);
+    
+    // List
+    const list = document.createElement('div');
+    list.className = 'pane-bookmarks-list';
+    
+    bookmarks.forEach((b, index) => {
+      const item = document.createElement('div');
+      item.className = 'pane-bookmarks-item';
+      
+      const textSpan = document.createElement('span');
+      textSpan.className = 'pane-bookmarks-item-text';
+      textSpan.textContent = b.quote || `Закладка ${index + 1}`;
+      textSpan.title = 'Перейти к закладке';
+      textSpan.addEventListener('click', () => {
+        if (isDoc) {
+          this.jumpToDocumentBookmark(paneId, b);
+        } else {
+          this.jumpToNoteBookmark(paneId, b);
+        }
+        dropdown.classList.remove('active');
+      });
+      
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'pane-bookmarks-item-delete btn-icon';
+      deleteBtn.title = 'Удалить закладку';
+      deleteBtn.innerHTML = '<i class="bx bx-trash"></i>';
+      deleteBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (isDoc && doc) {
+          doc.bookmarks = doc.bookmarks.filter(x => x.id !== b.id);
+          await this.db.put('docs', doc);
+        } else if (note) {
+          note.bookmarks = note.bookmarks.filter(x => x.id !== b.id);
+          await this.saveLore();
+        }
+        this.renderBookmarksMenu(paneId);
+      });
+      
+      item.appendChild(textSpan);
+      item.appendChild(deleteBtn);
+      list.appendChild(item);
+    });
+    
+    dropdown.appendChild(list);
+    
+    // Toggle dropdown
+    button.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const wasActive = dropdown.classList.contains('active');
+      // Close all other dropdowns
+      document.querySelectorAll('.pane-bookmarks-dropdown').forEach(d => d.classList.remove('active'));
+      if (!wasActive) {
+        dropdown.classList.add('active');
+      }
+    });
+    
+    // Close dropdown on click outside
+    const outsideClickListener = (e) => {
+      if (!widget.contains(e.target)) {
+        dropdown.classList.remove('active');
+      }
+    };
+    document.addEventListener('click', outsideClickListener);
+    // Cleanup event listener when widget is removed
+    const observer = new MutationObserver((mutations, obs) => {
+      if (!paneEl.contains(widget)) {
+        document.removeEventListener('click', outsideClickListener);
+        obs.disconnect();
+      }
+    });
+    observer.observe(paneEl, { childList: true, subtree: true });
+    
+    widget.appendChild(button);
+    widget.appendChild(dropdown);
+    paneEl.appendChild(widget);
   }
 
   async createReviewMarkFromSelection(kind, category = 'style', options = {}) {
@@ -14159,7 +14607,7 @@ class NocturneWriter {
       };
 
       return `
-        <article class="lore-detail timeline-detail">
+        <article class="lore-detail timeline-detail" data-lore-id="${item.id}" data-lore-type="${type}">
           <div class="lore-detail-topbar">
             <button class="pill-btn" data-action="back-lore-list"><i class="bx bx-arrow-back"></i> Назад к списку</button>
             <button class="btn-icon" data-action="close-kb"><i class="bx bx-x"></i></button>
@@ -14275,7 +14723,7 @@ class NocturneWriter {
 
     if (kind === 'note') {
       return `
-        <article class="lore-detail note-detail">
+        <article class="lore-detail note-detail" data-lore-id="${item.id}" data-lore-type="${type}">
           <div class="lore-detail-topbar">
             <button class="pill-btn" data-action="back-lore-list"><i class="bx bx-arrow-back"></i> Назад к списку</button>
             <button class="btn-icon" data-action="close-kb"><i class="bx bx-x"></i></button>
@@ -14304,7 +14752,7 @@ class NocturneWriter {
     }
 
     return `
-      <article class="lore-detail">
+      <article class="lore-detail" data-lore-id="${item.id}" data-lore-type="${type}">
         <div class="lore-detail-topbar">
           <button class="pill-btn" data-action="back-lore-list"><i class="bx bx-arrow-back"></i> Назад к списку</button>
           <button class="btn-icon" data-action="close-kb"><i class="bx bx-x"></i></button>
@@ -16595,6 +17043,7 @@ class NocturneWriter {
           ${row('Дневная цель слов', 'Количество слов, к которому стремится дневной прогресс в нижней части sidebar.', range('dailyGoal', 100, 10000, 100))}
                               ${row('Show, Don’t Tell анализатор', 'Локально подсвечивает слабые слова и места, где фразу можно показать действием.', toggle('showDontTell'))}
           ${row('Фокус-линза', 'Позволяет временно выделить диалоги или описания и приглушить остальной текст.', select('dialogueLens', [['off', 'Выключено'], ['dialogues', 'Только диалоги'], ['descriptions', 'Только описания']]))}
+          ${row('Поведение закладок', 'Определяет, к какой закладке перемещать автоматически в режиме Чтения, если их несколько.', select('bookmarkBehavior', [['text', 'Последняя по тексту'], ['time', 'Последняя по времени']]))}
         </div>`,
       ai: `
         <div class="tab-content active">
@@ -16760,6 +17209,7 @@ class NocturneWriter {
       { tab: 'focus', label: 'Дневная цель слов', note: 'Количество слов, к которому стремится дневной прогресс в нижней части sidebar.', key: 'dailyGoal', type: 'range', min: 100, max: 10000, step: 100 },
       { tab: 'focus', label: 'Show, Don’t Tell анализатор', note: 'Локально подсвечивает слабые слова и места, где фразу можно показать действием.', key: 'showDontTell', type: 'toggle' },
       { tab: 'focus', label: 'Фокус-линза', note: 'Позволяет временно выделить диалоги или описания и приглушить остальной текст.', key: 'dialogueLens', type: 'select', options: [['off', 'Выключено'], ['dialogues', 'Только диалоги'], ['descriptions', 'Только описания']] },
+      { tab: 'focus', label: 'Поведение закладок', note: 'Определяет, к какой закладке перемещать автоматически в режиме Чтения, если их несколько.', key: 'bookmarkBehavior', type: 'select', options: [['text', 'Последняя по тексту'], ['time', 'Последняя по времени']] },
       { tab: 'ai', label: 'LLM Provider', note: 'Режим «Не настроен» ничего не генерирует.', key: 'aiProvider', type: 'select', options: [['local', 'Не настроен / без генерации'], ['ollama', 'Ollama'], ['groq', 'Groq free tier'], ['gemini', 'Gemini free tier'], ['openai', 'OpenAI-compatible'], ['anthropic', 'Anthropic-compatible']] },
       { tab: 'ai', label: 'Endpoint', note: 'Адрес API выбранного провайдера.', key: 'aiEndpoint', type: 'input' },
       { tab: 'ai', label: 'API Key', note: 'Ключ хранится локально в настройках браузера.', key: 'aiKey', type: 'input', inputType: 'password' },

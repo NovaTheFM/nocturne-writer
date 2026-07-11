@@ -73,6 +73,7 @@ export const defaultSettings = {
       { trigger: '___', action: 'separator', enabled: true }
     ],
     newRuleAction: 'center',
+    bookmarkBehavior: 'text',
   };
 
 export const seedFolders = [

@@ -10339,3 +10339,186 @@ body.is-electron .side-panel {
   transform: translateY(0) scale(0.95);
 }
 
+/* Bookmarks System */
+.workspace-pane {
+  position: relative;
+}
+
+.pane-bookmarks-widget {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 100;
+}
+
+body[data-active-review-mode="finalization"] .pane-bookmarks-widget {
+  bottom: 80px;
+}
+
+.pane-bookmarks-btn {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--bg-card, #1e1e2e);
+  color: var(--accent, #8b5cf6);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pane-bookmarks-btn:hover {
+  transform: scale(1.08);
+  background: var(--bg-hover, #2b2b3d);
+  border-color: var(--accent, #8b5cf6);
+}
+
+.pane-bookmarks-btn i {
+  font-size: 18px;
+}
+
+.pane-bookmarks-btn .bookmarks-count {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: var(--accent, #8b5cf6);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--bg-card, #1e1e2e);
+}
+
+.pane-bookmarks-dropdown {
+  position: absolute;
+  bottom: 44px;
+  right: 0;
+  width: 260px;
+  max-height: 320px;
+  background: var(--bg-card, #1e1e2e);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  transform: scale(0.9) translateY(10px);
+  pointer-events: none;
+  transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 105;
+}
+
+.pane-bookmarks-dropdown.active {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+  pointer-events: auto;
+}
+
+.pane-bookmarks-header {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  font-size: 12px;
+  color: var(--text-main, #e4e4e7);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pane-bookmarks-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.pane-bookmarks-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  gap: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.pane-bookmarks-item:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.05));
+}
+
+.pane-bookmarks-item-text {
+  font-size: 13px;
+  color: var(--text-muted, #a1a1aa);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.pane-bookmarks-item:hover .pane-bookmarks-item-text {
+  color: var(--text-main, #e4e4e7);
+}
+
+.pane-bookmarks-item-delete {
+  width: 24px;
+  height: 24px;
+  color: var(--text-muted, #a1a1aa);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.6;
+  transition: all 0.15s ease;
+}
+
+.pane-bookmarks-item-delete:hover {
+  color: var(--danger, #f43f5e);
+  opacity: 1;
+  transform: scale(1.1);
+  background: rgba(244, 63, 94, 0.1);
+  border-radius: 4px;
+}
+
+/* Animations and Flash Highlights */
+@keyframes bookmarkFlashPulse {
+  0% {
+    background-color: rgba(var(--accent-rgb, 139, 92, 246), 0.4);
+    box-shadow: 0 0 0 4px rgba(var(--accent-rgb, 139, 92, 246), 0.2);
+  }
+  50% {
+    background-color: rgba(var(--accent-rgb, 139, 92, 246), 0.15);
+    box-shadow: 0 0 0 8px rgba(var(--accent-rgb, 139, 92, 246), 0);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: none;
+  }
+}
+
+.bookmark-flash-highlight {
+  animation: bookmarkFlashPulse 1.8s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  border-radius: 4px;
+}
+
+.bookmark-flash-highlight-inline {
+  background-color: rgba(var(--accent-rgb, 139, 92, 246), 0.35);
+  border-bottom: 2px solid var(--accent, #8b5cf6);
+  border-radius: 2px;
+  animation: bookmarkFlashPulseInline 1.8s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+@keyframes bookmarkFlashPulseInline {
+  0% {
+    background-color: rgba(var(--accent-rgb, 139, 92, 246), 0.5);
+  }
+  100% {
+    background-color: rgba(var(--accent-rgb, 139, 92, 246), 0.15);
+  }
+}
+
