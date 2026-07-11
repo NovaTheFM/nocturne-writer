@@ -16244,11 +16244,6 @@ class NocturneWriter {
           icon.className = `bx ${note.completed ? 'bx-check-double' : 'bx-check'}`;
         }
       }
-
-      // Pulse animation
-      cardEl.classList.remove('note-card-completed-anim');
-      void cardEl.offsetWidth; // force reflow
-      cardEl.classList.add('note-card-completed-anim');
     });
 
     // Phase 2: After the smooth outline & checkmark transition completes (300ms delay), trigger re-sorting via FLIP

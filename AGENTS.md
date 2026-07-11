@@ -197,6 +197,13 @@ When the user gives the command `"Обновляем"` (or similar release/updat
 
 ---
 
+### CODE COMMENTING RULES
+- **DO NOT over-comment.** Write clean, self-documenting code with clear variable/function names instead of relying on comments.
+- **NO obvious comments.** Never write comments that just repeat what the code does (e.g., `// loop through array` or `// fetch data`).
+- **Explain the "WHY", not the "WHAT".** Add comments ONLY if the business logic is complex, requires a hack, or has non-obvious edge cases. 
+- Keep the code visually clean. Less noise, more signal.
+
+
 ## Contact / Ownership
 
 Repository maintained by **BebraNova**.  

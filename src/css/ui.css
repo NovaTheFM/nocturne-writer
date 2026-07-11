@@ -10319,13 +10319,3 @@ body.is-electron .side-panel {
   transform: translateY(0) scale(0.95);
 }
 
-/* Completed Card Pulse Animation */
-@keyframes note-complete-pulse {
-  0% { transform: scale(1); }
-  50% { transform: scale(0.96) translateY(2px); border-color: rgba(16, 185, 129, 0.6); box-shadow: 0 0 15px rgba(16, 185, 129, 0.2); }
-  100% { transform: scale(1); }
-}
-.note-card-completed-anim {
-  animation: note-complete-pulse 0.4s cubic-bezier(0.25, 1, 0.5, 1) forwards;
-}
-
