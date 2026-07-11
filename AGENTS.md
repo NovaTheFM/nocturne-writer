@@ -65,6 +65,16 @@ capacitor.config.json ← Capacitor / Android config
 | **Persistence** | All data goes through `src/core/db.js` (IndexedDB). Do not use localStorage for app data. |
 | **Encryption** | Projects can be E2E encrypted. Always route sensitive data through `src/core/crypto.js`. |
 
+UX Principle
+
+When modifying existing UI:
+
+- Preserve the existing interaction language.
+- Prefer animating existing DOM over replacing it.
+- Reuse existing FLIP/layout transition helpers.
+- Never introduce instant visual changes where surrounding UI is animated.
+- Match placement with surrounding controls instead of simply finding an available container.
+
 ---
 
 ## How to Run

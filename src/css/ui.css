@@ -10262,3 +10262,79 @@ body.is-electron .side-panel {
 .formatting-add-card .nocturne-select {
   min-width: 0 !important;
 }
+
+/* ==========================================================================
+   Notes Completed Styling & done-btn
+   ========================================================================== */
+.char-card.note-card {
+  transition: border-color 220ms ease, background 220ms ease, box-shadow 220ms ease, opacity 220ms ease, transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.char-card.note-card .char-info h3,
+.char-card.note-card .char-info p {
+  transition: color 250ms ease, text-decoration-color 250ms ease, opacity 250ms ease;
+}
+.char-card.note-card-completed {
+  border-color: rgba(132, 204, 22, 0.45) !important;
+  opacity: 1 !important;
+  background: rgba(132, 204, 22, 0.03) !important;
+}
+.char-card.note-card-completed:hover {
+  border-color: rgba(132, 204, 22, 0.7) !important;
+  box-shadow: 0 10px 30px rgba(132, 204, 22, 0.15) !important;
+  opacity: 1 !important;
+}
+.char-card.note-card-completed .char-info h3 {
+  color: var(--text-main) !important;
+}
+.char-card.note-card-completed .char-img i {
+  color: rgba(132, 204, 22, 0.4) !important;
+}
+.lore-card-actions button[data-action="toggle-note-completed"].active {
+  color: #84cc16 !important;
+  border-color: rgba(132, 204, 22, 0.5) !important;
+  background: rgba(132, 204, 22, 0.15) !important;
+}
+.lore-card-actions button[data-action="toggle-note-completed"].active:hover {
+  color: #84cc16 !important;
+  border-color: rgba(132, 204, 22, 0.7) !important;
+  background: rgba(132, 204, 22, 0.25) !important;
+}
+
+/* Hover and onClick micro-animations for card action buttons */
+.lore-card-actions button {
+  transition: border-color 200ms ease, background 200ms ease, color 200ms ease, transform 150ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+.lore-card-actions button:hover {
+  transform: scale(1.12);
+}
+.lore-card-actions button:active {
+  transform: scale(0.9);
+}
+.lore-card-actions button i {
+  transition: transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.lore-card-actions button:hover i {
+  transform: scale(1.15);
+}
+
+/* Hover and active states for pill buttons */
+.pill-btn {
+  transition: border-color 200ms ease, background 200ms ease, color 200ms ease, transform 150ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+.pill-btn:hover {
+  transform: translateY(-1px);
+}
+.pill-btn:active {
+  transform: translateY(0) scale(0.95);
+}
+
+/* Completed Card Pulse Animation */
+@keyframes note-complete-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(0.96) translateY(2px); border-color: rgba(16, 185, 129, 0.6); box-shadow: 0 0 15px rgba(16, 185, 129, 0.2); }
+  100% { transform: scale(1); }
+}
+.note-card-completed-anim {
+  animation: note-complete-pulse 0.4s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+

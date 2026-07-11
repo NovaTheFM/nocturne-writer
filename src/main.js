@@ -826,6 +826,7 @@ class NocturneWriter {
       title: String(item.title || '').trim(),
       body: String(item.body || '').trim(),
       order: Number.isFinite(item.order) ? item.order : index,
+      completed: !!item.completed,
     };
   }
 
@@ -1262,6 +1263,9 @@ class NocturneWriter {
   }
 
   closeSecondaryPane() {
+    this.docPaneDropState = null;
+    document.body.classList.remove('doc-pane-drop-active');
+    document.querySelectorAll('.workspace-pane').forEach((pane) => pane.classList.remove('drop-available', 'drop-hover'));
     this.state.workspace.mode = 'single';
     this.state.workspace.panes.secondary = this.emptyPaneDescriptor('secondary');
     this.state.workspace.focusedPaneId = 'primary';
@@ -1272,6 +1276,9 @@ class NocturneWriter {
   }
 
   toggleSplitMode() {
+    this.docPaneDropState = null;
+    document.body.classList.remove('doc-pane-drop-active');
+    document.querySelectorAll('.workspace-pane').forEach((pane) => pane.classList.remove('drop-available', 'drop-hover'));
     if (this.state.workspace.mode === 'split') {
       this.closeSecondaryPane();
       return;
@@ -1448,6 +1455,9 @@ class NocturneWriter {
   }
 
   openSplitWithEmptyPane(emptySide = 'right') {
+    this.docPaneDropState = null;
+    document.body.classList.remove('doc-pane-drop-active');
+    document.querySelectorAll('.workspace-pane').forEach((pane) => pane.classList.remove('drop-available', 'drop-hover'));
     const currentDoc = this.getFocusedDoc();
     this.state.workspace.mode = 'split';
     if (emptySide === 'left') {
@@ -1632,7 +1642,11 @@ class NocturneWriter {
       return `<section class="kb-pane-section"><h2>Таймлайн</h2><div class="timeline-container">${time.length ? time.map((item, i, arr) => this.timelineCard(item, { isLast: i === arr.length - 1 })).join('') : this.emptyStateMarkup('bx-git-commit', 'Хронология пока пуста.', 'Добавьте первое событие, чтобы собрать порядок истории.', 'new-lore', 'Добавить событие', 'data-lore-type="timeline"')}</div></section>`;
     }
     if (tab === 'notes') {
-      const notes = [...(this.state.lore.notes || [])].sort((a, b) => a.order - b.order);
+      const notes = [...(this.state.lore.notes || [])].sort((a, b) => {
+        if (a.completed && !b.completed) return 1;
+        if (!a.completed && b.completed) return -1;
+        return a.order - b.order;
+      });
       return `<section class="kb-pane-section"><h2>Записи</h2><div class="character-grid">${notes.length ? notes.map((item) => this.noteCard(item, false)).join('') : this.emptyStateMarkup('bx-note', 'Записей пока нет.', 'Добавьте первую свободную запись или заметку к миру.', 'new-lore', 'Создать запись', 'data-lore-type="notes"')}</div></section>`;
     }
     const chars = [...this.state.lore.characters].sort((a, b) => a.order - b.order);
@@ -3907,6 +3921,11 @@ class NocturneWriter {
     if (action === 'delete-lore') {
       const button = event.target.closest('[data-lore-type][data-lore-id]');
       if (button) this.confirmDeleteLore(button.dataset.loreType, button.dataset.loreId, button.dataset.parentId);
+      return;
+    }
+    if (action === 'toggle-note-completed') {
+      const button = event.target.closest('[data-lore-id]');
+      if (button) this.toggleNoteCompleted(button.dataset.loreId);
       return;
     }
     if (action === 'new-folder') {
@@ -12262,9 +12281,13 @@ class NocturneWriter {
           <div class="dictionary-control-row">
             <label class="dictionary-toggle"><span>Проверка частых ошибок</span><div class="toggle ${this.state.settings.strictSpellcheck ? 'on' : ''}" data-setting="strictSpellcheck" data-kind="toggle"></div></label>
             <label class="dictionary-toggle smart-dictionary-toggle"><span>Smart-словарь <em>Экспериментально</em></span><div class="toggle ${this.state.settings.smartDictionary ? 'on' : ''}" data-setting="smartDictionary" data-kind="toggle"></div></label>
-            <div class="dictionary-search">
-              <i class="bx bx-search"></i>
-              <input class="form-control" data-dictionary-search placeholder="Поиск правил..." value="${escapeHtml(this.state.dictionarySearch || '')}">
+            <div style="display: flex; gap: 8px; align-items: center; min-width: 0;">
+              <div class="dictionary-search" style="flex: 1; min-width: 0;">
+                <i class="bx bx-search"></i>
+                <input class="form-control" data-dictionary-search placeholder="Поиск правил..." value="${escapeHtml(this.state.dictionarySearch || '')}">
+              </div>
+              <button class="pill-btn" data-action="dictionary-import" title="Импортировать правила" style="height:38px; width:38px; display:flex; align-items:center; justify-content:center; padding:0; flex-shrink:0; border-radius: 9px;"><i class="bx bx-import" style="font-size: 18px;"></i></button>
+              <button class="pill-btn" data-action="dictionary-export" title="Экспортировать правила" style="height:38px; width:38px; display:flex; align-items:center; justify-content:center; padding:0; flex-shrink:0; border-radius: 9px;"><i class="bx bx-export" style="font-size: 18px;"></i></button>
             </div>
           </div>
           <div class="dictionary-filters-row" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-top:8px;">
@@ -12793,10 +12816,148 @@ class NocturneWriter {
     };
   }
 
+  async importDictionaryFile(file) {
+    try {
+      const text = await file.text();
+      const parsedData = JSON.parse(text);
+      let rules = [];
+      if (Array.isArray(parsedData)) {
+        rules = parsedData;
+      } else if (parsedData && Array.isArray(parsedData.rules)) {
+        rules = parsedData.rules;
+      } else {
+        this.toast('Неверный формат файла словаря.');
+        return;
+      }
+
+      let rulesCount = 0;
+      let mergedCount = 0;
+
+      for (const rule of rules) {
+        const wrong = rule.wrong || '';
+        if (!wrong) continue;
+        const normalizedWrong = normalizeTypoToken(wrong);
+        
+        const existingRule = this.state.typoRules.find(r => r.normalizedWrong === normalizedWrong);
+        if (existingRule) {
+          existingRule.correct = rule.correct !== undefined ? rule.correct : existingRule.correct;
+          existingRule.label = rule.label !== undefined ? rule.label : existingRule.label;
+          existingRule.enabled = rule.enabled !== undefined ? rule.enabled : existingRule.enabled;
+          existingRule.matchMode = rule.matchMode !== undefined ? rule.matchMode : existingRule.matchMode;
+          existingRule.source = rule.source !== undefined ? rule.source : existingRule.source;
+          existingRule.builtinKey = rule.builtinKey !== undefined ? rule.builtinKey : existingRule.builtinKey;
+          existingRule.updatedAt = Date.now();
+          await this.db.put('typoRules', existingRule);
+          mergedCount++;
+        } else {
+          const newRule = this.sanitizeTypoRule({
+            id: rule.id || uid('typo-rule'),
+            wrong: rule.wrong,
+            normalizedWrong,
+            correct: rule.correct,
+            label: rule.label,
+            enabled: rule.enabled,
+            source: rule.source,
+            matchMode: rule.matchMode,
+            builtinKey: rule.builtinKey,
+            createdAt: rule.createdAt || Date.now(),
+            updatedAt: Date.now()
+          });
+          this.state.typoRules.unshift(newRule);
+          await this.db.put('typoRules', newRule);
+          rulesCount++;
+        }
+      }
+
+      this.updateTypoHighlights();
+      
+      await this.animateTypoImport(rulesCount + mergedCount, mergedCount, file.name);
+      
+      if (this.state.activeSettingsTab === 'dictionary') {
+        this.renderSettings();
+      }
+    } catch (err) {
+      console.error('Error importing typos:', err);
+      this.toast('Ошибка при импорте файла.');
+    }
+  }
+
+  async animateTypoImport(rulesCount, mergedCount, filename) {
+    let overlay = document.getElementById('kb-import-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'kb-import-overlay';
+      overlay.className = 'kb-import-overlay';
+      document.body.appendChild(overlay);
+    }
+    
+    overlay.innerHTML = `
+      <div class="kb-import-card">
+        <div class="kb-import-spinner">
+          <div class="spinner-ring"></div>
+          <i class="bx bx-file-import"></i>
+        </div>
+        <h3>Импортируем словарь ошибок...</h3>
+        <div class="kb-import-progress-list"></div>
+      </div>
+    `;
+    
+    overlay.classList.add('active');
+    await new Promise(r => setTimeout(r, 600));
+    
+    const listEl = overlay.querySelector('.kb-import-progress-list');
+    
+    const steps = [
+      { text: `Чтение файла: ${filename}`, class: 'success' },
+      { text: `Обработано правил: ${rulesCount}`, class: 'success' },
+      { text: mergedCount > 0 ? `Объединено дубликатов: ${mergedCount}` : 'Новые правила добавлены', class: 'success' }
+    ];
+
+    for (let i = 0; i < steps.length; i++) {
+      const step = document.createElement('div');
+      step.className = `kb-import-step ${steps[i].class}`;
+      step.style.animationDelay = `${i * 150}ms`;
+      step.innerHTML = `<span>${steps[i].text}</span><i class="bx bx-check-circle"></i>`;
+      listEl.appendChild(step);
+      await new Promise(r => setTimeout(r, 350));
+    }
+    
+    await new Promise(r => setTimeout(r, 1000));
+    overlay.classList.remove('active');
+    
+    this.toast(`Импорт завершен: добавлено/обновлено ${rulesCount} правил.`);
+  }
+
   handleDictionaryAction(action, event) {
     if (!action?.startsWith?.('dictionary-')) return false;
     const target = event.target.closest('[data-rule-id], [data-builtin-key], [data-dictionary-filter], [data-action]');
     if (action === 'dictionary-add') this.openTypoRuleForm('', null, { allowBlank: true });
+    if (action === 'dictionary-export') {
+      const exportData = {
+        type: 'nocturnetypos',
+        version: '1.1',
+        rules: this.state.typoRules.filter(r => r.source === 'user' || r.source === 'override' || r.source === 'disabled-builtin')
+      };
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      this.downloadBlob(blob, 'typos_dictionary.nocturnetypos');
+    }
+    if (action === 'dictionary-import') {
+      let input = document.getElementById('dictionary-import-input');
+      if (!input) {
+        input = document.createElement('input');
+        input.id = 'dictionary-import-input';
+        input.type = 'file';
+        input.accept = '.nocturnetypos,application/json';
+        input.style.display = 'none';
+        document.body.appendChild(input);
+        input.onchange = async (e) => {
+          const file = e.target.files[0];
+          if (file) await this.importDictionaryFile(file);
+          input.value = '';
+        };
+      }
+      input.click();
+    }
     if (action === 'dictionary-edit') {
       const rule = this.state.typoRules.find((item) => item.id === target?.dataset.ruleId);
       if (rule) this.openTypoRuleForm(rule.wrong, rule);
@@ -13543,7 +13704,11 @@ class NocturneWriter {
     let chars = [...this.state.lore.characters].sort((a, b) => a.order - b.order);
     let locs = [...this.state.lore.locations].sort((a, b) => a.order - b.order);
     let time = [...this.state.lore.timeline].sort((a, b) => (a.order - b.order) || parseTimelineRank(a.date) - parseTimelineRank(b.date));
-    let notes = [...(this.state.lore.notes || [])].sort((a, b) => a.order - b.order);
+    let notes = [...(this.state.lore.notes || [])].sort((a, b) => {
+      if (a.completed && !b.completed) return 1;
+      if (!a.completed && b.completed) return -1;
+      return a.order - b.order;
+    });
     const activeSubtimeline = this.activeSubtimeline();
 
     const sidebarExists = document.querySelector('#kb-modal .kb-sidebar');
@@ -14092,8 +14257,20 @@ class NocturneWriter {
   }
 
   applyKbSearch() {
+    const grids = Array.from(document.querySelectorAll('[data-dnd-zone]'));
+    const firstRects = new Map();
+    
+    grids.forEach(grid => {
+      Array.from(grid.querySelectorAll('[data-lore-id]')).forEach(el => {
+        if (!el.classList.contains('hidden')) {
+          firstRects.set(el, el.getBoundingClientRect());
+        }
+      });
+    });
+
     const q = (this.state.kbSearch || '').toLowerCase().trim();
     const isSearching = q.length > 0;
+    
     document.querySelectorAll('.char-card, .loc-card, .timeline-item').forEach(el => {
       const item = this.loreItemForElement(el);
       if (item) {
@@ -14104,10 +14281,32 @@ class NocturneWriter {
         el.toggleAttribute('draggable', !isSearching && !window.Sortable);
       }
     });
+    
     document.querySelectorAll('[data-dnd-zone]').forEach((zone) => {
       zone.__sortable?.option?.('disabled', isSearching);
     });
     document.querySelectorAll('[data-dnd-zone="timeline"], [data-dnd-zone="subtimeline"]').forEach((zone) => this.updateTimelineConnectors(zone));
+
+    // FLIP transition for layout shifts
+    requestAnimationFrame(() => {
+      firstRects.forEach((firstRect, el) => {
+        if (!el.parentNode || el.classList.contains('hidden')) return;
+        const lastRect = el.getBoundingClientRect();
+        const dx = firstRect.left - lastRect.left;
+        const dy = firstRect.top - lastRect.top;
+        if (dx !== 0 || dy !== 0) {
+          el.style.transition = 'none';
+          el.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+          el.offsetHeight; // force reflow
+          el.style.transition = 'transform 300ms cubic-bezier(0.16, 1, 0.3, 1)';
+          el.style.transform = 'translate3d(0, 0, 0)';
+          setTimeout(() => {
+            el.style.transition = '';
+            el.style.transform = '';
+          }, 320);
+        }
+      });
+    });
   }
 
   loreItemForElement(el) {
@@ -15190,7 +15389,8 @@ class NocturneWriter {
   noteCard(item, draggable = false) {
     const isNew = this.state.newlyCreatedId === item.id;
     const entranceClass = isNew ? ' new-card-entrance' : '';
-    return `<div class="char-card note-card${entranceClass}" data-lore-type="notes" data-lore-id="${item.id}">${this.loreCardActions('notes', item.id)}<div class="char-img"><i class="bx bx-note"></i></div><div class="char-info"><h3>${escapeHtml(item.title || 'Без названия')}</h3><p>${escapeHtml(item.body || 'Пустая запись')}</p></div></div>`;
+    const completedClass = item.completed ? ' note-card-completed' : '';
+    return `<div class="char-card note-card${entranceClass}${completedClass}" data-lore-type="notes" data-lore-id="${item.id}">${this.loreCardActions('notes', item.id)}<div class="char-img"><i class="bx bx-note"></i></div><div class="char-info"><h3>${escapeHtml(item.title || 'Без названия')}</h3><p>${escapeHtml(item.body || 'Пустая запись')}</p></div></div>`;
   }
 
   timelineCard(item, options = {}) {
@@ -15275,10 +15475,19 @@ class NocturneWriter {
   }
 
   loreCardActions(type, id) {
+    let doneButton = '';
+    if (type === 'notes') {
+      const note = (this.state.lore.notes || []).find(n => n.id === id);
+      const isCompleted = note?.completed;
+      const icon = isCompleted ? 'bx-check-double' : 'bx-check';
+      const title = isCompleted ? 'Вернуть в работу' : 'Исполнено';
+      doneButton = `<button type="button" data-action="toggle-note-completed" data-lore-id="${id}" class="done-btn ${isCompleted ? 'active' : ''}" title="${title}"><i class="bx ${icon}"></i></button>`;
+    }
     const cleanerButton = type === 'notes'
       ? `<button type="button" data-action="clean-note" data-lore-id="${id}" class="cleaner-btn" title="«Чистильщик™»"><i class="reaper-icon"></i></button>`
       : '';
     return `<div class="lore-card-actions">
+      ${doneButton}
       ${cleanerButton}
       <button type="button" data-action="dump-single-entity" data-lore-type="${type}" data-lore-id="${id}" title="Дамп карточки"><i class="bx bx-download"></i></button>
       <button type="button" data-action="edit-lore" data-lore-type="${type}" data-lore-id="${id}" title="Редактировать"><i class="bx bx-edit"></i></button>
@@ -15820,7 +16029,16 @@ class NocturneWriter {
             const cardElement = tempDiv.firstChild;
             if (cardElement) {
               cardElement.classList.add('new-card-entrance');
-              grid.appendChild(cardElement);
+              if (type === 'notes') {
+                const firstCompleted = grid.querySelector('.note-card-completed');
+                if (firstCompleted) {
+                  grid.insertBefore(cardElement, firstCompleted);
+                } else {
+                  grid.appendChild(cardElement);
+                }
+              } else {
+                grid.appendChild(cardElement);
+              }
               
               // Re-initialize SortableJS to register the new item
               this.setupKbDragDrop();
@@ -15969,11 +16187,116 @@ class NocturneWriter {
     this.state.lore.characters = (this.state.lore.characters || []).map((item, index) => this.normalizeCharacter(item, index));
     this.state.lore.locations = (this.state.lore.locations || []).map((item, index) => this.normalizeLocation(item, index));
     this.state.lore.timeline = (this.state.lore.timeline || []).map((item, index) => this.normalizeTimelineEvent(item, index));
-    this.state.lore.notes = (this.state.lore.notes || []).map((item, index) => this.normalizeNote(item, index));
+    
+    let sortedNotes = (this.state.lore.notes || []).map((item, index) => this.normalizeNote(item, index));
+    sortedNotes.sort((a, b) => {
+      if (a.completed && !b.completed) return 1;
+      if (!a.completed && b.completed) return -1;
+      return a.order - b.order;
+    });
+    sortedNotes.forEach((item, index) => {
+      item.order = index;
+    });
+    this.state.lore.notes = sortedNotes;
+
     if (this.state.activeSubtimelineId && !this.timelineEvent(this.state.activeSubtimelineId)) this.state.activeSubtimelineId = null;
     const activeId = this.state.activeLoreId || 'world';
     await this.db.put('lore', { id: activeId, title: this.state.lore.title || 'Основное произведение', ...this.state.lore });
     this.updateTypoHighlightsDebounced();
+  }
+
+  async toggleNoteCompleted(id) {
+    const note = (this.state.lore.notes || []).find(n => n.id === id);
+    if (!note) return;
+    
+    note.completed = !note.completed;
+    note.updatedAt = Date.now();
+
+    // Find all grids in the workspace that contain this note card (there could be multiple pane tabs showing notes!)
+    const cardEls = document.querySelectorAll(`.note-card[data-lore-id="${id}"]`);
+    
+    const firstRects = new Map();
+    const gridsToAnimate = [];
+
+    cardEls.forEach(cardEl => {
+      const grid = cardEl.closest('.character-grid');
+      if (grid) {
+        if (!gridsToAnimate.includes(grid)) {
+          gridsToAnimate.push(grid);
+        }
+        // Capture rects of all visible child cards
+        Array.from(grid.children).forEach(child => {
+          const childId = child.dataset.loreId;
+          if (childId) {
+            firstRects.set(child, child.getBoundingClientRect());
+          }
+        });
+      }
+
+      // Update this card's UI instantly
+      cardEl.classList.toggle('note-card-completed', note.completed);
+      const doneBtn = cardEl.querySelector('[data-action="toggle-note-completed"], .done-btn');
+      if (doneBtn) {
+        doneBtn.classList.toggle('active', note.completed);
+        doneBtn.title = note.completed ? 'Вернуть в работу' : 'Исполнено';
+        const icon = doneBtn.querySelector('i');
+        if (icon) {
+          icon.className = `bx ${note.completed ? 'bx-check-double' : 'bx-check'}`;
+        }
+      }
+      
+      // Pulse animation
+      cardEl.classList.remove('note-card-completed-anim');
+      void cardEl.offsetWidth; // force reflow
+      cardEl.classList.add('note-card-completed-anim');
+    });
+
+    // 2. Perform DB write and sort memory array
+    await this.saveLore();
+
+    // Sort the DOM elements in each grid and trigger FLIP transition
+    gridsToAnimate.forEach(grid => {
+      const children = Array.from(grid.children);
+      children.sort((elA, elB) => {
+        const idA = elA.dataset.loreId;
+        const idB = elB.dataset.loreId;
+        const noteA = (this.state.lore.notes || []).find(n => n.id === idA);
+        const noteB = (this.state.lore.notes || []).find(n => n.id === idB);
+        if (!noteA || !noteB) return 0;
+        if (noteA.completed && !noteB.completed) return 1;
+        if (!noteA.completed && noteB.completed) return -1;
+        return noteA.order - noteB.order;
+      });
+      
+      // Re-append elements to grid in sorted order (this re-orders them in DOM instantly)
+      children.forEach(el => grid.appendChild(el));
+    });
+
+    // 3. FLIP Play stage
+    requestAnimationFrame(() => {
+      firstRects.forEach((firstRect, el) => {
+        if (!el.parentNode) return;
+        const lastRect = el.getBoundingClientRect();
+        const dx = firstRect.left - lastRect.left;
+        const dy = firstRect.top - lastRect.top;
+        if (dx !== 0 || dy !== 0) {
+          el.style.transition = 'none';
+          el.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+          
+          el.offsetHeight; // force reflow
+
+          el.style.transition = 'transform 380ms cubic-bezier(0.16, 1, 0.3, 1)';
+          el.style.transform = 'translate3d(0, 0, 0)';
+          
+          setTimeout(() => {
+            el.style.transition = '';
+            el.style.transform = '';
+          }, 400);
+        }
+      });
+    });
+
+    this.toast(note.completed ? 'Запись исполнена' : 'Запись возвращена в работу');
   }
 
   renderSettings() {
