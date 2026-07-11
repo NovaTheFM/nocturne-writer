@@ -216,6 +216,98 @@ const NocturneEntityMentions = Extension.create({
       }),
     ];
   },
+});function bridgeFindBestQuoteOffset(text, quote, prefix = '', suffix = '', oldOffset = 0) {
+  if (!quote) return -1;
+  const matches = [];
+  let index = text.indexOf(quote);
+  while (index >= 0) {
+    let score = 0;
+    const before = text.slice(Math.max(0, index - String(prefix).length), index);
+    const after = text.slice(index + quote.length, index + quote.length + String(suffix).length);
+    if (prefix && before.endsWith(prefix)) score += prefix.length;
+    if (suffix && after.startsWith(suffix)) score += suffix.length;
+    matches.push({ index, score, distance: Math.abs(index - Number(oldOffset || 0)) });
+    index = text.indexOf(quote, index + Math.max(1, quote.length));
+  }
+  if (!matches.length) return -1;
+  matches.sort((a, b) => b.score - a.score || a.distance - b.distance);
+  if (matches.length > 1 && matches[0].score === matches[1].score && matches[0].score === 0) return -1;
+  return matches[0].index;
+}
+
+const NocturneBookmarks = Extension.create({
+  name: 'nocturneBookmarks',
+  addOptions() {
+    return {
+      getBookmarks: () => [],
+      getActiveBookmarkId: () => null,
+    };
+  },
+  addProseMirrorPlugins() {
+    const extension = this;
+    const key = new PluginKey('nocturneBookmarks');
+    
+    const buildDecos = (doc) => {
+      const decos = [];
+      const bookmarks = extension.options.getBookmarks() || [];
+      const activeId = extension.options.getActiveBookmarkId() || null;
+      
+      bookmarks.forEach((b) => {
+        let startPos = -1;
+        let endPos = -1;
+        
+        doc.descendants((node, pos) => {
+          if (node.attrs?.blockId === b.start?.blockId) {
+            const text = node.textContent || '';
+            let localOffset = b.start?.offset || 0;
+            if (b.quote) {
+              const found = bridgeFindBestQuoteOffset(text, b.quote, b.prefix, b.suffix);
+              if (found >= 0) localOffset = found;
+            }
+            startPos = pos + 1 + Math.max(0, Math.min(text.length, localOffset));
+            endPos = startPos + (b.quote ? b.quote.length : 0);
+            return false;
+          }
+        });
+        
+        if (startPos >= 0 && endPos >= startPos) {
+          const isActive = b.id === activeId;
+          const rangeClass = isActive ? 'nocturne-bookmark-range active' : 'nocturne-bookmark-range';
+          
+          decos.push(Decoration.inline(startPos, endPos, {
+            class: rangeClass,
+            'data-bookmark-id': b.id
+          }));
+        }
+      });
+      
+      decos.sort((a, b) => a.from - b.from);
+      return DecorationSet.create(doc, decos);
+    };
+
+    return [
+      new Plugin({
+        key,
+        state: {
+          init(config, instance) {
+            return buildDecos(instance.doc);
+          },
+          apply(tr, value, oldState, newState) {
+            const forced = tr.getMeta('nocturneBookmarksForceUpdate');
+            if (tr.docChanged || forced) {
+              return buildDecos(newState.doc);
+            }
+            return value.map(tr.mapping, tr.doc);
+          }
+        },
+        props: {
+          decorations(state) {
+            return key.getState(state);
+          }
+        }
+      })
+    ];
+  }
 });
 
 const NocturneInputRules = Extension.create({
@@ -365,7 +457,7 @@ function executeRuleAction(view, rule, from, to, isEnter = false) {
 }
 
 export class NocturneEditorBridge {
-  constructor({ onChange, onFocus, onSelectionUpdate, getSettings, getMentionIndex, onKeydown }) {
+  constructor({ onChange, onFocus, onSelectionUpdate, getSettings, getMentionIndex, onKeydown, getActiveBookmarkId }) {
     this.instances = new Map();
     this.onChange = onChange;
     this.onFocus = onFocus;
@@ -373,6 +465,7 @@ export class NocturneEditorBridge {
     this.getSettings = getSettings;
     this.getMentionIndex = getMentionIndex;
     this.onKeydown = onKeydown;
+    this.getActiveBookmarkId = getActiveBookmarkId;
     this.visualPageRaf = new Map();
   }
 
@@ -411,6 +504,10 @@ export class NocturneEditorBridge {
         NocturnePagination.configure({ bridge: this }),
         NocturneEntityMentions.configure({
           getMentionIndex: () => this.getMentionIndex?.() || [],
+        }),
+        NocturneBookmarks.configure({
+          getBookmarks: () => doc.bookmarks || [],
+          getActiveBookmarkId: () => this.getActiveBookmarkId?.(paneId) || null,
         }),
       ],
       editorProps: {
