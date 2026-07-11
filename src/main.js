@@ -15282,9 +15282,14 @@ class NocturneWriter {
       scrollSensitivity: mobile ? 42 : 36,
       scrollSpeed: mobile ? 9 : 10,
       handle: undefined,
-      draggable: '.char-card, .loc-card, .timeline-item, .note-card',
-      filter: '.empty-card, .mobile-empty-card, .doc-folder-empty, .workspace-empty, .workspace-single-empty, button, input, textarea, select, a, [data-action], .lore-card-actions, .mobile-lore-actions',
+      draggable: '.char-card, .loc-card, .timeline-item, .note-card:not(.note-card-completed)',
+      filter: '.empty-card, .mobile-empty-card, .doc-folder-empty, .workspace-empty, .workspace-single-empty, button, input, textarea, select, a, [data-action], .lore-card-actions, .mobile-lore-actions, .note-card-completed',
       preventOnFilter: false,
+      onMove: (evt) => {
+        if (evt.related?.classList.contains('note-card-completed')) {
+          return false;
+        }
+      },
       onStart: (event) => {
         document.body.classList.add('sortable-active');
         if (window.Capacitor?.Plugins?.Haptics?.impact) {
@@ -16029,16 +16034,18 @@ class NocturneWriter {
             const cardElement = tempDiv.firstChild;
             if (cardElement) {
               cardElement.classList.add('new-card-entrance');
-              if (type === 'notes') {
-                const firstCompleted = grid.querySelector('.note-card-completed');
-                if (firstCompleted) {
-                  grid.insertBefore(cardElement, firstCompleted);
+              this.animateLayoutTransition(grid, () => {
+                if (type === 'notes') {
+                  const firstCompleted = grid.querySelector('.note-card-completed');
+                  if (firstCompleted) {
+                    grid.insertBefore(cardElement, firstCompleted);
+                  } else {
+                    grid.appendChild(cardElement);
+                  }
                 } else {
                   grid.appendChild(cardElement);
                 }
-              } else {
-                grid.appendChild(cardElement);
-              }
+              });
               
               // Re-initialize SortableJS to register the new item
               this.setupKbDragDrop();
@@ -16212,59 +16219,57 @@ class NocturneWriter {
     note.completed = !note.completed;
     note.updatedAt = Date.now();
 
-    // 1. Capture positions of all visible notes elements before re-rendering
-    const grids = Array.from(document.querySelectorAll('.character-grid[data-dnd-zone="notes"]'));
-    const firstRects = new Map();
-    grids.forEach(grid => {
-      Array.from(grid.children).forEach(child => {
-        const childId = child.dataset.loreId;
-        if (childId) {
-          firstRects.set(childId, child.getBoundingClientRect());
-        }
-      });
-    });
-
-    // 2. Perform DB write and sort memory array
-    await this.saveLore();
-
-    // 3. Render KB and workspace to update DOM structures and re-setup Sortable JS cleanly
-    this.renderKb();
-    Object.keys(this.state.workspace?.panes || {}).forEach(paneId => {
-      const pane = this.state.workspace.panes[paneId];
-      if (pane.type === 'kb-tab' && pane.kbTab === 'notes') {
-        this.renderWorkspace();
+    // Find all grids in the workspace that contain this note card
+    const cardEls = document.querySelectorAll(`.note-card[data-lore-id="${id}"]`);
+    const gridsToAnimate = [];
+    cardEls.forEach(cardEl => {
+      const grid = cardEl.closest('.character-grid');
+      if (grid && !gridsToAnimate.includes(grid)) {
+        gridsToAnimate.push(grid);
       }
     });
 
-    // 4. FLIP Play stage using newly rendered DOM elements
-    requestAnimationFrame(() => {
-      const newGrids = Array.from(document.querySelectorAll('.character-grid[data-dnd-zone="notes"]'));
-      newGrids.forEach(grid => {
-        Array.from(grid.children).forEach(el => {
-          const childId = el.dataset.loreId;
-          const firstRect = firstRects.get(childId);
-          if (firstRect) {
-            const lastRect = el.getBoundingClientRect();
-            const dx = firstRect.left - lastRect.left;
-            const dy = firstRect.top - lastRect.top;
-            if (dx !== 0 || dy !== 0) {
-              el.style.transition = 'none';
-              el.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
-              el.offsetHeight; // force reflow
+    // Mutate existing DOM inside the existing animateLayoutTransition helper
+    gridsToAnimate.forEach(grid => {
+      this.animateLayoutTransition(grid, () => {
+        // 1. Update matching cards UI within this grid
+        const cardsInGrid = grid.querySelectorAll(`.note-card[data-lore-id="${id}"]`);
+        cardsInGrid.forEach(cardEl => {
+          cardEl.classList.toggle('note-card-completed', note.completed);
+          
+          // Re-evaluate if it is draggable (completed notes are not draggable)
+          cardEl.toggleAttribute('draggable', !note.completed);
 
-              el.style.transition = 'transform 380ms cubic-bezier(0.16, 1, 0.3, 1)';
-              el.style.transform = 'translate3d(0, 0, 0)';
-              
-              setTimeout(() => {
-                el.style.transition = '';
-                el.style.transform = '';
-              }, 400);
+          const doneBtn = cardEl.querySelector('[data-action="toggle-note-completed"], .done-btn');
+          if (doneBtn) {
+            doneBtn.classList.toggle('active', note.completed);
+            doneBtn.title = note.completed ? 'Вернуть в работу' : 'Исполнено';
+            const icon = doneBtn.querySelector('i');
+            if (icon) {
+              icon.className = `bx ${note.completed ? 'bx-check-double' : 'bx-check'}`;
             }
           }
         });
+
+        // 2. Sort DOM nodes inside the grid
+        const children = Array.from(grid.children);
+        children.sort((elA, elB) => {
+          const idA = elA.dataset.loreId;
+          const idB = elB.dataset.loreId;
+          const noteA = (this.state.lore.notes || []).find(n => n.id === idA);
+          const noteB = (this.state.lore.notes || []).find(n => n.id === idB);
+          if (!noteA || !noteB) return 0;
+          if (noteA.completed && !noteB.completed) return 1;
+          if (!noteA.completed && noteB.completed) return -1;
+          return noteA.order - noteB.order;
+        });
+        children.forEach(el => grid.appendChild(el));
       });
     });
 
+    // Perform DB write asynchronously
+    await this.saveLore();
+    
     // Add pulse animation on the toggled card element
     document.querySelectorAll(`.note-card[data-lore-id="${id}"]`).forEach(cardEl => {
       cardEl.classList.remove('note-card-completed-anim');
