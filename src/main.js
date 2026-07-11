@@ -10643,15 +10643,80 @@ class NocturneWriter {
       }
     }
     
-    if (!bookmarks.length) return;
+    // Sort bookmarks to match settings flow order
+    const editor = isDoc ? this.nocturneEditor?.get(paneId) : null;
+    const sortedBookmarks = [...bookmarks];
+    const behavior = this.state.settings?.bookmarkBehavior || 'text';
+    if (behavior === 'time') {
+      sortedBookmarks.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    } else {
+      if (isDoc && editor) {
+        const blockOrder = [];
+        editor.state.doc.descendants((node) => {
+          if (node.attrs?.blockId) blockOrder.push(node.attrs.blockId);
+        });
+        sortedBookmarks.sort((a, b) => {
+          const idxA = blockOrder.indexOf(a.start?.blockId);
+          const idxB = blockOrder.indexOf(b.start?.blockId);
+          if (idxA !== idxB) return idxA - idxB;
+          return (a.start?.offset || 0) - (b.start?.offset || 0);
+        });
+      } else if (!isDoc) {
+        sortedBookmarks.sort((a, b) => (a.offset || 0) - (b.offset || 0));
+      }
+    }
+    
+    if (!sortedBookmarks.length) {
+      this.updateBookmarkHighlights();
+      return;
+    }
     
     const widget = document.createElement('div');
     widget.className = 'pane-bookmarks-widget';
     
+    // Prev Button
+    const prevBtn = document.createElement('button');
+    prevBtn.className = 'pane-bookmarks-nav-btn btn-icon prev';
+    prevBtn.title = 'Предыдущая закладка';
+    prevBtn.innerHTML = '<i class="bx bx-chevron-left"></i>';
+    prevBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.state.activeBookmarkIndexByPane = this.state.activeBookmarkIndexByPane || {};
+      let currentIndex = this.state.activeBookmarkIndexByPane[paneId] ?? 0;
+      currentIndex = (currentIndex - 1 + sortedBookmarks.length) % sortedBookmarks.length;
+      this.state.activeBookmarkIndexByPane[paneId] = currentIndex;
+      const target = sortedBookmarks[currentIndex];
+      if (isDoc) {
+        this.jumpToDocumentBookmark(paneId, target);
+      } else {
+        this.jumpToNoteBookmark(paneId, target);
+      }
+    });
+    
+    // Main Bookmark Dropdown Button
     const button = document.createElement('button');
     button.className = 'pane-bookmarks-btn btn-icon';
-    button.title = 'Закладки в тексте';
-    button.innerHTML = `<i class="bx bxs-bookmark"></i><span class="bookmarks-count">${bookmarks.length}</span>`;
+    button.title = 'Список закладок';
+    button.innerHTML = `<i class="bx bxs-bookmark"></i><span class="bookmarks-count">${sortedBookmarks.length}</span>`;
+    
+    // Next Button
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'pane-bookmarks-nav-btn btn-icon next';
+    nextBtn.title = 'Следующая закладка';
+    nextBtn.innerHTML = '<i class="bx bx-chevron-right"></i>';
+    nextBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.state.activeBookmarkIndexByPane = this.state.activeBookmarkIndexByPane || {};
+      let currentIndex = this.state.activeBookmarkIndexByPane[paneId] ?? 0;
+      currentIndex = (currentIndex + 1) % sortedBookmarks.length;
+      this.state.activeBookmarkIndexByPane[paneId] = currentIndex;
+      const target = sortedBookmarks[currentIndex];
+      if (isDoc) {
+        this.jumpToDocumentBookmark(paneId, target);
+      } else {
+        this.jumpToNoteBookmark(paneId, target);
+      }
+    });
     
     const dropdown = document.createElement('div');
     dropdown.className = 'pane-bookmarks-dropdown';
@@ -10659,14 +10724,14 @@ class NocturneWriter {
     // Header
     const header = document.createElement('div');
     header.className = 'pane-bookmarks-header';
-    header.innerHTML = `<strong>Закладки (${bookmarks.length})</strong>`;
+    header.innerHTML = `<strong>Закладки (${sortedBookmarks.length})</strong>`;
     dropdown.appendChild(header);
     
     // List
     const list = document.createElement('div');
     list.className = 'pane-bookmarks-list';
     
-    bookmarks.forEach((b, index) => {
+    sortedBookmarks.forEach((b, index) => {
       const item = document.createElement('div');
       item.className = 'pane-bookmarks-item';
       
@@ -10675,6 +10740,8 @@ class NocturneWriter {
       textSpan.textContent = b.quote || `Закладка ${index + 1}`;
       textSpan.title = 'Перейти к закладке';
       textSpan.addEventListener('click', () => {
+        this.state.activeBookmarkIndexByPane = this.state.activeBookmarkIndexByPane || {};
+        this.state.activeBookmarkIndexByPane[paneId] = index;
         if (isDoc) {
           this.jumpToDocumentBookmark(paneId, b);
         } else {
@@ -10733,9 +10800,106 @@ class NocturneWriter {
     });
     observer.observe(paneEl, { childList: true, subtree: true });
     
+    widget.appendChild(prevBtn);
     widget.appendChild(button);
+    widget.appendChild(nextBtn);
     widget.appendChild(dropdown);
     paneEl.appendChild(widget);
+    
+    this.updateBookmarkHighlights();
+  }
+
+  updateBookmarkHighlights() {
+    if (this._updateBookmarkHighlightsTimer) clearTimeout(this._updateBookmarkHighlightsTimer);
+    this._updateBookmarkHighlightsTimer = setTimeout(() => {
+      if (!CSS.highlights || typeof Highlight === 'undefined') return;
+      
+      CSS.highlights.delete('bookmark');
+      if (this.state.reviewMode === 'write') return;
+      
+      const ranges = [];
+      
+      // 1. Resolve Document Bookmarks
+      this.state.docs.forEach((doc) => {
+        if (doc.bookmarks && doc.bookmarks.length) {
+          doc.bookmarks.forEach((b) => {
+            const mockMark = {
+              docId: doc.id,
+              start: b.start,
+              end: b.end,
+              quote: b.quote,
+              prefix: b.prefix,
+              suffix: b.suffix
+            };
+            const resolved = this.resolveReviewRange(mockMark);
+            if (resolved?.range) {
+              ranges.push(resolved.range);
+            }
+          });
+        }
+      });
+      
+      // 2. Resolve Note Bookmarks in DOM
+      const noteBodyEls = document.querySelectorAll('.lore-detail.note-detail .lore-detail-main p');
+      noteBodyEls.forEach((noteBodyEl) => {
+        const paneEl = noteBodyEl.closest('.workspace-pane');
+        const paneId = paneEl?.dataset.paneId;
+        if (!paneId) return;
+        const pane = this.getPane(paneId);
+        if (pane?.type === 'note-detail' && pane.entityId) {
+          const note = (this.state.lore.notes || []).find(n => n.id === pane.entityId);
+          if (note && note.bookmarks && note.bookmarks.length) {
+            const text = noteBodyEl.textContent || '';
+            const textNodes = [];
+            const walk = document.createTreeWalker(noteBodyEl, NodeFilter.SHOW_TEXT, null, false);
+            let n;
+            while (n = walk.nextNode()) {
+              textNodes.push(n);
+            }
+            
+            note.bookmarks.forEach((b) => {
+              let idx = text.indexOf(b.quote);
+              if (idx < 0) {
+                idx = text.toLowerCase().indexOf(b.quote.toLowerCase());
+              }
+              if (idx >= 0) {
+                const range = document.createRange();
+                let startNode = null, startOff = 0;
+                let endNode = null, endOff = 0;
+                let currentPos = 0;
+                
+                const targetStart = idx;
+                const targetEnd = idx + b.quote.length;
+                
+                for (const node of textNodes) {
+                  const len = node.textContent.length;
+                  if (!startNode && currentPos + len >= targetStart) {
+                    startNode = node;
+                    startOff = targetStart - currentPos;
+                  }
+                  if (!endNode && currentPos + len >= targetEnd) {
+                    endNode = node;
+                    endOff = targetEnd - currentPos;
+                    break;
+                  }
+                  currentPos += len;
+                }
+                
+                if (startNode && endNode) {
+                  range.setStart(startNode, startOff);
+                  range.setEnd(endNode, endOff);
+                  ranges.push(range);
+                }
+              }
+            });
+          }
+        }
+      });
+      
+      if (ranges.length) {
+        CSS.highlights.set('bookmark', new Highlight(...ranges));
+      }
+    }, 50);
   }
 
   async createReviewMarkFromSelection(kind, category = 'style', options = {}) {
@@ -10843,7 +11007,10 @@ class NocturneWriter {
     this._updateHighlightsTimer = setTimeout(() => {
       if (!CSS.highlights || typeof Highlight === 'undefined') return;
       ['orthography', 'punctuation', 'grammar', 'style', 'repetition', 'lore', 'continuity', 'logic', 'plot', 'current'].forEach((key) => CSS.highlights.delete(`review-${key}`));
-      if (this.state.reviewMode === 'write') return;
+      if (this.state.reviewMode === 'write') {
+        this.updateBookmarkHighlights();
+        return;
+      }
       const rangesByCategory = { orthography: [], punctuation: [], grammar: [], style: [], repetition: [], lore: [], continuity: [], logic: [], plot: [], current: [] };
       this.state.reviewMarks.filter((mark) => mark.status === 'open').forEach((mark) => {
         const resolved = this.resolveReviewRange(mark);
@@ -10854,6 +11021,7 @@ class NocturneWriter {
       Object.entries(rangesByCategory).forEach(([key, ranges]) => {
         if (ranges.length) CSS.highlights.set(`review-${key}`, new Highlight(...ranges));
       });
+      this.updateBookmarkHighlights();
     }, 0);
   }
 
