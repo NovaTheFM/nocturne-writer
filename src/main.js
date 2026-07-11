@@ -341,7 +341,8 @@ class NocturneWriter {
         if (this.state.workspace?.focusedPaneId !== paneId) this.setFocusedPane(paneId);
         this.handleMobileViewportChange();
       },
-      onSelectionUpdate: () => {
+      onSelectionUpdate: ({ paneId, editor }) => {
+        if (paneId) this.capturePaneEditorState(paneId);
         this.captureSelectionSnapshot();
         this.updateActiveBlock();
         this.updateEditorSelectionState();
@@ -1491,11 +1492,24 @@ class NocturneWriter {
     ['primary', 'secondary'].forEach((paneId) => {
       const paneEl = stage.querySelector(`[data-pane-id="${paneId}"]`);
       if (!paneEl) return;
+      const pane = this.getPane(paneId);
+      const isVisible = ws.mode === 'split' || paneId === 'primary';
+      if (!isVisible) {
+        if (paneEl.innerHTML !== '') {
+          this.nocturneEditor?.destroy(paneId);
+          paneEl.innerHTML = '';
+          paneEl.__paneConfig = null;
+        }
+        return;
+      }
+      const paneConfigStr = JSON.stringify(pane);
+      if (paneEl.__paneConfig === paneConfigStr) {
+        return;
+      }
       this.nocturneEditor?.destroy(paneId);
       paneEl.innerHTML = this.renderPane(paneId);
-    });
-    ['primary', 'secondary'].forEach((paneId) => {
-      if (this.getPane(paneId)?.type === 'document') this.renderEditor(paneId);
+      paneEl.__paneConfig = paneConfigStr;
+      if (pane?.type === 'document') this.renderEditor(paneId);
     });
     this.updateWorkspaceFocusClasses();
     this.disableBrowserSpellcheck();
@@ -1509,9 +1523,25 @@ class NocturneWriter {
     const stage = document.getElementById('workspace-stage');
     const paneEl = stage?.querySelector(`[data-pane-id="${paneId}"]`);
     if (!paneEl) return;
+    const pane = this.getPane(paneId);
+    const ws = this.state.workspace;
+    const isVisible = ws?.mode === 'split' || paneId === 'primary';
+    if (!isVisible) {
+      if (paneEl.innerHTML !== '') {
+        this.nocturneEditor?.destroy(paneId);
+        paneEl.innerHTML = '';
+        paneEl.__paneConfig = null;
+      }
+      return;
+    }
+    const paneConfigStr = JSON.stringify(pane);
+    if (paneEl.__paneConfig === paneConfigStr) {
+      return;
+    }
     this.nocturneEditor?.destroy(paneId);
     paneEl.innerHTML = this.renderPane(paneId);
-    if (this.getPane(paneId)?.type === 'document') this.renderEditor(paneId);
+    paneEl.__paneConfig = paneConfigStr;
+    if (pane?.type === 'document') this.renderEditor(paneId);
     this.updateWorkspaceFocusClasses();
     this.disableBrowserSpellcheck();
     this.clearSuggestionIfStale();
@@ -1760,11 +1790,12 @@ class NocturneWriter {
     if (!el) return;
     const doc = this.getFocusedDoc();
     if (!doc || doc.locked) {
-      if (el.innerHTML !== '' || el.className !== 'save-indicator' || el.title !== '') {
-        el.innerHTML = '';
-        el.className = 'save-indicator';
-        el.title = '';
-      }
+      const newClass = 'save-indicator disabled';
+      const newTitle = 'Недоступно для текущего окна';
+      const newHtml = `<i class="bx bx-check-circle"></i><span>Сохранено</span>`;
+      if (el.className !== newClass) el.className = newClass;
+      if (el.title !== newTitle) el.title = newTitle;
+      if (el.innerHTML !== newHtml) el.innerHTML = newHtml;
       return;
     }
     const status = this.state.saveStatusByDoc[doc.id] || { state: 'saved', updatedAt: doc.updatedAt || Date.now(), message: '' };
@@ -3399,6 +3430,15 @@ class NocturneWriter {
         requestAnimationFrame(() => this.renderNocturneSelectionLayer());
       }
     }, { passive: true, capture: true });
+    document.addEventListener('scroll', (e) => {
+      const scrollArea = e.target.closest?.('.editor-scroll-area');
+      if (scrollArea) {
+        const paneId = scrollArea.dataset.paneId;
+        if (paneId && this.state.pageStates[paneId]) {
+          this.state.pageStates[paneId].scrollTop = scrollArea.scrollTop;
+        }
+      }
+    }, { capture: true, passive: true });
     window.addEventListener('orientationchange', () => {
       this.renderNocturneSelectionLayer();
       this.mobileResizeDebounced();
@@ -9363,7 +9403,8 @@ class NocturneWriter {
       }
     });
     
-    this.state.pageStates[paneId] = { docId: doc?.id || null, revision, pages };
+    const existingState = this.state.pageStates[paneId] || {};
+    this.state.pageStates[paneId] = { ...existingState, docId: doc?.id || null, revision, pages };
     return pages;
   }
 
@@ -9526,6 +9567,19 @@ class NocturneWriter {
       overlay,
       readOnly: doc.locked || this.state.reviewMode === 'editor',
     });
+
+    const stateRecord = this.state.pageStates[paneId];
+    if (stateRecord && stateRecord.docId === doc.id) {
+      if (stateRecord.caret) {
+        this.restoreCaret(stateRecord.caret);
+      }
+      if (stateRecord.scrollTop !== undefined) {
+        const scrollContainer = host.closest('.editor-scroll-area, #workspace-stage, .workspace-pane') || host;
+        if (scrollContainer) {
+          scrollContainer.scrollTop = stateRecord.scrollTop;
+        }
+      }
+    }
 
     this.updateActiveBlock();
     this.disableBrowserSpellcheck();
@@ -12661,6 +12715,26 @@ class NocturneWriter {
     return (events || []).reduce((sum, event) => sum + 1 + this.timelineEventCount(event.subEvents || []), 0);
   }
 
+  notesCount() {
+    return (this.state.floatingNotes?.length || 0) + ((this.state.lore?.notes || []).length);
+  }
+
+  capturePaneEditorState(paneId) {
+    const instance = this.nocturneEditor?.instances.get(paneId);
+    if (!instance || !instance.editor) return;
+    const docId = instance.docId;
+    if (!docId) return;
+
+    const stateRecord = this.state.pageStates[paneId] || {};
+    stateRecord.docId = docId;
+    stateRecord.caret = this.getCaretSnapshot();
+    
+    const scrollContainer = instance.host.closest('.editor-scroll-area, #workspace-stage, .workspace-pane') || instance.host;
+    stateRecord.scrollTop = scrollContainer.scrollTop;
+    
+    this.state.pageStates[paneId] = stateRecord;
+  }
+
   storageApproxBytes() {
     const localBytes = Object.entries(localStorage).reduce((sum, [key, value]) => sum + (key.length + String(value).length) * 2, 0);
     const stateBytes = JSON.stringify({
@@ -12689,7 +12763,7 @@ class NocturneWriter {
       ['Персонажи', this.state.lore.characters.length],
       ['Локации', this.state.lore.locations.length],
       ['События', this.timelineEventCount()],
-      ['Заметки', this.state.floatingNotes.length],
+      ['Заметки', this.notesCount()],
       ['Review marks', this.state.reviewMarks.length],
       ['Локальное хранилище', this.formatBytes(this.storageApproxBytes())],
     ];
@@ -14257,19 +14331,21 @@ class NocturneWriter {
   }
 
   applyKbSearch() {
+    const q = (this.state.kbSearch || '').toLowerCase().trim();
+    const isSearching = q.length > 0;
+
     const grids = Array.from(document.querySelectorAll('[data-dnd-zone]'));
     const firstRects = new Map();
     
-    grids.forEach(grid => {
-      Array.from(grid.querySelectorAll('[data-lore-id]')).forEach(el => {
-        if (!el.classList.contains('hidden')) {
-          firstRects.set(el, el.getBoundingClientRect());
-        }
+    if (isSearching) {
+      grids.forEach(grid => {
+        Array.from(grid.querySelectorAll('[data-lore-id]')).forEach(el => {
+          if (!el.classList.contains('hidden')) {
+            firstRects.set(el, el.getBoundingClientRect());
+          }
+        });
       });
-    });
-
-    const q = (this.state.kbSearch || '').toLowerCase().trim();
-    const isSearching = q.length > 0;
+    }
     
     document.querySelectorAll('.char-card, .loc-card, .timeline-item').forEach(el => {
       const item = this.loreItemForElement(el);
@@ -14286,6 +14362,10 @@ class NocturneWriter {
       zone.__sortable?.option?.('disabled', isSearching);
     });
     document.querySelectorAll('[data-dnd-zone="timeline"], [data-dnd-zone="subtimeline"]').forEach((zone) => this.updateTimelineConnectors(zone));
+
+    if (!isSearching) {
+      return;
+    }
 
     // FLIP transition for layout shifts
     requestAnimationFrame(() => {
@@ -17352,6 +17432,18 @@ class NocturneWriter {
       });
     }
     if (key === 'writingAnimation') safeSetStorageItem(localStorage, 'nocturne-writing-animation-choice', '1');
+    if (key === 'dailyGoal') {
+      this.renderGoal();
+    }
+    if (key === 'fontFamily') {
+      document.fonts.ready.then(() => {
+        ['primary', 'secondary'].forEach((paneId) => {
+          if (this.getPane(paneId)?.type === 'document') {
+            this.nocturneEditor?.scheduleVisualPages(paneId);
+          }
+        });
+      });
+    }
     if (key === 'e2e') {
       if (this.state.settings.e2e) {
         safeRemoveStorageItem(localStorage, 'nocturne-global-notes');

@@ -761,6 +761,13 @@ body[data-active-review-mode="finalization"] .toolbar .save-indicator {
   border-color: rgba(248,113,113,.38);
   background: rgba(248,113,113,.08);
 }
+.save-indicator.disabled {
+  color: var(--text-muted);
+  border-color: var(--border);
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: transparent;
+}
 
 @media (max-width: 900px) {
   .save-indicator {
