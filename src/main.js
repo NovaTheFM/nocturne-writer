@@ -16222,60 +16222,59 @@ class NocturneWriter {
     // Find all grids in the workspace that contain this note card
     const cardEls = document.querySelectorAll(`.note-card[data-lore-id="${id}"]`);
     const gridsToAnimate = [];
+    
     cardEls.forEach(cardEl => {
       const grid = cardEl.closest('.character-grid');
       if (grid && !gridsToAnimate.includes(grid)) {
         gridsToAnimate.push(grid);
       }
-    });
 
-    // Mutate existing DOM inside the existing animateLayoutTransition helper
-    gridsToAnimate.forEach(grid => {
-      this.animateLayoutTransition(grid, () => {
-        // 1. Update matching cards UI within this grid
-        const cardsInGrid = grid.querySelectorAll(`.note-card[data-lore-id="${id}"]`);
-        cardsInGrid.forEach(cardEl => {
-          cardEl.classList.toggle('note-card-completed', note.completed);
-          
-          // Re-evaluate if it is draggable (completed notes are not draggable)
-          cardEl.toggleAttribute('draggable', !note.completed);
+      // Phase 1: Smoothly update the visual outline & done button state in-place without moving
+      cardEl.classList.toggle('note-card-completed', note.completed);
+      
+      // Re-evaluate if it is draggable (completed notes are not draggable)
+      cardEl.toggleAttribute('draggable', !note.completed);
 
-          const doneBtn = cardEl.querySelector('[data-action="toggle-note-completed"], .done-btn');
-          if (doneBtn) {
-            doneBtn.classList.toggle('active', note.completed);
-            doneBtn.title = note.completed ? 'Вернуть в работу' : 'Исполнено';
-            const icon = doneBtn.querySelector('i');
-            if (icon) {
-              icon.className = `bx ${note.completed ? 'bx-check-double' : 'bx-check'}`;
-            }
-          }
-        });
+      const doneBtn = cardEl.querySelector('[data-action="toggle-note-completed"], .done-btn');
+      if (doneBtn) {
+        doneBtn.classList.toggle('active', note.completed);
+        doneBtn.title = note.completed ? 'Вернуть в работу' : 'Исполнено';
+        const icon = doneBtn.querySelector('i');
+        if (icon) {
+          icon.className = `bx ${note.completed ? 'bx-check-double' : 'bx-check'}`;
+        }
+      }
 
-        // 2. Sort DOM nodes inside the grid
-        const children = Array.from(grid.children);
-        children.sort((elA, elB) => {
-          const idA = elA.dataset.loreId;
-          const idB = elB.dataset.loreId;
-          const noteA = (this.state.lore.notes || []).find(n => n.id === idA);
-          const noteB = (this.state.lore.notes || []).find(n => n.id === idB);
-          if (!noteA || !noteB) return 0;
-          if (noteA.completed && !noteB.completed) return 1;
-          if (!noteA.completed && noteB.completed) return -1;
-          return noteA.order - noteB.order;
-        });
-        children.forEach(el => grid.appendChild(el));
-      });
-    });
-
-    // Perform DB write asynchronously
-    await this.saveLore();
-    
-    // Add pulse animation on the toggled card element
-    document.querySelectorAll(`.note-card[data-lore-id="${id}"]`).forEach(cardEl => {
+      // Pulse animation
       cardEl.classList.remove('note-card-completed-anim');
       void cardEl.offsetWidth; // force reflow
       cardEl.classList.add('note-card-completed-anim');
     });
+
+    // Phase 2: After the smooth outline & checkmark transition completes (300ms delay), trigger re-sorting via FLIP
+    setTimeout(async () => {
+      gridsToAnimate.forEach(grid => {
+        // Mutate existing DOM inside the existing animateLayoutTransition helper
+        this.animateLayoutTransition(grid, () => {
+          // Sort DOM nodes inside the grid
+          const children = Array.from(grid.children);
+          children.sort((elA, elB) => {
+            const idA = elA.dataset.loreId;
+            const idB = elB.dataset.loreId;
+            const noteA = (this.state.lore.notes || []).find(n => n.id === idA);
+            const noteB = (this.state.lore.notes || []).find(n => n.id === idB);
+            if (!noteA || !noteB) return 0;
+            if (noteA.completed && !noteB.completed) return 1;
+            if (!noteA.completed && noteB.completed) return -1;
+            return noteA.order - noteB.order;
+          });
+          children.forEach(el => grid.appendChild(el));
+        });
+      });
+
+      // Perform DB write asynchronously
+      await this.saveLore();
+    }, 300);
 
     this.toast(note.completed ? 'Запись исполнена' : 'Запись возвращена в работу');
   }

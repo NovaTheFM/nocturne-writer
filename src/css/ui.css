@@ -10274,21 +10274,21 @@ body.is-electron .side-panel {
   transition: color 250ms ease, text-decoration-color 250ms ease, opacity 250ms ease;
 }
 .char-card.note-card-completed {
-  border-color: #a3e635 !important;
+  border-color: #10b981 !important;
 }
 .char-card.note-card-completed:hover {
-  border-color: #bef264 !important;
-  box-shadow: 0 10px 30px rgba(163, 230, 53, 0.15) !important;
+  border-color: rgba(16, 185, 129, 0.75) !important;
+  box-shadow: 0 10px 30px rgba(16, 185, 129, 0.15) !important;
 }
 .lore-card-actions button[data-action="toggle-note-completed"].active {
-  color: #a3e635 !important;
-  border-color: rgba(163, 230, 53, 0.4) !important;
-  background: rgba(163, 230, 53, 0.12) !important;
+  color: #10b981 !important;
+  border-color: rgba(16, 185, 129, 0.4) !important;
+  background: rgba(16, 185, 129, 0.12) !important;
 }
 .lore-card-actions button[data-action="toggle-note-completed"].active:hover {
-  color: #a3e635 !important;
-  border-color: rgba(163, 230, 53, 0.6) !important;
-  background: rgba(163, 230, 53, 0.2) !important;
+  color: #10b981 !important;
+  border-color: rgba(16, 185, 129, 0.6) !important;
+  background: rgba(16, 185, 129, 0.2) !important;
 }
 
 /* Hover and onClick micro-animations for card action buttons */
