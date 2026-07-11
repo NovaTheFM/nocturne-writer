@@ -3873,12 +3873,15 @@ body.resizing-floating-note {
   background: var(--accent);
   box-shadow: 0 0 0 5px rgba(var(--accent-rgb, 139, 92, 246),.12), 0 4px 12px rgba(0,0,0,.35);
 }
-.range-value {
-  min-width: 58px;
+.range-value,
+.range-value-input {
+  min-width: 72px;
+  width: 72px;
   height: 28px;
-  display: inline-grid;
-  place-items: center;
-  padding: 0 9px;
+  display: inline-block;
+  text-align: center;
+  line-height: 26px;
+  padding: 0 4px;
   border: 1px solid rgba(255,255,255,.075);
   border-radius: 999px;
   background: rgba(255,255,255,.04);
@@ -3886,6 +3889,16 @@ body.resizing-floating-note {
   font-size: 12px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+.range-value-input {
+  outline: none;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+.range-value-input:focus {
+  border-color: rgba(var(--accent-rgb, 139, 92, 246), 0.5);
+  background: rgba(255, 255, 255, 0.08);
 }
 .color-input { width: 52px; height: 36px; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); background: transparent; }
 .accent-picker {

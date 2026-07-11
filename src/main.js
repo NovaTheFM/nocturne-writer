@@ -332,6 +332,7 @@ class NocturneWriter {
     this.settingsTooltipTimer = null;
     this.settingsTooltipHideTimer = null;
     this.repaginateSettingsDebounced = debounce(() => this.renderWorkspace(), 260);
+    this.persistSettingsDebounced = debounce(() => this.persistSettings(), 300);
     this.typoMatchIndex = [];
     this.commandPalette = new CommandPalette(this);
     this.nocturneEditor = new NocturneEditorBridge({
@@ -5231,6 +5232,7 @@ class NocturneWriter {
       return;
     }
     if (event.target.matches('[data-setting]')) this.updateSettingFromControl(event.target);
+    if (event.target.matches('.range-value-input')) this.handleRangeValueInput(event.target);
     if (event.target.matches('[data-dictionary-search]')) {
       this.state.dictionarySearch = event.target.value;
       this.updateDictionarySearchList();
@@ -5280,6 +5282,9 @@ class NocturneWriter {
   handleFocusOut(event) {
     const title = event.target.closest?.('[data-floating-title][contenteditable="true"]');
     if (title) this.commitFloatingNoteRename(title);
+    if (event.target.matches('.range-value-input')) {
+      this.handleRangeValueChange(event.target);
+    }
     window.setTimeout(() => this.handleMobileViewportChange(), 80);
   }
 
@@ -5408,6 +5413,7 @@ class NocturneWriter {
       return;
     }
     if (event.target.matches('[data-setting]')) this.updateSettingFromControl(event.target);
+    if (event.target.matches('.range-value-input')) this.handleRangeValueChange(event.target);
     if (event.target.id === 'import-input') this.importDocuments(event.target.files);
         if (event.target.id === 'custom-font-uploader') {
       const file = event.target.files[0];
@@ -16505,7 +16511,7 @@ class NocturneWriter {
     const s = this.state.settings;
     const row = (label, note, control) => `<div class="setting-row"><div class="setting-info"><span>${label}${note ? `<i class="bx bx-info-circle info-icon" tabindex="0" data-tip="${escapeHtml(note)}"></i>` : ''}</span>${note ? `<small>${note}</small>` : ''}</div><div class="setting-control">${control}</div></div>`;
     const toggle = (key) => `<div class="toggle ${s[key] ? 'on' : ''}" data-setting="${key}" data-kind="toggle"></div>`;
-    const range = (key, min, max, step = 1, suffix = '') => `<div class="range-field" data-range-field><input class="range-control" type="range" min="${min}" max="${max}" step="${step}" value="${s[key]}" data-setting="${key}" data-suffix="${escapeHtml(suffix)}"><span class="range-value">${s[key]}${suffix}</span></div>`;
+    const range = (key, min, max, step = 1, suffix = '') => `<div class="range-field" data-range-field><input class="range-control" type="range" min="${min}" max="${max}" step="${step}" value="${s[key]}" data-setting="${key}" data-suffix="${escapeHtml(suffix)}"><input class="range-value-input" type="text" value="${s[key]}${suffix}" data-setting-input="${key}" data-suffix="${escapeHtml(suffix)}" data-min="${min}" data-max="${max}" data-step="${step}"></div>`;
     const select = (key, options) => this.renderSettingsSelect(key, options);
     const input = (key, type = 'text') => `<input class="form-control" type="${type}" value="${escapeHtml(s[key] || '')}" data-setting="${key}">`;
     const content = {
@@ -16845,7 +16851,7 @@ class NocturneWriter {
         const s = this.state.settings;
         const row = (label, note, control) => `<div class="setting-row"><div class="setting-info"><span>${label}${note ? `<i class="bx bx-info-circle info-icon" tabindex="0" data-tip="${escapeHtml(note)}"></i>` : ''}</span>${note ? `<small>${note}</small>` : ''}</div><div class="setting-control">${control}</div></div>`;
         const toggle = (key) => `<div class="toggle ${s[key] ? 'on' : ''}" data-setting="${key}" data-kind="toggle"></div>`;
-        const range = (key, min, max, step = 1, suffix = '') => `<div class="range-field" data-range-field><input class="range-control" type="range" min="${min}" max="${max}" step="${step}" value="${s[key]}" data-setting="${key}" data-suffix="${escapeHtml(suffix)}"><span class="range-value">${s[key]}${suffix}</span></div>`;
+        const range = (key, min, max, step = 1, suffix = '') => `<div class="range-field" data-range-field><input class="range-control" type="range" min="${min}" max="${max}" step="${step}" value="${s[key]}" data-setting="${key}" data-suffix="${escapeHtml(suffix)}"><input class="range-value-input" type="text" value="${s[key]}${suffix}" data-setting-input="${key}" data-suffix="${escapeHtml(suffix)}" data-min="${min}" data-max="${max}" data-step="${step}"></div>`;
         const select = (key, options) => this.renderSettingsSelect(key, options);
         const input = (key, type = 'text') => `<input class="form-control" type="${type}" value="${escapeHtml(s[key] || '')}" data-setting="${key}">`;
         
@@ -16945,7 +16951,7 @@ class NocturneWriter {
         const s = this.state.settings;
         const row = (label, note, control) => `<div class="setting-row"><div class="setting-info"><span>${label}${note ? `<i class="bx bx-info-circle info-icon" tabindex="0" data-tip="${escapeHtml(note)}"></i>` : ''}</span>${note ? `<small>${note}</small>` : ''}</div><div class="setting-control">${control}</div></div>`;
         const toggle = (key) => `<div class="toggle ${s[key] ? 'on' : ''}" data-setting="${key}" data-kind="toggle"></div>`;
-        const range = (key, min, max, step = 1, suffix = '') => `<div class="range-field" data-range-field><input class="range-control" type="range" min="${min}" max="${max}" step="${step}" value="${s[key]}" data-setting="${key}" data-suffix="${escapeHtml(suffix)}"><span class="range-value">${s[key]}${suffix}</span></div>`;
+        const range = (key, min, max, step = 1, suffix = '') => `<div class="range-field" data-range-field><input class="range-control" type="range" min="${min}" max="${max}" step="${step}" value="${s[key]}" data-setting="${key}" data-suffix="${escapeHtml(suffix)}"><input class="range-value-input" type="text" value="${s[key]}${suffix}" data-setting-input="${key}" data-suffix="${escapeHtml(suffix)}" data-min="${min}" data-max="${max}" data-step="${step}"></div>`;
         const select = (key, options) => this.renderSettingsSelect(key, options);
         const input = (key, type = 'text') => `<input class="form-control" type="${type}" value="${escapeHtml(s[key] || '')}" data-setting="${key}">`;
         
@@ -17484,7 +17490,11 @@ class NocturneWriter {
     if (key === 'aiProvider') this.applyProviderPreset();
     if (key === 'gitVersioning' || key === 'autosaveMinutes') this.startGitAutosave();
     this.applySettings();
-    this.persistSettings();
+    if (control && (control.type === 'range' || control.classList.contains('range-control') || control.classList.contains('range-value-input'))) {
+      this.persistSettingsDebounced();
+    } else {
+      this.persistSettings();
+    }
     if (['fontSize', 'lineHeight', 'letterSpacing', 'paragraphSpacing'].includes(key)) this.repaginateSettingsDebounced();
     if (key === 'readability') {
       this.updateReadabilityHighlights();
@@ -17508,8 +17518,92 @@ class NocturneWriter {
     const value = Number(control.value || 0);
     const pct = max === min ? 0 : ((value - min) / (max - min)) * 100;
     control.style.setProperty('--range-progress', `${Math.max(0, Math.min(100, pct))}%`);
-    const chip = control.closest('[data-range-field]')?.querySelector('.range-value') || control.nextElementSibling;
-    if (chip) chip.textContent = `${control.value}${control.dataset.suffix || ''}`;
+    const chip = control.closest('[data-range-field]')?.querySelector('.range-value, .range-value-input') || control.nextElementSibling;
+    if (chip) {
+      const displayVal = `${control.value}${control.dataset.suffix || ''}`;
+      if (chip.tagName === 'INPUT') {
+        if (document.activeElement !== chip) {
+          chip.value = displayVal;
+        }
+      } else {
+        chip.textContent = displayVal;
+      }
+    }
+  }
+
+  handleRangeValueInput(inputEl) {
+    const key = inputEl.dataset.settingInput;
+    if (!key) return;
+    const min = Number(inputEl.dataset.min || 0);
+    const max = Number(inputEl.dataset.max || 100);
+    const step = Number(inputEl.dataset.step || 1);
+    const suffix = inputEl.dataset.suffix || '';
+    
+    let rawStr = inputEl.value.trim();
+    if (suffix && rawStr.endsWith(suffix)) {
+      rawStr = rawStr.slice(0, -suffix.length).trim();
+    }
+    
+    let val = parseFloat(rawStr);
+    if (isNaN(val)) return; 
+    
+    val = Math.max(min, Math.min(max, val));
+    if (step) {
+      val = Math.round(val / step) * step;
+      const precision = (String(step).split('.')[1] || '').length;
+      val = Number(val.toFixed(precision));
+    }
+    
+    this.state.settings[key] = val;
+    this.state.settings = this.validateSettings(this.state.settings);
+    
+    const parent = inputEl.closest('[data-range-field]');
+    const control = parent?.querySelector('.range-control');
+    if (control) {
+      control.value = val;
+      this.updateRangeControl(control);
+    }
+    
+    this.applySettingSideEffects(key, inputEl);
+  }
+
+  handleRangeValueChange(inputEl) {
+    const key = inputEl.dataset.settingInput;
+    if (!key) return;
+    const min = Number(inputEl.dataset.min || 0);
+    const max = Number(inputEl.dataset.max || 100);
+    const step = Number(inputEl.dataset.step || 1);
+    const suffix = inputEl.dataset.suffix || '';
+    
+    let rawStr = inputEl.value.trim();
+    if (suffix && rawStr.endsWith(suffix)) {
+      rawStr = rawStr.slice(0, -suffix.length).trim();
+    }
+    
+    let val = parseFloat(rawStr);
+    if (isNaN(val)) {
+      val = Number(this.state.settings[key] || 0);
+    }
+    
+    val = Math.max(min, Math.min(max, val));
+    if (step) {
+      val = Math.round(val / step) * step;
+      const precision = (String(step).split('.')[1] || '').length;
+      val = Number(val.toFixed(precision));
+    }
+    
+    this.state.settings[key] = val;
+    this.state.settings = this.validateSettings(this.state.settings);
+    
+    const parent = inputEl.closest('[data-range-field]');
+    const control = parent?.querySelector('.range-control');
+    if (control) {
+      control.value = val;
+      this.updateRangeControl(control);
+    }
+    
+    inputEl.value = `${val}${suffix}`;
+    this.applySettingSideEffects(key, inputEl);
   }
 
   applyProviderPreset() {
