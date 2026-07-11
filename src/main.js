@@ -16212,88 +16212,64 @@ class NocturneWriter {
     note.completed = !note.completed;
     note.updatedAt = Date.now();
 
-    // Find all grids in the workspace that contain this note card (there could be multiple pane tabs showing notes!)
-    const cardEls = document.querySelectorAll(`.note-card[data-lore-id="${id}"]`);
-    
+    // 1. Capture positions of all visible notes elements before re-rendering
+    const grids = Array.from(document.querySelectorAll('.character-grid[data-dnd-zone="notes"]'));
     const firstRects = new Map();
-    const gridsToAnimate = [];
-
-    cardEls.forEach(cardEl => {
-      const grid = cardEl.closest('.character-grid');
-      if (grid) {
-        if (!gridsToAnimate.includes(grid)) {
-          gridsToAnimate.push(grid);
+    grids.forEach(grid => {
+      Array.from(grid.children).forEach(child => {
+        const childId = child.dataset.loreId;
+        if (childId) {
+          firstRects.set(childId, child.getBoundingClientRect());
         }
-        // Capture rects of all visible child cards
-        Array.from(grid.children).forEach(child => {
-          const childId = child.dataset.loreId;
-          if (childId) {
-            firstRects.set(child, child.getBoundingClientRect());
-          }
-        });
-      }
-
-      // Update this card's UI instantly
-      cardEl.classList.toggle('note-card-completed', note.completed);
-      const doneBtn = cardEl.querySelector('[data-action="toggle-note-completed"], .done-btn');
-      if (doneBtn) {
-        doneBtn.classList.toggle('active', note.completed);
-        doneBtn.title = note.completed ? 'Вернуть в работу' : 'Исполнено';
-        const icon = doneBtn.querySelector('i');
-        if (icon) {
-          icon.className = `bx ${note.completed ? 'bx-check-double' : 'bx-check'}`;
-        }
-      }
-      
-      // Pulse animation
-      cardEl.classList.remove('note-card-completed-anim');
-      void cardEl.offsetWidth; // force reflow
-      cardEl.classList.add('note-card-completed-anim');
+      });
     });
 
     // 2. Perform DB write and sort memory array
     await this.saveLore();
 
-    // Sort the DOM elements in each grid and trigger FLIP transition
-    gridsToAnimate.forEach(grid => {
-      const children = Array.from(grid.children);
-      children.sort((elA, elB) => {
-        const idA = elA.dataset.loreId;
-        const idB = elB.dataset.loreId;
-        const noteA = (this.state.lore.notes || []).find(n => n.id === idA);
-        const noteB = (this.state.lore.notes || []).find(n => n.id === idB);
-        if (!noteA || !noteB) return 0;
-        if (noteA.completed && !noteB.completed) return 1;
-        if (!noteA.completed && noteB.completed) return -1;
-        return noteA.order - noteB.order;
-      });
-      
-      // Re-append elements to grid in sorted order (this re-orders them in DOM instantly)
-      children.forEach(el => grid.appendChild(el));
+    // 3. Render KB and workspace to update DOM structures and re-setup Sortable JS cleanly
+    this.renderKb();
+    Object.keys(this.state.workspace?.panes || {}).forEach(paneId => {
+      const pane = this.state.workspace.panes[paneId];
+      if (pane.type === 'kb-tab' && pane.kbTab === 'notes') {
+        this.renderWorkspace();
+      }
     });
 
-    // 3. FLIP Play stage
+    // 4. FLIP Play stage using newly rendered DOM elements
     requestAnimationFrame(() => {
-      firstRects.forEach((firstRect, el) => {
-        if (!el.parentNode) return;
-        const lastRect = el.getBoundingClientRect();
-        const dx = firstRect.left - lastRect.left;
-        const dy = firstRect.top - lastRect.top;
-        if (dx !== 0 || dy !== 0) {
-          el.style.transition = 'none';
-          el.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
-          
-          el.offsetHeight; // force reflow
+      const newGrids = Array.from(document.querySelectorAll('.character-grid[data-dnd-zone="notes"]'));
+      newGrids.forEach(grid => {
+        Array.from(grid.children).forEach(el => {
+          const childId = el.dataset.loreId;
+          const firstRect = firstRects.get(childId);
+          if (firstRect) {
+            const lastRect = el.getBoundingClientRect();
+            const dx = firstRect.left - lastRect.left;
+            const dy = firstRect.top - lastRect.top;
+            if (dx !== 0 || dy !== 0) {
+              el.style.transition = 'none';
+              el.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+              el.offsetHeight; // force reflow
 
-          el.style.transition = 'transform 380ms cubic-bezier(0.16, 1, 0.3, 1)';
-          el.style.transform = 'translate3d(0, 0, 0)';
-          
-          setTimeout(() => {
-            el.style.transition = '';
-            el.style.transform = '';
-          }, 400);
-        }
+              el.style.transition = 'transform 380ms cubic-bezier(0.16, 1, 0.3, 1)';
+              el.style.transform = 'translate3d(0, 0, 0)';
+              
+              setTimeout(() => {
+                el.style.transition = '';
+                el.style.transform = '';
+              }, 400);
+            }
+          }
+        });
       });
+    });
+
+    // Add pulse animation on the toggled card element
+    document.querySelectorAll(`.note-card[data-lore-id="${id}"]`).forEach(cardEl => {
+      cardEl.classList.remove('note-card-completed-anim');
+      void cardEl.offsetWidth; // force reflow
+      cardEl.classList.add('note-card-completed-anim');
     });
 
     this.toast(note.completed ? 'Запись исполнена' : 'Запись возвращена в работу');

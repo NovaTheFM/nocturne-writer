@@ -10274,30 +10274,21 @@ body.is-electron .side-panel {
   transition: color 250ms ease, text-decoration-color 250ms ease, opacity 250ms ease;
 }
 .char-card.note-card-completed {
-  border-color: rgba(132, 204, 22, 0.45) !important;
-  opacity: 1 !important;
-  background: rgba(132, 204, 22, 0.03) !important;
+  border-color: #a3e635 !important;
 }
 .char-card.note-card-completed:hover {
-  border-color: rgba(132, 204, 22, 0.7) !important;
-  box-shadow: 0 10px 30px rgba(132, 204, 22, 0.15) !important;
-  opacity: 1 !important;
-}
-.char-card.note-card-completed .char-info h3 {
-  color: var(--text-main) !important;
-}
-.char-card.note-card-completed .char-img i {
-  color: rgba(132, 204, 22, 0.4) !important;
+  border-color: #bef264 !important;
+  box-shadow: 0 10px 30px rgba(163, 230, 53, 0.15) !important;
 }
 .lore-card-actions button[data-action="toggle-note-completed"].active {
-  color: #84cc16 !important;
-  border-color: rgba(132, 204, 22, 0.5) !important;
-  background: rgba(132, 204, 22, 0.15) !important;
+  color: #a3e635 !important;
+  border-color: rgba(163, 230, 53, 0.4) !important;
+  background: rgba(163, 230, 53, 0.12) !important;
 }
 .lore-card-actions button[data-action="toggle-note-completed"].active:hover {
-  color: #84cc16 !important;
-  border-color: rgba(132, 204, 22, 0.7) !important;
-  background: rgba(132, 204, 22, 0.25) !important;
+  color: #a3e635 !important;
+  border-color: rgba(163, 230, 53, 0.6) !important;
+  background: rgba(163, 230, 53, 0.2) !important;
 }
 
 /* Hover and onClick micro-animations for card action buttons */
