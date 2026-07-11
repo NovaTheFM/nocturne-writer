@@ -1222,7 +1222,7 @@ class NocturneWriter {
     }
     if (previousPaneId !== paneId || previousDocId !== nextDocId) {
       this.clearSuggestionIfStale();
-      this.renderDocs();
+      this.updateActiveDocHighlight();
       this.renderNotes();
       this.renderFloatingNotes();
     }
@@ -1503,7 +1503,8 @@ class NocturneWriter {
         return;
       }
       const paneConfigStr = JSON.stringify(pane);
-      if (paneEl.__paneConfig === paneConfigStr) {
+      const isDocumentOrKb = pane?.type === 'document' || pane?.type === 'kb-tab';
+      if (isDocumentOrKb && paneEl.__paneConfig === paneConfigStr) {
         return;
       }
       this.nocturneEditor?.destroy(paneId);
@@ -1535,7 +1536,8 @@ class NocturneWriter {
       return;
     }
     const paneConfigStr = JSON.stringify(pane);
-    if (paneEl.__paneConfig === paneConfigStr) {
+    const isDocumentOrKb = pane?.type === 'document' || pane?.type === 'kb-tab';
+    if (isDocumentOrKb && paneEl.__paneConfig === paneConfigStr) {
       return;
     }
     this.nocturneEditor?.destroy(paneId);
@@ -1664,12 +1666,12 @@ class NocturneWriter {
     const tab = pane?.kbTab || 'characters';
     if (tab === 'locations') {
       const locs = [...this.state.lore.locations].sort((a, b) => a.order - b.order);
-      return `<section class="kb-pane-section"><h2>Локации</h2><div class="locations-grid">${locs.length ? locs.map((item) => this.locationCard(item, false)).join('') : this.emptyStateMarkup('bx-map-alt', 'Локаций пока нет.', 'Добавьте первое место, чтобы связать сцену с миром.', 'new-lore', 'Добавить место', 'data-lore-type="locations"')}</div></section>`;
+      return `<section class="kb-pane-section"><h2>Локации</h2><div class="locations-grid" data-dnd-zone="locations">${locs.length ? locs.map((item) => this.locationCard(item, false)).join('') : this.emptyStateMarkup('bx-map-alt', 'Локаций пока нет.', 'Добавьте первое место, чтобы связать сцену с миром.', 'new-lore', 'Добавить место', 'data-lore-type="locations"')}</div></section>`;
     }
     if (tab === 'timeline') {
       if (pane?.subtimelineParentId) return this.renderPaneSubtimeline(paneId, pane.subtimelineParentId);
       const time = [...this.state.lore.timeline].sort((a, b) => (a.order - b.order) || parseTimelineRank(a.date) - parseTimelineRank(b.date));
-      return `<section class="kb-pane-section"><h2>Таймлайн</h2><div class="timeline-container">${time.length ? time.map((item, i, arr) => this.timelineCard(item, { isLast: i === arr.length - 1 })).join('') : this.emptyStateMarkup('bx-git-commit', 'Хронология пока пуста.', 'Добавьте первое событие, чтобы собрать порядок истории.', 'new-lore', 'Добавить событие', 'data-lore-type="timeline"')}</div></section>`;
+      return `<section class="kb-pane-section"><h2>Таймлайн</h2><div class="timeline-container" data-dnd-zone="timeline">${time.length ? time.map((item, i, arr) => this.timelineCard(item, { isLast: i === arr.length - 1 })).join('') : this.emptyStateMarkup('bx-git-commit', 'Хронология пока пуста.', 'Добавьте первое событие, чтобы собрать порядок истории.', 'new-lore', 'Добавить событие', 'data-lore-type="timeline"')}</div></section>`;
     }
     if (tab === 'notes') {
       const notes = [...(this.state.lore.notes || [])].sort((a, b) => {
@@ -1677,10 +1679,10 @@ class NocturneWriter {
         if (!a.completed && b.completed) return -1;
         return a.order - b.order;
       });
-      return `<section class="kb-pane-section"><h2>Записи</h2><div class="character-grid">${notes.length ? notes.map((item) => this.noteCard(item, false)).join('') : this.emptyStateMarkup('bx-note', 'Записей пока нет.', 'Добавьте первую свободную запись или заметку к миру.', 'new-lore', 'Создать запись', 'data-lore-type="notes"')}</div></section>`;
+      return `<section class="kb-pane-section"><h2>Записи</h2><div class="character-grid" data-dnd-zone="notes">${notes.length ? notes.map((item) => this.noteCard(item, false)).join('') : this.emptyStateMarkup('bx-note', 'Записей пока нет.', 'Добавьте первую свободную запись или заметку к миру.', 'new-lore', 'Создать запись', 'data-lore-type="notes"')}</div></section>`;
     }
     const chars = [...this.state.lore.characters].sort((a, b) => a.order - b.order);
-    return `<section class="kb-pane-section"><h2>Персонажи</h2><div class="character-grid">${chars.length ? chars.map((item) => this.characterCard(item, false)).join('') : this.emptyStateMarkup('bx-user-pin', 'Персонажей пока нет.', 'Создайте первый профиль для распознавания имён в тексте.', 'new-lore', 'Создать профиль', 'data-lore-type="characters"')}</div></section>`;
+    return `<section class="kb-pane-section"><h2>Персонажи</h2><div class="character-grid" data-dnd-zone="characters">${chars.length ? chars.map((item) => this.characterCard(item, false)).join('') : this.emptyStateMarkup('bx-user-pin', 'Персонажей пока нет.', 'Создайте первый профиль для распознавания имён в тексте.', 'new-lore', 'Создать профиль', 'data-lore-type="characters"')}</div></section>`;
   }
 
   renderPaneSubtimeline(paneId, parentId) {
@@ -7412,6 +7414,15 @@ class NocturneWriter {
       document.querySelectorAll('.side-panel.open').forEach((panel) => panel.classList.remove('open'));
     }
     if (options.persist) await this.persistSettings();
+  }
+
+  updateActiveDocHighlight() {
+    const activeDocId = this.state.activeDocId;
+    const docItems = document.querySelectorAll('#docs-container .doc-item');
+    docItems.forEach((el) => {
+      const isCardActive = el.dataset.docId === activeDocId;
+      el.classList.toggle('active', isCardActive);
+    });
   }
 
   renderDocs() {
@@ -16085,29 +16096,46 @@ class NocturneWriter {
         await this.saveLore();
         this.refreshVisibleEntityLinks();
         
-        const modal = document.getElementById('kb-modal');
-        const isModalOpen = modal && modal.classList.contains('active');
-        const isDetailView = this.state.activeLoreDetail !== null;
-
-        if (!id && isModalOpen && !isDetailView && this.state.activeKbTab === type) {
-          let gridSelector = '';
-          if (type === 'characters') gridSelector = '.character-grid[data-dnd-zone="characters"]';
-          if (type === 'locations') gridSelector = '.locations-grid[data-dnd-zone="locations"]';
-          if (type === 'notes') gridSelector = '.character-grid[data-dnd-zone="notes"]';
-          if (type === 'timeline') gridSelector = '.timeline-container[data-dnd-zone="timeline"]';
-
-          const grid = document.querySelector(gridSelector);
-          if (grid) {
+        if (id) {
+          // Edit: update the card in-place in all grids (both modal and pane)
+          const existingCards = document.querySelectorAll(`[data-lore-id="${id}"]`);
+          existingCards.forEach(card => {
+            const isModalCard = card.closest('#kb-modal') !== null;
+            let cardHtml = '';
+            if (type === 'characters') cardHtml = this.characterCard(next, isModalCard);
+            else if (type === 'locations') cardHtml = this.locationCard(next, isModalCard);
+            else if (type === 'notes') cardHtml = this.noteCard(next, isModalCard);
+            else if (type === 'timeline' || type === 'subtimeline') {
+              const isSub = type === 'subtimeline';
+              const isLast = card.classList.contains('last');
+              const parentId = card.dataset.parentId || '';
+              cardHtml = this.timelineCard(next, { isLast, draggable: true, isSub, parentId });
+            }
+            if (cardHtml) {
+              const tempDiv = document.createElement('div');
+              tempDiv.innerHTML = cardHtml.trim();
+              const newCardEl = tempDiv.firstChild;
+              if (newCardEl) {
+                card.replaceWith(newCardEl);
+              }
+            }
+          });
+          this.renderKb();
+        } else {
+          // New: append the card in-place to all matching grids (modal and pane)
+          const grids = document.querySelectorAll(`[data-dnd-zone="${type}"]`);
+          grids.forEach(grid => {
+            const isModalGrid = grid.closest('#kb-modal') !== null;
             const hasEmptyState = grid.querySelector('.kb-empty-state') || grid.querySelector('.empty-card') || grid.innerHTML.includes('пока нет');
             if (hasEmptyState) {
               grid.innerHTML = '';
             }
 
             let cardHtml = '';
-            if (type === 'characters') cardHtml = this.characterCard(next, true);
-            if (type === 'locations') cardHtml = this.locationCard(next, true);
-            if (type === 'notes') cardHtml = this.noteCard(next, true);
-            if (type === 'timeline') cardHtml = this.timelineCard(next, { isLast: true, draggable: true });
+            if (type === 'characters') cardHtml = this.characterCard(next, isModalGrid);
+            else if (type === 'locations') cardHtml = this.locationCard(next, isModalGrid);
+            else if (type === 'notes') cardHtml = this.noteCard(next, isModalGrid);
+            else if (type === 'timeline') cardHtml = this.timelineCard(next, { isLast: true, draggable: true });
 
             const tempDiv = document.createElement('div');
             tempDiv.innerHTML = cardHtml.trim();
@@ -16127,27 +16155,26 @@ class NocturneWriter {
                 }
               });
               
-              // Re-initialize SortableJS to register the new item
-              this.setupKbDragDrop();
-              
               setTimeout(() => {
                 cardElement.classList.remove('new-card-entrance');
-                if (this.state.newlyCreatedId === next.id) {
-                  this.state.newlyCreatedId = null;
-                }
               }, 1000);
             }
-          } else {
-            this.renderKb();
-          }
-        } else {
+          });
+
+          this.setupKbDragDrop();
           this.renderKb();
+
+          setTimeout(() => {
+            if (this.state.newlyCreatedId === next.id) {
+              this.state.newlyCreatedId = null;
+            }
+          }, 1000);
         }
 
-        // Re-render active split-screen or main panes showing KB or detail cards
+        // Re-render active split-screen or main panes showing detail cards
         ['primary', 'secondary'].forEach((paneId) => {
           const pane = this.getPane(paneId);
-          if (pane && (pane.type === 'kb-tab' || (pane.type && pane.type.endsWith('-detail')))) {
+          if (pane && pane.type && pane.type.endsWith('-detail')) {
             this.renderWorkspacePane(paneId);
           }
         });
