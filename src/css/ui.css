@@ -5367,6 +5367,62 @@ body.mobile-shell-active .sortable-fallback-drag.timeline-item {
   --workspace-grid-opacity: .42;
   --settings-header-bg: rgba(22, 12, 13, .9);
 }
+.theme-adaptive {
+  --baseline-grid-color: rgba(var(--accent-rgb), 0.06);
+  --bg-deep: color-mix(in srgb, var(--accent) 4%, #070709);
+  --bg-panel: color-mix(in srgb, var(--accent) 8%, #0e0e12);
+  --bg-glass: color-mix(in srgb, var(--accent) 8%, rgba(14, 14, 18, 0.74));
+  --bg-page: color-mix(in srgb, var(--accent) 10%, #121216);
+  --text-main: color-mix(in srgb, var(--accent) 15%, #f2f2f5);
+  --text-muted: color-mix(in srgb, var(--accent) 40%, #7d7d91);
+  --border: color-mix(in srgb, var(--accent) 20%, #1e1e24);
+  --border-light: color-mix(in srgb, var(--accent) 10%, rgba(255, 255, 255, 0.03));
+  --popover-bg-solid: color-mix(in srgb, var(--accent) 8%, #0d0d12);
+  --popover-bg-material: color-mix(in srgb, var(--accent) 8%, rgba(13, 13, 18, 0.74));
+  --popover-border: color-mix(in srgb, var(--accent) 25%, rgba(255, 255, 255, 0.08));
+  --workspace-bg:
+    radial-gradient(circle at 16% 18%, rgba(var(--accent-rgb), .18), transparent 34%),
+    radial-gradient(circle at 82% 10%, rgba(var(--accent-rgb), .12), transparent 30%),
+    radial-gradient(circle at 54% 86%, rgba(var(--accent-rgb), .06), transparent 38%),
+    linear-gradient(145deg, color-mix(in srgb, var(--accent) 3%, #050508) 0%, color-mix(in srgb, var(--accent) 6%, #0b0b0f) 44%, color-mix(in srgb, var(--accent) 3%, #060609) 100%);
+  --workspace-grid: rgba(var(--accent-rgb), .028);
+  --workspace-grid-2: rgba(var(--accent-hover-rgb), .022);
+  --workspace-grid-opacity: .42;
+  --settings-header-bg: color-mix(in srgb, var(--accent) 4%, rgba(7, 7, 9, 0.95));
+}
+.theme-blazing {
+  --baseline-grid-color: rgba(255, 56, 56, 0.06);
+  --accent: #ff3838;
+  --accent-hover: #ff5c5c;
+  --accent-hover-rgb: 255, 92, 92;
+  --accent-glow: rgba(255, 56, 56, 0.25);
+  --accent-rgb: 255, 56, 56;
+  --bg-deep: #000000;
+  --bg-panel: #0a0606;
+  --bg-glass: rgba(10, 6, 6, 0.78);
+  --bg-page: #0d0808;
+  --text-main: #fdf5f5;
+  --text-muted: #886869;
+  --border: rgba(255, 56, 56, 0.2);
+  --border-light: rgba(255, 56, 56, 0.08);
+  --popover-bg-solid: #0c0707;
+  --popover-bg-material: rgba(12, 7, 7, 0.72);
+  --popover-border: rgba(255, 56, 56, 0.28);
+  --workspace-bg:
+    radial-gradient(circle at 16% 18%, rgba(255, 56, 56, .22), transparent 34%),
+    radial-gradient(circle at 82% 10%, rgba(255, 56, 56, .12), transparent 30%),
+    radial-gradient(circle at 54% 86%, rgba(255, 56, 56, .08), transparent 38%),
+    linear-gradient(145deg, #000000 0%, #080303 48%, #030000 100%);
+  --workspace-grid: rgba(255, 56, 56, .035);
+  --workspace-grid-2: rgba(255, 56, 56, .025);
+  --workspace-grid-opacity: .45;
+  --settings-header-bg: rgba(0, 0, 0, 0.95);
+  --pane-header-bg: rgba(0, 0, 0, 0.65);
+  --card-bg: rgba(255, 255, 255, 0.015);
+  --field-bg: rgba(255, 255, 255, 0.02);
+  --selection-bg: rgba(255, 56, 56, 0.35);
+  --selection-text: #fff;
+}
 .theme-paper {
   --baseline-grid-color: rgba(91, 72, 48, 0.07);
   --bg-deep: #f4ecdf;

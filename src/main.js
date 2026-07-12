@@ -544,7 +544,7 @@ class NocturneWriter {
     }
 
     const enums = {
-      theme: ['nocturne', 'midnight', 'paper', 'matrix', 'lavender', 'crimson'],
+      theme: ['nocturne', 'midnight', 'paper', 'matrix', 'lavender', 'crimson', 'adaptive', 'blazing'],
       caretStyle: ['line', 'block', 'underline'],
       fontFamily: allowedFonts,
       dialogueLens: ['off', 'dialogues', 'descriptions'],
@@ -17450,7 +17450,7 @@ class NocturneWriter {
     const content = {
       visual: `
         <div class="tab-content active">
-          ${row('Тема оформления', 'Меняет базовую палитру интерфейса без изменения структуры документов.', select('theme', [['nocturne', 'Nocturne Dark'], ['midnight', 'Deep Midnight'], ['paper', 'Paper Light'], ['matrix', 'Cyberpunk Matrix'], ['lavender', 'Lavender Bloom'], ['crimson', 'Crimson Flame']]))}
+          ${row('Тема оформления', 'Меняет базовую палитру интерфейса без изменения структуры документов.', select('theme', [['nocturne', 'Nocturne Dark'], ['adaptive', 'Nocturne Adaptive'], ['blazing', 'Blazing Black'], ['midnight', 'Deep Midnight'], ['paper', 'Paper Light'], ['matrix', 'Cyberpunk Matrix'], ['lavender', 'Lavender Bloom'], ['crimson', 'Crimson Flame']]))}
           ${row('Кастомный акцентный цвет', 'Обновляет кнопки, свечения и подсветку сущностей.', this.renderAccentColorControl())}
           ${row('Прозрачность окна / Blur', 'В веб-версии включает CSS-материал; desktop bridge сможет подключить Mica/Vibrancy.', toggle('windowMaterial'))}
           ${row('Свечение курсора', 'Добавляет мягкую подсветку вокруг позиции ввода, чтобы легче держать фокус на строке.', toggle('cursorGlow'))}
@@ -17664,7 +17664,7 @@ class NocturneWriter {
     ];
     const customFonts = (this.state.settings.customFonts || []).map((f) => [f.name, f.name]);
     return [
-      { tab: 'visual', label: 'Тема оформления', note: 'Меняет базовую палитру интерфейса без изменения структуры документов.', key: 'theme', type: 'select', options: [['nocturne', 'Nocturne Dark'], ['midnight', 'Deep Midnight'], ['paper', 'Paper Light'], ['matrix', 'Cyberpunk Matrix'], ['lavender', 'Lavender Bloom'], ['crimson', 'Crimson Flame']] },
+      { tab: 'visual', label: 'Тема оформления', note: 'Меняет базовую палитру интерфейса без изменения структуры документов.', key: 'theme', type: 'select', options: [['nocturne', 'Nocturne Dark'], ['adaptive', 'Nocturne Adaptive'], ['blazing', 'Blazing Black'], ['midnight', 'Deep Midnight'], ['paper', 'Paper Light'], ['matrix', 'Cyberpunk Matrix'], ['lavender', 'Lavender Bloom'], ['crimson', 'Crimson Flame']] },
       { tab: 'visual', label: 'Кастомный акцентный цвет', note: 'Обновляет кнопки, свечения и подсветку сущностей.', key: 'accent', type: 'accent' },
       { tab: 'visual', label: 'Прозрачность окна / Blur', note: 'В веб-версии включает CSS-материал; desktop bridge сможет подключить Mica/Vibrancy.', key: 'windowMaterial', type: 'toggle' },
       { tab: 'visual', label: 'Свечение курсора', note: 'Добавляет мягкую подсветку вокруг позиции ввода, чтобы легче держать фокус на строке.', key: 'cursorGlow', type: 'toggle' },
@@ -18654,11 +18654,15 @@ class NocturneWriter {
     shell.classList.toggle('theme-matrix', s.theme === 'matrix');
     shell.classList.toggle('theme-lavender', s.theme === 'lavender');
     shell.classList.toggle('theme-crimson', s.theme === 'crimson');
+    shell.classList.toggle('theme-adaptive', s.theme === 'adaptive');
+    shell.classList.toggle('theme-blazing', s.theme === 'blazing');
     document.body.classList.toggle('theme-midnight', s.theme === 'midnight');
     document.body.classList.toggle('theme-paper', s.theme === 'paper');
     document.body.classList.toggle('theme-matrix', s.theme === 'matrix');
     document.body.classList.toggle('theme-lavender', s.theme === 'lavender');
     document.body.classList.toggle('theme-crimson', s.theme === 'crimson');
+    document.body.classList.toggle('theme-adaptive', s.theme === 'adaptive');
+    document.body.classList.toggle('theme-blazing', s.theme === 'blazing');
     document.body.classList.toggle('reduce-mobile-animations', !!s.reduceMobileAnimations);
     shell.classList.toggle('compact', s.compactPanels);
     document.body.classList.toggle('compact', s.compactPanels);
