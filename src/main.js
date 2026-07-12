@@ -10529,6 +10529,30 @@ class NocturneWriter {
     }
   }
 
+  confirmDeleteBookmark(bookmarkId) {
+    this.closeAllFloatingMenus();
+    const overlay = document.getElementById('form-overlay');
+    if (!overlay) return;
+    
+    overlay.innerHTML = `
+      <div class="form-modal confirm-modal">
+        <div class="confirm-icon"><i class="bx bx-trash"></i></div>
+        <h2>Удалить закладку?</h2>
+        <p>Вы действительно хотите удалить эту закладку?</p>
+        <div class="form-actions">
+          <button class="pill-btn" data-close-form>Отмена</button>
+          <button class="pill-btn danger-btn" data-confirm-delete>Удалить</button>
+        </div>
+      </div>
+    `;
+    overlay.classList.add('active');
+    overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
+    overlay.querySelector('[data-confirm-delete]').onclick = async () => {
+      overlay.classList.remove('active');
+      await this.deleteBookmark(bookmarkId);
+    };
+  }
+
   async deleteBookmark(bookmarkId) {
     let found = false;
     
@@ -10866,16 +10890,9 @@ class NocturneWriter {
       deleteBtn.className = 'pane-bookmarks-item-delete btn-icon';
       deleteBtn.title = 'Удалить закладку';
       deleteBtn.innerHTML = '<i class="bx bx-trash"></i>';
-      deleteBtn.addEventListener('click', async (e) => {
+      deleteBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (isDoc && doc) {
-          doc.bookmarks = doc.bookmarks.filter(x => x.id !== b.id);
-          await this.db.put('docs', doc);
-        } else if (note) {
-          note.bookmarks = note.bookmarks.filter(x => x.id !== b.id);
-          await this.saveLore();
-        }
-        this.renderBookmarksMenu(paneId);
+        this.confirmDeleteBookmark(b.id);
       });
       
       item.appendChild(textSpan);
@@ -10963,8 +10980,8 @@ class NocturneWriter {
                       <svg class="nocturne-bookmark-svg" viewBox="0 0 20 24" width="20" height="24">
                         <path d="M10,2 L2,10 V20 A2,2 0 0,0 4,22 H16 A2,2 0 0,0 18,20 V10 L10,2 Z" />
                       </svg>
-                      <button class="nocturne-bookmark-delete-btn" type="button" title="Удалить закладку" onclick="event.stopPropagation(); event.preventDefault(); if (confirm('Удалить эту закладку?')) window.nocturneApp?.deleteBookmark('${b.id}');">
-                        <i class="bx bx-file"></i>
+                      <button class="nocturne-bookmark-delete-btn" type="button" title="Удалить закладку" onclick="event.stopPropagation(); event.preventDefault(); window.nocturneApp?.confirmDeleteBookmark('${b.id}');">
+                        <i class="bx bx-bookmark"></i>
                       </button>
                     </span>
                   </span>

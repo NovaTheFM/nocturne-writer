@@ -246,7 +246,7 @@ const createHouseWidget = (bookmarkId, isActive) => {
         <path d="M10,2 L2,10 V20 A2,2 0 0,0 4,22 H16 A2,2 0 0,0 18,20 V10 L10,2 Z" />
       </svg>
       <button class="nocturne-bookmark-delete-btn" type="button" title="Удалить закладку">
-        <i class="bx bx-file"></i>
+        <i class="bx bx-bookmark"></i>
       </button>
     </span>
   `;
@@ -259,9 +259,7 @@ const createHouseWidget = (bookmarkId, isActive) => {
   deleteBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     e.preventDefault();
-    if (confirm('Удалить эту закладку?')) {
-      window.nocturneApp?.deleteBookmark(bookmarkId);
-    }
+    window.nocturneApp?.confirmDeleteBookmark(bookmarkId);
   });
   
   return element;
