@@ -1285,7 +1285,7 @@ class NocturneWriter {
         return;
       }
     }
-    Object.assign(pane, { type: null, docId: null, entityType: null, entityId: null, kbTab: null, subtimelineParentId: null }, descriptor, { id: paneId });
+    Object.assign(pane, { type: null, docId: null, entityType: null, entityId: null, kbTab: null, subtimelineParentId: null, readMode: false }, descriptor, { id: paneId });
     this.state.workspace.focusedPaneId = paneId;
         this.persistWorkspaceState();
     this.renderWorkspace();
@@ -1706,7 +1706,7 @@ class NocturneWriter {
       item = this.state.lore[type]?.find((entry) => entry.id === pane.entityId);
     }
     if (!item) return '<div class="workspace-empty"><p>Карточка не найдена.</p></div>';
-    return this.renderLoreDetail(type, item);
+    return this.renderLoreDetail(type, item, pane.readMode);
   }
 
   renderKbPane(paneId, pane) {
@@ -3830,10 +3830,27 @@ class NocturneWriter {
         }
       }
       this.state.activeLoreDetail = null;
+      this.state.kbReadMode = false;
       this.kbTransitioning = true;
       if (this.isMobileLayout()) {
         this.renderMobileShell();
       } else {
+        this.renderKb();
+      }
+      return;
+    }
+    if (action === 'toggle-note-read-mode') {
+      const paneEl = event.target.closest('.workspace-pane');
+      const paneId = paneEl?.dataset.paneId || null;
+      if (paneId) {
+        const pane = this.getPane(paneId);
+        if (pane) {
+          pane.readMode = !pane.readMode;
+          this.persistWorkspaceState();
+          this.renderWorkspacePane(paneId);
+        }
+      } else {
+        this.state.kbReadMode = !this.state.kbReadMode;
         this.renderKb();
       }
       return;
@@ -7156,6 +7173,7 @@ class NocturneWriter {
       'close-kb': () => {
         this.state.activeSubtimelineId = null;
         this.state.activeLoreDetail = null;
+        this.state.kbReadMode = false;
         document.getElementById('kb-modal').classList.remove('active');
       },
       'new-kb-project': () => {
@@ -14646,7 +14664,7 @@ class NocturneWriter {
       });
       const main = document.querySelector('#kb-modal .kb-main');
       if (main) {
-        main.innerHTML = detail ? this.renderLoreDetail(detail.type, detail.item) : `
+        main.innerHTML = detail ? this.renderLoreDetail(detail.type, detail.item, this.state.kbReadMode) : `
           <div class="kb-search-wrap">
             <i class="bx bx-search"></i>
             <input class="form-control kb-search-input" id="kb-search" placeholder="Поиск в базе знаний..." value="${escapeHtml(this.state.kbSearch || '')}">
@@ -14761,7 +14779,7 @@ class NocturneWriter {
         </div>
       </aside>
       <main class="kb-main">
-        ${detail ? this.renderLoreDetail(detail.type, detail.item) : `
+        ${detail ? this.renderLoreDetail(detail.type, detail.item, this.state.kbReadMode) : `
         <div class="kb-search-wrap">
           <i class="bx bx-search"></i>
           <input class="form-control kb-search-input" id="kb-search" placeholder="Поиск в базе знаний..." value="${escapeHtml(this.state.kbSearch || '')}">
@@ -14902,6 +14920,7 @@ class NocturneWriter {
     }
 
     this.state.activeLoreDetail = { type: normalizedType, id };
+    this.state.kbReadMode = false;
     this.hideEntityHoverCards();
     if (this.isMobileLayout()) {
       this.switchMobileTab('lore', { keepOverlay: false });
@@ -14916,7 +14935,7 @@ class NocturneWriter {
     }
   }
 
-  renderLoreDetail(type, item) {
+  renderLoreDetail(type, item, readMode = false) {
     const kind = this.singularLoreType(type);
     if (kind === 'timeline' || kind === 'subtimeline') {
       const isSub = kind === 'subtimeline';
@@ -15082,6 +15101,19 @@ class NocturneWriter {
     }
 
     if (kind === 'note') {
+      if (readMode) {
+        return `
+          <article class="lore-detail note-detail note-read-mode" data-lore-id="${item.id}" data-lore-type="${type}">
+            <div class="lore-detail-topbar">
+              <button class="pill-btn" data-action="toggle-note-read-mode"><i class="bx bx-arrow-back"></i> Назад к досье</button>
+              <button class="btn-icon" data-action="close-kb"><i class="bx bx-x"></i></button>
+            </div>
+            <div class="note-read-container">
+              <div class="note-read-text">${escapeHtml(item.body || 'Текст записи пуст.').replace(/\n/g, '<br>')}</div>
+            </div>
+          </article>
+        `;
+      }
       return `
         <article class="lore-detail note-detail" data-lore-id="${item.id}" data-lore-type="${type}">
           <div class="lore-detail-topbar">
@@ -15095,6 +15127,7 @@ class NocturneWriter {
               <h1>${escapeHtml(title)}</h1>
               <div class="lore-detail-actions">
                 <button class="pill-btn ai-btn" data-action="edit-lore" data-lore-type="${type}" data-lore-id="${item.id}"><i class="bx bx-edit"></i> Редактировать</button>
+                <button class="pill-btn" data-action="toggle-note-read-mode"><i class="bx bx-book-open"></i> Чтение</button>
                 <button class="pill-btn" data-action="dump-single-entity" data-lore-type="${type}" data-lore-id="${item.id}"><i class="bx bx-download"></i> Дамп карточки</button>
                 <button class="pill-btn" data-action="open-lore-side" data-entity-kind="${kind}" data-entity-id="${item.id}"><i class="bx bx-dock-right"></i> Открыть справа</button>
               </div>
