@@ -11042,8 +11042,8 @@ class NocturneWriter {
                 const houseHtml = `
                   <span class="${houseCls}" data-bookmark-id="${b.id}">
                     <span class="nocturne-bookmark-house-inner">
-                      <svg class="nocturne-bookmark-svg" viewBox="0 0 20 24" width="20" height="24">
-                        <path d="M10,2 L2,10 V20 A2,2 0 0,0 4,22 H16 A2,2 0 0,0 18,20 V10 L10,2 Z" />
+                      <svg class="nocturne-bookmark-svg" viewBox="0 0 24 28" width="24" height="28">
+                        <path d="M12,2 L2,12 V24 A2,2 0 0,0 4,26 H20 A2,2 0 0,0 22,24 V12 L12,2 Z" />
                       </svg>
                       <button class="nocturne-bookmark-delete-btn" type="button" title="Удалить закладку" onclick="event.stopPropagation(); event.preventDefault(); window.nocturneApp?.confirmDeleteBookmark('${b.id}');">
                         <i class="bx bx-bookmark"></i>

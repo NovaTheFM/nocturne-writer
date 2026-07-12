@@ -10515,11 +10515,12 @@ body[data-active-review-mode="finalization"] .pane-bookmarks-widget {
 .nocturne-bookmark-range::before {
   content: '';
   position: absolute;
-  bottom: -5px; /* space below text */
+  bottom: -3px; /* raised from -5px */
   left: 0;
   width: 2px;
-  height: 6px;
+  height: 5px;
   background-color: var(--accent, #8b5cf6);
+  border-radius: 1px; /* rounded corners */
   opacity: 0.75;
   transition: opacity 0.2s ease, transform 0.2s ease;
   transform-origin: top center;
@@ -10527,7 +10528,9 @@ body[data-active-review-mode="finalization"] .pane-bookmarks-widget {
 
 /* Hide the tick mark when hovered/active as it morphs into the house */
 .nocturne-bookmark-range:hover::before,
-.nocturne-bookmark-range.active::before {
+.nocturne-bookmark-range.active::before,
+.nocturne-bookmark-house:hover + .nocturne-bookmark-range::before,
+.nocturne-bookmark-house.active + .nocturne-bookmark-range::before {
   opacity: 0;
   transform: scaleY(0);
 }
@@ -10544,10 +10547,10 @@ body[data-active-review-mode="finalization"] .pane-bookmarks-widget {
 
 .nocturne-bookmark-house-inner {
   position: absolute;
-  top: 8px; /* space below text */
-  left: -9px; /* centered relative to the 2px tick mark */
-  width: 20px;
-  height: 24px;
+  top: 6px; /* space below text, slightly raised */
+  left: -11px; /* centered relative to the 2px tick mark (width 24px) */
+  width: 24px;
+  height: 28px;
   opacity: 0;
   transform: translate(0, -6px) scaleY(0.1) scaleX(0.5);
   transform-origin: top center;
@@ -10571,8 +10574,8 @@ body[data-active-review-mode="finalization"] .pane-bookmarks-widget {
   position: absolute;
   top: 0;
   left: 0;
-  width: 20px;
-  height: 24px;
+  width: 24px;
+  height: 28px;
   fill: var(--bg-card, #1e1e2e); /* theme background inside */
   stroke: var(--accent, #8b5cf6); /* accent color outline */
   stroke-width: 1.5;
@@ -10581,10 +10584,10 @@ body[data-active-review-mode="finalization"] .pane-bookmarks-widget {
 /* Note icon / delete button inside the house */
 .nocturne-bookmark-delete-btn {
   position: absolute;
-  top: 10px; /* position it inside the square part */
+  top: 12px; /* centered inside the square base */
   left: 2px;
-  width: 16px;
-  height: 12px;
+  width: 20px;
+  height: 14px;
   border: none !important;
   background: transparent !important;
   color: var(--text-muted, #a1a1aa) !important;
