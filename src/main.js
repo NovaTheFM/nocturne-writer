@@ -460,7 +460,7 @@ class NocturneWriter {
     this.startGitAutosave();
 
     // Check if new version first run (specifically for Electron desktop users)
-    const currentVersion = '1.0.6';
+    const currentVersion = '1.1.0';
     if (this.runtime.isElectron && this.state.settings.lastSeenVersion !== currentVersion) {
       setTimeout(() => {
         this.openWhatsNewModal();
@@ -19924,7 +19924,7 @@ ${raw}`;
       format: 'nocturnedump',
       version: 1,
       appName: 'Nocturne Writer',
-      appVersion: '1.0.6',
+      appVersion: '1.1.0',
       schemaVersion: 3,
       exportedAt: new Date().toISOString(),
       encrypted: !!this.state.settings.e2e,
