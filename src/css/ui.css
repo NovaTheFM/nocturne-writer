@@ -10579,14 +10579,30 @@ body[data-active-review-mode="finalization"] .pane-bookmarks-widget {
   z-index: 50;
 }
 
-/* Morph/Flow transition into the house shape when active or hovered */
+/* Morph/Flow transition into the house shape when hovered */
 .nocturne-bookmark-house:hover .nocturne-bookmark-house-inner,
-.nocturne-bookmark-house.active .nocturne-bookmark-house-inner,
-.nocturne-bookmark-house:has(+ .nocturne-bookmark-range:hover) .nocturne-bookmark-house-inner,
-.nocturne-bookmark-house:has(+ .nocturne-bookmark-range.active) .nocturne-bookmark-house-inner {
+.nocturne-bookmark-house:has(+ .nocturne-bookmark-range:hover) .nocturne-bookmark-house-inner {
   opacity: 1;
   transform: translate(0, 0) scale(1);
   pointer-events: auto;
+}
+
+/* Active states run entrance keyframe animation when DOM elements are recreated/mounted */
+.nocturne-bookmark-house.active .nocturne-bookmark-house-inner,
+.nocturne-bookmark-house:has(+ .nocturne-bookmark-range.active) .nocturne-bookmark-house-inner {
+  animation: bookmarkHouseFadeIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  pointer-events: auto;
+}
+
+@keyframes bookmarkHouseFadeIn {
+  0% {
+    opacity: 0;
+    transform: translate(0, -6px) scaleY(0.1) scaleX(0.5);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
 }
 
 /* The house SVG styling */
