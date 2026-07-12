@@ -2144,7 +2144,7 @@ body.ctrl-pressed .entity-family-link:hover {
 }
 .doc-search-panel-row {
   display: grid;
-  grid-template-columns: 22px minmax(0, 1fr) auto repeat(3, 34px);
+  grid-template-columns: 22px minmax(0, 1fr) 72px repeat(3, 34px);
   align-items: center;
   gap: 8px;
 }
@@ -2165,6 +2165,8 @@ body.ctrl-pressed .entity-family-link:hover {
   color: var(--text-muted);
   font-size: 12px;
   white-space: nowrap;
+  min-width: 72px;
+  text-align: center;
 }
 .search-options-row {
   display: flex;
@@ -5423,21 +5425,21 @@ body.mobile-shell-active .sortable-fallback-drag.timeline-item {
 .theme-blazing {
   --baseline-grid-color: rgba(var(--accent-rgb), 0.06);
   --bg-deep: #000000;
-  --bg-panel: #0a0606;
-  --bg-glass: rgba(10, 6, 6, 0.78);
-  --bg-page: #0d0808;
-  --text-main: #fdf5f5;
-  --text-muted: #886869;
+  --bg-panel: color-mix(in srgb, var(--accent) 3.5%, #000000);
+  --bg-glass: color-mix(in srgb, var(--accent) 3.5%, rgba(0, 0, 0, 0.78));
+  --bg-page: color-mix(in srgb, var(--accent) 4.5%, #000000);
+  --text-main: color-mix(in srgb, var(--accent) 3%, #ffffff);
+  --text-muted: color-mix(in srgb, var(--accent) 28%, #777777);
   --border: rgba(var(--accent-rgb), 0.2);
   --border-light: rgba(var(--accent-rgb), 0.08);
-  --popover-bg-solid: #0c0707;
-  --popover-bg-material: rgba(12, 7, 7, 0.72);
+  --popover-bg-solid: color-mix(in srgb, var(--accent) 4.5%, #000000);
+  --popover-bg-material: color-mix(in srgb, var(--accent) 4.5%, rgba(0, 0, 0, 0.72));
   --popover-border: rgba(var(--accent-rgb), 0.28);
   --workspace-bg:
     radial-gradient(circle at 16% 18%, rgba(var(--accent-rgb), .22), transparent 34%),
     radial-gradient(circle at 82% 10%, rgba(var(--accent-rgb), .12), transparent 30%),
     radial-gradient(circle at 54% 86%, rgba(var(--accent-rgb), .08), transparent 38%),
-    linear-gradient(145deg, #000000 0%, #080303 48%, #030000 100%);
+    linear-gradient(145deg, #000000 0%, color-mix(in srgb, var(--accent) 3%, #000000) 48%, color-mix(in srgb, var(--accent) 1%, #000000) 100%);
   --workspace-grid: rgba(var(--accent-rgb), .035);
   --workspace-grid-2: rgba(var(--accent-rgb), .025);
   --workspace-grid-opacity: .45;
@@ -5445,7 +5447,7 @@ body.mobile-shell-active .sortable-fallback-drag.timeline-item {
   --pane-header-bg: rgba(0, 0, 0, 0.65);
   --card-bg: rgba(255, 255, 255, 0.015);
   --field-bg: rgba(255, 255, 255, 0.02);
-  --selection-bg: rgba(255, 56, 56, 0.35);
+  --selection-bg: rgba(var(--accent-rgb), 0.35);
   --selection-text: #fff;
 }
 .theme-paper {
