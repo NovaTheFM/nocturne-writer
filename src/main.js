@@ -1038,16 +1038,16 @@ class NocturneWriter {
 
   updateTitlebarLayout() {
     if (!window.nocturneElectron) return;
-    const titlebarBrand = document.querySelector('.titlebar-brand');
+    const titlebarLeft = document.querySelector('.titlebar-left-side');
     const sidebar = document.getElementById('sidebar');
-    if (!titlebarBrand || !sidebar) return;
+    if (!titlebarLeft || !sidebar) return;
 
     const baseWidth = sidebar.getBoundingClientRect().width;
     if (baseWidth === 0) {
-      titlebarBrand.style.display = 'none';
+      titlebarLeft.style.display = 'none';
       return;
     }
-    titlebarBrand.style.display = '';
+    titlebarLeft.style.display = '';
   }
 
   updateElectronTitlebarTitle() {
@@ -4127,6 +4127,9 @@ class NocturneWriter {
     if (kbOpen) this.openKb(kbOpen);
     const kbTab = event.target.closest('[data-kb-tab]')?.dataset.kbTab;
     if (kbTab) {
+      if (this.state.activeKbTab === kbTab && !this.state.activeLoreDetail && (kbTab !== 'timeline' || !this.state.activeSubtimelineId)) {
+        return;
+      }
       this.state.activeKbTab = kbTab;
       this.state.activeLoreDetail = null;
       if (kbTab !== 'timeline') this.state.activeSubtimelineId = null;
@@ -7546,7 +7549,10 @@ class NocturneWriter {
   renderDocs() {
     this.cleanupSortableDragState();
     const container = document.getElementById('docs-container');
+    if (!container) return;
     this.closeDocContextMenu();
+    const scrollEl = container.querySelector('.docs-list-scroll');
+    const savedScrollTop = scrollEl ? scrollEl.scrollTop : 0;
     const q = this.state.docSearch.toLowerCase().trim();
     const isFocused = document.activeElement?.id === 'doc-search';
     
@@ -7618,6 +7624,11 @@ class NocturneWriter {
     }).join('')}
       </div>`;
     
+    const newScrollEl = container.querySelector('.docs-list-scroll');
+    if (newScrollEl) {
+      newScrollEl.scrollTop = savedScrollTop;
+    }
+
     this.setupDocSortables();
     const searchInput = document.getElementById('doc-search');
     if (searchInput) {
