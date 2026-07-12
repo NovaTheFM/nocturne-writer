@@ -4179,7 +4179,7 @@ class NocturneWriter {
     const ai = event.target.closest('[data-ai]')?.dataset.ai;
     if (ai) this.runAi(ai);
     const loreCard = event.target.closest('[data-lore-id]');
-    if (loreCard && Date.now() >= this.kbSuppressClickUntil && !event.target.closest('.lore-card-actions, .association-badge, button, a')) {
+    if (loreCard && !loreCard.classList.contains('lore-detail') && Date.now() >= this.kbSuppressClickUntil && !event.target.closest('.lore-card-actions, .association-badge, button, a')) {
       if (['characters', 'locations', 'notes', 'timeline', 'subtimeline'].includes(loreCard.dataset.loreType)) {
         const paneEl = loreCard.closest('.workspace-pane');
         const paneId = paneEl?.dataset.paneId || null;
@@ -15062,10 +15062,47 @@ class NocturneWriter {
           if (role === 'first_appearance') roleLabel = ' <span class="role-badge role-first-appearance"><i class="bx bx-star"></i> Появление</span>';
           else if (role === 'death') roleLabel = ' <span class="role-badge role-death"><i class="bx bx-skull"></i> Смерть</span>';
           
+          const charBadges = (Array.isArray(event.characterIds) ? event.characterIds : []).map(charId => {
+            if (kind === 'character' && charId === item.id) return '';
+            const char = this.state.lore.characters.find(c => c.id === charId);
+            if (!char) return '';
+            return `<span class="association-badge char-badge" data-action="open-lore-detail" data-entity-kind="character" data-entity-id="${char.id}"><i class="bx bx-user"></i>${escapeHtml(this.entityDisplayName(char))}</span>`;
+          }).filter(Boolean).join('');
+
+          const locBadges = (Array.isArray(event.locationIds) ? event.locationIds : []).map(locId => {
+            if (kind === 'location' && locId === item.id) return '';
+            const loc = this.state.lore.locations.find(l => l.id === locId);
+            if (!loc) return '';
+            return `<span class="association-badge loc-badge" data-action="open-lore-detail" data-entity-kind="location" data-entity-id="${loc.id}"><i class="bx bx-map-alt"></i>${escapeHtml(this.entityDisplayName(loc))}</span>`;
+          }).filter(Boolean).join('');
+
+          const docBadges = (Array.isArray(event.chapterIds) ? event.chapterIds : []).map(docId => {
+            const doc = this.state.docs.find(d => d.id === docId);
+            if (!doc) return '';
+            return `<span class="association-badge doc-badge" data-action="open-search-result" data-doc-id="${doc.id}"><i class="bx bx-book-content"></i>${escapeHtml(doc.title || 'Без названия')}</span>`;
+          }).filter(Boolean).join('');
+
+          const noteBadges = (Array.isArray(event.noteIds) ? event.noteIds : []).map(noteId => {
+            if (kind === 'note' && noteId === item.id) return '';
+            const note = (this.state.lore.notes || []).find(n => n.id === noteId);
+            if (!note) return '';
+            return `<span class="association-badge note-badge" data-action="open-lore-detail" data-entity-kind="note" data-entity-id="${note.id}"><i class="bx bx-note"></i>${escapeHtml(note.title || 'Без названия')}</span>`;
+          }).filter(Boolean).join('');
+
+          const badgesHTML = (charBadges || locBadges || noteBadges || docBadges) ? `
+            <div class="timeline-event-associations" style="margin-top: 8px;">
+              ${charBadges}
+              ${locBadges}
+              ${noteBadges}
+              ${docBadges}
+            </div>
+          ` : '';
+
           itemsStr += `<li class="associated-timeline-item-row">
             <span class="assoc-date">${escapeHtml(event.date)}</span>
             <strong>${escapeHtml(event.title)}</strong>${roleLabel}
             <p>${escapeHtml(event.body)}</p>
+            ${badgesHTML}
           </li>`;
         }
         matchedSubEvents.forEach(sub => {
@@ -15074,10 +15111,47 @@ class NocturneWriter {
           if (role === 'first_appearance') roleLabel = ' <span class="role-badge role-first-appearance"><i class="bx bx-star"></i> Появление</span>';
           else if (role === 'death') roleLabel = ' <span class="role-badge role-death"><i class="bx bx-skull"></i> Смерть</span>';
           
+          const charBadges = (Array.isArray(sub.characterIds) ? sub.characterIds : []).map(charId => {
+            if (kind === 'character' && charId === item.id) return '';
+            const char = this.state.lore.characters.find(c => c.id === charId);
+            if (!char) return '';
+            return `<span class="association-badge char-badge" data-action="open-lore-detail" data-entity-kind="character" data-entity-id="${char.id}"><i class="bx bx-user"></i>${escapeHtml(this.entityDisplayName(char))}</span>`;
+          }).filter(Boolean).join('');
+
+          const locBadges = (Array.isArray(sub.locationIds) ? sub.locationIds : []).map(locId => {
+            if (kind === 'location' && locId === item.id) return '';
+            const loc = this.state.lore.locations.find(l => l.id === locId);
+            if (!loc) return '';
+            return `<span class="association-badge loc-badge" data-action="open-lore-detail" data-entity-kind="location" data-entity-id="${loc.id}"><i class="bx bx-map-alt"></i>${escapeHtml(this.entityDisplayName(loc))}</span>`;
+          }).filter(Boolean).join('');
+
+          const docBadges = (Array.isArray(sub.chapterIds) ? sub.chapterIds : []).map(docId => {
+            const doc = this.state.docs.find(d => d.id === docId);
+            if (!doc) return '';
+            return `<span class="association-badge doc-badge" data-action="open-search-result" data-doc-id="${doc.id}"><i class="bx bx-book-content"></i>${escapeHtml(doc.title || 'Без названия')}</span>`;
+          }).filter(Boolean).join('');
+
+          const noteBadges = (Array.isArray(sub.noteIds) ? sub.noteIds : []).map(noteId => {
+            if (kind === 'note' && noteId === item.id) return '';
+            const note = (this.state.lore.notes || []).find(n => n.id === noteId);
+            if (!note) return '';
+            return `<span class="association-badge note-badge" data-action="open-lore-detail" data-entity-kind="note" data-entity-id="${note.id}"><i class="bx bx-note"></i>${escapeHtml(note.title || 'Без названия')}</span>`;
+          }).filter(Boolean).join('');
+
+          const badgesHTML = (charBadges || locBadges || noteBadges || docBadges) ? `
+            <div class="timeline-event-associations" style="margin-top: 8px;">
+              ${charBadges}
+              ${locBadges}
+              ${noteBadges}
+              ${docBadges}
+            </div>
+          ` : '';
+
           itemsStr += `<li class="associated-timeline-item-row sub-row">
             <span class="assoc-date">${escapeHtml(sub.date)}</span>
             <strong>${escapeHtml(sub.title)}</strong> <span class="subtimeline-type-badge"><i class="bx bx-git-branch"></i> Подсобытие</span>${roleLabel}
             <p>${escapeHtml(sub.body)}</p>
+            ${badgesHTML}
           </li>`;
         });
         return itemsStr;
