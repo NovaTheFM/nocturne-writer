@@ -2752,7 +2752,7 @@ body.ctrl-pressed .entity-family-link:hover {
   backdrop-filter: blur(24px);
   border-left: 1px solid var(--border-light);
   transition: right 420ms cubic-bezier(.16, 1, .3, 1);
-  z-index: 45;
+  z-index: 100;
   display: flex;
   flex-direction: column;
   box-shadow: -20px 0 50px rgba(0,0,0,.6);
@@ -4272,7 +4272,7 @@ body.resizing-floating-note {
 }
 .kb-modal.active { transform: translateY(0); }
 .kb-sidebar {
-  width: 280px;
+  width: 260px;
   flex-shrink: 0;
   background: var(--bg-panel);
   border-right: 1px solid var(--border);
@@ -4467,7 +4467,7 @@ body.resizing-floating-note {
 }
 .kb-modal.active { transform: translateY(0); }
 .kb-sidebar {
-  width: 280px;
+  width: 260px;
   flex-shrink: 0;
   background: var(--bg-panel);
   border-right: 1px solid var(--border);
@@ -10238,6 +10238,15 @@ body.is-electron .main-workspace {
 body.is-electron .side-panel {
   top: 102px;
   height: calc(100% - 102px);
+}
+
+body.is-electron .kb-modal {
+  top: 38px;
+  height: calc(100% - 38px);
+}
+
+body.compact .kb-sidebar {
+  width: 224px;
 }
 
 .formatting-settings .nocturne-select {

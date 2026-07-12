@@ -3021,8 +3021,8 @@ class NocturneWriter {
                 <button class="tool-btn" data-action="toggle-floating-note-menu" data-floating-note-menu-anchor title="Плавающие заметки"><i class="bx bx-note"></i></button>
               </div>
               ${this.state.settings.showZenButton ? '<button class="tool-btn zen-toggle-btn" data-action="toggle-zen" aria-pressed="false" title="Режим Дзен"><i class="bx bx-target-lock"></i></button>' : ''}
-              <button class="pill-btn" data-action="toggle-notes"><i class="bx bx-notepad"></i> <span>Заметки</span></button>
               <button class="pill-btn" data-action="import-doc"><i class="bx bx-import"></i> <span>Импорт</span></button>
+              <button class="pill-btn" data-action="toggle-notes"><i class="bx bx-notepad"></i> <span>Заметки</span></button>
               <button class="pill-btn ai-btn" data-action="toggle-ai">${aiIcon('toolbar-ai-svg')} <span>Ассистент</span></button>
               <input id="import-input" type="file" accept=".txt,.md,.html,.htm,.docx,.pdf,.nocturned,.nocturnedump,application/json" multiple hidden>
             </div>
@@ -4100,18 +4100,25 @@ class NocturneWriter {
     }
     const settingsTab = event.target.closest('[data-settings-tab]')?.dataset.settingsTab;
     if (settingsTab) {
-      this.state.activeSettingsTab = settingsTab;
-      if (this.isMobileLayout()) {
-        this.state.mobile.settingsTab = settingsTab;
-        this.renderMobileShell();
-      } else {
-        this.renderSettings();
+      const isCurrent = this.isMobileLayout() 
+        ? (this.state.mobile.settingsTab === settingsTab) 
+        : (this.state.activeSettingsTab === settingsTab);
+      if (!isCurrent) {
+        this.state.activeSettingsTab = settingsTab;
+        if (this.isMobileLayout()) {
+          this.state.mobile.settingsTab = settingsTab;
+          this.renderMobileShell();
+        } else {
+          this.renderSettings();
+        }
       }
     }
     const mobileSettingsTab = event.target.closest('[data-mobile-settings-tab]')?.dataset.mobileSettingsTab;
     if (mobileSettingsTab) {
-      this.state.mobile.settingsTab = mobileSettingsTab;
-      this.renderMobileShell();
+      if (this.state.mobile.settingsTab !== mobileSettingsTab) {
+        this.state.mobile.settingsTab = mobileSettingsTab;
+        this.renderMobileShell();
+      }
       return;
     }
     const mobileKbTab = event.target.closest('[data-mobile-kb-tab]')?.dataset.mobileKbTab;
