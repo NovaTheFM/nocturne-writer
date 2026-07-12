@@ -10352,9 +10352,52 @@ class NocturneWriter {
   serializeRangeToBookmarkAnchor(range, paneId, docId) {
     if (!docId) return null;
     
-    // 1. Try to get selection from editor view first (most accurate for ProseMirror)
+    // 1. Try to get selection from DOM range mapped to editor first (highly accurate for clicks)
     const editor = this.nocturneEditor?.get(paneId);
-    if (editor) {
+    if (editor && range) {
+      try {
+        const pos = editor.view.posAtDOM(range.startContainer, range.startOffset);
+        let blockNode = null;
+        let blockPos = 0;
+        editor.state.doc.descendants((node, p) => {
+          if (node.attrs?.blockId && p <= pos && p + node.nodeSize >= pos) {
+            blockNode = node;
+            blockPos = p;
+            return false;
+          }
+        });
+        if (blockNode) {
+          const text = blockNode.textContent || '';
+          const offset = Math.max(0, Math.min(text.length, pos - blockPos - 1));
+          
+          let quote = '';
+          if (range.startContainer !== range.endContainer || range.startOffset !== range.endOffset) {
+            quote = range.toString();
+          }
+          if (!quote) {
+            quote = text.slice(offset, offset + 1);
+            if (!quote && offset > 0) {
+              quote = text.slice(offset - 1, offset);
+            }
+            if (!quote) {
+              quote = ' ';
+            }
+          }
+          
+          return {
+            start: { blockId: blockNode.attrs.blockId, offset: offset },
+            end: { blockId: blockNode.attrs.blockId, offset: offset + quote.length },
+            quote: quote,
+            prefix: text.slice(Math.max(0, offset - 36), offset),
+            suffix: text.slice(offset + quote.length, offset + quote.length + 36),
+          };
+        }
+      } catch (err) {
+        console.warn('posAtDOM failed, falling back to selection', err);
+      }
+    }
+
+    if (editor && !range) {
       const { state } = editor;
       const { selection } = state;
       const pos = selection.from;
@@ -10376,7 +10419,6 @@ class NocturneWriter {
           quote = state.doc.textBetween(selection.from, selection.to, ' ');
         }
         if (!quote) {
-          // Empty selection: grab exactly 1 letter at the caret position to enable letter-level accuracy
           quote = text.slice(offset, offset + 1);
           if (!quote && offset > 0) {
             quote = text.slice(offset - 1, offset);
@@ -10463,7 +10505,32 @@ class NocturneWriter {
     const ctx = this.state.contextMenu;
     if (!ctx) return;
     
-    const range = this.restoreContextRange();
+    const paneEl = document.querySelector(`.workspace-pane[data-pane-id="${ctx.paneId}"]`);
+    let range = null;
+    const selection = window.getSelection();
+    const hasSelection = selection && !selection.isCollapsed && ctx.selectedText;
+    
+    if (hasSelection) {
+      range = this.restoreContextRange();
+    } else if (typeof ctx.x === 'number' && typeof ctx.y === 'number') {
+      if (document.caretRangeFromPoint) {
+        range = document.caretRangeFromPoint(ctx.x, ctx.y);
+      } else if (document.caretPositionFromPoint) {
+        const position = document.caretPositionFromPoint(ctx.x, ctx.y);
+        if (position) {
+          range = document.createRange();
+          range.setStart(position.offsetNode, position.offset);
+          range.setEnd(position.offsetNode, position.offset);
+        }
+      }
+      if (range && paneEl && !paneEl.contains(range.startContainer)) {
+        range = null;
+      }
+    }
+    
+    if (!range) {
+      range = this.restoreContextRange();
+    }
     
     if (ctx.docId) {
       const doc = this.state.docs.find(d => d.id === ctx.docId);
@@ -10490,14 +10557,12 @@ class NocturneWriter {
       let quote = ctx.selectedText || '';
       let offset = 0;
       
-      const selection = window.getSelection();
-      if (selection && selection.rangeCount > 0) {
-        const selRange = selection.getRangeAt(0);
-        const noteBodyEl = document.querySelector(`.workspace-pane[data-pane-id="${ctx.paneId}"] .lore-detail.note-detail .lore-detail-main p`);
-        if (noteBodyEl) {
-          const pre = selRange.cloneRange();
+      if (range) {
+        const noteBodyEl = paneEl?.querySelector('.lore-detail.note-detail .lore-detail-main p');
+        if (noteBodyEl && noteBodyEl.contains(range.startContainer)) {
+          const pre = range.cloneRange();
           pre.selectNodeContents(noteBodyEl);
-          pre.setEnd(selRange.startContainer, selRange.startOffset);
+          pre.setEnd(range.startContainer, range.startOffset);
           offset = pre.toString().length;
           if (!quote) {
             const fullText = noteBodyEl.textContent || '';
@@ -10986,7 +11051,7 @@ class NocturneWriter {
                     </span>
                   </span>
                 `;
-                bodyText = bodyText.replace(escapedQuote, rangeHtml + houseHtml);
+                bodyText = bodyText.replace(escapedQuote, houseHtml + rangeHtml);
               });
             }
             if (noteBodyEl.innerHTML !== bodyText) {

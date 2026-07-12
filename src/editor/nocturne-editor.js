@@ -309,8 +309,8 @@ const NocturneBookmarks = Extension.create({
             'data-bookmark-id': b.id
           }));
           
-          decos.push(Decoration.widget(endPos, () => createHouseWidget(b.id, isActive), {
-            side: 1,
+          decos.push(Decoration.widget(startPos, () => createHouseWidget(b.id, isActive), {
+            side: -1,
             ignoreSelection: true
           }));
         }

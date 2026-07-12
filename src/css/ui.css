@@ -10507,18 +10507,29 @@ body[data-active-review-mode="finalization"] .pane-bookmarks-widget {
 /* Animations and Flash Highlights */
 .nocturne-bookmark-range {
   position: relative;
-  border-left: 2px solid var(--accent, #8b5cf6); /* vertical caret line using accent color */
-  padding-left: 1px;
-  margin-left: -1px;
   cursor: pointer;
   display: inline;
-  transition: border-left-color 0.2s ease;
 }
 
-/* Hide the vertical line when hovered or active since it morphs into the house */
-.nocturne-bookmark-range:hover,
-.nocturne-bookmark-range.active {
-  border-left-color: transparent;
+/* Default state: subtle vertical line/tick below the text baseline */
+.nocturne-bookmark-range::before {
+  content: '';
+  position: absolute;
+  bottom: -5px; /* space below text */
+  left: 0;
+  width: 2px;
+  height: 6px;
+  background-color: var(--accent, #8b5cf6);
+  opacity: 0.75;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  transform-origin: top center;
+}
+
+/* Hide the tick mark when hovered/active as it morphs into the house */
+.nocturne-bookmark-range:hover::before,
+.nocturne-bookmark-range.active::before {
+  opacity: 0;
+  transform: scaleY(0);
 }
 
 /* Sibling house widget container */
@@ -10533,8 +10544,8 @@ body[data-active-review-mode="finalization"] .pane-bookmarks-widget {
 
 .nocturne-bookmark-house-inner {
   position: absolute;
-  top: 4px;
-  left: -10px;
+  top: 8px; /* space below text */
+  left: -9px; /* centered relative to the 2px tick mark */
   width: 20px;
   height: 24px;
   opacity: 0;
@@ -10546,10 +10557,10 @@ body[data-active-review-mode="finalization"] .pane-bookmarks-widget {
 }
 
 /* Morph/Flow transition into the house shape when active or hovered */
-.nocturne-bookmark-range:hover + .nocturne-bookmark-house .nocturne-bookmark-house-inner,
-.nocturne-bookmark-range.active + .nocturne-bookmark-house .nocturne-bookmark-house-inner,
 .nocturne-bookmark-house:hover .nocturne-bookmark-house-inner,
-.nocturne-bookmark-house.active .nocturne-bookmark-house-inner {
+.nocturne-bookmark-house.active .nocturne-bookmark-house-inner,
+.nocturne-bookmark-house:has(+ .nocturne-bookmark-range:hover) .nocturne-bookmark-house-inner,
+.nocturne-bookmark-house:has(+ .nocturne-bookmark-range.active) .nocturne-bookmark-house-inner {
   opacity: 1;
   transform: translate(0, 0) scale(1);
   pointer-events: auto;
@@ -10571,9 +10582,9 @@ body[data-active-review-mode="finalization"] .pane-bookmarks-widget {
 .nocturne-bookmark-delete-btn {
   position: absolute;
   top: 10px; /* position it inside the square part */
-  left: 3px;
-  width: 14px;
-  height: 14px;
+  left: 2px;
+  width: 16px;
+  height: 12px;
   border: none !important;
   background: transparent !important;
   color: var(--text-muted, #a1a1aa) !important;
@@ -10588,6 +10599,10 @@ body[data-active-review-mode="finalization"] .pane-bookmarks-widget {
 
 .nocturne-bookmark-delete-btn i {
   font-size: 10px !important;
+  line-height: 1 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
 .nocturne-bookmark-delete-btn:hover {
