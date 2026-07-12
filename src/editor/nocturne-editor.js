@@ -235,6 +235,38 @@ const NocturneEntityMentions = Extension.create({
   return matches[0].index;
 }
 
+const createHouseWidget = (bookmarkId, isActive) => {
+  const element = document.createElement('span');
+  element.className = isActive ? 'nocturne-bookmark-house active' : 'nocturne-bookmark-house';
+  element.setAttribute('data-bookmark-id', bookmarkId);
+  
+  element.innerHTML = `
+    <span class="nocturne-bookmark-house-inner">
+      <svg class="nocturne-bookmark-svg" viewBox="0 0 20 24" width="20" height="24">
+        <path d="M10,2 L2,10 V20 A2,2 0 0,0 4,22 H16 A2,2 0 0,0 18,20 V10 L10,2 Z" />
+      </svg>
+      <button class="nocturne-bookmark-delete-btn" type="button" title="Удалить закладку">
+        <i class="bx bx-file"></i>
+      </button>
+    </span>
+  `;
+  
+  const deleteBtn = element.querySelector('.nocturne-bookmark-delete-btn');
+  deleteBtn.addEventListener('mousedown', (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+  });
+  deleteBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (confirm('Удалить эту закладку?')) {
+      window.nocturneApp?.deleteBookmark(bookmarkId);
+    }
+  });
+  
+  return element;
+};
+
 const NocturneBookmarks = Extension.create({
   name: 'nocturneBookmarks',
   addOptions() {
@@ -278,10 +310,19 @@ const NocturneBookmarks = Extension.create({
             class: rangeClass,
             'data-bookmark-id': b.id
           }));
+          
+          decos.push(Decoration.widget(endPos, () => createHouseWidget(b.id, isActive), {
+            side: 1,
+            ignoreSelection: true
+          }));
         }
       });
       
-      decos.sort((a, b) => a.from - b.from);
+      decos.sort((a, b) => {
+        if (a.from !== b.from) return a.from - b.from;
+        // Keep inline decoration before widget decoration if at same position
+        return a.isInline ? -1 : 1;
+      });
       return DecorationSet.create(doc, decos);
     };
 

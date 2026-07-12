@@ -10352,9 +10352,9 @@ class NocturneWriter {
   serializeRangeToBookmarkAnchor(range, paneId, docId) {
     if (!docId) return null;
     
-    // If range is null, try to get selection from editor view
+    // 1. Try to get selection from editor view first (most accurate for ProseMirror)
     const editor = this.nocturneEditor?.get(paneId);
-    if (!range && editor) {
+    if (editor) {
       const { state } = editor;
       const { selection } = state;
       const pos = selection.from;
@@ -10370,7 +10370,22 @@ class NocturneWriter {
       if (blockNode) {
         const text = blockNode.textContent || '';
         const offset = Math.max(0, Math.min(text.length, pos - blockPos - 1));
-        const quote = text.slice(offset, offset + 30).trim() || 'Закладка';
+        
+        let quote = '';
+        if (!selection.empty) {
+          quote = state.doc.textBetween(selection.from, selection.to, ' ');
+        }
+        if (!quote) {
+          // Empty selection: grab exactly 1 letter at the caret position to enable letter-level accuracy
+          quote = text.slice(offset, offset + 1);
+          if (!quote && offset > 0) {
+            quote = text.slice(offset - 1, offset);
+          }
+          if (!quote) {
+            quote = ' ';
+          }
+        }
+        
         return {
           start: { blockId: blockNode.attrs.blockId, offset: offset },
           end: { blockId: blockNode.attrs.blockId, offset: offset + quote.length },
@@ -10382,6 +10397,7 @@ class NocturneWriter {
       return null;
     }
 
+    // 2. Fallback to DOM range
     if (!range) return null;
     
     let startBlock = this.getBlockFromNode(range.startContainer, range.startOffset);
@@ -10423,7 +10439,15 @@ class NocturneWriter {
     let quote = range.toString();
     const text = startBlock.textContent || '';
     if (!quote) {
-      quote = text.slice(start, start + 30).trim() || 'Закладка';
+      // Empty selection: grab exactly 1 letter
+      quote = text.slice(start, start + 1);
+      if (!quote && start > 0) {
+        quote = text.slice(start - 1, start);
+      }
+      if (!quote) {
+        quote = ' ';
+      }
+      end = start + quote.length;
     }
     
     return {
@@ -10477,12 +10501,18 @@ class NocturneWriter {
           offset = pre.toString().length;
           if (!quote) {
             const fullText = noteBodyEl.textContent || '';
-            quote = fullText.slice(offset, offset + 30).trim() || 'Закладка';
+            quote = fullText.slice(offset, offset + 1);
+            if (!quote && offset > 0) {
+              quote = fullText.slice(offset - 1, offset);
+            }
+            if (!quote) {
+              quote = ' ';
+            }
           }
         }
       }
       
-      if (!quote) quote = 'Закладка';
+      if (!quote) quote = ' ';
       
       note.bookmarks = note.bookmarks || [];
       const bookmark = {
@@ -10497,6 +10527,40 @@ class NocturneWriter {
       this.toast('Закладка установлена в заметке.');
       this.renderBookmarksMenu(ctx.paneId);
     }
+  }
+
+  async deleteBookmark(bookmarkId) {
+    let found = false;
+    
+    // 1. Search docs
+    for (const doc of this.state.docs) {
+      if (doc.bookmarks && doc.bookmarks.some(b => b.id === bookmarkId)) {
+        doc.bookmarks = doc.bookmarks.filter(b => b.id !== bookmarkId);
+        await this.db.put('docs', doc);
+        found = true;
+        break;
+      }
+    }
+    
+    // 2. Search lore notes
+    if (!found && this.state.lore?.notes) {
+      for (const note of this.state.lore.notes) {
+        if (note.bookmarks && note.bookmarks.some(b => b.id === bookmarkId)) {
+          note.bookmarks = note.bookmarks.filter(b => b.id !== bookmarkId);
+          await this.saveLore();
+          found = true;
+          break;
+        }
+      }
+    }
+    
+    // 3. Re-render all bookmark widgets and highlights
+    if (this.state.workspace?.panes) {
+      Object.keys(this.state.workspace.panes).forEach((paneId) => {
+        this.renderBookmarksMenu(paneId);
+      });
+    }
+    this.updateBookmarkHighlights();
   }
 
   getAutoJumpBookmark(bookmarks, editorOrText, isDocument) {
@@ -10890,7 +10954,22 @@ class NocturneWriter {
                 const escapedQuote = escapeHtml(b.quote);
                 const isActive = activeIndex !== undefined && note.bookmarks[activeIndex]?.id === b.id;
                 const cls = isActive ? 'nocturne-bookmark-range active' : 'nocturne-bookmark-range';
-                bodyText = bodyText.replace(escapedQuote, `<span class="${cls}" data-bookmark-id="${b.id}">${escapedQuote}</span>`);
+                
+                const rangeHtml = `<span class="${cls}" data-bookmark-id="${b.id}">${escapedQuote}</span>`;
+                const houseCls = isActive ? 'nocturne-bookmark-house active' : 'nocturne-bookmark-house';
+                const houseHtml = `
+                  <span class="${houseCls}" data-bookmark-id="${b.id}">
+                    <span class="nocturne-bookmark-house-inner">
+                      <svg class="nocturne-bookmark-svg" viewBox="0 0 20 24" width="20" height="24">
+                        <path d="M10,2 L2,10 V20 A2,2 0 0,0 4,22 H16 A2,2 0 0,0 18,20 V10 L10,2 Z" />
+                      </svg>
+                      <button class="nocturne-bookmark-delete-btn" type="button" title="Удалить закладку" onclick="event.stopPropagation(); event.preventDefault(); if (confirm('Удалить эту закладку?')) window.nocturneApp?.deleteBookmark('${b.id}');">
+                        <i class="bx bx-file"></i>
+                      </button>
+                    </span>
+                  </span>
+                `;
+                bodyText = bodyText.replace(escapedQuote, rangeHtml + houseHtml);
               });
             }
             if (noteBodyEl.innerHTML !== bodyText) {

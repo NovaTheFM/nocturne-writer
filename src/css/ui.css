@@ -10507,64 +10507,103 @@ body[data-active-review-mode="finalization"] .pane-bookmarks-widget {
 /* Animations and Flash Highlights */
 .nocturne-bookmark-range {
   position: relative;
-  border-bottom: 2.5px solid #eab308; /* beautiful yellow accent line */
+  border-left: 2px solid var(--accent, #8b5cf6); /* vertical caret line using accent color */
+  padding-left: 1px;
+  margin-left: -1px;
   cursor: pointer;
-  transition: border-bottom-color 0.2s ease;
   display: inline;
+  transition: border-left-color 0.2s ease;
 }
 
-/* When active/hovered, hide the bottom line as it morphs into the house */
+/* Hide the vertical line when hovered or active since it morphs into the house */
 .nocturne-bookmark-range:hover,
 .nocturne-bookmark-range.active {
-  border-bottom-color: rgba(234, 179, 8, 0.15);
+  border-left-color: transparent;
 }
 
-/* House-like indicator badge */
-.nocturne-bookmark-range::after {
-  content: '▲'; /* house roof arrow */
-  font-size: 8px;
-  line-height: 1;
-  font-weight: 900;
-  color: #1e1e2e; /* dark bg color */
-  
+/* Sibling house widget container */
+.nocturne-bookmark-house {
+  display: inline-block;
+  position: relative;
+  width: 0;
+  height: 0;
+  vertical-align: middle;
+  user-select: none;
+}
+
+.nocturne-bookmark-house-inner {
   position: absolute;
-  bottom: -15px;
-  left: 50%;
-  
+  top: 4px;
+  left: -10px;
+  width: 20px;
+  height: 24px;
+  opacity: 0;
+  transform: translate(0, -6px) scaleY(0.1) scaleX(0.5);
+  transform-origin: top center;
+  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  pointer-events: none;
+  z-index: 50;
+}
+
+/* Morph/Flow transition into the house shape when active or hovered */
+.nocturne-bookmark-range:hover + .nocturne-bookmark-house .nocturne-bookmark-house-inner,
+.nocturne-bookmark-range.active + .nocturne-bookmark-house .nocturne-bookmark-house-inner,
+.nocturne-bookmark-house:hover .nocturne-bookmark-house-inner,
+.nocturne-bookmark-house.active .nocturne-bookmark-house-inner {
+  opacity: 1;
+  transform: translate(0, 0) scale(1);
+  pointer-events: auto;
+}
+
+/* The house SVG styling */
+.nocturne-bookmark-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 20px;
+  height: 24px;
+  fill: var(--bg-card, #1e1e2e); /* theme background inside */
+  stroke: var(--accent, #8b5cf6); /* accent color outline */
+  stroke-width: 1.5;
+}
+
+/* Note icon / delete button inside the house */
+.nocturne-bookmark-delete-btn {
+  position: absolute;
+  top: 10px; /* position it inside the square part */
+  left: 3px;
   width: 14px;
   height: 14px;
-  background-color: #eab308;
-  border-radius: 2px;
-  
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  
-  opacity: 0;
-  pointer-events: none;
-  transform: translate(-50%, -4px) scaleY(0.1) scaleX(0.5);
-  transform-origin: bottom center;
-  transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-  z-index: 10;
+  border: none !important;
+  background: transparent !important;
+  color: var(--text-muted, #a1a1aa) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+  transition: color 0.2s ease, transform 0.2s ease !important;
+  outline: none !important;
 }
 
-/* Morph/Flow transition into the house square when active or hovered */
-.nocturne-bookmark-range:hover::after,
-.nocturne-bookmark-range.active::after {
-  opacity: 1;
-  transform: translate(-50%, 0) scale(1);
-  pointer-events: auto;
+.nocturne-bookmark-delete-btn i {
+  font-size: 10px !important;
+}
+
+.nocturne-bookmark-delete-btn:hover {
+  color: var(--danger, #f43f5e) !important;
+  transform: scale(1.15) !important;
 }
 
 /* Flash animation on jump */
 @keyframes bookmarkFlashPulse {
   0% {
-    background-color: rgba(234, 179, 8, 0.5);
-    box-shadow: 0 0 0 4px rgba(234, 179, 8, 0.2);
+    background-color: rgba(var(--accent-rgb, 139, 92, 246), 0.5);
+    box-shadow: 0 0 0 4px rgba(var(--accent-rgb, 139, 92, 246), 0.2);
   }
   50% {
-    background-color: rgba(234, 179, 8, 0.2);
-    box-shadow: 0 0 0 8px rgba(234, 179, 8, 0);
+    background-color: rgba(var(--accent-rgb, 139, 92, 246), 0.2);
+    box-shadow: 0 0 0 8px rgba(var(--accent-rgb, 139, 92, 246), 0);
   }
   100% {
     background-color: transparent;
