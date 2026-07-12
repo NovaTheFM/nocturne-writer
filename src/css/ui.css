@@ -10089,6 +10089,36 @@ body.theme-paper .titlebar-title .title-separator {
   box-shadow: 0 0 10px rgba(var(--accent-rgb, 139, 92, 246), 0.15);
 }
 
+.titlebar-kb-project-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 14px;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+.titlebar-kb-project-badge .project-label {
+  font-family: var(--font-ui);
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.55;
+}
+.titlebar-kb-project-badge .project-name-badge {
+  color: var(--accent);
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: 10.5px;
+  letter-spacing: 0.01em;
+  background: rgba(var(--accent-rgb, 139, 92, 246), 0.05);
+  padding: 2px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(var(--accent-rgb, 139, 92, 246), 0.12);
+  text-shadow: 0 0 6px var(--accent-glow);
+  white-space: nowrap;
+}
+
 .titlebar-title .doc-name {
   color: var(--text-muted);
   font-weight: 500;

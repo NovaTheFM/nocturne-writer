@@ -1062,12 +1062,27 @@ class NocturneWriter {
     const activeDoc = this.state.docs?.find(d => d.id === this.state.activeDocId);
     const docTitle = activeDoc ? activeDoc.title : '';
 
+    const kbBadge = titlebar.querySelector('.titlebar-kb-project-badge');
+    if (kbBadge) {
+      kbBadge.innerHTML = `<span class="project-label">Произведение:</span><span class="project-name-badge">${escapeHtml(projectTitle)}</span>`;
+      kbBadge.style.display = 'flex';
+    }
+
+    let displayProjectTitle = 'Документ';
+    if (activeDoc) {
+      if (activeDoc.docType === 'book-chapter') {
+        displayProjectTitle = activeDoc.workTitle || 'Книга';
+      } else {
+        displayProjectTitle = 'Документ';
+      }
+    }
+
     const projectSpan = titlebar.querySelector('.project-name');
     const docSpan = titlebar.querySelector('.doc-name');
     const separator = titlebar.querySelector('.title-separator');
 
     if (projectSpan) {
-      projectSpan.textContent = projectTitle;
+      projectSpan.textContent = displayProjectTitle;
     }
 
     if (docSpan) {
@@ -7220,6 +7235,7 @@ class NocturneWriter {
           } else {
             this.renderKb();
           }
+          this.updateElectronTitlebarTitle();
           this.toast(`Произведение "${title}" создано.`);
         };
       },
@@ -7269,6 +7285,7 @@ class NocturneWriter {
           } else {
             this.renderKb();
           }
+          this.updateElectronTitlebarTitle();
           this.toast('Произведение переименовано.');
         };
       },
@@ -7309,6 +7326,7 @@ class NocturneWriter {
           } else {
             this.transitionKbContent(() => this.renderKb());
           }
+          this.updateElectronTitlebarTitle();
           this.toast(`Произведение "${project.title}" удалено.`);
         };
       },
@@ -18379,6 +18397,7 @@ class NocturneWriter {
         } else {
           this.transitionKbContent(() => this.renderKb());
         }
+        this.updateElectronTitlebarTitle();
       });
     }
     if (key === 'writingAnimation') safeSetStorageItem(localStorage, 'nocturne-writing-animation-choice', '1');
