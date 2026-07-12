@@ -10377,7 +10377,7 @@ class NocturneWriter {
         });
         if (blockNode) {
           const text = blockNode.textContent || '';
-          const offset = Math.max(0, Math.min(text.length, pos - blockPos - 1));
+          let offset = Math.max(0, Math.min(text.length, pos - blockPos - 1));
           
           let quote = '';
           if (range.startContainer !== range.endContainer || range.startOffset !== range.endOffset) {
@@ -10387,6 +10387,7 @@ class NocturneWriter {
             quote = text.slice(offset, offset + 1);
             if (!quote && offset > 0) {
               quote = text.slice(offset - 1, offset);
+              offset = offset - 1;
             }
             if (!quote) {
               quote = ' ';
@@ -10421,7 +10422,7 @@ class NocturneWriter {
       });
       if (blockNode) {
         const text = blockNode.textContent || '';
-        const offset = Math.max(0, Math.min(text.length, pos - blockPos - 1));
+        let offset = Math.max(0, Math.min(text.length, pos - blockPos - 1));
         
         let quote = '';
         if (!selection.empty) {
@@ -10431,6 +10432,7 @@ class NocturneWriter {
           quote = text.slice(offset, offset + 1);
           if (!quote && offset > 0) {
             quote = text.slice(offset - 1, offset);
+            offset = offset - 1;
           }
           if (!quote) {
             quote = ' ';
@@ -10494,6 +10496,7 @@ class NocturneWriter {
       quote = text.slice(start, start + 1);
       if (!quote && start > 0) {
         quote = text.slice(start - 1, start);
+        start = start - 1;
       }
       if (!quote) {
         quote = ' ';
@@ -10578,6 +10581,7 @@ class NocturneWriter {
             quote = fullText.slice(offset, offset + 1);
             if (!quote && offset > 0) {
               quote = fullText.slice(offset - 1, offset);
+              offset = offset - 1;
             }
             if (!quote) {
               quote = ' ';

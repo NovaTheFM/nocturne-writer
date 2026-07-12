@@ -5227,9 +5227,16 @@ body.mobile-shell-active .sortable-fallback-drag.timeline-item {
   color: var(--text-main);
   opacity: 0;
   transform: translateY(12px);
-  transition: 220ms ease;
+  transition: opacity 220ms ease, transform 220ms ease, visibility 220ms ease;
+  pointer-events: none;
+  visibility: hidden;
 }
-.toast.active { opacity: 1; transform: translateY(0); }
+.toast.active {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+  visibility: visible;
+}
 .confetti {
   position: fixed;
   top: -10px;
