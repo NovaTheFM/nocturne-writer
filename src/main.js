@@ -4108,6 +4108,12 @@ class NocturneWriter {
       this.closeDocContextMenu();
       return;
     }
+    if (action === 'export-doc-menu') {
+      const docId = event.target.closest('[data-ctx-doc]')?.dataset.ctxDoc || event.target.closest('[data-doc-id]')?.dataset.docId;
+      if (docId) this.exportDocById(docId);
+      this.closeDocContextMenu();
+      return;
+    }
     if (action) this.runAction(action, event);
     if (action === 'new-doc') return;
     const settingToggle = event.target.closest('[data-setting][data-kind="toggle"]');
@@ -4296,6 +4302,7 @@ class NocturneWriter {
         <button class="ctx-btn" data-action="duplicate-doc" data-ctx-doc="${escapeHtml(doc.id)}"><i class="bx bx-copy"></i><span>Дублировать</span></button>
         <button class="ctx-btn" data-action="pin-doc" data-ctx-doc="${escapeHtml(doc.id)}"><i class="bx ${doc.pinned ? 'bx-pin' : 'bxs-pin'}"></i><span>${doc.pinned ? 'Открепить' : 'Закрепить'}</span></button>
         <button class="ctx-btn" data-action="edit-doc" data-ctx-doc="${escapeHtml(doc.id)}"><i class="bx bx-edit"></i><span>Редактировать</span></button>
+        <button class="ctx-btn" data-action="export-doc-menu" data-ctx-doc="${escapeHtml(doc.id)}"><i class="bx bx-export"></i><span>Экспорт DOCX / .nocturned</span></button>
         <button class="ctx-btn danger" data-action="delete-doc" data-ctx-doc="${escapeHtml(doc.id)}"><i class="bx bx-trash"></i><span>Удалить</span></button>
       </div>`;
     portal.classList.add('open');
@@ -9297,6 +9304,8 @@ class NocturneWriter {
     this.updateActiveDocHighlight();
     this.renderNotes();
     this.drawSentiment();
+    this.renderReviewNavigator();
+    this.updateReviewHighlights();
   }
 
   paginate(ast = this.activeDoc?.ast, paneId = this.state.workspace?.focusedPaneId || 'primary') {
@@ -9726,6 +9735,8 @@ class NocturneWriter {
     this.applyReviewMode();
     this.triggerBookmarkAutoJump(paneId);
     this.renderBookmarksMenu(paneId);
+    this.renderReviewNavigator();
+    this.updateReviewHighlights();
   }
 
   disableBrowserSpellcheck() {
@@ -10618,6 +10629,33 @@ class NocturneWriter {
       
       await this.db.put('docs', doc);
       this.toast('Закладка установлена в документе.');
+      
+      // Auto-select the newly created bookmark
+      this.state.activeBookmarkIndexByPane = this.state.activeBookmarkIndexByPane || {};
+      const sorted = [...doc.bookmarks];
+      const behavior = this.state.settings?.bookmarkBehavior || 'text';
+      if (behavior === 'time') {
+        sorted.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+      } else {
+        const editor = this.nocturneEditor?.get(ctx.paneId);
+        if (editor) {
+          const blockOrder = [];
+          editor.state.doc.descendants((node) => {
+            if (node.attrs?.blockId) blockOrder.push(node.attrs.blockId);
+          });
+          sorted.sort((a, b) => {
+            const idxA = blockOrder.indexOf(a.start?.blockId);
+            const idxB = blockOrder.indexOf(b.start?.blockId);
+            if (idxA !== idxB) return idxA - idxB;
+            return (a.start?.offset || 0) - (b.start?.offset || 0);
+          });
+        }
+      }
+      const newIdx = sorted.findIndex(b => b.id === bookmark.id);
+      if (newIdx >= 0) {
+        this.state.activeBookmarkIndexByPane[ctx.paneId] = newIdx;
+      }
+      
       this.renderBookmarksMenu(ctx.paneId);
     } else if (ctx.noteId) {
       const note = (this.state.lore.notes || []).find(n => n.id === ctx.noteId);
@@ -10660,6 +10698,15 @@ class NocturneWriter {
       
       await this.saveLore();
       this.toast('Закладка установлена в заметке.');
+      
+      // Auto-select the newly created bookmark
+      this.state.activeBookmarkIndexByPane = this.state.activeBookmarkIndexByPane || {};
+      const sorted = [...note.bookmarks].sort((a, b) => (a.offset || 0) - (b.offset || 0));
+      const newIdx = sorted.findIndex(b => b.id === bookmark.id);
+      if (newIdx >= 0) {
+        this.state.activeBookmarkIndexByPane[ctx.paneId] = newIdx;
+      }
+      
       this.renderBookmarksMenu(ctx.paneId);
     }
   }
@@ -11321,6 +11368,7 @@ class NocturneWriter {
     if (this.state.reviewMode !== 'finalization') {
       nav.classList.remove('active');
       nav.setAttribute('aria-hidden', 'true');
+      nav.style.display = 'none';
       nav.innerHTML = '';
       return;
     }
@@ -11328,12 +11376,19 @@ class NocturneWriter {
       nav.innerHTML = '';
       nav.classList.remove('active', 'empty');
       nav.setAttribute('aria-hidden', 'true');
+      nav.style.display = 'none';
       return;
     }
+    
+    // Measure old card height
+    const oldCard = nav.querySelector('.review-detail-card');
+    const oldHeight = oldCard ? oldCard.offsetHeight : 0;
+    
     const docId = this.getFocusedDoc()?.id;
     const index = Math.min(marks.length - 1, Math.max(0, this.state.currentReviewIndexByDoc[docId] || 0));
     const mark = marks[index];
     this.state.activeReviewMarkId = mark.id;
+    
     nav.innerHTML = `
       <div class="review-nav-controls">
         <button data-action="review-prev"><i class="bx bx-chevron-left"></i></button>
@@ -11350,9 +11405,35 @@ class NocturneWriter {
           ${mark.kind === 'suggestion' ? '<button class="pill-btn ai-btn" data-action="review-accept">Принять</button><button class="pill-btn" data-action="review-reject">Отклонить</button>' : '<button class="pill-btn ai-btn" data-action="review-resolve">Решено</button>'}
         </div>
       </div>`;
+      
+    nav.style.display = 'flex';
     nav.classList.remove('empty');
     nav.classList.add('active');
     nav.setAttribute('aria-hidden', 'false');
+    
+    // Animate height if old height exists
+    const newCard = nav.querySelector('.review-detail-card');
+    if (oldHeight > 0 && newCard) {
+      newCard.style.height = `${oldHeight}px`;
+      newCard.offsetHeight; // reflow
+      newCard.style.transition = 'height 0.22s cubic-bezier(0.4, 0, 0.2, 1)';
+      
+      newCard.style.height = 'auto';
+      const newHeight = newCard.offsetHeight;
+      
+      newCard.style.height = `${oldHeight}px`;
+      newCard.offsetHeight; // reflow
+      newCard.style.height = `${newHeight}px`;
+      
+      newCard.addEventListener('transitionend', function handler(e) {
+        if (e.propertyName === 'height') {
+          newCard.style.height = '';
+          newCard.style.transition = '';
+          newCard.removeEventListener('transitionend', handler);
+        }
+      });
+    }
+    
     this.updateReviewHighlights();
   }
 
@@ -11363,6 +11444,7 @@ class NocturneWriter {
     nav.innerHTML = '';
     nav.classList.remove('active', 'empty');
     nav.setAttribute('aria-hidden', 'true');
+    nav.style.display = 'none';
     this.state.activeReviewMarkId = null;
     this.updateReviewHighlights();
   }
@@ -11857,53 +11939,96 @@ class NocturneWriter {
   collectDocMatches(doc, query, options = {}) {
     if (!String(query || '').trim()) return [];
     const matches = [];
+    const subQueries = query.includes(';')
+      ? query.split(';').map(q => q.trim()).filter(Boolean)
+      : [query];
+    if (!subQueries.length) return [];
+
     if (doc.docType === 'book-chapter') {
       const metaText = [doc.workTitle, doc.volume, doc.chapterNumber, doc.bookStatus].filter(Boolean).join(' ');
       if (metaText) {
-        this.searchTextMatches(metaText, query, options).forEach((match) => {
-          matches.push({ ...match, docId: doc.id, docTitle: doc.title, blockId: 'meta', blockIndex: -1, query });
+        const metaLower = options.caseSensitive ? metaText : metaText.toLowerCase();
+        const allExistMeta = subQueries.every(sub => {
+          const needle = options.caseSensitive ? sub : sub.toLowerCase();
+          return metaLower.includes(needle);
         });
+        if (allExistMeta) {
+          subQueries.forEach(sub => {
+            this.searchTextMatches(metaText, sub, options).forEach((match) => {
+              matches.push({ ...match, docId: doc.id, docTitle: doc.title, blockId: 'meta', blockIndex: -1, query });
+            });
+          });
+        }
       }
     }
     if (!doc?.ast?.blocks?.length) return matches;
     doc.ast.blocks.forEach((block, blockIndex) => {
       const text = blockText(block);
-      this.searchTextMatches(text, query, options).forEach((match) => {
-        matches.push({ ...match, docId: doc.id, docTitle: doc.title, blockId: block.id, blockIndex, query });
+      const textLower = options.caseSensitive ? text : text.toLowerCase();
+      const allExist = subQueries.every(sub => {
+        const needle = options.caseSensitive ? sub : sub.toLowerCase();
+        return textLower.includes(needle);
       });
+      if (allExist) {
+        subQueries.forEach(sub => {
+          this.searchTextMatches(text, sub, options).forEach((match) => {
+            matches.push({ ...match, docId: doc.id, docTitle: doc.title, blockId: block.id, blockIndex, query });
+          });
+        });
+      }
     });
-    return matches;
+    return matches.sort((a, b) => a.blockIndex - b.blockIndex || a.start - b.start);
   }
 
   clearSearchHighlights(root = document) {
     root.querySelectorAll?.('.search-hit,.mention-hit').forEach((span) => {
       span.replaceWith(document.createTextNode(span.textContent || ''));
     });
+    if (CSS.highlights) {
+      CSS.highlights.delete('search-hit');
+      CSS.highlights.delete('search-hit-active');
+    }
   }
 
   applySearchHighlights() {
     this.clearSearchHighlights();
+    if (!CSS.highlights || typeof Highlight === 'undefined') return;
     if (!this.searchSession?.matches?.length) return;
+    
+    const docId = this.searchSession.docId;
+    const ranges = [];
+    const activeRanges = [];
     const byBlock = new Map();
+    
     this.searchSession.matches.forEach((match, index) => {
       const list = byBlock.get(match.blockId) || [];
       list.push({ ...match, index });
       byBlock.set(match.blockId, list);
     });
-    document.querySelectorAll(`.page-content[data-doc-id="${CSS.escape(this.searchSession.docId)}"] [data-block-id]`).forEach((block) => {
+    
+    document.querySelectorAll(`.page-content[data-doc-id="${CSS.escape(docId)}"] [data-block-id]`).forEach((block) => {
       const matches = byBlock.get(block.dataset.blockId);
       if (!matches?.length) return;
+      
       const { textNodes } = this.textNodesForHighlightBlock(block);
-      [...matches].sort((a, b) => b.start - a.start).forEach((match) => {
+      matches.forEach((match) => {
         const range = this.rangeFromBlockOffsets(textNodes, match.start, match.end);
         if (!range) return;
-        const span = document.createElement('span');
-        span.className = `search-hit ${match.index === this.searchSession.activeIndex ? 'active' : ''}`;
-        span.dataset.searchHit = String(match.index);
-        span.appendChild(range.extractContents());
-        range.insertNode(span);
+        
+        if (match.index === this.searchSession.activeIndex) {
+          activeRanges.push(range);
+        } else {
+          ranges.push(range);
+        }
       });
     });
+    
+    if (ranges.length) {
+      CSS.highlights.set('search-hit', new Highlight(...ranges));
+    }
+    if (activeRanges.length) {
+      CSS.highlights.set('search-hit-active', new Highlight(...activeRanges));
+    }
   }
 
   renderSearchNavigator() {
@@ -14306,6 +14431,10 @@ class NocturneWriter {
   updateCustomCaret() {
     const caret = document.getElementById('custom-caret');
     if (!caret || !document.getElementById('app-shell').classList.contains('custom-caret-enabled')) return;
+    if (!document.hasFocus()) {
+      if (caret.style.display !== 'none') caret.style.display = 'none';
+      return;
+    }
     const sel = getSelection();
     
     let activeEditable = document.activeElement?.closest?.('.page-content');
@@ -14370,9 +14499,7 @@ class NocturneWriter {
 
     const runLoop = () => {
       if (Date.now() - this._lastCaretActivity < 3000) {
-        if (document.hasFocus()) {
-          this.updateCustomCaret();
-        }
+        this.updateCustomCaret();
         this.caretLoopId = requestAnimationFrame(runLoop);
       } else {
         this._caretLoopRunning = false;
@@ -14407,6 +14534,8 @@ class NocturneWriter {
     document.addEventListener('mouseup', triggerActivity, { passive: true });
     document.addEventListener('focusin', triggerActivity, { passive: true });
     document.addEventListener('focusout', triggerActivity, { passive: true });
+    window.addEventListener('focus', triggerActivity, { passive: true });
+    document.addEventListener('visibilitychange', triggerActivity, { passive: true });
 
     // Initial trigger
     triggerActivity();
@@ -20917,9 +21046,17 @@ ${raw}`;
   }
 
   exportDocx() {
-    const doc = this.activeDoc;
-    if (!doc) {
+    if (!this.activeDoc) {
       this.toast('Откройте документ для экспорта.');
+      return;
+    }
+    this.exportDocById(this.activeDoc.id);
+  }
+
+  exportDocById(docId) {
+    const doc = this.state.docs.find(d => d.id === docId);
+    if (!doc) {
+      this.toast('Документ не найден.');
       return;
     }
     const paragraphs = (doc.ast.blocks || []).map((block) => {
@@ -20937,7 +21074,7 @@ ${raw}`;
     const files = {
       '[Content_Types].xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>`,
       '_rels/.rels': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>`,
-      'docProps/core.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${this.xmlEscape(doc.title)}</dc:title><dc:creator>${this.xmlEscape(this.state.settings.authorName || 'Nocturne')}</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:created></cp:coreProperties>`,
+      'docProps/core.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/cp:coreProperties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${this.xmlEscape(doc.title)}</dc:title><dc:creator>${this.xmlEscape(this.state.settings.authorName || 'Nocturne')}</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:created></cp:coreProperties>`,
       'word/_rels/document.xml.rels': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`,
       'word/styles.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"/><w:sz w:val="24"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:rPr><w:b/><w:sz w:val="36"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Subtitle"><w:name w:val="Subtitle"/><w:rPr><w:i/><w:color w:val="666666"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:pPr><w:ind w:left="720"/></w:pPr><w:rPr><w:i/></w:rPr></w:style></w:styles>`,
       'word/document.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${notes}${paragraphs}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>`,
