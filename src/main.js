@@ -3456,6 +3456,15 @@ class NocturneWriter {
       
       this.updateToolbarState();
       this.renderReviewToolbarSlot();
+
+      // Clear active bookmark on user-initiated cursor/selection movement
+      if (!this._isJumpingToBookmark) {
+        const focusedPaneId = this.state.workspace?.focusedPaneId;
+        if (focusedPaneId && this.state.activeBookmarkIndexByPane && this.state.activeBookmarkIndexByPane[focusedPaneId] !== undefined) {
+          delete this.state.activeBookmarkIndexByPane[focusedPaneId];
+          this.updateBookmarkHighlights();
+        }
+      }
     });
     window.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') {
@@ -10686,6 +10695,10 @@ class NocturneWriter {
   }
 
   jumpToDocumentBookmark(paneId, bookmark) {
+    this._isJumpingToBookmark = true;
+    if (this._jumpToBookmarkTimeout) clearTimeout(this._jumpToBookmarkTimeout);
+    this._jumpToBookmarkTimeout = setTimeout(() => { this._isJumpingToBookmark = false; }, 200);
+
     const editor = this.nocturneEditor?.get(paneId);
     if (!editor) return;
     
@@ -10739,6 +10752,10 @@ class NocturneWriter {
   }
 
   jumpToNoteBookmark(paneId, bookmark) {
+    this._isJumpingToBookmark = true;
+    if (this._jumpToBookmarkTimeout) clearTimeout(this._jumpToBookmarkTimeout);
+    this._jumpToBookmarkTimeout = setTimeout(() => { this._isJumpingToBookmark = false; }, 200);
+
     const paneEl = document.querySelector(`.workspace-pane[data-pane-id="${paneId}"]`);
     if (!paneEl) return;
     
