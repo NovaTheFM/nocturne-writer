@@ -2067,29 +2067,31 @@ body.ctrl-pressed .entity-family-link:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border: 1px solid rgba(var(--accent-rgb, 139, 92, 246), .28);
+  border: 1px solid var(--border);
   border-radius: 10px;
-  background: rgba(14, 14, 18, .96);
+  background: var(--popover-bg-solid, var(--bg-panel, rgba(14, 14, 18, .96)));
   box-shadow: 0 8px 25px rgba(0, 0, 0, .3);
   padding: 8px 12px;
   pointer-events: auto;
+  color: var(--text-main);
 }
 .material .review-nav-controls {
-  background: rgba(18, 18, 24, .78);
+  background: var(--popover-bg-material, var(--bg-glass, rgba(18, 18, 24, .78)));
   backdrop-filter: blur(18px) saturate(1.2);
   -webkit-backdrop-filter: blur(18px) saturate(1.2);
 }
 .review-detail-card {
-  border: 1px solid rgba(var(--accent-rgb, 139, 92, 246), .28);
+  border: 1px solid var(--border);
   border-radius: 10px;
-  background: rgba(14, 14, 18, .96);
+  background: var(--popover-bg-solid, var(--bg-panel, rgba(14, 14, 18, .96)));
   box-shadow: 0 18px 45px rgba(0, 0, 0, .4);
   padding: 16px;
   overflow: hidden;
   pointer-events: auto;
+  color: var(--text-main);
 }
 .material .review-detail-card {
-  background: rgba(18, 18, 24, .78);
+  background: var(--popover-bg-material, var(--bg-glass, rgba(18, 18, 24, .78)));
   backdrop-filter: blur(18px) saturate(1.2);
   -webkit-backdrop-filter: blur(18px) saturate(1.2);
 }
@@ -2099,7 +2101,7 @@ body.ctrl-pressed .entity-family-link:hover {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: #a7f3d0;
+  color: var(--accent);
   font-weight: 800;
 }
 .review-nav-controls button {
@@ -2107,12 +2109,15 @@ body.ctrl-pressed .entity-family-link:hover {
   height: 30px;
   border: 1px solid var(--border);
   border-radius: 7px;
-  background: rgba(255,255,255,.04);
-  color: #fff;
+  background: var(--field-bg, rgba(255,255,255,.04));
+  color: var(--text-main);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+.review-nav-controls button:hover {
+  background: var(--hover-soft, rgba(255, 255, 255, .08));
 }
 .review-detail-card blockquote {
   margin: 8px 0;
@@ -5425,21 +5430,21 @@ body.mobile-shell-active .sortable-fallback-drag.timeline-item {
 .theme-blazing {
   --baseline-grid-color: rgba(var(--accent-rgb), 0.06);
   --bg-deep: #000000;
-  --bg-panel: #0a0606;
-  --bg-glass: rgba(10, 6, 6, 0.78);
-  --bg-page: #0d0808;
+  --bg-panel: #000000;
+  --bg-glass: rgba(0, 0, 0, 0.82);
+  --bg-page: #000000;
   --text-main: #fdf5f5;
   --text-muted: #886869;
   --border: rgba(var(--accent-rgb), 0.2);
   --border-light: rgba(var(--accent-rgb), 0.08);
-  --popover-bg-solid: #0c0707;
-  --popover-bg-material: rgba(12, 7, 7, 0.72);
+  --popover-bg-solid: #000000;
+  --popover-bg-material: rgba(0, 0, 0, 0.85);
   --popover-border: rgba(var(--accent-rgb), 0.28);
   --workspace-bg:
     radial-gradient(circle at 16% 18%, rgba(var(--accent-rgb), .22), transparent 34%),
     radial-gradient(circle at 82% 10%, rgba(var(--accent-rgb), .12), transparent 30%),
     radial-gradient(circle at 54% 86%, rgba(var(--accent-rgb), .08), transparent 38%),
-    linear-gradient(145deg, #000000 0%, #080303 48%, #030000 100%);
+    linear-gradient(145deg, #000000 0%, #000000 100%);
   --workspace-grid: rgba(var(--accent-rgb), .035);
   --workspace-grid-2: rgba(var(--accent-rgb), .025);
   --workspace-grid-opacity: .45;
@@ -10515,7 +10520,7 @@ body.compact .kb-sidebar {
   display: flex;
   align-items: center;
   gap: 2px;
-  background: var(--bg-card, #1e1e2e);
+  background: var(--popover-bg-solid, var(--bg-panel, #1e1e2e));
   border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
   border-radius: var(--radius-lg, 24px);
   padding: 4px;

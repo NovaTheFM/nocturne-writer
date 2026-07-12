@@ -460,7 +460,7 @@ class NocturneWriter {
     this.startGitAutosave();
 
     // Check if new version first run (specifically for Electron desktop users)
-    const currentVersion = '1.1.0';
+    const currentVersion = '1.1.1';
     if (this.runtime.isElectron && this.state.settings.lastSeenVersion !== currentVersion) {
       setTimeout(() => {
         this.openWhatsNewModal();
@@ -5339,7 +5339,15 @@ class NocturneWriter {
     const floatingEditable = event.target.closest?.('[data-floating-field]');
     if (floatingEditable) this.handleFloatingNoteInput(floatingEditable);
     if (event.target.matches('[data-accent-hex], [data-accent-native]')) {
-      this.handleAccentInput(event.target);
+      if (this.state.settings.theme !== 'adaptive') {
+        this.handleAccentInput(event.target);
+      } else {
+        const raw = event.target.matches('[data-accent-hex]') ? `#${event.target.value}` : event.target.value;
+        const color = this.normalizeAccentHex(raw);
+        if (color) {
+          event.target.closest('[data-accent-picker]')?.style.setProperty('--accent-preview', color);
+        }
+      }
       return;
     }
     if (event.target.matches('[data-setting]')) this.updateSettingFromControl(event.target);
@@ -5521,6 +5529,12 @@ class NocturneWriter {
     const action = event.target.closest('[data-action]')?.dataset.action;
     if (action) {
       this.runAction(action, event);
+      return;
+    }
+    if (event.target.matches('[data-accent-hex], [data-accent-native]')) {
+      if (this.state.settings.theme === 'adaptive') {
+        this.handleAccentInput(event.target);
+      }
       return;
     }
     if (event.target.matches('[data-setting]')) this.updateSettingFromControl(event.target);
@@ -20163,7 +20177,7 @@ ${raw}`;
       format: 'nocturnedump',
       version: 1,
       appName: 'Nocturne Writer',
-      appVersion: '1.1.0',
+      appVersion: '1.1.1',
       schemaVersion: 3,
       exportedAt: new Date().toISOString(),
       encrypted: !!this.state.settings.e2e,
@@ -20529,6 +20543,31 @@ ${raw}`;
             <h2 style="text-align: center; margin: 0 0 4px; font-size: 22px; color: var(--text-main); font-weight: 700;">Что нового</h2>
             <p style="text-align: center; margin: 0 0 20px; font-size: 13px; color: var(--text-muted, #a1a1aa);">Луна хочет рассказать вам о новинках!</p>
             <div class="whats-new-body" style="max-height: 280px; overflow-y: auto; padding-right: 8px; font-size: 14px; line-height: 1.6; color: var(--text-main);">
+              <p style="margin: 0 0 16px; font-weight: 600; color: var(--accent);">Версия 1.1.1</p>
+              
+              <p style="margin: 0 0 4px; font-weight: 600;">🖤 Чистый OLED Черный и Темизация:</p>
+              <ul style="margin: 0 0 12px; padding-left: 20px;">
+                <li>Тема <b>Blazing Black</b> переработана под абсолютно черный OLED-цвет (#000000) для глубокого контраста.</li>
+                <li>Реализована сквозная темизация виджета <b>закладок</b> и панели <b>финализации правок</b> — теперь они подстраивают свои цвета под любые темы оформления (включая светлые).</li>
+              </ul>
+
+              <p style="margin: 0 0 4px; font-weight: 600;">🔍 Улучшенный поиск и замена:</p>
+              <ul style="margin: 0 0 12px; padding-left: 20px;">
+                <li>Добавлена поддержка поиска нескольких ключевых слов (через точку с запятой <code>;</code>) с одновременной подсветкой.</li>
+                <li>Добавлены плавные переходы высоты окон глобального поиска и автозамены при изменении параметров запроса.</li>
+                <li>Подсветка результатов переведена на сверхбыстрый <b>CSS Custom Highlight API</b> без изменения DOM-структуры.</li>
+              </ul>
+
+              <p style="margin: 0 0 4px; font-weight: 600;">🚀 Оптимизация и исправления:</p>
+              <ul style="margin: 0 0 20px; padding-left: 20px;">
+                <li>Добавлена «защита от лагов» для темы <b>Adaptive</b>: акцентный цвет применяется только после завершения выбора.</li>
+                <li>Виджет закладок в режиме финализации плавно перемещается влево, предотвращая перекрытия.</li>
+                <li>Добавлен экспорт DOCX/.nocturned напрямую из контекстного меню документов.</li>
+                <li>Исправлен фокус кастомной каретки при возвращении в приложение и центрирование кнопок подтверждения.</li>
+              </ul>
+
+              <hr style="border: 0; border-top: 1px solid var(--border); margin: 20px 0;">
+
               <p style="margin: 0 0 16px; font-weight: 600; color: var(--accent);">Версия 1.1.0</p>
               
               <p style="margin: 0 0 4px; font-weight: 600;">🔖 Закладки и Режим Чтения:</p>
