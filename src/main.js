@@ -1276,7 +1276,8 @@ class NocturneWriter {
         this.state.workspace.focusedPaneId = existingPaneId;
                 this.persistWorkspaceState();
         this.updateWorkspaceFocusClasses();
-        this.renderDocs();
+        this.state.activeDocId = descriptor.docId;
+        this.updateActiveDocHighlight();
         this.renderNotes();
         this.renderFloatingNotes();
         this.renderSaveIndicator();
@@ -1510,7 +1511,9 @@ class NocturneWriter {
     }
         this.persistWorkspaceState();
     this.renderWorkspace();
-    this.renderDocs();
+    const activeDoc = this.getFocusedDoc();
+    this.state.activeDocId = activeDoc ? activeDoc.id : null;
+    this.updateActiveDocHighlight();
     this.renderFloatingNotes();
     this.toast(emptySide === 'left' ? 'Пустая область открыта слева.' : 'Пустая область открыта справа.');
   }
@@ -9244,7 +9247,7 @@ class NocturneWriter {
     const paneId = this.state.workspace?.mode === 'split' ? this.state.workspace.focusedPaneId : 'primary';
     this.openInPane(paneId, { type: 'document', docId: id });
     this.state.activeDocId = id;
-    this.renderDocs();
+    this.updateActiveDocHighlight();
     this.renderNotes();
     this.drawSentiment();
   }
