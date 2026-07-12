@@ -117,58 +117,26 @@ export class CommandPalette {
     const groups = this.groupedCommands();
     const flat = [...groups.values()].flat();
     this.selected = Math.min(this.selected, Math.max(0, flat.length - 1));
-
-    const panel = box.closest('.command-palette-panel');
-    let startHeight = 0;
-    if (panel) {
-      startHeight = panel.offsetHeight;
-      panel.style.height = `${startHeight}px`;
-      panel.style.transition = 'none';
-    }
-
     if (!flat.length) {
       box.innerHTML = '<div class="command-empty"><i class="bx bx-search-alt"></i><strong>Ничего не найдено</strong><span>Попробуйте: настройки, экспорт, персонаж, глава или таймлайн.</span></div>';
-    } else {
-      let index = 0;
-      box.innerHTML = [...groups.entries()].map(([group, commands]) => `
-        <div class="command-group">
-          <div class="command-group-title">${escapeHtml(group)}</div>
-          ${commands.map((command) => {
-            const active = index === this.selected;
-            const currentIndex = index;
-            const icon = this.app.commandPaletteIconHtml?.(command.icon) || `<i class="bx ${escapeHtml(command.icon || 'bx-command')}"></i>`;
-            index += 1;
-            return `<button class="command-item ${active ? 'active' : ''}" data-command-palette-run="${escapeHtml(command.id)}" data-command-index="${currentIndex}">
-              ${icon}
-              <span><strong>${escapeHtml(command.title)}</strong><small>${escapeHtml(command.subtitle || '')}</small></span>
-              ${mobile ? '' : '<kbd class="command-key-hint">Enter</kbd>'}
-            </button>`;
-          }).join('')}
-        </div>`).join('');
+      return;
     }
-
-    if (panel && startHeight > 0) {
-      requestAnimationFrame(() => {
-        panel.style.height = '';
-        const targetHeight = panel.offsetHeight;
-        panel.style.height = `${startHeight}px`;
-        
-        // Force reflow
-        panel.offsetHeight;
-        
-        panel.style.transition = 'height 0.22s cubic-bezier(0.4, 0, 0.2, 1)';
-        panel.style.height = `${targetHeight}px`;
-        
-        const onEnd = (e) => {
-          if (e.propertyName === 'height') {
-            panel.style.height = '';
-            panel.style.transition = '';
-            panel.removeEventListener('transitionend', onEnd);
-          }
-        };
-        panel.addEventListener('transitionend', onEnd);
-      });
-    }
+    let index = 0;
+    box.innerHTML = [...groups.entries()].map(([group, commands]) => `
+      <div class="command-group">
+        <div class="command-group-title">${escapeHtml(group)}</div>
+        ${commands.map((command) => {
+          const active = index === this.selected;
+          const currentIndex = index;
+          const icon = this.app.commandPaletteIconHtml?.(command.icon) || `<i class="bx ${escapeHtml(command.icon || 'bx-command')}"></i>`;
+          index += 1;
+          return `<button class="command-item ${active ? 'active' : ''}" data-command-palette-run="${escapeHtml(command.id)}" data-command-index="${currentIndex}">
+            ${icon}
+            <span><strong>${escapeHtml(command.title)}</strong><small>${escapeHtml(command.subtitle || '')}</small></span>
+            ${mobile ? '' : '<kbd class="command-key-hint">Enter</kbd>'}
+          </button>`;
+        }).join('')}
+      </div>`).join('');
   }
 
   handleKeydown(event) {

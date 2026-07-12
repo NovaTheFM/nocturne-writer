@@ -11809,6 +11809,64 @@ class NocturneWriter {
     this.repaginatePreserve(paneId, immediate);
   }
 
+  animateHeightTransition(element, updateCallback) {
+    if (!element) {
+      updateCallback();
+      return;
+    }
+    
+    // Clean up any pending transition cleanup function
+    if (typeof element.__heightTransitionCleanup === 'function') {
+      element.__heightTransitionCleanup();
+    }
+    
+    const startHeight = element.offsetHeight;
+    
+    const origTransition = element.style.transition;
+    const origOverflow = element.style.overflow;
+    element.style.transition = 'none';
+    element.style.height = `${startHeight}px`;
+    element.style.overflow = 'hidden';
+    
+    updateCallback();
+    
+    let isCleanedUp = false;
+    const cleanup = () => {
+      if (isCleanedUp) return;
+      isCleanedUp = true;
+      element.style.height = '';
+      element.style.transition = origTransition;
+      element.style.overflow = origOverflow;
+      element.removeEventListener('transitionend', onEnd);
+      element.__heightTransitionCleanup = null;
+    };
+    
+    const onEnd = (e) => {
+      if (e.propertyName === 'height') {
+        cleanup();
+      }
+    };
+    
+    element.__heightTransitionCleanup = cleanup;
+    
+    requestAnimationFrame(() => {
+      element.style.height = '';
+      const targetHeight = element.offsetHeight;
+      element.style.height = `${startHeight}px`;
+      
+      // Force reflow
+      element.offsetHeight;
+      
+      element.style.transition = 'height 0.22s cubic-bezier(0.4, 0, 0.2, 1)';
+      element.style.height = `${targetHeight}px`;
+      
+      element.addEventListener('transitionend', onEnd);
+      
+      // Safety timeout
+      setTimeout(cleanup, 350);
+    });
+  }
+
   openSearchChooser() {
     const hasDoc = !!this.getFocusedDoc();
     const overlay = document.getElementById('form-overlay');
@@ -11864,19 +11922,28 @@ class NocturneWriter {
     if (!panel || !this.searchSession) return;
     const total = this.searchSession.matches?.length || 0;
     const current = total ? Math.min(total, this.searchSession.activeIndex + 1) : 0;
-    panel.innerHTML = `
-      <div class="doc-search-panel-row">
-        <i class="bx bx-search"></i>
-        <input id="doc-search-query" data-doc-search-query value="${escapeHtml(this.searchSession.query || '')}" placeholder="Найти в документе">
-        <span class="search-count">${current} / ${total}</span>
-        <button class="tool-btn" data-action="search-prev" title="Предыдущее"><i class="bx bx-chevron-left"></i></button>
-        <button class="tool-btn" data-action="search-next" title="Следующее"><i class="bx bx-chevron-right"></i></button>
-        <button class="tool-btn" data-action="close-doc-search" title="Закрыть"><i class="bx bx-x"></i></button>
-      </div>
-      <div class="search-options-row">
-        <label class="nocturne-check"><input type="checkbox" data-doc-search-case ${this.searchSession.caseSensitive ? 'checked' : ''}><span class="check-mark"></span><span>Учитывать регистр</span></label>
-        <label class="nocturne-check"><input type="checkbox" data-doc-search-whole ${this.searchSession.wholeWords ? 'checked' : ''}><span class="check-mark"></span><span>Только целые слова</span></label>
-      </div>`;
+    
+    const update = () => {
+      panel.innerHTML = `
+        <div class="doc-search-panel-row">
+          <i class="bx bx-search"></i>
+          <input id="doc-search-query" data-doc-search-query value="${escapeHtml(this.searchSession.query || '')}" placeholder="Найти в документе">
+          <span class="search-count">${current} / ${total}</span>
+          <button class="tool-btn" data-action="search-prev" title="Предыдущее"><i class="bx bx-chevron-left"></i></button>
+          <button class="tool-btn" data-action="search-next" title="Следующее"><i class="bx bx-chevron-right"></i></button>
+          <button class="tool-btn" data-action="close-doc-search" title="Закрыть"><i class="bx bx-x"></i></button>
+        </div>
+        <div class="search-options-row">
+          <label class="nocturne-check"><input type="checkbox" data-doc-search-case ${this.searchSession.caseSensitive ? 'checked' : ''}><span class="check-mark"></span><span>Учитывать регистр</span></label>
+          <label class="nocturne-check"><input type="checkbox" data-doc-search-whole ${this.searchSession.wholeWords ? 'checked' : ''}><span class="check-mark"></span><span>Только целые слова</span></label>
+        </div>`;
+    };
+
+    if (panel.classList.contains('active')) {
+      this.animateHeightTransition(panel, update);
+    } else {
+      update();
+    }
     panel.classList.add('active');
     panel.setAttribute('aria-hidden', 'false');
   }
@@ -12076,8 +12143,10 @@ class NocturneWriter {
   openGlobalSearchWindow(seedQuery = '') {
     this.closeAllFloatingMenus();
     this.globalSearchState = { query: seedQuery || this.globalSearchState.query || '', caseSensitive: false, wholeWords: false, results: [], entitySuggestions: [] };
+    this._globalSearchOpening = true;
     this.renderGlobalSearchWindow();
     this.runGlobalSearch();
+    this._globalSearchOpening = false;
     setTimeout(() => document.getElementById('global-search-query')?.focus(), 0);
   }
 
@@ -12114,25 +12183,35 @@ class NocturneWriter {
   renderGlobalSearchResults() {
     const box = document.getElementById('global-search-results');
     if (!box) return;
-    const q = this.globalSearchState.query.trim();
-    if (!q) {
-      box.innerHTML = '<div class="search-empty">Введите запрос, чтобы начать поиск.</div>';
-      return;
+    const modal = document.querySelector('.global-search-modal');
+    
+    const update = () => {
+      const q = this.globalSearchState.query.trim();
+      if (!q) {
+        box.innerHTML = '<div class="search-empty">Введите запрос, чтобы начать поиск.</div>';
+        return;
+      }
+      const smart = this.globalSearchState.entitySuggestions.map((entry) => `
+        <div class="smart-entity-suggestion">
+          <span>${entry.kind === 'location' ? 'Найдено место' : 'Найден персонаж'}: <strong>${escapeHtml(this.entityDisplayName(entry.entity))}</strong></span>
+          <button class="pill-btn ai-btn" data-action="open-entity-mentions" data-entity-kind="${entry.kind}" data-entity-id="${escapeHtml(entry.entity.id)}">Показать все упоминания</button>
+        </div>`).join('');
+      const results = this.globalSearchState.results.map(({ doc, matches }) => `
+        <section class="search-result-doc">
+          <header><strong>${escapeHtml(doc.title)}</strong><span>${matches.length} совп.</span></header>
+          ${matches.slice(0, 12).map((match, index) => `
+            <button class="search-snippet" data-action="open-search-result" data-doc-id="${escapeHtml(doc.id)}" data-block-id="${escapeHtml(match.blockId)}" data-match-start="${match.start}" data-query="${escapeHtml(q)}">
+              ${this.snippetForMatch(doc, match)}
+            </button>`).join('')}
+        </section>`).join('');
+      box.innerHTML = `${smart}${results || '<div class="search-empty">Совпадений нет.</div>'}`;
+    };
+
+    if (modal && !this._globalSearchOpening) {
+      this.animateHeightTransition(modal, update);
+    } else {
+      update();
     }
-    const smart = this.globalSearchState.entitySuggestions.map((entry) => `
-      <div class="smart-entity-suggestion">
-        <span>${entry.kind === 'location' ? 'Найдено место' : 'Найден персонаж'}: <strong>${escapeHtml(this.entityDisplayName(entry.entity))}</strong></span>
-        <button class="pill-btn ai-btn" data-action="open-entity-mentions" data-entity-kind="${entry.kind}" data-entity-id="${escapeHtml(entry.entity.id)}">Показать все упоминания</button>
-      </div>`).join('');
-    const results = this.globalSearchState.results.map(({ doc, matches }) => `
-      <section class="search-result-doc">
-        <header><strong>${escapeHtml(doc.title)}</strong><span>${matches.length} совп.</span></header>
-        ${matches.slice(0, 12).map((match, index) => `
-          <button class="search-snippet" data-action="open-search-result" data-doc-id="${escapeHtml(doc.id)}" data-block-id="${escapeHtml(match.blockId)}" data-match-start="${match.start}" data-query="${escapeHtml(q)}">
-            ${this.snippetForMatch(doc, match)}
-          </button>`).join('')}
-      </section>`).join('');
-    box.innerHTML = `${smart}${results || '<div class="search-empty">Совпадений нет.</div>'}`;
   }
 
   openSearchResult(dataset = {}) {
@@ -12169,8 +12248,10 @@ class NocturneWriter {
       preview: true,
       activeIndex: 0,
     };
+    this._replaceOpening = true;
     this.renderReplaceWindow();
     this.updateReplaceMatches();
+    this._replaceOpening = false;
   }
 
   renderReplaceWindow() {
@@ -12222,7 +12303,17 @@ class NocturneWriter {
     this.replaceSession.matches = this.collectDocMatches(doc, this.replaceSession.find, this.replaceSession);
     if (this.replaceSession.activeIndex >= this.replaceSession.matches.length) this.replaceSession.activeIndex = Math.max(0, this.replaceSession.matches.length - 1);
     const summary = document.getElementById('replace-summary');
-    if (summary) summary.innerHTML = this.replaceSession.find ? `Найдено: <strong>${this.replaceSession.matches.length}</strong>` : 'Введите текст для поиска.';
+    if (summary) {
+      const modal = document.querySelector('.replace-modal');
+      const update = () => {
+        summary.innerHTML = this.replaceSession.find ? `Найдено: <strong>${this.replaceSession.matches.length}</strong>` : 'Введите текст для поиска.';
+      };
+      if (modal && !this._replaceOpening) {
+        this.animateHeightTransition(modal, update);
+      } else {
+        update();
+      }
+    }
   }
 
   replacementWithCase(found, replacement) {
@@ -12352,12 +12443,20 @@ class NocturneWriter {
     const doc = this.state.docs.find((item) => item.id === this.replaceSession.docId);
     const summary = document.getElementById('replace-summary');
     if (!summary) return;
-    summary.innerHTML = `
-      <div class="replace-preview">
-        <strong>Будет заменено: ${matches.length}</strong>
-        ${matches.slice(0, 8).map((match) => `<div>${this.snippetForMatch(doc, match, 36)}</div>`).join('')}
-        <button class="pill-btn ai-btn" data-action="confirm-replace-all">Подтвердить замену всех</button>
-      </div>`;
+    const modal = document.querySelector('.replace-modal');
+    const update = () => {
+      summary.innerHTML = `
+        <div class="replace-preview">
+          <strong>Будет заменено: ${matches.length}</strong>
+          ${matches.slice(0, 8).map((match) => `<div>${this.snippetForMatch(doc, match, 36)}</div>`).join('')}
+          <button class="pill-btn ai-btn" data-action="confirm-replace-all">Подтвердить замену всех</button>
+        </div>`;
+    };
+    if (modal) {
+      this.animateHeightTransition(modal, update);
+    } else {
+      update();
+    }
   }
 
   confirmReplaceAll() {

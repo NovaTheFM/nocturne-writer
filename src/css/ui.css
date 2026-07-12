@@ -5425,21 +5425,21 @@ body.mobile-shell-active .sortable-fallback-drag.timeline-item {
 .theme-blazing {
   --baseline-grid-color: rgba(var(--accent-rgb), 0.06);
   --bg-deep: #000000;
-  --bg-panel: color-mix(in srgb, var(--accent) 3.5%, #000000);
-  --bg-glass: color-mix(in srgb, var(--accent) 3.5%, rgba(0, 0, 0, 0.78));
-  --bg-page: color-mix(in srgb, var(--accent) 4.5%, #000000);
-  --text-main: color-mix(in srgb, var(--accent) 3%, #ffffff);
-  --text-muted: color-mix(in srgb, var(--accent) 28%, #777777);
+  --bg-panel: #0a0606;
+  --bg-glass: rgba(10, 6, 6, 0.78);
+  --bg-page: #0d0808;
+  --text-main: #fdf5f5;
+  --text-muted: #886869;
   --border: rgba(var(--accent-rgb), 0.2);
   --border-light: rgba(var(--accent-rgb), 0.08);
-  --popover-bg-solid: color-mix(in srgb, var(--accent) 4.5%, #000000);
-  --popover-bg-material: color-mix(in srgb, var(--accent) 4.5%, rgba(0, 0, 0, 0.72));
+  --popover-bg-solid: #0c0707;
+  --popover-bg-material: rgba(12, 7, 7, 0.72);
   --popover-border: rgba(var(--accent-rgb), 0.28);
   --workspace-bg:
     radial-gradient(circle at 16% 18%, rgba(var(--accent-rgb), .22), transparent 34%),
     radial-gradient(circle at 82% 10%, rgba(var(--accent-rgb), .12), transparent 30%),
     radial-gradient(circle at 54% 86%, rgba(var(--accent-rgb), .08), transparent 38%),
-    linear-gradient(145deg, #000000 0%, color-mix(in srgb, var(--accent) 3%, #000000) 48%, color-mix(in srgb, var(--accent) 1%, #000000) 100%);
+    linear-gradient(145deg, #000000 0%, #080303 48%, #030000 100%);
   --workspace-grid: rgba(var(--accent-rgb), .035);
   --workspace-grid-2: rgba(var(--accent-rgb), .025);
   --workspace-grid-opacity: .45;
@@ -10520,7 +10520,7 @@ body.compact .kb-sidebar {
   border-radius: var(--radius-lg, 24px);
   padding: 4px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-  transition: bottom 0.2s ease;
+  transition: bottom 0.2s ease, left 0.2s ease, right 0.2s ease;
   user-select: none;
   -webkit-user-select: none;
   pointer-events: auto !important;
@@ -10528,7 +10528,9 @@ body.compact .kb-sidebar {
 }
 
 body[data-active-review-mode="finalization"] .pane-bookmarks-widget {
-  bottom: 80px;
+  right: auto;
+  left: 16px;
+  bottom: 16px;
 }
 
 .pane-bookmarks-btn,
