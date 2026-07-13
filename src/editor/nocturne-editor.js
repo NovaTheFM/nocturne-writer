@@ -349,6 +349,81 @@ const NocturneBookmarks = Extension.create({
   }
 });
 
+const NocturneAutoformat = Extension.create({
+  name: 'nocturneAutoformat',
+  addOptions() {
+    return {
+      getSettings: () => ({}),
+    };
+  },
+  addProseMirrorPlugins() {
+    const extension = this;
+    let lastDoubleDashReplacement = null;
+
+    return [
+      new Plugin({
+        key: new PluginKey('nocturneAutoformat'),
+        props: {
+          handleTextInput(view, from, to, text) {
+            const settings = extension.options.getSettings() || {};
+            const state = view.state;
+            const $from = state.selection.$from;
+            if ($from.depth === 0) return false;
+            const parent = $from.parent;
+            const textBefore = parent.textBetween(0, $from.parentOffset, null, '\0');
+
+            // 1. Convert -- to — (Em-dash)
+            if (settings.autoReplaceDoubleDash && text === '-' && textBefore.endsWith('-')) {
+              const start = $from.pos - 1;
+              const tr = state.tr.insertText('—', start, $from.pos);
+              view.dispatch(tr);
+              const newPos = view.state.selection.from;
+              lastDoubleDashReplacement = {
+                pos: newPos,
+                timestamp: Date.now()
+              };
+              return true; // handled
+            }
+
+            // 2. Convert space-hyphen-space to space-en-dash-space
+            if (settings.autoReplaceEnDash && text === ' ' && textBefore.endsWith(' -')) {
+              const start = $from.pos - 1; // position of '-'
+              const tr = state.tr.insertText('–', start, $from.pos);
+              view.dispatch(tr);
+              return false; // let Prosemirror insert the typed space after '–'
+            }
+
+            return false;
+          },
+          handleKeyDown(view, event) {
+            if (event.key === 'Backspace') {
+              const state = view.state;
+              const { selection } = state;
+              if (selection.empty && lastDoubleDashReplacement) {
+                const pos = selection.from;
+                const timeDiff = Date.now() - lastDoubleDashReplacement.timestamp;
+                if (pos === lastDoubleDashReplacement.pos && timeDiff < 10000) {
+                  const $from = selection.$from;
+                  const textBefore = $from.parent.textBetween(0, $from.parentOffset, null, '\0');
+                  if (textBefore.endsWith('—')) {
+                    event.preventDefault();
+                    const tr = state.tr.insertText('--', pos - 1, pos);
+                    view.dispatch(tr);
+                    lastDoubleDashReplacement = null;
+                    return true;
+                  }
+                }
+              }
+              lastDoubleDashReplacement = null;
+            }
+            return false;
+          }
+        }
+      })
+    ];
+  }
+});
+
 const NocturneInputRules = Extension.create({
   name: 'nocturneInputRules',
   addOptions() {
@@ -520,6 +595,9 @@ export class NocturneEditorBridge {
       editable: !readOnly,
       content: doc.pmJson || legacyAstToHtml(doc.ast),
       extensions: [
+        NocturneAutoformat.configure({
+          getSettings: () => this.getSettings?.() || {}
+        }),
         NocturneInputRules.configure({
           getRules: () => {
             const settings = this.getSettings?.() || {};
@@ -530,6 +608,8 @@ export class NocturneEditorBridge {
           heading: { levels: [1, 2, 3] },
           history: { depth: 100 },
           horizontalRule: false,
+          bulletList: false,
+          orderedList: false,
         }),
         HorizontalRule.extend({
           addInputRules() {

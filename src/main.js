@@ -329,6 +329,7 @@ class NocturneWriter {
         this.nocturnedImportQueue = [];
     this.nocturnedImportModalOpen = false;
     this.docWordBaselines = new Map();
+    this.docHighWatermarks = new Map();
     this.settingsTooltipTimer = null;
     this.settingsTooltipHideTimer = null;
     this.repaginateSettingsDebounced = debounce(() => this.renderWorkspace(), 260);
@@ -439,8 +440,18 @@ class NocturneWriter {
     // Only calculate word baseline for active document on startup to avoid startup lag
     const activeDoc = this.state.docs.find((doc) => doc.id === this.state.activeDocId) || this.state.docs[0];
     if (activeDoc) {
-      this.docWordBaselines.set(activeDoc.id, countWords(docText(activeDoc.ast)));
+      const wordsCount = countWords(docText(activeDoc.ast));
+      this.docWordBaselines.set(activeDoc.id, wordsCount);
+      this.docHighWatermarks.set(activeDoc.id, wordsCount);
     }
+    
+    // Load today's stats from DB to prevent resetting to 0 on reload
+    const todayStr = new Date().toISOString().slice(0, 10);
+    this.todayStatsCache = (await this.db.get('stats', todayStr)) || { id: todayStr, words: 0, completed: false };
+    
+    // Check daily goal streak on startup
+    await this.checkStreakOnStartup();
+
     this.state.lore = await this.loadLore();
     await this.loadFloatingNotes();
     await this.loadTypoRules();
@@ -460,13 +471,18 @@ class NocturneWriter {
     this.startGitAutosave();
 
     // Check if new version first run (specifically for Electron desktop users)
-    const currentVersion = '1.1.1';
-    if (this.runtime.isElectron && this.state.settings.lastSeenVersion !== currentVersion) {
+    const currentVersion = '1.1.2';
+    const showWhatsNew = this.runtime.isElectron && this.state.settings.lastSeenVersion !== currentVersion;
+    if (showWhatsNew) {
       setTimeout(() => {
         this.openWhatsNewModal();
         this.state.settings.lastSeenVersion = currentVersion;
         this.persistSettings();
       }, 2200);
+    } else {
+      setTimeout(() => {
+        this.checkAndShowSadMoonModal();
+      }, 2500);
     }
   }
 
@@ -501,7 +517,7 @@ class NocturneWriter {
       const value = Number(merged[key]);
       merged[key] = Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
     };
-    const bools = ['windowMaterial', 'cursorGlow', 'compactPanels', 'experimentalDesign', 'caretBreath', 'paragraphIndent', 'smartPunctuation', 'writerSyntax', 'baselineGrid', 'readability', 'typewriterSound', 'typewriterMode', 'strictSpellcheck', 'smartDictionary', 'sentenceFocus', 'showDontTell', 'sentimentTimeline', 'sprintLock', 'timeMachine', 'gitVersioning', 'e2e', 'watermark', 'liveSave', 'autoPaginate', 'showPageRulers', 'showZenButton', 'notesAutosave', 'toolbarSticky', 'reduceMobileAnimations', 'aiKnowledgeContext', 'aiContextCharacters', 'aiContextLocations', 'aiContextTimeline', 'aiContextSubtimelines', 'aiContextRules', 'aiContextNotes'];
+    const bools = ['windowMaterial', 'cursorGlow', 'compactPanels', 'experimentalDesign', 'caretBreath', 'paragraphIndent', 'smartPunctuation', 'writerSyntax', 'baselineGrid', 'readability', 'typewriterSound', 'typewriterMode', 'strictSpellcheck', 'smartDictionary', 'sentenceFocus', 'showDontTell', 'sentimentTimeline', 'sprintLock', 'timeMachine', 'gitVersioning', 'e2e', 'watermark', 'liveSave', 'autoPaginate', 'showPageRulers', 'showZenButton', 'notesAutosave', 'toolbarSticky', 'reduceMobileAnimations', 'aiKnowledgeContext', 'aiContextCharacters', 'aiContextLocations', 'aiContextTimeline', 'aiContextSubtimelines', 'aiContextRules', 'aiContextNotes', 'autoReplaceDoubleDash', 'autoReplaceEnDash'];
     bools.forEach((key) => { merged[key] = !!merged[key]; });
     const allowedFonts = ['Lora', 'Manrope', 'Georgia', 'Inter', 'Playfair Display', 'Merriweather', 'Courier New'];
     if (Array.isArray(merged.customFonts)) {
@@ -3760,8 +3776,15 @@ class NocturneWriter {
       const overlay = document.getElementById('whats-new-overlay');
       if (overlay) {
         overlay.classList.remove('active');
-        setTimeout(() => overlay.remove(), 300);
+        setTimeout(() => {
+          overlay.remove();
+          this.checkAndShowSadMoonModal();
+        }, 300);
       }
+      return;
+    }
+    if (action === 'close-luna-streak') {
+      this.closeLunaStreakModal();
       return;
     }
     const reviewModeButton = event.target.closest('button[data-review-mode]');
@@ -5593,6 +5616,22 @@ class NocturneWriter {
   }
 
   handleKeydown(event) {
+    // Detect typing the word "luna" while settings misc panel is active
+    const settingsOverlay = document.getElementById('settings-overlay');
+    if (settingsOverlay && settingsOverlay.classList.contains('active') && this.state.activeSettingsTab === 'misc') {
+      if (event.key && event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        if (!this.lunaDebugBuffer) this.lunaDebugBuffer = '';
+        this.lunaDebugBuffer += event.key.toLowerCase();
+        if (this.lunaDebugBuffer.length > 4) {
+          this.lunaDebugBuffer = this.lunaDebugBuffer.slice(-4);
+        }
+        if (this.lunaDebugBuffer === 'luna') {
+          this.lunaDebugBuffer = '';
+          this.openLunaDebugMenu();
+        }
+      }
+    }
+
     const keyName = this.getLayoutIndependentKey(event).toUpperCase();
     this.currentlyPressedKeys = this.currentlyPressedKeys || new Set();
     this.currentlyPressedKeys.add(keyName);
@@ -5723,13 +5762,31 @@ class NocturneWriter {
       return;
     }
     if (!isTiptap && editable && (event.key === 'Backspace' || event.key === 'Delete')) {
+      if (event.key === 'Backspace') {
+        const sel = getSelection();
+        if (sel && sel.rangeCount && sel.anchorNode && sel.getRangeAt(0).collapsed && this.legacyLastDoubleDashReplacement) {
+          const offset = sel.anchorOffset;
+          if (sel.anchorNode === this.legacyLastDoubleDashReplacement.node && 
+              offset === this.legacyLastDoubleDashReplacement.offset && 
+              Date.now() - this.legacyLastDoubleDashReplacement.timestamp < 10000) {
+            const text = sel.anchorNode.textContent || '';
+            if (text[offset - 1] === '—') {
+              event.preventDefault();
+              this.replaceTextBeforeCaret(1, '--');
+              this.legacyLastDoubleDashReplacement = null;
+              return;
+            }
+          }
+        }
+        this.legacyLastDoubleDashReplacement = null;
+      }
       if (this.handlePageBoundaryDeletion(editable, event)) return;
       if (event.key === 'Delete' && this.handleEditorDeleteKey(editable, event)) return;
       if (event.key === 'Backspace' && this.handleEmptyEditorBackspace(editable, event)) return;
     }
     if (editable && this.isEditable(editable) && event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
       setTimeout(() => this.spawnLetterAnimation(event.key), 0);
-      if (!isTiptap && this.state.settings.smartPunctuation) this.smartPunctuationKey(event);
+      if (!isTiptap && (this.state.settings.smartPunctuation || this.state.settings.autoReplaceDoubleDash || this.state.settings.autoReplaceEnDash)) this.smartPunctuationKey(event);
     }
     if (editable) this.lastEditKey = event.key;
     if ((event.ctrlKey || event.metaKey) && this.getLayoutIndependentKey(event).toLowerCase() === 's') {
@@ -14217,10 +14274,11 @@ class NocturneWriter {
     countEl.textContent = `${words} / ${goal}`;
     const pct = Math.min(100, Math.round((words / goal) * 100));
     fillEl.style.width = `${pct}%`;
-    if (pct >= 100 && !safeGetStorageItem(localStorage, `goal-done-${new Date().toISOString().slice(0, 10)}`, '')) {
-      safeSetStorageItem(localStorage, `goal-done-${new Date().toISOString().slice(0, 10)}`, '1');
-      this.confetti();
-      this.toast('Цель дня достигнута.');
+    
+    // Save completion state in stats db row if reached
+    if (pct >= 100 && this.todayStatsCache && !this.todayStatsCache.completed) {
+      this.todayStatsCache.completed = true;
+      this.db.put('stats', this.todayStatsCache);
     }
   }
 
@@ -14229,17 +14287,52 @@ class NocturneWriter {
   }
 
   async updateTodayStatsForDoc(docId) {
+    if (!docId) return;
     const id = new Date().toISOString().slice(0, 10);
     const doc = this.state.docs.find((item) => item.id === docId);
-    const current = doc ? countWords(docText(doc.ast)) : 0;
+    if (!doc) return;
+    
+    const current = countWords(docText(doc.ast));
+    
+    // Initialize high watermark if not set for this document session
+    if (!this.docHighWatermarks.has(docId)) {
+      this.docHighWatermarks.set(docId, current);
+    }
+    
+    let highWatermark = this.docHighWatermarks.get(docId);
     const previous = this.docWordBaselines.has(docId) ? this.docWordBaselines.get(docId) : current;
-    const delta = Math.max(0, current - previous);
+    const diff = previous - current;
+    
+    // If user deletes a whole paragraph (15+ words in a single check), reset watermark
+    if (diff >= 15) {
+      highWatermark = current;
+      this.docHighWatermarks.set(docId, current);
+    }
+    
+    let delta = 0;
+    if (current - previous >= 15) {
+      // Large jump (Paste/Undo): adjust watermark without counting progress
+      highWatermark = current;
+      this.docHighWatermarks.set(docId, current);
+    } else if (current > highWatermark) {
+      delta = current - highWatermark;
+      this.docHighWatermarks.set(docId, current);
+    }
+    
     this.docWordBaselines.set(docId, current);
-    const existing = (await this.db.get('stats', id)) || { id, words: 0 };
-    const next = { id, words: Math.max(0, Number(existing.words || 0) + delta), updatedAt: Date.now() };
-    await this.db.put('stats', next);
-    this.todayStatsCache = next;
-    this.renderGoal();
+    
+    if (delta > 0) {
+      const existing = (await this.db.get('stats', id)) || { id, words: 0, completed: false };
+      const next = { 
+        id, 
+        words: Math.max(0, Number(existing.words || 0) + delta), 
+        completed: existing.completed || false, 
+        updatedAt: Date.now() 
+      };
+      await this.db.put('stats', next);
+      this.todayStatsCache = next;
+      this.renderGoal();
+    }
   }
 
   smartPunctuationKey(event) {
@@ -14248,11 +14341,22 @@ class NocturneWriter {
     if (!sel.rangeCount || !sel.anchorNode || !sel.getRangeAt(0).collapsed) return;
     const text = sel.anchorNode.textContent || '';
     const offset = sel.anchorOffset;
-    if (event.key === '-' && text[offset - 1] === '-') {
+    if (this.state.settings.autoReplaceDoubleDash && event.key === '-' && text[offset - 1] === '-') {
       event.preventDefault();
       this.replaceTextBeforeCaret(1, '—');
+      this.legacyLastDoubleDashReplacement = {
+        node: sel.anchorNode,
+        offset: offset,
+        timestamp: Date.now()
+      };
+      return;
     }
-    if (event.key === '.' && text.slice(Math.max(0, offset - 2), offset) === '..') {
+    if (this.state.settings.autoReplaceEnDash && event.key === ' ' && text.slice(Math.max(0, offset - 2), offset) === ' -') {
+      event.preventDefault();
+      this.replaceTextBeforeCaret(1, '– ');
+      return;
+    }
+    if (this.state.settings.smartPunctuation && event.key === '.' && text.slice(Math.max(0, offset - 2), offset) === '..') {
       event.preventDefault();
       this.replaceTextBeforeCaret(2, '…');
     }
@@ -14617,6 +14721,7 @@ class NocturneWriter {
       } else {
         this._caretLoopRunning = false;
         this.caretLoopId = null;
+        this.checkCaretIdleStreakTrigger();
       }
     };
 
@@ -17967,6 +18072,8 @@ class NocturneWriter {
       { tab: 'export', label: 'Имя автора', note: 'Попадает в метаданные DOCX и используется в водяном знаке PDF.', key: 'authorName', type: 'input' },
       { tab: 'review', label: 'Экспортировать .nocturned рядом с DOCX', note: 'Если у документа есть редакторские правок, рядом с DOCX скачивается JSON-файл обмена правками.', key: 'exportNocturned', type: 'toggle' },
       { tab: 'misc', label: 'Экспериментальный дизайн', note: 'Включает ультра-хайповый детализированный UI.', key: 'experimentalDesign', type: 'toggle' },
+      { tab: 'formatting', label: 'Автозамена -- на длинное тире —', note: 'Автоматически заменяет два дефиса на длинное тире (em-dash) при вводе. При нажатии Backspace возвращает дефисы.', key: 'autoReplaceDoubleDash', type: 'toggle' },
+      { tab: 'formatting', label: 'Автозамена дефиса на среднее тире –', note: 'Автоматически заменяет одиночный дефис на среднее тире (en-dash), когда он находится между отдельными словами.', key: 'autoReplaceEnDash', type: 'toggle' },
     ];
   }
 
@@ -18323,9 +18430,17 @@ class NocturneWriter {
   formattingSettingsContent() {
     const s = this.state.settings;
     const rules = s.customInputRules || [];
+    const row = (label, note, control) => `<div class="setting-row"><div class="setting-info"><span>${label}${note ? `<i class="bx bx-info-circle info-icon" tabindex="0" data-tip="${escapeHtml(note)}"></i>` : ''}</span>${note ? `<small>${note}</small>` : ''}</div><div class="setting-control">${control}</div></div>`;
+    const toggle = (key) => `<div class="toggle ${s[key] ? 'on' : ''}" data-setting="${key}" data-kind="toggle"></div>`;
     return `
       <div class="tab-content active formatting-settings">
         <p class="settings-tab-desc" style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px; line-height: 1.5;">Настройте динамические правила автозамены в редакторе. Например, ввод трех звездочек и нажатие клавиши Enter или Пробел может применить центрирование текста вместо вставки стандартного разделителя.</p>
+
+        <section class="formatting-general-settings" style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); padding: 18px; border-radius: var(--radius-md); margin-bottom: 24px;">
+          <h4 style="margin: 0 0 14px; font-size: 15px; font-weight: 600;">Автоформатирование</h4>
+          ${row('Автозамена -- на длинное тире —', 'Автоматически заменяет два дефиса на длинное тире (em-dash) при вводе. При нажатии Backspace возвращает дефисы.', toggle('autoReplaceDoubleDash'))}
+          ${row('Автозамена дефиса на среднее тире –', 'Автоматически заменяет одиночный дефис на среднее тире (en-dash), когда он находится между отдельными словами.', toggle('autoReplaceEnDash'))}
+        </section>
 
         <section class="formatting-add-card" style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); padding: 18px; border-radius: var(--radius-md); margin-bottom: 24px;">
           <h4 style="margin: 0 0 14px; font-size: 15px; font-weight: 600;">Добавить новое правило</h4>
@@ -20177,7 +20292,7 @@ ${raw}`;
       format: 'nocturnedump',
       version: 1,
       appName: 'Nocturne Writer',
-      appVersion: '1.1.1',
+      appVersion: '1.1.2',
       schemaVersion: 3,
       exportedAt: new Date().toISOString(),
       encrypted: !!this.state.settings.e2e,
@@ -20543,6 +20658,31 @@ ${raw}`;
             <h2 style="text-align: center; margin: 0 0 4px; font-size: 22px; color: var(--text-main); font-weight: 700;">Что нового</h2>
             <p style="text-align: center; margin: 0 0 20px; font-size: 13px; color: var(--text-muted, #a1a1aa);">Луна хочет рассказать вам о новинках!</p>
             <div class="whats-new-body" style="max-height: 280px; overflow-y: auto; padding-right: 8px; font-size: 14px; line-height: 1.6; color: var(--text-main);">
+              <p style="margin: 0 0 16px; font-weight: 600; color: var(--accent);">Версия 1.1.2</p>
+
+              <p style="margin: 0 0 4px; font-weight: 600;">✍️ Автоформатирование тире и отключение автосписков:</p>
+              <ul style="margin: 0 0 12px; padding-left: 20px;">
+                <li>Ввод двух дефисов <code>--</code> автоматически заменяется на длинное тире <code>—</code>.</li>
+                <li>Ввод дефиса между отдельными словами преобразуется в среднее тире <code>–</code>.</li>
+                <li>Нажатие Backspace по автозамененному длинному тире восстанавливает его обратно в <code>--</code>.</li>
+                <li>Отключено принудительное создание списков при вводе <code>- </code> или <code>1. </code>, мешающее художественному тексту.</li>
+              </ul>
+
+              <p style="margin: 0 0 4px; font-weight: 600;">🌙 Счётчик цепочки целей дня Луны:</p>
+              <ul style="margin: 0 0 12px; padding-left: 20px;">
+                <li>Реализован счётчик дней подряд цели дня с поздравлениями, анимацией Луны и летящими конфетти при 3-секундной неактивности ввода.</li>
+                <li>При пропуске дня при первом запуске Луна грустит, побуждая вернуться к творчеству.</li>
+                <li>Интегрировано скрытое отладочное меню Луны (по кодовому слову <code>luna</code> во вкладке настроек «Прочее»).</li>
+              </ul>
+
+              <p style="margin: 0 0 4px; font-weight: 600;">🛡️ Интеллектуальный подсчёт слов:</p>
+              <ul style="margin: 0 0 20px; padding-left: 20px;">
+                <li>Предотвращен сброс цели дня при перезагрузке приложения.</li>
+                <li>Внедрен вотермарк для документов, полностью исключающий фиктивный начет слов на Undo/Redo и Paste, при этом удаление/переписывание целых абзацев (15+ слов) корректно засчитывается.</li>
+              </ul>
+
+              <hr style="border: 0; border-top: 1px solid var(--border); margin: 20px 0;">
+
               <p style="margin: 0 0 16px; font-weight: 600; color: var(--accent);">Версия 1.1.1</p>
               
               <p style="margin: 0 0 4px; font-weight: 600;">🖤 Чистый OLED Черный и Темизация:</p>
@@ -22652,6 +22792,347 @@ async httpGetJson(url, timeoutMs = 650) {
 
 
 
+  async checkStreakOnStartup() {
+    const today = new Date().toISOString().slice(0, 10);
+    const d = new Date(today + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() - 1);
+    const yesterday = d.toISOString().slice(0, 10);
+
+    let streakStats = await this.db.get('settings', 'streak_stats') || {
+      id: 'streak_stats',
+      streakCount: 0,
+      lastGoalMetDate: null,
+      streakModalShownDate: null,
+      streakBrokenModalShownDate: null,
+      lastCheckedDate: null
+    };
+
+    if (streakStats.lastGoalMetDate) {
+      const lastMet = streakStats.lastGoalMetDate;
+      if (lastMet !== today && lastMet !== yesterday) {
+        if (streakStats.streakCount > 0) {
+          streakStats.streakCount = 0;
+          this.needToShowSadMoon = true;
+        }
+      }
+    }
+    streakStats.lastCheckedDate = today;
+    await this.db.put('settings', streakStats);
+  }
+
+  async checkAndShowSadMoonModal() {
+    if (!this.needToShowSadMoon) return;
+    const today = new Date().toISOString().slice(0, 10);
+    let streakStats = await this.db.get('settings', 'streak_stats');
+    if (streakStats && streakStats.streakBrokenModalShownDate !== today) {
+      this.showLunaStreakModal('cry', 0);
+      streakStats.streakBrokenModalShownDate = today;
+      await this.db.put('settings', streakStats);
+    }
+    this.needToShowSadMoon = false;
+  }
+
+  async checkCaretIdleStreakTrigger() {
+    const today = new Date().toISOString().slice(0, 10);
+    const cached = this.todayStatsCache?.id === today ? this.todayStatsCache.words : 0;
+    const words = cached || Number(this.todayStatsCache?.words || 0);
+    const goal = Number(this.state.settings.dailyGoal) || 1;
+    const pct = Math.min(100, Math.round((words / goal) * 100));
+
+    if (pct >= 100) {
+      let streakStats = await this.db.get('settings', 'streak_stats') || {
+        id: 'streak_stats',
+        streakCount: 0,
+        lastGoalMetDate: null,
+        streakModalShownDate: null,
+        streakBrokenModalShownDate: null,
+        lastCheckedDate: null
+      };
+
+      let changed = false;
+      if (streakStats.lastGoalMetDate !== today) {
+        streakStats.streakCount += 1;
+        streakStats.lastGoalMetDate = today;
+        changed = true;
+      }
+
+      if (streakStats.streakModalShownDate !== today) {
+        this.showLunaStreakModal('congrats', streakStats.streakCount);
+        streakStats.streakModalShownDate = today;
+        changed = true;
+      }
+
+      if (changed) {
+        await this.db.put('settings', streakStats);
+      }
+    }
+  }
+
+  showLunaStreakModal(type, streakCount) {
+    let moonImg = '';
+    if (type === 'congrats') {
+      if (streakCount < 3) {
+        moonImg = 'lil_mascot.png';
+      } else if (streakCount < 7) {
+        moonImg = 'luna_happy.png';
+      } else if (streakCount < 14) {
+        moonImg = 'luna_congrats.png';
+      } else if (streakCount < 30) {
+        moonImg = 'luna_love.png';
+      } else {
+        moonImg = 'luna_absolute.png';
+      }
+    } else {
+      moonImg = 'luna_cry.png';
+    }
+
+    const congratsPhrases = [
+      "Ты отлично справляешься!",
+      "Хорошо постарался!",
+      "Продолжай в том же духе!",
+      "Каждый шаг приближает тебя к шедевру!",
+      "Великолепная работа, писатель!",
+      "Слова так и льются из-под твоего пера!",
+      "Горжусь твоим упорством сегодня!",
+      "Ты просто космос!",
+      "Твоя история оживает на глазах!",
+      "Чудесный день для творчества, не так ли?",
+      "Каждое слово сегодня на вес золота!",
+      "Отличный темп, не останавливайся!",
+      "Твоя муза точно довольна тобой!",
+      "Ты пишешь историю, буквально!",
+      "Прекрасный результат!",
+      "Твои старания обязательно окупятся!",
+      "Потрясающая концентрация!",
+      "Так держать, звёздочка!",
+      "Ты делаешь огромный шаг вперёд!",
+      "Магия слов в действии!",
+      "Невероятное упорство!",
+      "Творчество — твоя суперсила!",
+      "Еще один день победы над белым листом!",
+      "Какая вдохновляющая продуктивность!",
+      "Твой внутренний творец ликует!",
+      "Ты создаешь что-то прекрасное!",
+      "Твоя история заслуживает быть написанной!",
+      "Это было мощно!",
+      "Сегодня ты превзошел себя!",
+      "Спасибо за этот чудесный творческий день!"
+    ];
+
+    const cryPhrases = [
+      "Хнык... Так обидно, что ты оставил меня одну...",
+      "Я так ждала тебя вчера... Где же ты был?",
+      "Наша цепочка дней порвалась... Мне очень грустно.",
+      "Неужели ты забыл про меня? Хнык...",
+      "Вчера не было написано ни строчки... Моё лунное сердце разбито.",
+      "Грустно смотреть на пустой счётчик... Давай начнём сначала?",
+      "Я скучала по твоим историям... Пожалуйста, не уходи больше так надолго.",
+      "Вчерашний день прошел без магии твоих слов... Хнык...",
+      "Одиноко без твоего творчества... Давай вернем нашу искру?",
+      "Мой свет немного угас без твоих вчерашних строк... Напишем что-нибудь сегодня?"
+    ];
+
+    let title = "";
+    let message = "";
+    let buttonText = "Спасибо, Луна";
+    
+    if (type === 'congrats') {
+      title = "Цель дня достигнута!";
+      if (streakCount === 7) {
+        message = "Целая неделя! Молодец!";
+      } else if (streakCount === 14) {
+        message = "Уже две недели! Я горжусь тобой!";
+      } else if (streakCount === 30) {
+        message = "Спасибо, проводишь столько времени со мной, я ценю это!";
+      } else {
+        message = congratsPhrases[Math.floor(Math.random() * congratsPhrases.length)];
+      }
+    } else {
+      title = "Цепочка прервалась...";
+      message = cryPhrases[Math.floor(Math.random() * cryPhrases.length)];
+      buttonText = "Прости, Луна...";
+    }
+
+    let streakBadgeHtml = "";
+    if (type === 'congrats') {
+      const getPluralRussian = (n, titles) => {
+        const cases = [2, 0, 1, 1, 1, 2];
+        return titles[(n % 100 > 4 && n % 100 < 20) ? 2 : cases[(n % 10 < 5) ? n % 10 : 5]];
+      };
+      const pluralDay = getPluralRussian(streakCount, ['день', 'дня', 'дней']);
+      streakBadgeHtml = `
+        <div style="display: inline-flex; align-items: center; justify-content: center; background: rgba(139, 92, 246, 0.15); border: 1px solid var(--accent); border-radius: 12px; padding: 12px 24px; margin: 12px 0;">
+          <span style="font-size: 32px; font-weight: 800; color: var(--accent); margin-right: 8px;">${streakCount}</span>
+          <span style="font-size: 14px; font-weight: 600; text-align: left; line-height: 1.2; color: var(--text-main);">
+            ${pluralDay}<br>подряд!
+          </span>
+        </div>
+      `;
+    }
+
+    let overlay = document.getElementById('luna-streak-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'luna-streak-overlay';
+      overlay.className = 'cleaner-overlay';
+      document.body.appendChild(overlay);
+    }
+
+    overlay.innerHTML = `
+      <div class="cleaner-modal-container">
+        <div class="whats-new-reaper-wrapper floating" style="position: absolute; top: -270px; left: 50%; transform: translateX(-50%); width: 320px; height: 320px; pointer-events: none; z-index: 100;">
+          <!-- Base layer -->
+          <img src="./reaper_photo/${moonImg}" id="luna-streak-img" class="cleaner-reaper-img" alt="Luna">
+          <!-- Glow overlay -->
+          <img src="./reaper_photo/luna_happy.png" id="cleaner-reaper-glow-img" class="cleaner-reaper-img" style="opacity: 0; z-index: 10;" alt="Luna Glow">
+        </div>
+        <div class="cleaner-modal" style="max-width: 480px; width: 90%; background: rgba(18, 18, 24, 0.85); box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 32px; backdrop-filter: blur(10px); position: relative; z-index: 101; overflow: hidden; text-align: center;">
+          <div class="cleaner-content">
+            <h2 style="margin: 0 0 8px; font-size: 22px; color: var(--text-main); font-weight: 700;">
+              ${title}
+            </h2>
+            <div style="font-size: 15px; line-height: 1.6; color: var(--text-main); margin-bottom: 20px;">
+              ${message}
+            </div>
+            ${streakBadgeHtml}
+            <div class="form-actions" style="justify-content: center; gap: 12px; margin-top: 24px;">
+              <button class="pill-btn ai-btn" data-action="close-luna-streak" style="min-width: 160px; height: 38px; border-radius: 99px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;">
+                ${buttonText}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const imgEl = overlay.querySelector('#luna-streak-img');
+    const btn = overlay.querySelector('[data-action="close-luna-streak"]');
+    if (imgEl && btn) {
+      btn.addEventListener('mouseenter', () => {
+        const hoverState = type === 'congrats' ? 'luna_love' : 'luna_happy';
+        this.transitionLunaImage(imgEl, hoverState, { duration: 250 });
+      });
+      btn.addEventListener('mouseleave', () => {
+        this.transitionLunaImage(imgEl, moonImg.replace('.png', ''), { duration: 250 });
+      });
+    }
+
+    if (type === 'congrats') {
+      this.confetti();
+    }
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        overlay.classList.add('active');
+      });
+    });
+
+    clearTimeout(this.lunaStreakTimeoutId);
+    this.lunaStreakTimeoutId = setTimeout(() => {
+      this.closeLunaStreakModal();
+    }, 7000);
+  }
+
+  closeLunaStreakModal() {
+    clearTimeout(this.lunaStreakTimeoutId);
+    const overlay = document.getElementById('luna-streak-overlay');
+    if (overlay) {
+      overlay.classList.remove('active');
+      setTimeout(() => overlay.remove(), 350);
+    }
+  }
+
+  async openLunaDebugMenu() {
+    let streakStats = await this.db.get('settings', 'streak_stats') || {
+      id: 'streak_stats',
+      streakCount: 0,
+      lastGoalMetDate: null,
+      streakModalShownDate: null,
+      streakBrokenModalShownDate: null,
+      lastCheckedDate: null
+    };
+
+    let overlay = document.getElementById('luna-debug-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'luna-debug-overlay';
+      overlay.className = 'cleaner-overlay';
+      document.body.appendChild(overlay);
+    }
+
+    overlay.innerHTML = `
+      <div class="cleaner-modal-container" style="margin-top: 50px;">
+        <div class="cleaner-modal" style="max-width: 440px; width: 90%; background: #181824; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; text-align: left;">
+          <h3 style="margin: 0 0 12px; font-size: 18px; color: var(--text-main); font-weight: 700; display: flex; align-items: center; gap: 8px;">
+            <i class="bx bxs-moon" style="color: var(--accent);"></i> Luna Debug Menu
+          </h3>
+          <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px;">
+            Инструменты отладки цепочки дней и маскота Луны.
+          </div>
+          
+          <div class="settings-row" style="margin-bottom: 16px;">
+            <div class="settings-row-label" style="font-size: 13px; font-weight: 600; color: var(--text-main); margin-bottom: 4px;">Реальный счётчик дней (streak):</div>
+            <div style="display: flex; gap: 8px;">
+              <input type="number" id="luna-debug-streak-input" style="flex: 1; background: var(--bg-panel); border: 1px solid var(--border); color: var(--text-main); padding: 6px 12px; border-radius: var(--radius-sm); font-size: 14px;" value="${streakStats.streakCount}">
+              <button class="pill-btn ai-btn" id="luna-debug-save-streak-btn" style="height: 32px; font-size: 12px; padding: 0 12px;">Сохранить</button>
+            </div>
+          </div>
+          
+          <div class="settings-row" style="margin-bottom: 16px;">
+            <div class="settings-row-label" style="font-size: 13px; font-weight: 600; color: var(--text-main); margin-bottom: 4px;">Вызов Congrats-окна для дня:</div>
+            <div style="display: flex; gap: 8px;">
+              <input type="number" id="luna-debug-congrats-days" style="flex: 1; background: var(--bg-panel); border: 1px solid var(--border); color: var(--text-main); padding: 6px 12px; border-radius: var(--radius-sm); font-size: 14px;" value="1">
+              <button class="pill-btn" id="luna-debug-trigger-congrats-btn" style="height: 32px; font-size: 12px; padding: 0 12px; background: var(--accent); color: white;">Вызвать</button>
+            </div>
+          </div>
+          
+          <div class="settings-row" style="margin-bottom: 20px; display: flex; gap: 8px; justify-content: space-between;">
+            <button class="pill-btn" id="luna-debug-trigger-cry-btn" style="flex: 1; height: 32px; font-size: 12px;">Вызвать Cry-окно</button>
+            <button class="pill-btn" id="luna-debug-reset-shown-btn" style="flex: 1; height: 32px; font-size: 12px;">Сбросить «Показано»</button>
+          </div>
+          
+          <div class="form-actions" style="justify-content: flex-end; gap: 8px; margin-top: 16px;">
+            <button class="pill-btn" id="luna-debug-close-btn" style="height: 32px; font-size: 12px; padding: 0 16px;">Закрыть</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    overlay.querySelector('#luna-debug-save-streak-btn').onclick = async () => {
+      const val = parseInt(overlay.querySelector('#luna-debug-streak-input').value, 10) || 0;
+      streakStats.streakCount = val;
+      await this.db.put('settings', streakStats);
+      this.toast(`Счётчик изменен на ${val}`);
+    };
+
+    overlay.querySelector('#luna-debug-trigger-congrats-btn').onclick = () => {
+      const val = parseInt(overlay.querySelector('#luna-debug-congrats-days').value, 10) || 1;
+      this.showLunaStreakModal('congrats', val);
+    };
+
+    overlay.querySelector('#luna-debug-trigger-cry-btn').onclick = () => {
+      this.showLunaStreakModal('cry', 0);
+    };
+
+    overlay.querySelector('#luna-debug-reset-shown-btn').onclick = async () => {
+      streakStats.streakModalShownDate = null;
+      streakStats.streakBrokenModalShownDate = null;
+      await this.db.put('settings', streakStats);
+      this.toast('Сброшены отметки о показе окон на сегодня');
+    };
+
+    overlay.querySelector('#luna-debug-close-btn').onclick = () => {
+      overlay.classList.remove('active');
+      setTimeout(() => overlay.remove(), 350);
+    };
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        overlay.classList.add('active');
+      });
+    });
+  }
+
   toast(message, duration = 2200) {
     const toast = document.getElementById('toast');
     toast.textContent = message;
@@ -22667,6 +23148,7 @@ async httpGetJson(url, timeoutMs = 650) {
       c.style.left = `${Math.random() * 100}vw`;
       c.style.background = ['var(--accent)', '#22c55e', '#f59e0b', '#0ea5e9'][i % 4];
       c.style.animationDelay = `${Math.random() * 380}ms`;
+      c.style.zIndex = '20000';
       document.body.appendChild(c);
       setTimeout(() => c.remove(), 1800);
     }

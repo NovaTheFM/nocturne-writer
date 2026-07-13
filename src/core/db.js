@@ -110,5 +110,16 @@ export class Database {
     const today = new Date().toISOString().slice(0, 10);
     const stats = await requestToPromise(this.store('stats').get(today));
     if (!stats) await this.put('stats', { id: today, words: 0, completed: false });
+    const streakStats = await requestToPromise(this.store('settings').get('streak_stats'));
+    if (!streakStats) {
+      await this.put('settings', {
+        id: 'streak_stats',
+        streakCount: 0,
+        lastGoalMetDate: null,
+        streakModalShownDate: null,
+        streakBrokenModalShownDate: null,
+        lastCheckedDate: null
+      });
+    }
   }
 }

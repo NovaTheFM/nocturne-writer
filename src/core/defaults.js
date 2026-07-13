@@ -74,6 +74,8 @@ export const defaultSettings = {
     ],
     newRuleAction: 'center',
     bookmarkBehavior: 'text',
+    autoReplaceDoubleDash: true,
+    autoReplaceEnDash: true,
   };
 
 export const seedFolders = [
