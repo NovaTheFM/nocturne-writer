@@ -5959,14 +5959,14 @@ class NocturneWriter {
   }
 
   generateWavySvgPath(width) {
-    let d = 'M 0 2';
+    let d = 'M 0 3.5';
     const half = 3;
     let x = 0;
     let up = false;
     while (x < width) {
       const nextX = Math.min(x + half, width);
-      const controlY = up ? 0 : 4;
-      d += ` Q ${x + half / 2} ${controlY} ${nextX} 2`;
+      const controlY = up ? 1.5 : 5.5;
+      d += ` Q ${x + half / 2} ${controlY} ${nextX} 3.5`;
       up = !up;
       x += half;
     }
@@ -6033,15 +6033,14 @@ class NocturneWriter {
       if (!pageOverlay) continue;
 
       const overlayRect = pageOverlay.getBoundingClientRect();
-      const fontMetric = parseFloat(window.getComputedStyle(editable).fontSize) || 16;
       const left = rect.left - overlayRect.left;
-      const top = (rect.bottom - overlayRect.top) - (fontMetric * 0.28);
+      const top = (rect.bottom - overlayRect.top) - 1.5;
       const width = rect.width;
 
       const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       svgEl.setAttribute('class', 'typo-svg-overlay');
       svgEl.setAttribute('data-key', key);
-      svgEl.setAttribute('height', '10');
+      svgEl.setAttribute('height', '12');
       svgEl.setAttribute('width', `${width}`);
       svgEl.style.left = `${left}px`;
       svgEl.style.top = `${top}px`;
@@ -6069,7 +6068,11 @@ class NocturneWriter {
         pageOverlay.appendChild(svgDefContainer);
       }
 
-      svgEl.innerHTML = `<path class="typo-svg-path" d="${this.generateWavySvgPath(width)}" />`;
+      const wavePathD = this.generateWavySvgPath(width);
+      svgEl.innerHTML = `
+        <path class="typo-svg-path-glow" d="${wavePathD}" />
+        <path class="typo-svg-path-base" d="${wavePathD}" />
+      `;
       pageOverlay.appendChild(svgEl);
     }
   }

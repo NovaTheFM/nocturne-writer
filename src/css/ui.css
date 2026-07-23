@@ -1700,20 +1700,32 @@ body.resizing-workspace {
   pointer-events: none;
   z-index: 10;
   overflow: visible;
-  opacity: 1;
 }
 
-.typo-svg-path {
+.typo-svg-path-base {
   stroke: color-mix(in srgb, var(--accent) 70%, transparent);
-  stroke-width: 1.25px;
+  stroke-width: 1.3px;
   stroke-linecap: round;
   fill: none;
-  transition: stroke 0.22s cubic-bezier(0.16, 1, 0.3, 1), filter 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: stroke 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.typo-svg-overlay.hovered .typo-svg-path {
+.typo-svg-path-glow {
   stroke: var(--accent);
+  stroke-width: 2.2px;
+  stroke-linecap: round;
+  fill: none;
   filter: url(#typo-custom-glow-filter);
+  opacity: 0;
+  transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.typo-svg-overlay.hovered .typo-svg-path-base {
+  stroke: var(--accent);
+}
+
+.typo-svg-overlay.hovered .typo-svg-path-glow {
+  opacity: 1;
 }
 
 .typo-glow-svg.active {
