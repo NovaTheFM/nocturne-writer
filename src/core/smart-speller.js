@@ -137,14 +137,14 @@ async function checkLanguageTool(words, lang = 'auto') {
  * Main Smart Speller entry point
  */
 export async function getSmartSpellerMatches(words, options = {}) {
-  const { provider = 'languagetool', lang = 'auto' } = options;
+  const { mode = 'hybrid', provider = 'languagetool', lang = 'auto' } = options;
   const uncachedWords = [];
   const results = new Map();
 
   words.forEach((w) => {
     const norm = normalizeTypoToken(w);
     if (!norm) return;
-    const cacheKey = `${provider}:${lang}:${norm}`;
+    const cacheKey = `${mode}:${provider}:${lang}:${norm}`;
     if (spellerCache.has(cacheKey)) {
       const match = spellerCache.get(cacheKey);
       if (match) results.set(norm, match);
@@ -155,17 +155,25 @@ export async function getSmartSpellerMatches(words, options = {}) {
 
   if (!uncachedWords.length) return results;
 
-  uncachedWords.forEach((norm) => pendingRequests.add(`${provider}:${lang}:${norm}`));
+  uncachedWords.forEach((norm) => pendingRequests.add(`${mode}:${provider}:${lang}:${norm}`));
 
   let fetchedMatches = new Map();
-  if (provider === 'hunspell') {
+  if (mode === 'local') {
     fetchedMatches = checkHunspellOffline(uncachedWords, lang);
-  } else {
+  } else if (mode === 'api') {
     fetchedMatches = await checkLanguageTool(uncachedWords, lang);
+  } else {
+    // Hybrid mode: First try local Hunspell
+    fetchedMatches = checkHunspellOffline(uncachedWords, lang);
+    const remainingForApi = uncachedWords.filter((w) => !fetchedMatches.has(w));
+    if (remainingForApi.length) {
+      const apiMatches = await checkLanguageTool(remainingForApi, lang);
+      apiMatches.forEach((match, word) => fetchedMatches.set(word, match));
+    }
   }
 
   uncachedWords.forEach((norm) => {
-    const cacheKey = `${provider}:${lang}:${norm}`;
+    const cacheKey = `${mode}:${provider}:${lang}:${norm}`;
     pendingRequests.delete(cacheKey);
     const match = fetchedMatches.get(norm) || null;
     spellerCache.set(cacheKey, match);

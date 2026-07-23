@@ -576,6 +576,7 @@ class NocturneWriter {
       aiPersona: allowedPersonas,
       loreReaction: ['soft', 'warn', 'hard'],
       writingAnimation: ['off', 'ripple', 'mist', 'sparkles', 'glow', 'spark'],
+      smartDictionaryMode: ['local', 'api', 'hybrid'],
       smartDictionaryProvider: ['languagetool', 'hunspell'],
       smartDictionaryLang: ['auto', 'uk', 'ru', 'en'],
     };
@@ -10324,6 +10325,7 @@ class NocturneWriter {
       
       try {
         const matches = await getSmartSpellerMatches(words, {
+          mode: this.state.settings.smartDictionaryMode || 'hybrid',
           provider: this.state.settings.smartDictionaryProvider || 'languagetool',
           lang: this.state.settings.smartDictionaryLang || 'auto',
         });
@@ -13699,23 +13701,43 @@ class NocturneWriter {
             <label class="dictionary-toggle smart-dictionary-toggle"><span>Smart-словарь <em>Экспериментально</em></span><div class="toggle ${this.state.settings.smartDictionary ? 'on' : ''}" data-setting="smartDictionary" data-kind="toggle"></div></label>
           </div>
           ${this.state.settings.smartDictionary ? `
-          <div class="dictionary-smart-options-row" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; background:rgba(255,255,255,0.02); padding:10px 14px; border-radius:9px; border:1px solid rgba(255,255,255,0.04);">
-            <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:200px;">
-              <span style="font-size:12px; color:var(--text-muted);">Движок:</span>
-              <select class="form-control" data-setting="smartDictionaryProvider" style="height:32px; font-size:12px; padding:0 8px;">
-                <option value="languagetool" ${this.state.settings.smartDictionaryProvider === 'languagetool' ? 'selected' : ''}>LanguageTool (Онлайн API: UK, RU, EN)</option>
-                <option value="hunspell" ${this.state.settings.smartDictionaryProvider === 'hunspell' ? 'selected' : ''}>Hunspell (100% Оффлайн)</option>
-              </select>
+          <div class="dictionary-smart-options-row" style="display:flex; flex-direction:column; gap:12px; background:rgba(255,255,255,0.02); padding:14px; border-radius:12px; border:1px solid rgba(255,255,255,0.05); margin-top:8px;">
+            <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+              <div style="display:flex; align-items:center; gap:8px; flex:1.2; min-width:240px;">
+                <span style="font-size:12px; color:var(--text-muted); font-weight:500;">Режим работы:</span>
+                <select class="form-control" data-setting="smartDictionaryMode" style="height:34px; font-size:12px; padding:0 8px; flex:1;">
+                  <option value="hybrid" ${this.state.settings.smartDictionaryMode === 'hybrid' ? 'selected' : ''}>Гибридный (Hunspell + LanguageTool)</option>
+                  <option value="local" ${this.state.settings.smartDictionaryMode === 'local' ? 'selected' : ''}>Только Оффлайн (Hunspell - 100% Локально)</option>
+                  <option value="api" ${this.state.settings.smartDictionaryMode === 'api' ? 'selected' : ''}>Только Онлайн API (LanguageTool)</option>
+                </select>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:180px;">
+                <span style="font-size:12px; color:var(--text-muted); font-weight:500;">Язык:</span>
+                <select class="form-control" data-setting="smartDictionaryLang" style="height:34px; font-size:12px; padding:0 8px; flex:1;">
+                  <option value="auto" ${this.state.settings.smartDictionaryLang === 'auto' ? 'selected' : ''}>Авто (Украинский / Русский / English)</option>
+                  <option value="uk" ${this.state.settings.smartDictionaryLang === 'uk' ? 'selected' : ''}>Українська</option>
+                  <option value="ru" ${this.state.settings.smartDictionaryLang === 'ru' ? 'selected' : ''}>Русский</option>
+                  <option value="en" ${this.state.settings.smartDictionaryLang === 'en' ? 'selected' : ''}>English</option>
+                </select>
+              </div>
             </div>
-            <div style="display:flex; align-items:center; gap:8px; min-width:180px;">
-              <span style="font-size:12px; color:var(--text-muted);">Язык:</span>
-              <select class="form-control" data-setting="smartDictionaryLang" style="height:32px; font-size:12px; padding:0 8px;">
-                <option value="auto" ${this.state.settings.smartDictionaryLang === 'auto' ? 'selected' : ''}>Авто (Украинский / Русский / English)</option>
-                <option value="uk" ${this.state.settings.smartDictionaryLang === 'uk' ? 'selected' : ''}>Українська</option>
-                <option value="ru" ${this.state.settings.smartDictionaryLang === 'ru' ? 'selected' : ''}>Русский</option>
-                <option value="en" ${this.state.settings.smartDictionaryLang === 'en' ? 'selected' : ''}>English</option>
-              </select>
+
+            <!-- Notice & Privacy Warning Banner -->
+            ${this.state.settings.smartDictionaryMode === 'local' ? `
+            <div style="display:flex; align-items:flex-start; gap:10px; background:rgba(34, 197, 94, 0.08); border:1px solid rgba(34, 197, 94, 0.2); padding:10px 12px; border-radius:8px; font-size:12px; color:#a7f3d0; line-height:1.45;">
+              <i class="bx bx-shield-check" style="font-size:18px; color:#4ade80; flex-shrink:0; margin-top:1px;"></i>
+              <div>
+                <strong>100% Локальная конфиденциальность:</strong> Все проверки происходят непосредственно на вашем устройстве через движок Hunspell. Никакие слова и тексты не передаются в сеть.
+              </div>
             </div>
+            ` : `
+            <div style="display:flex; align-items:flex-start; gap:10px; background:rgba(59, 130, 246, 0.08); border:1px solid rgba(59, 130, 246, 0.2); padding:10px 12px; border-radius:8px; font-size:12px; color:#bfdbfe; line-height:1.45;">
+              <i class="bx bx-cloud-upload" style="font-size:18px; color:#60a5fa; flex-shrink:0; margin-top:1px;"></i>
+              <div>
+                <strong>Использование внешнего API (LanguageTool):</strong> ${this.state.settings.smartDictionaryMode === 'hybrid' ? 'В гибридном режиме неопознанные локально слова допроверяются' : 'Фрагменты слов проверяются'} через публичный международный сервис <code>api.languagetool.org</code>. Текст не сохраняется на серверах. Для полной автономности выберите режим <em>«Только Оффлайн»</em>.
+              </div>
+            </div>
+            `}
           </div>
           ` : ''}
           <div class="dictionary-search-row">
@@ -19025,7 +19047,7 @@ class NocturneWriter {
     if (key === 'readability') {
       this.updateReadabilityHighlights();
     }
-    if (['strictSpellcheck', 'smartDictionary', 'smartDictionaryProvider', 'smartDictionaryLang'].includes(key)) {
+    if (['strictSpellcheck', 'smartDictionary', 'smartDictionaryMode', 'smartDictionaryProvider', 'smartDictionaryLang'].includes(key)) {
       this.disableBrowserSpellcheck();
       if (this.spellerCache) this.spellerCache.clear();
       this.updateTypoHighlights();

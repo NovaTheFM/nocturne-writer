@@ -22,6 +22,7 @@ export const defaultSettings = {
   typewriterMode: false,
   strictSpellcheck: true,
   smartDictionary: false,
+  smartDictionaryMode: 'hybrid',
   smartDictionaryProvider: 'languagetool',
   smartDictionaryLang: 'auto',
   userLexicon: [],
