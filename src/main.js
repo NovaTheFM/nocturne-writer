@@ -6042,6 +6042,26 @@ class NocturneWriter {
         if (normalSmart.length) CSS.highlights.set('typo-smart-errors', new Highlight(...normalSmart));
         else CSS.highlights.delete('typo-smart-errors');
         CSS.highlights.set('typo-hover', new Highlight(item.range));
+
+        const pageShell = editable.closest('.visual-page-shell') || editable.closest('.page') || editable.parentElement;
+        const pageOverlay = pageShell?.querySelector('.page-overlay') || pageShell;
+        if (pageShell && pageOverlay) {
+          const rect = item.range.getBoundingClientRect();
+          const overlayRect = pageOverlay.getBoundingClientRect();
+          let bar = pageOverlay.querySelector('.typo-ambient-glow');
+          if (!bar) {
+            bar = document.createElement('div');
+            bar.className = 'typo-ambient-glow';
+            pageOverlay.appendChild(bar);
+          }
+          const left = rect.left - overlayRect.left;
+          const top = (rect.bottom - overlayRect.top) - 3;
+          const width = rect.width;
+          bar.style.left = `${left}px`;
+          bar.style.top = `${top}px`;
+          bar.style.width = `${width}px`;
+          requestAnimationFrame(() => bar.classList.add('active'));
+        }
       } else {
         this.clearTypoHoverState();
       }
@@ -6051,7 +6071,12 @@ class NocturneWriter {
   clearTypoHoverState() {
     this._hoveredTypoKey = null;
     CSS.highlights.delete('typo-hover');
-    document.querySelectorAll('.typo-glow-svg').forEach((el) => el.remove());
+    document.querySelectorAll('.typo-ambient-glow').forEach((el) => {
+      el.classList.remove('active');
+      setTimeout(() => {
+        if (!el.classList.contains('active')) el.remove();
+      }, 220);
+    });
     if (this._typoHighlightRangesMap) {
       const normalExact = [];
       const normalSmart = [];
