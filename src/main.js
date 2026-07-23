@@ -5979,6 +5979,9 @@ class NocturneWriter {
   }
 
   findTypoMatchAtPoint(x, y, editable) {
+    if (document.elementFromPoint?.(x, y)?.closest?.('#app-context-menu, .popover-surface, .cleaner-overlay, .form-modal, .settings-modal')) {
+      return null;
+    }
     const pointRange = document.caretRangeFromPoint
       ? document.caretRangeFromPoint(x, y)
       : (() => {
@@ -6208,7 +6211,7 @@ class NocturneWriter {
     ` : '';
     const typoBlock = ctx.typoMatch ? `
       <div class="context-section-title">${ctx.typoMatch.source === 'smart' ? 'Smart-словарь: возможная ошибка' : 'Словарь ошибок'}</div>
-      ${item('context-apply-typo-replacement', 'bx-check-shield', `Заменить на «${escapeHtml(ctx.typoMatch.correct)}»`)}
+      ${ctx.typoMatch.correct ? item('context-apply-typo-replacement', 'bx-check-shield', `Заменить на «${escapeHtml(ctx.typoMatch.correct)}»`) : ''}
       ${item('context-ignore-typo-word', 'bx-minus-circle', `Игнорировать «${escapeHtml(ctx.typoMatch.rawText)}»`)}
       ${item('context-add-word-to-lexicon', 'bx-plus-circle', `Добавить «${escapeHtml(ctx.typoMatch.rawText)}» в словарь`)}
       <div class="context-separator"></div>
@@ -6224,15 +6227,19 @@ class NocturneWriter {
       ${hasSelection ? item('context-add-typo-rule', 'bx-book-add', 'Добавить в словарь ошибок') : ''}
       ${editorBlock}
     `;
+
+    menu.style.left = `${ctx.x}px`;
+    menu.style.top = `${ctx.y}px`;
     menu.classList.add('active');
     menu.setAttribute('aria-hidden', 'false');
-    menu.style.pointerEvents = '';
+    menu.style.pointerEvents = 'auto';
     this.activeFloatingMenuKey = 'context';
     const rect = menu.getBoundingClientRect();
     const x = Math.min(window.innerWidth - rect.width - 12, Math.max(12, ctx.x));
     const y = Math.min(window.innerHeight - rect.height - 12, Math.max(12, ctx.y));
     menu.style.left = `${x}px`;
     menu.style.top = `${y}px`;
+    this.renderTypoSvgOverlays();
   }
 
   closeContextMenu() {
@@ -6242,6 +6249,7 @@ class NocturneWriter {
     if (menu) menu.style.pointerEvents = 'none';
     if (this.activeFloatingMenuKey === 'context') this.activeFloatingMenuKey = '';
     this.state.contextMenu = null;
+    this.contextSelectionRange = null;
     this.clearTypoHoverState();
   }
 
