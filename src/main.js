@@ -1658,6 +1658,7 @@ class NocturneWriter {
     this.clearSuggestionIfStale();
     this.updateAssistantPanelState();
     this.updateElectronTitlebarTitle();
+    this.updateTypoHighlightsDebounced();
   }
 
   renderPane(paneId) {
@@ -12626,17 +12627,29 @@ class NocturneWriter {
   }
 
   applyTypoReplacement(match) {
-    if (!match?.docId || !match.blockId) return false;
+    if (!match?.docId || !match.blockId || !match.rawText || !match.correct) return false;
     const doc = this.state.docs.find((item) => item.id === match.docId);
     const block = doc?.ast?.blocks?.find((item) => item.id === match.blockId);
     if (!doc || !block) return false;
-    const current = blockText(block).slice(match.startOffset, match.endOffset);
-    if (normalizeTypoToken(current) !== normalizeTypoToken(match.rawText)) {
+
+    const rawWord = match.rawText;
+    const normWord = normalizeTypoToken(rawWord);
+    const blockPlain = normalizeTypoToken(blockText(block));
+
+    if (!blockPlain.includes(normWord)) {
       this.toast('Фрагмент уже изменился. Повторите действие.');
       this.updateTypoHighlightsDebounced();
       return false;
     }
-    block.html = this.replaceInHtmlRange(block.html, match.startOffset, match.endOffset, match.correct);
+
+    const pattern = this.escapeRegExp(rawWord);
+    const regex = new RegExp(`(^|[^\\p{L}\\p{N}_])(${pattern})(?=$|[^\\p{L}\\p{N}_])`, 'gu');
+    if (regex.test(block.html)) {
+      block.html = block.html.replace(regex, `$1${match.correct}`);
+    } else {
+      block.html = this.replaceInHtmlRange(block.html, match.startOffset, match.endOffset, match.correct);
+    }
+
     doc.updatedAt = Date.now();
     doc.summary = doc.description || buildSummary(doc.ast);
 

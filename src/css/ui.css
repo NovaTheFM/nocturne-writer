@@ -1688,23 +1688,14 @@ body.resizing-workspace {
   color: #ff5f7d;
   text-shadow: 0 0 5px rgba(255, 95, 125, .34);
 }
-::highlight(typo-errors) {
-  background: transparent;
-  text-decoration-line: underline;
-  text-decoration-style: wavy;
-  text-decoration-color: rgba(255, 126, 118, .82);
-  text-decoration-thickness: 1.25px;
-  text-underline-offset: 4px;
-  text-shadow: 0 0 6px rgba(255, 126, 118, .16);
-}
+::highlight(typo-errors),
 ::highlight(typo-smart-errors) {
   background: transparent;
   text-decoration-line: underline;
   text-decoration-style: wavy;
-  text-decoration-color: rgba(255, 126, 118, .82);
-  text-decoration-thickness: 1.25px;
-  text-underline-offset: 4px;
-  text-shadow: 0 0 6px rgba(255, 126, 118, .16);
+  text-decoration-color: rgba(244, 114, 182, .75);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 1.5px;
 }
 ::highlight(review-orthography) {
   background: rgba(255, 126, 118, .17);
