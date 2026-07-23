@@ -1510,6 +1510,10 @@ class NocturneWriter {
   }
 
   closeFloatingMenu(key, options = {}) {
+    if (key === 'context') {
+      this.closeContextMenu();
+      return;
+    }
     const { animate = true } = options;
     const el = this.floatingMenuElement(key);
     if (!el) return;
@@ -6228,6 +6232,7 @@ class NocturneWriter {
       ${editorBlock}
     `;
 
+    menu.style.display = 'block';
     menu.style.left = `${ctx.x}px`;
     menu.style.top = `${ctx.y}px`;
     menu.classList.add('active');
@@ -6244,9 +6249,12 @@ class NocturneWriter {
 
   closeContextMenu() {
     const menu = document.getElementById('app-context-menu');
-    menu?.classList.remove('active');
-    menu?.setAttribute('aria-hidden', 'true');
-    if (menu) menu.style.pointerEvents = 'none';
+    if (menu) {
+      menu.classList.remove('active');
+      menu.setAttribute('aria-hidden', 'true');
+      menu.style.pointerEvents = 'none';
+      menu.style.display = 'none';
+    }
     if (this.activeFloatingMenuKey === 'context') this.activeFloatingMenuKey = '';
     this.state.contextMenu = null;
     this.contextSelectionRange = null;

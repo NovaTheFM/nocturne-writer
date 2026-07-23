@@ -1808,14 +1808,16 @@ body.ctrl-pressed .entity-family-link:hover {
   padding: 8px;
   border-radius: 10px;
   opacity: 0;
+  display: none;
   transform: translateY(6px) scale(.985);
-  pointer-events: none;
+  pointer-events: none !important;
   transition: opacity 160ms ease, transform 160ms ease;
 }
 .app-context-menu.active {
+  display: block;
   opacity: 1;
   transform: translateY(0) scale(1);
-  pointer-events: auto;
+  pointer-events: auto !important;
 }
 .context-selection {
   color: var(--text-muted);
