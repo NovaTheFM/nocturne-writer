@@ -1713,27 +1713,6 @@ body.resizing-workspace {
   text-decoration-thickness: 1.2px;
   text-underline-offset: 1.5px;
 }
-
-.typo-wavy-glow-svg {
-  position: absolute;
-  pointer-events: none;
-  z-index: 15;
-  opacity: 0;
-  transform: scaleY(0.6);
-  transform-origin: center bottom;
-  transition: 
-    left 0.16s cubic-bezier(0.16, 1, 0.3, 1),
-    top 0.16s cubic-bezier(0.16, 1, 0.3, 1),
-    width 0.16s cubic-bezier(0.16, 1, 0.3, 1),
-    opacity 0.22s ease-out,
-    transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-  overflow: visible;
-}
-
-.typo-wavy-glow-svg.active {
-  opacity: 1;
-  transform: scaleY(1);
-}
 ::highlight(review-orthography) {
   background: rgba(255, 126, 118, .17);
   text-decoration: underline rgba(255, 126, 118, .72);

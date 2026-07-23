@@ -6041,46 +6041,6 @@ class NocturneWriter {
         if (normalSmart.length) CSS.highlights.set('typo-smart-errors', new Highlight(...normalSmart));
         else CSS.highlights.delete('typo-smart-errors');
         CSS.highlights.set('typo-hover', new Highlight(item.range));
-
-        const pageShell = editable.closest('.visual-page-shell') || editable.closest('.page') || editable.parentElement;
-        const pageOverlay = pageShell?.querySelector('.page-overlay') || pageShell;
-        if (pageShell && pageOverlay) {
-          const rect = item.range.getBoundingClientRect();
-          const pageRect = pageShell.getBoundingClientRect();
-          let svgEl = pageOverlay.querySelector('.typo-wavy-glow-svg');
-          if (!svgEl) {
-            svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            svgEl.setAttribute('class', 'typo-wavy-glow-svg');
-            svgEl.setAttribute('height', '12');
-            svgEl.innerHTML = `
-              <defs>
-                <filter id="typo-wavy-glow-filter" x="-30%" y="-80%" width="160%" height="260%">
-                  <feGaussianBlur stdDeviation="1.2" result="blur1"/>
-                  <feGaussianBlur stdDeviation="3.0" result="blur2"/>
-                  <feMerge>
-                    <feMergeNode in="blur2"/>
-                    <feMergeNode in="blur1"/>
-                    <feMergeNode in="SourceGraphic"/>
-                  </feMerge>
-                </filter>
-              </defs>
-              <path class="typo-wavy-glow-path" stroke="var(--accent)" stroke-width="1.2" fill="none" filter="url(#typo-wavy-glow-filter)"/>
-            `;
-            pageOverlay.appendChild(svgEl);
-          }
-          const left = rect.left - pageRect.left;
-          const top = rect.bottom - pageRect.top - 4;
-          const width = rect.width;
-          svgEl.style.left = `${left}px`;
-          svgEl.style.top = `${top}px`;
-          svgEl.style.width = `${width}px`;
-          svgEl.setAttribute('width', `${width}`);
-          const pathEl = svgEl.querySelector('.typo-wavy-glow-path');
-          if (pathEl) {
-            pathEl.setAttribute('d', this.generateWavySvgPath(width));
-          }
-          svgEl.classList.add('active');
-        }
       } else {
         this.clearTypoHoverState();
       }
@@ -6090,9 +6050,6 @@ class NocturneWriter {
   clearTypoHoverState() {
     this._hoveredTypoKey = null;
     CSS.highlights.delete('typo-hover');
-    document.querySelectorAll('.typo-wavy-glow-svg.active').forEach((el) => {
-      el.classList.remove('active');
-    });
     if (this._typoHighlightRangesMap) {
       const normalExact = [];
       const normalSmart = [];
@@ -6219,7 +6176,17 @@ class NocturneWriter {
       if (this.applyTypoReplacement(ctx.typoMatch)) this.toast(`Заменено на «${ctx.typoMatch.correct}».`);
       this.closeContextMenu();
       return;
-    } else if (action === 'context-ignore-typo-word' || action === 'context-add-word-to-lexicon') {
+    } else if (action === 'context-ignore-typo-word') {
+      if (ctx.typoMatch?.rawText) {
+        const norm = normalizeTypoToken(ctx.typoMatch.rawText);
+        if (!this.ignoredTypoWords) this.ignoredTypoWords = new Set();
+        this.ignoredTypoWords.add(norm);
+        this.updateTypoHighlights();
+        this.toast(`Слово «${ctx.typoMatch.rawText}» проигнорировано на время сессии.`);
+      }
+      this.closeContextMenu();
+      return;
+    } else if (action === 'context-add-word-to-lexicon') {
       if (ctx.typoMatch?.rawText) {
         const norm = normalizeTypoToken(ctx.typoMatch.rawText);
         if (!Array.isArray(this.state.settings.userLexicon)) this.state.settings.userLexicon = [];
@@ -10721,6 +10688,9 @@ class NocturneWriter {
     });
     if (Array.isArray(this.state.settings?.userLexicon)) {
       this.state.settings.userLexicon.forEach(addText);
+    }
+    if (this.ignoredTypoWords) {
+      this.ignoredTypoWords.forEach(addText);
     }
     return protectedWords;
   }
