@@ -1598,7 +1598,7 @@ class NocturneWriter {
         }
         return;
       }
-      const paneConfigStr = JSON.stringify(pane);
+      const paneConfigStr = `${ws.mode}:${ws.focusedPaneId}:${JSON.stringify(pane)}`;
       const isDocumentOrKb = pane?.type === 'document' || pane?.type === 'kb-tab';
       if (isDocumentOrKb && paneEl.__paneConfig === paneConfigStr) {
         return;
@@ -1636,7 +1636,7 @@ class NocturneWriter {
       }
       return;
     }
-    const paneConfigStr = JSON.stringify(pane);
+    const paneConfigStr = `${ws.mode}:${ws.focusedPaneId}:${JSON.stringify(pane)}`;
     const isDocumentOrKb = pane?.type === 'document' || pane?.type === 'kb-tab';
     if (isDocumentOrKb && paneEl.__paneConfig === paneConfigStr) {
       return;
@@ -1668,10 +1668,8 @@ class NocturneWriter {
     }
     const isSecondary = paneId === 'secondary';
     const isSplit = this.state.workspace?.mode === 'split';
-    const isFocused = isSplit && this.state.workspace?.focusedPaneId === paneId;
     const title = this.paneTitle(pane);
     const kind = this.paneKindLabel(pane);
-    const focusLabel = isSplit ? (isFocused ? ' • Активная область' : '') : '';
     
     const actionButtons = [];
     if (isSplit) {
@@ -1682,7 +1680,7 @@ class NocturneWriter {
     }
     return `
       <header class="workspace-pane-header">
-        <div><small>${kind}${focusLabel}</small><strong>${escapeHtml(title)}</strong></div>
+        <div><small>${kind}</small><strong>${escapeHtml(title)}</strong></div>
         <div class="pane-header-actions">${actionButtons.join('')}</div>
       </header>
       <div class="workspace-pane-body">
