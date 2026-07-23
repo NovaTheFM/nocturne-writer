@@ -6047,7 +6047,7 @@ class NocturneWriter {
         const pageOverlay = pageShell?.querySelector('.page-overlay') || pageShell;
         if (pageShell && pageOverlay) {
           const rect = item.range.getBoundingClientRect();
-          const pageRect = pageShell.getBoundingClientRect();
+          const overlayRect = pageOverlay.getBoundingClientRect();
           let svgEl = pageOverlay.querySelector('.typo-glow-svg');
           if (!svgEl) {
             svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -6069,10 +6069,16 @@ class NocturneWriter {
             `;
             pageOverlay.appendChild(svgEl);
           }
-          const fontMetric = parseFloat(window.getComputedStyle(editable).fontSize) || 16;
-          const left = rect.left - pageRect.left;
-          const top = (rect.bottom - (fontMetric * 0.22)) - pageRect.top - 2;
+          const style = window.getComputedStyle(editable);
+          const fontMetric = parseFloat(style.fontSize) || 16;
+          const lineHeight = parseFloat(style.lineHeight) || (fontMetric * 1.5);
+          const halfPad = Math.max(0, (lineHeight - fontMetric) / 2);
+          const baselineY = rect.bottom - halfPad - (fontMetric * 0.12);
+
+          const left = rect.left - overlayRect.left;
+          const top = baselineY - overlayRect.top - 2;
           const width = rect.width;
+
           svgEl.style.left = `${left}px`;
           svgEl.style.top = `${top}px`;
           svgEl.style.width = `${width}px`;
