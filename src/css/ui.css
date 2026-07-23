@@ -1695,9 +1695,10 @@ body.resizing-workspace {
   text-decoration: none;
 }
 
-.typo-svg-overlay {
+.typo-svg-overlay,
+.typo-svg-overlay * {
   position: absolute;
-  pointer-events: none;
+  pointer-events: none !important;
   z-index: 10;
   overflow: visible;
 }

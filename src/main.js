@@ -5927,7 +5927,7 @@ class NocturneWriter {
   }
 
   handleContextMenu(event) {
-    const editable = event.target.closest?.('.page-content');
+    const editable = event.target.closest?.('.page-content') || event.target.closest?.('.visual-page-shell, .page')?.querySelector?.('.page-content');
     const entity = event.target.closest?.('.entity-link');
     const loreDetail = event.target.closest?.('.lore-detail.note-detail');
     if (!editable && !entity && !loreDetail) return;
@@ -6006,8 +6006,8 @@ class NocturneWriter {
     const item = this._typoHighlightRangesMap.get(key);
     if (item?.range) {
       const rect = item.range.getBoundingClientRect();
-      const padX = 8;
-      const padY = 14;
+      const padX = 12;
+      const padY = 20;
       if (x < rect.left - padX || x > rect.right + padX || y < rect.top - padY || y > rect.bottom + padY) {
         return null;
       }
@@ -6086,7 +6086,7 @@ class NocturneWriter {
     const activeContextMenuTypo = this.state?.contextMenu?.typoMatch;
     const contextKey = activeContextMenuTypo ? `${activeContextMenuTypo.blockId}:${activeContextMenuTypo.startOffset}:${activeContextMenuTypo.endOffset}` : null;
 
-    const editable = event.target.closest?.('.page-content');
+    const editable = event.target.closest?.('.page-content') || event.target.closest?.('.visual-page-shell, .page')?.querySelector?.('.page-content');
     if (!editable) {
       if (this._hoveredTypoKey && this._hoveredTypoKey !== contextKey) {
         this.clearTypoHoverState(contextKey);
