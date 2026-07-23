@@ -1168,7 +1168,16 @@ body[data-active-review-mode="finalization"] .toolbar .save-indicator {
   transform: translateX(0);
 }
 .workspace-pane.active-pane {
-  border-color: rgba(var(--accent-rgb, 139, 92, 246),.2);
+  border-color: rgba(var(--accent-rgb, 139, 92, 246),.45);
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+.workspace-pane.active-pane .workspace-pane-header {
+  background: rgba(var(--accent-rgb, 139, 92, 246),.08);
+}
+.pane-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 .pane-drop-overlay {
   position: absolute;
@@ -3327,8 +3336,10 @@ body.resizing-floating-note {
   background: rgba(var(--accent-rgb, 139, 92, 246),.11);
   color: white;
 }
-.split-close-option { display: none !important; }
-.split-active .split-close-option { display: grid !important; }
+.split-close-option,
+.split-active-only { display: none !important; }
+.split-active .split-close-option,
+.split-active .split-active-only { display: grid !important; }
 .floating-note-popover {
   position: absolute;
   top: calc(100% + 12px);

@@ -1178,7 +1178,9 @@ class NocturneWriter {
   }
 
   getFocusedDoc() {
-    return this.getDocForPane(this.state.workspace?.focusedPaneId || 'primary');
+    const focused = this.getDocForPane(this.state.workspace?.focusedPaneId || 'primary');
+    if (focused) return focused;
+    return this.getDocForPane('primary') || this.state.docs.find((doc) => doc.id === this.state.activeDocId) || null;
   }
 
   getFocusedEditable() {
@@ -1350,6 +1352,20 @@ class NocturneWriter {
     this.clearSuggestionIfStale();
   }
 
+  swapPanes() {
+    if (this.state.workspace?.mode !== 'split') return;
+    const primarySnapshot = this.clonePaneDescriptor(this.state.workspace.panes.primary);
+    const secondarySnapshot = this.clonePaneDescriptor(this.state.workspace.panes.secondary);
+    this.state.workspace.panes.primary = Object.assign(secondarySnapshot, { id: 'primary' });
+    this.state.workspace.panes.secondary = Object.assign(primarySnapshot, { id: 'secondary' });
+    this.state.workspace.focusedPaneId = this.state.workspace.focusedPaneId === 'primary' ? 'secondary' : 'primary';
+    this.persistWorkspaceState();
+    this.renderWorkspace();
+    this.renderFloatingNotes();
+    this.animatePaneContentRefresh(['primary', 'secondary']);
+    this.toast('Области успешно поменялись местами.');
+  }
+
   toggleSplitMode() {
     this.docPaneDropState = null;
     document.body.classList.remove('doc-pane-drop-active');
@@ -1367,6 +1383,10 @@ class NocturneWriter {
   }
 
   toggleSplitMenu() {
+    if (window.innerWidth < 1024 || document.body.classList.contains('mobile-shell-active')) {
+      this.toast('Split-screen поддерживается на экранах от 1024px');
+      return;
+    }
     const willOpen = !this.isFloatingMenuOpen('split');
     if (willOpen) this.openFloatingMenu('split');
     else this.closeFloatingMenu('split');
@@ -1647,15 +1667,23 @@ class NocturneWriter {
       `;
     }
     const isSecondary = paneId === 'secondary';
+    const isSplit = this.state.workspace?.mode === 'split';
+    const isFocused = isSplit && this.state.workspace?.focusedPaneId === paneId;
     const title = this.paneTitle(pane);
     const kind = this.paneKindLabel(pane);
-    const close = isSecondary && this.state.workspace.mode === 'split'
-      ? '<button class="btn-icon" data-action="close-secondary-pane" title="Закрыть правую область"><i class="bx bx-x"></i></button>'
-      : '';
+    const focusLabel = isSplit ? (isFocused ? ' • Активная область' : '') : '';
+    
+    const actionButtons = [];
+    if (isSplit) {
+      actionButtons.push('<button class="btn-icon" data-action="swap-panes" title="Поменять области местами"><i class="bx bx-transfer-alt"></i></button>');
+      if (isSecondary) {
+        actionButtons.push('<button class="btn-icon" data-action="close-secondary-pane" title="Закрыть правую область"><i class="bx bx-x"></i></button>');
+      }
+    }
     return `
       <header class="workspace-pane-header">
-        <div><small>${kind}</small><strong>${escapeHtml(title)}</strong></div>
-        ${close}
+        <div><small>${kind}${focusLabel}</small><strong>${escapeHtml(title)}</strong></div>
+        <div class="pane-header-actions">${actionButtons.join('')}</div>
       </header>
       <div class="workspace-pane-body">
         ${this.renderPaneBody(paneId)}
@@ -3057,7 +3085,7 @@ class NocturneWriter {
             </div>
             <div class="toolbar-right">
               <div class="split-menu-wrap" id="split-menu-wrap">
-                <button class="tool-btn" data-action="toggle-split-menu" title="Split-screen"><i class="bx bx-sidebar"></i></button>
+                <button class="tool-btn" data-action="toggle-split-menu" title="Разделение экрана (Split-screen)"><i class="bx bx-columns"></i></button>
               </div>
               <div class="floating-note-menu-wrap" id="floating-note-menu-wrap">
                 <button class="tool-btn" data-action="toggle-floating-note-menu" data-floating-note-menu-anchor title="Плавающие заметки"><i class="bx bx-note"></i></button>
@@ -3134,10 +3162,10 @@ class NocturneWriter {
       <div class="floating-notes-modal" id="floating-notes-modal"></div>
       <div class="floating-menu-portal" id="floating-menu-portal" aria-hidden="true">
         <div class="dropdown-menu popover-surface portal-floating-menu" id="kb-menu" data-floating-menu="kb" aria-hidden="true">
-          <div class="drop-item kb-drop-row" data-kb-open="characters"><i class="bx bx-user-pin"></i><span>Персонажи</span><button type="button" data-action="open-kb-right" data-kb-tab="characters" title="Открыть справа"><i class="bx bx-sidebar"></i></button></div>
-          <div class="drop-item kb-drop-row" data-kb-open="locations"><i class="bx bx-map-alt"></i><span>Локации</span><button type="button" data-action="open-kb-right" data-kb-tab="locations" title="Открыть справа"><i class="bx bx-sidebar"></i></button></div>
-          <div class="drop-item kb-drop-row" data-kb-open="timeline"><i class="bx bx-git-commit"></i><span>Таймлайн</span><button type="button" data-action="open-kb-right" data-kb-tab="timeline" title="Открыть справа"><i class="bx bx-sidebar"></i></button></div>
-          <div class="drop-item kb-drop-row" data-kb-open="notes"><i class="bx bx-note"></i><span>Записи</span><button type="button" data-action="open-kb-right" data-kb-tab="notes" title="Открыть справа"><i class="bx bx-sidebar"></i></button></div>
+          <div class="drop-item kb-drop-row" data-kb-open="characters"><i class="bx bx-user-pin"></i><span>Персонажи</span><button type="button" data-action="open-kb-right" data-kb-tab="characters" title="Открыть справа"><i class="bx bx-columns"></i></button></div>
+          <div class="drop-item kb-drop-row" data-kb-open="locations"><i class="bx bx-map-alt"></i><span>Локации</span><button type="button" data-action="open-kb-right" data-kb-tab="locations" title="Открыть справа"><i class="bx bx-columns"></i></button></div>
+          <div class="drop-item kb-drop-row" data-kb-open="timeline"><i class="bx bx-git-commit"></i><span>Таймлайн</span><button type="button" data-action="open-kb-right" data-kb-tab="timeline" title="Открыть справа"><i class="bx bx-columns"></i></button></div>
+          <div class="drop-item kb-drop-row" data-kb-open="notes"><i class="bx bx-note"></i><span>Записи</span><button type="button" data-action="open-kb-right" data-kb-tab="notes" title="Открыть справа"><i class="bx bx-columns"></i></button></div>
         </div>
         <div class="format-menu popover-surface portal-floating-menu" id="format-menu" data-floating-menu="format" aria-hidden="true">
           <button data-format-block="paragraph"><i class="bx bx-text"></i><span>Обычный текст</span></button>
@@ -3162,6 +3190,10 @@ class NocturneWriter {
           <button class="floating-menu-item split-menu-item" data-action="split-empty-left">
             <i class="bx bx-dock-left"></i>
             <span>Пустая область слева<small>Открыть вторую рабочую область слева</small></span>
+          </button>
+          <button class="floating-menu-item split-menu-item split-active-only" data-action="swap-panes">
+            <i class="bx bx-transfer-alt"></i>
+            <span>Поменять области местами<small>Поменять левую и правую панели местами</small></span>
           </button>
           <button class="floating-menu-item split-menu-item split-close-option" data-action="close-secondary-pane">
             <i class="bx bx-collapse-horizontal"></i>
@@ -3921,6 +3953,11 @@ class NocturneWriter {
     }
     if (action === 'close-secondary-pane') {
       this.closeSecondaryPane();
+      this.hideSplitMenu();
+      return;
+    }
+    if (action === 'swap-panes') {
+      this.swapPanes();
       this.hideSplitMenu();
       return;
     }
@@ -9489,8 +9526,11 @@ class NocturneWriter {
     this.clearSuggestionIfStale();
     const existingPaneId = this.paneIdForOpenDoc(id);
     if (existingPaneId && this.state.workspace?.mode === 'split') {
+      if (existingPaneId === this.state.workspace.focusedPaneId) {
+        return;
+      }
       this.setFocusedPane(existingPaneId);
-      this.toast('Документ уже открыт в другой области.');
+      this.toast('Перешли к открытому документу.');
       return;
     }
     const paneId = this.state.workspace?.mode === 'split' ? this.state.workspace.focusedPaneId : 'primary';
