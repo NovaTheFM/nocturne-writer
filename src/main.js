@@ -6014,6 +6014,66 @@ class NocturneWriter {
     return candidate;
   }
 
+  renderTypoSvgOverlays() {
+    document.querySelectorAll('.typo-svg-overlay').forEach((el) => el.remove());
+    if (!this._typoHighlightRangesMap || !this.state.settings.strictSpellcheck) return;
+
+    for (const [key, item] of this._typoHighlightRangesMap.entries()) {
+      if (!item?.range) continue;
+      const rect = item.range.getBoundingClientRect();
+      if (!rect.width || !rect.height) continue;
+
+      const node = item.range.startContainer;
+      const block = (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement)?.closest?.('[data-block-id]');
+      const editable = block?.closest?.('.page-content');
+      if (!editable) continue;
+
+      const pageShell = editable.closest('.visual-page-shell') || editable.closest('.page') || editable.parentElement;
+      const pageOverlay = pageShell?.querySelector('.page-overlay') || pageShell;
+      if (!pageOverlay) continue;
+
+      const overlayRect = pageOverlay.getBoundingClientRect();
+      const fontMetric = parseFloat(window.getComputedStyle(editable).fontSize) || 16;
+      const left = rect.left - overlayRect.left;
+      const top = (rect.bottom - overlayRect.top) - (fontMetric * 0.28);
+      const width = rect.width;
+
+      const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svgEl.setAttribute('class', 'typo-svg-overlay');
+      svgEl.setAttribute('data-key', key);
+      svgEl.setAttribute('height', '10');
+      svgEl.setAttribute('width', `${width}`);
+      svgEl.style.left = `${left}px`;
+      svgEl.style.top = `${top}px`;
+      svgEl.style.width = `${width}px`;
+
+      let defs = pageOverlay.querySelector('#typo-custom-defs');
+      if (!defs) {
+        const svgDefContainer = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svgDefContainer.style.position = 'absolute';
+        svgDefContainer.style.width = '0';
+        svgDefContainer.style.height = '0';
+        svgDefContainer.innerHTML = `
+          <defs id="typo-custom-defs">
+            <filter id="typo-custom-glow-filter" x="-30%" y="-150%" width="160%" height="400%">
+              <feGaussianBlur stdDeviation="1.2" result="blur1"/>
+              <feGaussianBlur stdDeviation="2.4" result="blur2"/>
+              <feMerge>
+                <feMergeNode in="blur2"/>
+                <feMergeNode in="blur1"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+          </defs>
+        `;
+        pageOverlay.appendChild(svgDefContainer);
+      }
+
+      svgEl.innerHTML = `<path class="typo-svg-path" d="${this.generateWavySvgPath(width)}" />`;
+      pageOverlay.appendChild(svgEl);
+    }
+  }
+
   handleTypoMouseMove(event) {
     if (!CSS.highlights || typeof Highlight === 'undefined') return;
     const editable = event.target.closest?.('.page-content');
@@ -6027,65 +6087,15 @@ class NocturneWriter {
     const key = match ? `${match.blockId}:${match.startOffset}:${match.endOffset}` : null;
     if (this._hoveredTypoKey !== key) {
       this._hoveredTypoKey = key;
-      if (key && this._typoHighlightRangesMap?.has(key)) {
-        const item = this._typoHighlightRangesMap.get(key);
-        const normalExact = [];
-        const normalSmart = [];
-        for (const [k, val] of this._typoHighlightRangesMap.entries()) {
-          if (k !== key) {
-            if (val.type === 'exact') normalExact.push(val.range);
-            else normalSmart.push(val.range);
-          }
+      document.querySelectorAll('.typo-svg-overlay.hovered').forEach((el) => el.classList.remove('hovered'));
+      CSS.highlights.delete('typo-hover');
+      if (key) {
+        const item = this._typoHighlightRangesMap?.get(key);
+        if (item?.range) {
+          CSS.highlights.set('typo-hover', new Highlight(item.range));
         }
-        if (normalExact.length) CSS.highlights.set('typo-errors', new Highlight(...normalExact));
-        else CSS.highlights.delete('typo-errors');
-        if (normalSmart.length) CSS.highlights.set('typo-smart-errors', new Highlight(...normalSmart));
-        else CSS.highlights.delete('typo-smart-errors');
-        CSS.highlights.set('typo-hover', new Highlight(item.range));
-
-        const pageShell = editable.closest('.visual-page-shell') || editable.closest('.page') || editable.parentElement;
-        const pageOverlay = pageShell?.querySelector('.page-overlay') || pageShell;
-        if (pageShell && pageOverlay) {
-          const rect = item.range.getBoundingClientRect();
-          const overlayRect = pageOverlay.getBoundingClientRect();
-          let svgEl = pageOverlay.querySelector('.typo-glow-svg');
-          if (!svgEl) {
-            svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            svgEl.setAttribute('class', 'typo-glow-svg');
-            svgEl.setAttribute('height', '10');
-            svgEl.innerHTML = `
-              <defs>
-                <filter id="typo-line-glow-filter" x="-20%" y="-100%" width="140%" height="300%">
-                  <feGaussianBlur stdDeviation="1.2" result="blur1"/>
-                  <feGaussianBlur stdDeviation="2.4" result="blur2"/>
-                  <feMerge>
-                    <feMergeNode in="blur2"/>
-                    <feMergeNode in="blur1"/>
-                    <feMergeNode in="SourceGraphic"/>
-                  </feMerge>
-                </filter>
-              </defs>
-              <path class="typo-glow-path" stroke="var(--accent)" stroke-width="1.3" stroke-linecap="round" fill="none" filter="url(#typo-line-glow-filter)"/>
-            `;
-            pageOverlay.appendChild(svgEl);
-          }
-          const fontMetric = parseFloat(window.getComputedStyle(editable).fontSize) || 16;
-          const left = rect.left - overlayRect.left;
-          const top = (rect.bottom - overlayRect.top) - (fontMetric * 0.28);
-          const width = rect.width;
-
-          svgEl.style.left = `${left}px`;
-          svgEl.style.top = `${top}px`;
-          svgEl.style.width = `${width}px`;
-          svgEl.setAttribute('width', `${width}`);
-          const pathEl = svgEl.querySelector('.typo-glow-path');
-          if (pathEl) {
-            pathEl.setAttribute('d', this.generateWavySvgPath(width));
-          }
-          requestAnimationFrame(() => svgEl.classList.add('active'));
-        }
-      } else {
-        this.clearTypoHoverState();
+        const activeSvg = document.querySelector(`.typo-svg-overlay[data-key="${CSS.escape(key)}"]`);
+        if (activeSvg) activeSvg.classList.add('hovered');
       }
     }
   }
@@ -6093,24 +6103,7 @@ class NocturneWriter {
   clearTypoHoverState() {
     this._hoveredTypoKey = null;
     CSS.highlights.delete('typo-hover');
-    document.querySelectorAll('.typo-glow-svg').forEach((el) => {
-      el.classList.remove('active');
-      setTimeout(() => {
-        if (!el.classList.contains('active')) el.remove();
-      }, 220);
-    });
-    if (this._typoHighlightRangesMap) {
-      const normalExact = [];
-      const normalSmart = [];
-      for (const val of this._typoHighlightRangesMap.values()) {
-        if (val.type === 'exact') normalExact.push(val.range);
-        else normalSmart.push(val.range);
-      }
-      if (normalExact.length) CSS.highlights.set('typo-errors', new Highlight(...normalExact));
-      else CSS.highlights.delete('typo-errors');
-      if (normalSmart.length) CSS.highlights.set('typo-smart-errors', new Highlight(...normalSmart));
-      else CSS.highlights.delete('typo-smart-errors');
-    }
+    document.querySelectorAll('.typo-svg-overlay.hovered').forEach((el) => el.classList.remove('hovered'));
   }
 
   renderContextMenu() {
@@ -10473,6 +10466,7 @@ class NocturneWriter {
       h.priority = 1;
       CSS.highlights.set('typo-smart-errors', h);
     }
+    this.renderTypoSvgOverlays();
   }
 
   scheduleSpellerCheck() {
