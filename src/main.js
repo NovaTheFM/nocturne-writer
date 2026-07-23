@@ -484,7 +484,7 @@ class NocturneWriter {
     this.startGitAutosave();
 
     // Check if new version first run (specifically for Electron desktop users)
-    const currentVersion = '1.1.2';
+    const currentVersion = '1.1.3';
     const showWhatsNew = this.runtime.isElectron && this.state.settings.lastSeenVersion !== currentVersion;
     if (showWhatsNew) {
       setTimeout(() => {
@@ -20830,7 +20830,7 @@ ${raw}`;
       format: 'nocturnedump',
       version: 1,
       appName: 'Nocturne Writer',
-      appVersion: '1.1.2',
+      appVersion: '1.1.3',
       schemaVersion: 3,
       exportedAt: new Date().toISOString(),
       encrypted: !!this.state.settings.e2e,
@@ -21252,6 +21252,31 @@ ${raw}`;
             <h2 style="text-align: center; margin: 0 0 4px; font-size: 22px; color: var(--text-main); font-weight: 700;">Что нового</h2>
             <p style="text-align: center; margin: 0 0 20px; font-size: 13px; color: var(--text-muted, #a1a1aa);">Луна хочет рассказать вам о новинках!</p>
             <div class="whats-new-body" style="max-height: 280px; overflow-y: auto; padding-right: 8px; font-size: 14px; line-height: 1.6; color: var(--text-main);">
+              <p style="margin: 0 0 16px; font-weight: 600; color: var(--accent);">Версия 1.1.3</p>
+
+              <p style="margin: 0 0 4px; font-weight: 600;">✨ Исправление системы подсветок и Smart-словаря:</p>
+              <ul style="margin: 0 0 12px; padding-left: 20px;">
+                <li><b>Мгновенная подсветка опечаток</b>: При вводе слова и нажатии пробела/знака препинания подчёркивание красной волной срабатывает мгновенно (0ms delay).</li>
+                <li><b>Устранение исчезновения подчёркиваний</b>: Исправлен сброс SVG-слоя пагинатором страниц — волнистые линии опечаток теперь устойчиво остаются на месте при любых кликах и перемещении каретки.</li>
+                <li><b>Ускорение Smart-словаря</b>: Время обработки очереди проверки сокращено с 600ms до ультра-быстрых 50ms.</li>
+              </ul>
+
+              <p style="margin: 0 0 4px; font-weight: 600;">🧹 Интеллектуальный «Чистильщик заметок™»:</p>
+              <ul style="margin: 0 0 12px; padding-left: 20px;">
+                <li>Реализовано удаление заголовков ответов Telegram (<code>in reply to</code> / <code>в ответ на</code>) с ПК и мобильных клиентов.</li>
+                <li>Автоматическое вырезание цитируемых ответов (<code>> ...</code>) с привязкой к заголовкам и сопоставлением дублирующегося текста.</li>
+                <li>Наглядная плашка <code>[Ответ]</code> в окне совпадений для предварительного просмотра вырезаемых цитат.</li>
+              </ul>
+
+              <p style="margin: 0 0 4px; font-weight: 600;">🔀 Улучшения Split-Screen и Базы Знаний:</p>
+              <ul style="margin: 0 0 20px; padding-left: 20px;">
+                <li>Добавлена кнопка быстрой смены панелей местами <code>swap-panes</code> и удалена надпись «Активная область».</li>
+                <li>Устранено 1px микродвижение карточек БЗ и активирована плавная цепочка анимации появления.</li>
+                <li>Разделены функции «Игнорировать» (на сессию) и «Добавить в словарь» (персистентно в БД).</li>
+              </ul>
+
+              <hr style="border: 0; border-top: 1px solid var(--border); margin: 20px 0;">
+
               <p style="margin: 0 0 16px; font-weight: 600; color: var(--accent);">Версия 1.1.2</p>
 
               <p style="margin: 0 0 4px; font-weight: 600;">✍️ Автоформатирование тире и отключение автосписков:</p>
