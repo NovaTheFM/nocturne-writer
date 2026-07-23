@@ -7916,6 +7916,51 @@ class NocturneWriter {
     return isValid;
   }
 
+  getVisualTranslate(el) {
+    if (!el) return { x: 0, y: 0 };
+    const style = window.getComputedStyle(el);
+    const transform = style.transform || style.webkitTransform;
+    if (!transform || transform === 'none') return { x: 0, y: 0 };
+    
+    const matrixMatch = transform.match(/^matrix\((.+)\)$/);
+    if (matrixMatch) {
+      const values = matrixMatch[1].split(', ');
+      return {
+        x: parseFloat(values[4]) || 0,
+        y: parseFloat(values[5]) || 0,
+      };
+    }
+    
+    const matrix3dMatch = transform.match(/^matrix3d\((.+)\)$/);
+    if (matrix3dMatch) {
+      const values = matrix3dMatch[1].split(', ');
+      return {
+        x: parseFloat(values[12]) || 0,
+        y: parseFloat(values[13]) || 0,
+      };
+    }
+    
+    return { x: 0, y: 0 };
+  }
+
+  cancelElementAnimations(el) {
+    if (!el) return;
+    if (el._activeNocturneAnim) {
+      try {
+        el._activeNocturneAnim.cancel();
+      } catch (err) {}
+      el._activeNocturneAnim = null;
+    }
+    if (typeof el.getAnimations === 'function') {
+      try {
+        el.getAnimations().forEach((anim) => anim.cancel());
+      } catch (err) {}
+    }
+    el.classList.remove('new-card-entrance', 'new-doc-entrance', 'kb-card-stagger-in');
+    el.style.transition = '';
+    el.style.transform = '';
+  }
+
   animateLayoutTransition(container, mutateDOM) {
     if (!container) {
       mutateDOM();
@@ -7924,48 +7969,62 @@ class NocturneWriter {
     
     // 1. Record current positions of all animated elements inside container
     const targets = Array.from(container.querySelectorAll('.doc-item, .section-title, .char-card, .loc-card, .timeline-item, .note-card'));
-    const oldRects = (targets.length ? targets : Array.from(container.children)).map(el => ({
-      element: el,
-      rect: el.getBoundingClientRect()
-    }));
+    const candidateList = targets.length ? targets : Array.from(container.children);
+    
+    const oldRects = candidateList.map((el) => {
+      const visTranslate = this.getVisualTranslate(el);
+      const baseRect = el.getBoundingClientRect();
+      const rect = {
+        left: baseRect.left - visTranslate.x,
+        top: baseRect.top - visTranslate.y,
+        width: baseRect.width,
+        height: baseRect.height,
+      };
+      this.cancelElementAnimations(el);
+      return {
+        element: el,
+        rect,
+        visTranslate,
+      };
+    });
 
     // 2. Perform DOM mutation
     mutateDOM();
 
-    // 3. Immediately measure new positions synchronously (before painting)
-    const newRects = oldRects.map(item => {
+    // 3. Measure new layout positions synchronously
+    const newRects = oldRects.map((item) => {
       if (!item.element.parentNode) return null;
       const newRect = item.element.getBoundingClientRect();
-      const dx = item.rect.left - newRect.left;
-      const dy = item.rect.top - newRect.top;
+      const dx = (item.rect.left + item.visTranslate.x) - newRect.left;
+      const dy = (item.rect.top + item.visTranslate.y) - newRect.top;
       return {
         element: item.element,
         dx,
-        dy
+        dy,
       };
     }).filter(Boolean);
 
-    // 4. Immediately invert synchronously to keep layout position visually unchanged
-    newRects.forEach(item => {
+    // 4. Play additive transition with Web Animations API
+    newRects.forEach((item) => {
       if (Math.abs(item.dx) < 0.5 && Math.abs(item.dy) < 0.5) return;
-      item.element.style.transition = 'none';
-      item.element.style.transform = `translate(${item.dx}px, ${item.dy}px)`;
-    });
-
-    // 5. Play (transition to 0,0)
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        newRects.forEach(item => {
-          if (Math.abs(item.dx) < 0.5 && Math.abs(item.dy) < 0.5) return;
-          item.element.style.transition = 'transform 380ms cubic-bezier(0.16, 1, 0.3, 1)';
-          item.element.style.transform = 'translate(0, 0)';
-          
-          setTimeout(() => {
-            item.element.style.transition = '';
-            item.element.style.transform = '';
-          }, 380);
-        });
+      
+      const anim = item.element.animate([
+        { transform: `translate(${item.dx}px, ${item.dy}px)` },
+        { transform: 'translate(0px, 0px)' }
+      ], {
+        duration: 380,
+        easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+        fill: 'none'
       });
+      
+      item.element._activeNocturneAnim = anim;
+      anim.onfinish = () => {
+        if (item.element._activeNocturneAnim === anim) {
+          item.element._activeNocturneAnim = null;
+          item.element.style.transform = '';
+          item.element.style.transition = '';
+        }
+      };
     });
   }
 
@@ -9205,32 +9264,33 @@ class NocturneWriter {
 
   animateSortableDrop(item, lastMousePos, clickOffset) {
     if (!item || !lastMousePos || !clickOffset) return;
+    this.cancelElementAnimations(item);
+    
     const finalRect = item.getBoundingClientRect();
     const startX = lastMousePos.x - clickOffset.x;
     const startY = lastMousePos.y - clickOffset.y;
     const dx = startX - finalRect.left;
     const dy = startY - finalRect.top;
     
-    // Invert stage: position card exactly where it was under the cursor
-    item.style.transition = 'none';
-    item.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(1.015)`;
-    item.style.boxShadow = '0 20px 40px rgba(0,0,0,.6), 0 0 20px var(--accent-glow)';
     item.style.zIndex = '9999';
-    
-    // Play stage: transition smoothly back to its natural place in the list
-    requestAnimationFrame(() => {
-      // Force layout repaint
-      item.offsetHeight;
-      item.style.transition = 'transform 0.42s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.42s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.42s cubic-bezier(0.16, 1, 0.3, 1)';
-      item.style.transform = 'translate3d(0, 0, 0) scale(1)';
-      item.style.boxShadow = '';
-      
-      setTimeout(() => {
-        item.style.transition = '';
-        item.style.transform = '';
-        item.style.zIndex = '';
-      }, 450);
+    const anim = item.animate([
+      { transform: `translate3d(${dx}px, ${dy}px, 0) scale(1.015)`, boxShadow: '0 20px 40px rgba(0,0,0,.6), 0 0 20px var(--accent-glow)' },
+      { transform: 'translate3d(0, 0, 0) scale(1)', boxShadow: 'none' }
+    ], {
+      duration: 420,
+      easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+      fill: 'none'
     });
+    
+    item._activeNocturneAnim = anim;
+    anim.onfinish = () => {
+      if (item._activeNocturneAnim === anim) {
+        item._activeNocturneAnim = null;
+        item.style.zIndex = '';
+        item.style.transform = '';
+        item.style.boxShadow = '';
+      }
+    };
   }
 
   setupDocSortables() {
@@ -9262,6 +9322,11 @@ class NocturneWriter {
           document.body.classList.add('sortable-active');
           window.getSelection()?.removeAllRanges();
           event.from.classList.add('is-dragging');
+          
+          // Cancel active animations on all doc items in container to prevent mid-flight glitches
+          event.from.querySelectorAll('.doc-item').forEach((child) => {
+            this.cancelElementAnimations(child);
+          });
           
           // Remove entrance animation classes immediately on drag start to prevent style/ghost glitches
           event.item.classList.remove('new-card-entrance', 'new-doc-entrance');
@@ -16811,6 +16876,11 @@ class NocturneWriter {
           window.Capacitor.Plugins.Haptics.impact({ style: 'light' }).catch(() => {});
         }
         window.getSelection()?.removeAllRanges();
+
+        // Cancel active animations on all cards in container to prevent mid-flight glitches
+        event.from.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card').forEach((child) => {
+          this.cancelElementAnimations(child);
+        });
 
         // Remove entrance animation classes immediately on drag start to prevent style/ghost glitches
         event.item.classList.remove('new-card-entrance', 'new-doc-entrance');
