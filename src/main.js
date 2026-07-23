@@ -6023,14 +6023,33 @@ class NocturneWriter {
     const contextKey = activeContextMenuTypo ? `${activeContextMenuTypo.blockId}:${activeContextMenuTypo.startOffset}:${activeContextMenuTypo.endOffset}` : null;
 
     for (const [key, item] of this._typoHighlightRangesMap.entries()) {
-      if (!item?.range) continue;
-      const rect = item.range.getBoundingClientRect();
-      if (!rect.width || !rect.height) continue;
+      if (!item) continue;
+      const { blockId, startOffset, endOffset } = item;
+      let range = item.range;
 
-      const node = item.range.startContainer;
-      const block = (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement)?.closest?.('[data-block-id]');
-      const editable = block?.closest?.('.page-content');
+      let block = document.querySelector(`[data-block-id="${CSS.escape(blockId)}"], [data-source-block-id="${CSS.escape(blockId)}"]`);
+      if (!block && range?.startContainer) {
+        const node = range.startContainer;
+        block = (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement)?.closest?.('[data-block-id]');
+      }
+      if (!block) continue;
+
+      const editable = block.closest('.page-content');
       if (!editable) continue;
+
+      let rect = range ? range.getBoundingClientRect() : null;
+      if (!rect || !rect.width || !rect.height) {
+        const fragmentBase = Number(block.dataset.fragmentStart || 0);
+        const localStart = startOffset >= fragmentBase ? startOffset - fragmentBase : startOffset;
+        const localEnd = endOffset >= fragmentBase ? endOffset - fragmentBase : endOffset;
+        const { textNodes } = this.textNodesForHighlightBlock(block);
+        range = this.rangeFromBlockOffsets(textNodes, localStart, localEnd);
+        if (range) {
+          item.range = range;
+          rect = range.getBoundingClientRect();
+        }
+      }
+      if (!rect || !rect.width || !rect.height) continue;
 
       const pageShell = editable.closest('.visual-page-shell') || editable.closest('.page') || editable.parentElement;
       const pageOverlay = pageShell?.querySelector('.page-overlay') || pageShell;
@@ -10431,7 +10450,7 @@ class NocturneWriter {
               const startOffset = fragmentBase + start;
               const endOffset = fragmentBase + end;
               const key = `${blockId}:${startOffset}:${endOffset}`;
-              this._typoHighlightRangesMap.set(key, { range, type: 'exact' });
+              this._typoHighlightRangesMap.set(key, { range, blockId, startOffset, endOffset, type: 'exact' });
               typoRanges.push(range);
               this.registerTypoMatch({ docId, paneId, blockId, start: startOffset, end: endOffset, rawText: phraseMatch[2], rule, source: 'exact' });
               occupied.push([start, end]);
@@ -10460,7 +10479,7 @@ class NocturneWriter {
             const startOffset = fragmentBase + start;
             const endOffset = fragmentBase + end;
             const key = `${blockId}:${startOffset}:${endOffset}`;
-            this._typoHighlightRangesMap.set(key, { range, type: 'exact' });
+            this._typoHighlightRangesMap.set(key, { range, blockId, startOffset, endOffset, type: 'exact' });
             typoRanges.push(range);
             this.registerTypoMatch({ docId, paneId, blockId, start: startOffset, end: endOffset, rawText: rawWord, rule: typo, source: 'exact' });
             occupied.push([start, end]);
@@ -10585,7 +10604,7 @@ class NocturneWriter {
               const blockId = block.dataset.sourceBlockId || block.dataset.blockId;
               const key = `${blockId}:${startOffset}:${endOffset}`;
               if (this._typoHighlightRangesMap) {
-                this._typoHighlightRangesMap.set(key, { range, type: 'smart' });
+                this._typoHighlightRangesMap.set(key, { range, blockId, startOffset, endOffset, type: 'smart' });
               }
               smartRanges.push(range);
               occupied.push([start, end]);
