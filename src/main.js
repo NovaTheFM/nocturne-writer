@@ -10709,9 +10709,8 @@ class NocturneWriter {
 
   isCompletedTypoToken(text, start, end, active, blockId) {
     const caretInsideToken = active?.blockId === blockId && active.offset >= start && active.offset <= end;
-    if (caretInsideToken) return false;
-    if (end >= text.length) return !caretInsideToken;
-    return /[\s.,!?;:()\[\]{}"'\u00ab\u00bb\u201c\u201d\u2018\u2019\u2014\u2013-]/u.test(text[end] || '');
+    if (end >= text.length && caretInsideToken) return false;
+    return end >= text.length || /[\s.,!?;:()\[\]{}"'\u00ab\u00bb\u201c\u201d\u2018\u2019\u2014\u2013-]/u.test(text[end] || '');
   }
 
   buildProtectedLexicon() {
