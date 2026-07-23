@@ -5989,8 +5989,7 @@ class NocturneWriter {
     const editable = event.target.closest?.('.page-content');
     if (!editable) {
       if (this._hoveredTypoKey) {
-        this._hoveredTypoKey = null;
-        CSS.highlights.delete('typo-hover');
+        this.clearTypoHoverState();
       }
       return;
     }
@@ -5998,23 +5997,41 @@ class NocturneWriter {
     const key = match ? `${match.blockId}:${match.startOffset}:${match.endOffset}` : null;
     if (this._hoveredTypoKey !== key) {
       this._hoveredTypoKey = key;
-      if (match) {
-        const block = editable.querySelector(`[data-block-id="${CSS.escape(match.blockId)}"], [data-source-block-id="${CSS.escape(match.blockId)}"]`);
-        if (block) {
-          const { textNodes } = this.textNodesForHighlightBlock(block);
-          const fragmentBase = Number(block.dataset.fragmentStart || 0);
-          const localStart = match.startOffset - fragmentBase;
-          const localEnd = match.endOffset - fragmentBase;
-          const range = this.rangeFromBlockOffsets(textNodes, localStart, localEnd);
-          if (range) {
-            const h = new Highlight(range);
-            h.priority = 10;
-            CSS.highlights.set('typo-hover', h);
-            return;
+      if (key && this._typoHighlightRangesMap?.has(key)) {
+        const item = this._typoHighlightRangesMap.get(key);
+        const normalExact = [];
+        const normalSmart = [];
+        for (const [k, val] of this._typoHighlightRangesMap.entries()) {
+          if (k !== key) {
+            if (val.type === 'exact') normalExact.push(val.range);
+            else normalSmart.push(val.range);
           }
         }
+        if (normalExact.length) CSS.highlights.set('typo-errors', new Highlight(...normalExact));
+        else CSS.highlights.delete('typo-errors');
+        if (normalSmart.length) CSS.highlights.set('typo-smart-errors', new Highlight(...normalSmart));
+        else CSS.highlights.delete('typo-smart-errors');
+        CSS.highlights.set('typo-hover', new Highlight(item.range));
+      } else {
+        this.clearTypoHoverState();
       }
-      CSS.highlights.delete('typo-hover');
+    }
+  }
+
+  clearTypoHoverState() {
+    this._hoveredTypoKey = null;
+    CSS.highlights.delete('typo-hover');
+    if (this._typoHighlightRangesMap) {
+      const normalExact = [];
+      const normalSmart = [];
+      for (const val of this._typoHighlightRangesMap.values()) {
+        if (val.type === 'exact') normalExact.push(val.range);
+        else normalSmart.push(val.range);
+      }
+      if (normalExact.length) CSS.highlights.set('typo-errors', new Highlight(...normalExact));
+      else CSS.highlights.delete('typo-errors');
+      if (normalSmart.length) CSS.highlights.set('typo-smart-errors', new Highlight(...normalSmart));
+      else CSS.highlights.delete('typo-smart-errors');
     }
   }
 
@@ -10277,6 +10294,7 @@ class NocturneWriter {
     CSS.highlights.delete('typo-hover');
     this._hoveredTypoKey = null;
     this.typoMatchIndex = [];
+    this._typoHighlightRangesMap = new Map();
     this.disableBrowserSpellcheck();
     if (!this.state.settings.strictSpellcheck) return;
 
@@ -10295,6 +10313,7 @@ class NocturneWriter {
       const editable = block.closest('.page-content');
       const paneId = editable?.dataset.paneId || block.closest('.workspace-pane')?.dataset.paneId || 'primary';
       const docId = editable?.dataset.docId || null;
+      const blockId = block.dataset.sourceBlockId || block.dataset.blockId;
 
       phraseRules.forEach((rule) => {
         const pattern = this.escapeRegExp(rule.wrong).replace(/\s+/g, '\\s+');
@@ -10310,8 +10329,12 @@ class NocturneWriter {
           ) {
             const range = this.rangeFromBlockOffsets(textNodes, start, end);
             if (range) {
+              const startOffset = fragmentBase + start;
+              const endOffset = fragmentBase + end;
+              const key = `${blockId}:${startOffset}:${endOffset}`;
+              this._typoHighlightRangesMap.set(key, { range, type: 'exact' });
               typoRanges.push(range);
-              this.registerTypoMatch({ docId, paneId, blockId: block.dataset.sourceBlockId || block.dataset.blockId, start: fragmentBase + start, end: fragmentBase + end, rawText: phraseMatch[2], rule, source: 'exact' });
+              this.registerTypoMatch({ docId, paneId, blockId, start: startOffset, end: endOffset, rawText: phraseMatch[2], rule, source: 'exact' });
               occupied.push([start, end]);
             }
           }
@@ -10335,8 +10358,12 @@ class NocturneWriter {
         ) {
           const range = this.rangeFromBlockOffsets(textNodes, start, end);
           if (range) {
+            const startOffset = fragmentBase + start;
+            const endOffset = fragmentBase + end;
+            const key = `${blockId}:${startOffset}:${endOffset}`;
+            this._typoHighlightRangesMap.set(key, { range, type: 'exact' });
             typoRanges.push(range);
-            this.registerTypoMatch({ docId, paneId, blockId: block.dataset.sourceBlockId || block.dataset.blockId, start: fragmentBase + start, end: fragmentBase + end, rawText: rawWord, rule: typo, source: 'exact' });
+            this.registerTypoMatch({ docId, paneId, blockId, start: startOffset, end: endOffset, rawText: rawWord, rule: typo, source: 'exact' });
             occupied.push([start, end]);
           }
         }
@@ -10453,14 +10480,21 @@ class NocturneWriter {
           if (cachedTypo && cachedTypo.correct && normalizeTypoToken(cachedTypo.correct) !== normalized) {
             const range = this.rangeFromBlockOffsets(textNodes, start, end);
             if (range) {
+              const startOffset = fragmentBase + start;
+              const endOffset = fragmentBase + end;
+              const blockId = block.dataset.sourceBlockId || block.dataset.blockId;
+              const key = `${blockId}:${startOffset}:${endOffset}`;
+              if (this._typoHighlightRangesMap) {
+                this._typoHighlightRangesMap.set(key, { range, type: 'smart' });
+              }
               smartRanges.push(range);
               occupied.push([start, end]);
               this.registerTypoMatch({
                 docId,
                 paneId,
-                blockId: block.dataset.sourceBlockId || block.dataset.blockId,
-                start: fragmentBase + start,
-                end: fragmentBase + end,
+                blockId,
+                start: startOffset,
+                end: endOffset,
                 rawText: rawWord,
                 rule: {
                   id: `smart-${normalized}`,
@@ -12721,18 +12755,14 @@ class NocturneWriter {
 
     delete doc.pmJson;
     const paneId = match.paneId || this.state.workspace?.focusedPaneId || 'primary';
-    const editorInstance = this.nocturneEditor?.instances.get(paneId);
-    if (editorInstance?.editor) {
-      editorInstance.editor.commands.setContent(legacyAstToHtml(doc.ast), false);
-    } else {
-      this.renderWorkspacePane(paneId);
-    }
+    this.renderWorkspacePane(paneId);
 
     this.bumpDocRenderRevision(doc);
     this.writeLiveDraft(doc.id);
     this.saveDocByIdDebounced(doc.id);
 
-    this._hoveredTypoId = null;
+    this._hoveredTypoKey = null;
+    CSS.highlights.delete('typo-hover');
     this.updateTypoHighlights();
     return true;
   }
