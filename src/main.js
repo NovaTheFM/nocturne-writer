@@ -25,7 +25,6 @@ import { CommandPalette } from './features/command-palette.js';
 import { buildAiContext, serializeAiContextSafe } from './features/ai-context.js';
 import { NocturneEditorBridge } from './editor/nocturne-editor.js';
 import { aiIcon, iconSvg } from './ui/icons.js';
-import { MasterpiecePreloader } from './core/test-preloader-masterpiece.js';
 import Sortable from './vendor/sortablejs/sortable.complete.esm.js';
 
 if (typeof window !== 'undefined' && !window.Sortable) {
@@ -7613,7 +7612,6 @@ class NocturneWriter {
       'demo-remove-timeline': () => this.removeDemoTimeline(),
       'demo-add-all': () => this.addFullDemoSet(),
       'demo-remove-all': () => this.removeFullDemoSet(),
-      'test-new-preloader': () => this.runTestPreloader(),
       'clear-temp-notes': () => this.clearTemporaryNotes(),
       'clear-current-review-marks': () => this.clearCurrentDocumentReviewMarks(),
       'reset-hidden-floating-notes': () => this.resetHiddenFloatingNotes(),
@@ -7629,43 +7627,6 @@ class NocturneWriter {
       this.state.noteMode = notesMode;
       this.renderNotes();
     }
-  }
-
-  runTestPreloader() {
-    document.getElementById('settings-overlay')?.classList.remove('active');
-    const existing = document.getElementById('cosmic-preloader');
-    if (existing) existing.remove();
-
-    const engine = new MasterpiecePreloader({
-      onComplete: () => {
-        this.toast('Тест Masterpiece Preloader v2.0 завершён!');
-      }
-    });
-
-    engine.mount();
-    engine.setProgress(15, 'Подключение к локальному хранилищу...');
-
-    const steps = [
-      { p: 32, msg: 'Загрузка структуры рукописей и томов...' },
-      { p: 58, msg: 'Инициализация векторов персонажей и локаций...' },
-      { p: 78, msg: 'Калибровка движка TipTap и рендеринга...' },
-      { p: 94, msg: 'Оптимизация фокус-режима и слоев GPU...' },
-      { p: 100, msg: 'Мастер-система полностью готова к работе.' }
-    ];
-
-    let currentStep = 0;
-    const interval = setInterval(() => {
-      if (currentStep < steps.length) {
-        const { p, msg } = steps[currentStep];
-        engine.setProgress(p, msg);
-        currentStep++;
-      } else {
-        clearInterval(interval);
-        setTimeout(() => {
-          engine.destroy();
-        }, 1100);
-      }
-    }, 950);
   }
 
   togglePanel(id) {
@@ -14117,19 +14078,6 @@ class NocturneWriter {
             ${action('bx-trash', 'Удалить тестовые события таймлайна', 'demo-remove-timeline', true)}
             ${action('bx-layer-plus', 'Добавить весь демо-набор', 'demo-add-all')}
             ${action('bx-trash', 'Удалить весь демо-набор', 'demo-remove-all', true)}
-          </div>
-        </section>
-        <section class="misc-card misc-dev-card" style="border-color: rgba(var(--accent-rgb, 139, 92, 246), 0.3); background: rgba(var(--accent-rgb, 139, 92, 246), 0.04);">
-          <div class="misc-card-head">
-            <div>
-              <h3 style="color: var(--accent);">Тестирование нового прелоадера</h3>
-              <p>Запускает новый 3D/Cosmic Preloader с анимацией световой гиперскорости и партиклами.</p>
-            </div>
-          </div>
-          <div class="misc-action-grid compact">
-            <button class="pill-btn ai-btn" data-action="test-new-preloader" style="font-weight: 700; gap: 8px;">
-              <i class="bx bx-play-circle" style="font-size: 18px;"></i> TEST (Запустить новый прелоадер)
-            </button>
           </div>
         </section>
         <section class="misc-card misc-dev-card">
