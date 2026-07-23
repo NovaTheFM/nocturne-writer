@@ -383,7 +383,7 @@ class NocturneWriter {
         this.updateEditorSelectionState();
         this.updateToolbarState();
         this.updateReviewHighlights();
-        this.updateTypoHighlightsDebounced();
+        this.renderTypoSvgOverlays();
       },
       onChange: ({ paneId, doc, transaction }) => this.handleRichEditorChange(paneId, doc, transaction),
       onKeydown: (event) => {
@@ -3537,7 +3537,7 @@ class NocturneWriter {
       
       this.updateToolbarState();
       this.renderReviewToolbarSlot();
-      this.updateTypoHighlightsDebounced();
+      this.renderTypoSvgOverlays();
 
       // Clear active bookmark on user-initiated cursor/selection movement
       if (!this._isJumpingToBookmark) {
@@ -6018,11 +6018,14 @@ class NocturneWriter {
   }
 
   renderTypoSvgOverlays() {
-    document.querySelectorAll('.typo-svg-overlay').forEach((el) => el.remove());
-    if (!this._typoHighlightRangesMap || !this.state.settings.strictSpellcheck) return;
+    if (!this._typoHighlightRangesMap || !this.state.settings.strictSpellcheck) {
+      document.querySelectorAll('.typo-svg-overlay').forEach((el) => el.remove());
+      return;
+    }
 
     const activeContextMenuTypo = this.state?.contextMenu?.typoMatch;
     const contextKey = activeContextMenuTypo ? `${activeContextMenuTypo.blockId}:${activeContextMenuTypo.startOffset}:${activeContextMenuTypo.endOffset}` : null;
+    const validKeys = new Set();
 
     for (const [key, item] of this._typoHighlightRangesMap.entries()) {
       if (!item) continue;
@@ -6057,20 +6060,14 @@ class NocturneWriter {
       const pageOverlay = pageShell?.querySelector('.page-overlay') || pageShell;
       if (!pageOverlay) continue;
 
+      validKeys.add(key);
+
       const overlayRect = pageOverlay.getBoundingClientRect();
       const left = rect.left - overlayRect.left;
       const top = (rect.bottom - overlayRect.top) - 1.5;
       const width = rect.width;
-
-      const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      const wavePathD = this.generateWavySvgPath(width);
       const isHovered = key === contextKey || key === this._hoveredTypoKey;
-      svgEl.setAttribute('class', `typo-svg-overlay${isHovered ? ' hovered' : ''}`);
-      svgEl.setAttribute('data-key', key);
-      svgEl.setAttribute('height', '12');
-      svgEl.setAttribute('width', `${width}`);
-      svgEl.style.left = `${left}px`;
-      svgEl.style.top = `${top}px`;
-      svgEl.style.width = `${width}px`;
 
       let defs = pageOverlay.querySelector('#typo-custom-defs');
       if (!defs) {
@@ -6093,13 +6090,33 @@ class NocturneWriter {
         pageOverlay.appendChild(svgDefContainer);
       }
 
-      const wavePathD = this.generateWavySvgPath(width);
-      svgEl.innerHTML = `
-        <path class="typo-svg-path-glow" d="${wavePathD}" />
-        <path class="typo-svg-path-base" d="${wavePathD}" />
-      `;
-      pageOverlay.appendChild(svgEl);
+      let svgEl = pageOverlay.querySelector(`.typo-svg-overlay[data-key="${CSS.escape(key)}"]`);
+      if (!svgEl) {
+        svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svgEl.setAttribute('data-key', key);
+        svgEl.setAttribute('height', '12');
+        svgEl.innerHTML = `
+          <path class="typo-svg-path-glow" d="${wavePathD}" />
+          <path class="typo-svg-path-base" d="${wavePathD}" />
+        `;
+        pageOverlay.appendChild(svgEl);
+      } else {
+        const glow = svgEl.querySelector('.typo-svg-path-glow');
+        const base = svgEl.querySelector('.typo-svg-path-base');
+        if (glow && glow.getAttribute('d') !== wavePathD) glow.setAttribute('d', wavePathD);
+        if (base && base.getAttribute('d') !== wavePathD) base.setAttribute('d', wavePathD);
+      }
+
+      svgEl.setAttribute('class', `typo-svg-overlay${isHovered ? ' hovered' : ''}`);
+      svgEl.setAttribute('width', `${width}`);
+      svgEl.style.left = `${left}px`;
+      svgEl.style.top = `${top}px`;
+      svgEl.style.width = `${width}px`;
     }
+
+    document.querySelectorAll('.typo-svg-overlay').forEach((el) => {
+      if (!validKeys.has(el.dataset.key)) el.remove();
+    });
   }
 
   handleTypoMouseMove(event) {
