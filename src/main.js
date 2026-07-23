@@ -6042,48 +6042,6 @@ class NocturneWriter {
         if (normalSmart.length) CSS.highlights.set('typo-smart-errors', new Highlight(...normalSmart));
         else CSS.highlights.delete('typo-smart-errors');
         CSS.highlights.set('typo-hover', new Highlight(item.range));
-
-        const pageShell = editable.closest('.visual-page-shell') || editable.closest('.page') || editable.parentElement;
-        const pageOverlay = pageShell?.querySelector('.page-overlay') || pageShell;
-        if (pageShell && pageOverlay) {
-          const rect = item.range.getBoundingClientRect();
-          const overlayRect = pageOverlay.getBoundingClientRect();
-          let svgEl = pageOverlay.querySelector('.typo-glow-svg');
-          if (!svgEl) {
-            svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            svgEl.setAttribute('class', 'typo-glow-svg');
-            svgEl.setAttribute('height', '10');
-            svgEl.innerHTML = `
-              <defs>
-                <filter id="typo-glow-soft-filter" x="-40%" y="-150%" width="180%" height="400%">
-                  <feGaussianBlur stdDeviation="1.4" result="blur1"/>
-                  <feGaussianBlur stdDeviation="3.2" result="blur2"/>
-                  <feMerge>
-                    <feMergeNode in="blur2"/>
-                    <feMergeNode in="blur1"/>
-                    <feMergeNode in="SourceGraphic"/>
-                  </feMerge>
-                </filter>
-              </defs>
-              <path class="typo-glow-path" stroke="var(--accent)" stroke-width="1.2" fill="none" filter="url(#typo-glow-soft-filter)"/>
-            `;
-            pageOverlay.appendChild(svgEl);
-          }
-          const fontMetric = parseFloat(window.getComputedStyle(editable).fontSize) || 16;
-          const left = rect.left - overlayRect.left;
-          const top = (rect.bottom - overlayRect.top) - (fontMetric * 0.28);
-          const width = rect.width;
-
-          svgEl.style.left = `${left}px`;
-          svgEl.style.top = `${top}px`;
-          svgEl.style.width = `${width}px`;
-          svgEl.setAttribute('width', `${width}`);
-          const pathEl = svgEl.querySelector('.typo-glow-path');
-          if (pathEl) {
-            pathEl.setAttribute('d', this.generateWavySvgPath(width));
-          }
-          requestAnimationFrame(() => svgEl.classList.add('active'));
-        }
       } else {
         this.clearTypoHoverState();
       }
@@ -6093,9 +6051,7 @@ class NocturneWriter {
   clearTypoHoverState() {
     this._hoveredTypoKey = null;
     CSS.highlights.delete('typo-hover');
-    document.querySelectorAll('.typo-glow-svg.active').forEach((el) => {
-      el.classList.remove('active');
-    });
+    document.querySelectorAll('.typo-glow-svg').forEach((el) => el.remove());
     if (this._typoHighlightRangesMap) {
       const normalExact = [];
       const normalSmart = [];

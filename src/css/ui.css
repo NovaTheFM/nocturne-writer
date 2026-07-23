@@ -1710,21 +1710,8 @@ body.resizing-workspace {
   text-decoration-line: underline;
   text-decoration-style: wavy;
   text-decoration-color: var(--accent);
-  text-decoration-thickness: 1.2px;
+  text-decoration-thickness: 1.6px;
   text-underline-offset: 1.5px;
-}
-
-.typo-glow-svg {
-  position: absolute;
-  pointer-events: none;
-  z-index: 12;
-  opacity: 0;
-  transition: opacity 0.28s cubic-bezier(0.16, 1, 0.3, 1);
-  overflow: visible;
-}
-
-.typo-glow-svg.active {
-  opacity: 1;
 }
 ::highlight(review-orthography) {
   background: rgba(255, 126, 118, .17);
