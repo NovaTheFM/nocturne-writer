@@ -178,6 +178,35 @@ async function runAppSmoke(page) {
 
     const wrongType = app.validateParsedAiProtocol(app.parseAiJsonResponse(JSON.stringify({ type: 'review', thinking: '', issues: [] })), 'style');
     assertInPage(!!wrongType, 'wrong AI response type was not rejected');
+
+    // TEST: Typo replacement live DOM update without reloading document
+    setEditorContent('<p>тут сдесь ошибка в слове</p>');
+    app.updateTypoHighlights();
+    const typoMatch = app.typoMatchIndex.find((m) => m.rawText === 'сдесь');
+    assertInPage(typoMatch, 'typo "сдесь" was not indexed by speller');
+    const applied = app.applyTypoReplacement(typoMatch);
+    assertInPage(applied, 'applyTypoReplacement returned false');
+    const liveTextAfterReplace = getBlock().textContent || getBlock().innerText;
+    assertInPage(liveTextAfterReplace.includes('здесь'), 'applyTypoReplacement failed to update DOM live without leaving document');
+
+    // TEST: Typo hover glow pill animation state
+    setEditorContent('<p>тут сдесь снова</p>');
+    app.updateTypoHighlights();
+    const typoMatch2 = app.typoMatchIndex.find((m) => m.rawText === 'сдесь');
+    if (typoMatch2) {
+      const key = `${typoMatch2.blockId}:${typoMatch2.startOffset}:${typoMatch2.endOffset}`;
+      const fakeEvent = {
+        target: editable,
+        clientX: 100,
+        clientY: 100,
+      };
+      app.findTypoMatchAtPoint = () => typoMatch2;
+      app.handleTypoMouseMove(fakeEvent);
+      const glowPill = document.querySelector('.typo-hover-glow-pill.active');
+      assertInPage(glowPill, 'typo-hover-glow-pill active class was not added on hover');
+      app.clearTypoHoverState();
+      assertInPage(!document.querySelector('.typo-hover-glow-pill.active'), 'typo-hover-glow-pill active class was not removed on clear');
+    }
     const contradictoryReview = app.validateParsedAiProtocol(
       app.parseAiJsonResponse(JSON.stringify({ type: 'review', thinking: 'Найдено несколько механических опечаток.', issues: [] })),
       'proofread',

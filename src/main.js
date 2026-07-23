@@ -25,6 +25,7 @@ import { detectRuntime } from './platform/runtime.js';
 import { CommandPalette } from './features/command-palette.js';
 import { buildAiContext, serializeAiContextSafe } from './features/ai-context.js';
 import { NocturneEditorBridge } from './editor/nocturne-editor.js';
+import { legacyAstToHtml } from './editor/document-adapter.js';
 import { aiIcon, iconSvg } from './ui/icons.js';
 import Sortable from './vendor/sortablejs/sortable.complete.esm.js';
 
@@ -1639,7 +1640,9 @@ class NocturneWriter {
       }
       return;
     }
-    const paneConfigStr = `${ws.mode}:${ws.focusedPaneId}:${JSON.stringify(pane)}`;
+    const docForPane = pane?.docId ? this.state.docs.find(d => d.id === pane.docId) : null;
+    const rev = docForPane ? this.ensureDocRenderRevision(docForPane) : 0;
+    const paneConfigStr = `${ws.mode}:${ws.focusedPaneId}:${JSON.stringify(pane)}:rev-${rev}`;
     const isDocumentOrKb = pane?.type === 'document' || pane?.type === 'kb-tab';
     if (isDocumentOrKb && paneEl.__paneConfig === paneConfigStr) {
       return;
@@ -6012,6 +6015,26 @@ class NocturneWriter {
         if (normalSmart.length) CSS.highlights.set('typo-smart-errors', new Highlight(...normalSmart));
         else CSS.highlights.delete('typo-smart-errors');
         CSS.highlights.set('typo-hover', new Highlight(item.range));
+
+        const pageShell = editable.closest('.visual-page-shell') || editable.closest('.page') || editable.parentElement;
+        const pageOverlay = pageShell?.querySelector('.page-overlay') || pageShell;
+        if (pageShell && pageOverlay) {
+          const rect = item.range.getBoundingClientRect();
+          const pageRect = pageShell.getBoundingClientRect();
+          let glowEl = pageOverlay.querySelector('.typo-hover-glow-pill');
+          if (!glowEl) {
+            glowEl = document.createElement('div');
+            glowEl.className = 'typo-hover-glow-pill';
+            pageOverlay.appendChild(glowEl);
+          }
+          const left = rect.left - pageRect.left;
+          const top = rect.top - pageRect.top;
+          glowEl.style.left = `${left - 3}px`;
+          glowEl.style.top = `${top - 1}px`;
+          glowEl.style.width = `${rect.width + 6}px`;
+          glowEl.style.height = `${rect.height + 2}px`;
+          glowEl.classList.add('active');
+        }
       } else {
         this.clearTypoHoverState();
       }
@@ -6021,6 +6044,9 @@ class NocturneWriter {
   clearTypoHoverState() {
     this._hoveredTypoKey = null;
     CSS.highlights.delete('typo-hover');
+    document.querySelectorAll('.typo-hover-glow-pill.active').forEach((el) => {
+      el.classList.remove('active');
+    });
     if (this._typoHighlightRangesMap) {
       const normalExact = [];
       const normalSmart = [];
@@ -12754,10 +12780,15 @@ class NocturneWriter {
     doc.summary = doc.description || buildSummary(doc.ast);
 
     delete doc.pmJson;
-    const paneId = match.paneId || this.state.workspace?.focusedPaneId || 'primary';
-    this.renderWorkspacePane(paneId);
-
     this.bumpDocRenderRevision(doc);
+    const paneId = match.paneId || this.state.workspace?.focusedPaneId || 'primary';
+    const editor = this.nocturneEditor?.get(paneId);
+    if (editor) {
+      editor.commands.setContent(legacyAstToHtml(doc.ast));
+    } else {
+      this.renderWorkspacePane(paneId);
+    }
+
     this.writeLiveDraft(doc.id);
     this.saveDocByIdDebounced(doc.id);
 
