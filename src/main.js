@@ -6069,14 +6069,8 @@ class NocturneWriter {
             `;
             pageOverlay.appendChild(svgEl);
           }
-          const style = window.getComputedStyle(editable);
-          const fontMetric = parseFloat(style.fontSize) || 16;
-          const lineHeight = parseFloat(style.lineHeight) || (fontMetric * 1.5);
-          const halfPad = Math.max(0, (lineHeight - fontMetric) / 2);
-          const baselineY = rect.bottom - halfPad - (fontMetric * 0.12);
-
           const left = rect.left - overlayRect.left;
-          const top = baselineY - overlayRect.top - 2;
+          const top = (rect.bottom - overlayRect.top) - 3;
           const width = rect.width;
 
           svgEl.style.left = `${left}px`;
