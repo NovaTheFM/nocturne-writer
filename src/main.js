@@ -12639,15 +12639,18 @@ class NocturneWriter {
     block.html = this.replaceInHtmlRange(block.html, match.startOffset, match.endOffset, match.correct);
     doc.updatedAt = Date.now();
     doc.summary = doc.description || buildSummary(doc.ast);
+
     delete doc.pmJson;
     const paneId = match.paneId || this.state.workspace?.focusedPaneId || 'primary';
-    if (this.nocturneEditor?.instances.has(paneId)) {
-      this.nocturneEditor.destroy(paneId);
+    const editorInstance = this.nocturneEditor?.instances.get(paneId);
+    if (editorInstance?.editor) {
+      editorInstance.editor.commands.setContent(legacyAstToHtml(doc.ast), false);
+    } else {
+      this.renderWorkspacePane(paneId);
     }
     this.bumpDocRenderRevision(doc);
     this.writeLiveDraft(doc.id);
     this.saveDocByIdDebounced(doc.id);
-    this.renderWorkspacePane(paneId);
     this.updateTypoHighlightsDebounced();
     return true;
   }
