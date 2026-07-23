@@ -19,6 +19,7 @@ import {
 } from './core/utils.js';
 import { encryptJson, decryptJson } from './core/crypto.js';
 import { TYPO_LOOKUP, normalizeTypoToken } from './core/typos.js';
+import { getSmartSpellerMatches } from './core/smart-speller.js';
 import { platformFiles } from './platform/file-adapter.js';
 import { detectRuntime } from './platform/runtime.js';
 import { CommandPalette } from './features/command-palette.js';
@@ -575,6 +576,8 @@ class NocturneWriter {
       aiPersona: allowedPersonas,
       loreReaction: ['soft', 'warn', 'hard'],
       writingAnimation: ['off', 'ripple', 'mist', 'sparkles', 'glow', 'spark'],
+      smartDictionaryProvider: ['languagetool', 'hunspell'],
+      smartDictionaryLang: ['auto', 'uk', 'ru', 'en'],
     };
     Object.entries(enums).forEach(([key, allowed]) => {
       if (!allowed.includes(merged[key])) merged[key] = defaultSettings[key];
@@ -6011,6 +6014,8 @@ class NocturneWriter {
     const typoBlock = ctx.typoMatch ? `
       <div class="context-section-title">${ctx.typoMatch.source === 'smart' ? 'Smart-словарь: возможная ошибка' : 'Словарь ошибок'}</div>
       ${item('context-apply-typo-replacement', 'bx-check-shield', `Заменить на «${escapeHtml(ctx.typoMatch.correct)}»`)}
+      ${item('context-ignore-typo-word', 'bx-minus-circle', `Игнорировать «${escapeHtml(ctx.typoMatch.rawText)}»`)}
+      ${item('context-add-word-to-lexicon', 'bx-plus-circle', `Добавить «${escapeHtml(ctx.typoMatch.rawText)}» в словарь`)}
       <div class="context-separator"></div>
     ` : '';
     menu.innerHTML = `
@@ -6086,6 +6091,19 @@ class NocturneWriter {
       return;
     } else if (action === 'context-apply-typo-replacement') {
       if (this.applyTypoReplacement(ctx.typoMatch)) this.toast(`Заменено на «${ctx.typoMatch.correct}».`);
+      this.closeContextMenu();
+      return;
+    } else if (action === 'context-ignore-typo-word' || action === 'context-add-word-to-lexicon') {
+      if (ctx.typoMatch?.rawText) {
+        const norm = normalizeTypoToken(ctx.typoMatch.rawText);
+        if (!Array.isArray(this.state.settings.userLexicon)) this.state.settings.userLexicon = [];
+        if (!this.state.settings.userLexicon.includes(norm)) {
+          this.state.settings.userLexicon.push(norm);
+          this.saveSettings();
+        }
+        this.updateTypoHighlights();
+        this.toast(`Слово «${ctx.typoMatch.rawText}» добавлено в ваш словарь.`);
+      }
       this.closeContextMenu();
       return;
     } else if (action === 'context-review-comment') {
@@ -10299,49 +10317,35 @@ class NocturneWriter {
       if (!this.spellerQueue || !this.spellerQueue.size) return;
       
       const words = Array.from(this.spellerQueue).slice(0, 50);
-      words.forEach(w => {
+      words.forEach((w) => {
         this.spellerQueue.delete(w);
         this.spellerPending.add(w);
       });
       
       try {
-        const url = 'https://speller.yandex.net/services/spellcheck?options=518';
-        const formData = new URLSearchParams();
-        words.forEach(w => formData.append('text', w));
-        
-        const res = await fetch(url, {
-          method: 'POST',
-          body: formData
+        const matches = await getSmartSpellerMatches(words, {
+          provider: this.state.settings.smartDictionaryProvider || 'languagetool',
+          lang: this.state.settings.smartDictionaryLang || 'auto',
         });
         
-        if (res.ok) {
-          const data = await res.json();
-          const errorMap = new Map();
-          data.forEach(item => {
-            if (item.word && item.s && item.s.length) {
-              errorMap.set(item.word.toLowerCase(), item.s[0]);
-            }
-          });
-          
-          words.forEach(w => {
-            this.spellerPending.delete(w);
-            if (errorMap.has(w)) {
-              this.spellerCache.set(w, {
-                correct: errorMap.get(w),
-                label: 'Smart-словарь: опечатка'
-              });
-            } else {
-              this.spellerCache.set(w, null);
-            }
-          });
-          
-          this.updateTypoHighlightsDebounced();
-        } else {
-          words.forEach(w => this.spellerPending.delete(w));
-        }
+        words.forEach((w) => {
+          this.spellerPending.delete(w);
+          if (matches.has(w)) {
+            const matchData = matches.get(w);
+            this.spellerCache.set(w, {
+              correct: matchData.correct,
+              suggestions: matchData.suggestions || [matchData.correct],
+              label: matchData.label || 'Smart-словарь: опечатка'
+            });
+          } else {
+            this.spellerCache.set(w, null);
+          }
+        });
+        
+        this.updateTypoHighlightsDebounced();
       } catch (e) {
-        console.error('Speller API error:', e);
-        words.forEach(w => this.spellerPending.delete(w));
+        console.error('Smart Speller error:', e);
+        words.forEach((w) => this.spellerPending.delete(w));
       }
     }, 600);
   }
@@ -10554,6 +10558,9 @@ class NocturneWriter {
         ...(entity.mentionForms || []),
       ].forEach(addText);
     });
+    if (Array.isArray(this.state.settings?.userLexicon)) {
+      this.state.settings.userLexicon.forEach(addText);
+    }
     return protectedWords;
   }
 
@@ -13691,6 +13698,26 @@ class NocturneWriter {
             <label class="dictionary-toggle"><span>Проверка частых ошибок</span><div class="toggle ${this.state.settings.strictSpellcheck ? 'on' : ''}" data-setting="strictSpellcheck" data-kind="toggle"></div></label>
             <label class="dictionary-toggle smart-dictionary-toggle"><span>Smart-словарь <em>Экспериментально</em></span><div class="toggle ${this.state.settings.smartDictionary ? 'on' : ''}" data-setting="smartDictionary" data-kind="toggle"></div></label>
           </div>
+          ${this.state.settings.smartDictionary ? `
+          <div class="dictionary-smart-options-row" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; background:rgba(255,255,255,0.02); padding:10px 14px; border-radius:9px; border:1px solid rgba(255,255,255,0.04);">
+            <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:200px;">
+              <span style="font-size:12px; color:var(--text-muted);">Движок:</span>
+              <select class="form-control" data-setting="smartDictionaryProvider" style="height:32px; font-size:12px; padding:0 8px;">
+                <option value="languagetool" ${this.state.settings.smartDictionaryProvider === 'languagetool' ? 'selected' : ''}>LanguageTool (Онлайн API: UK, RU, EN)</option>
+                <option value="hunspell" ${this.state.settings.smartDictionaryProvider === 'hunspell' ? 'selected' : ''}>Hunspell (100% Оффлайн)</option>
+              </select>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; min-width:180px;">
+              <span style="font-size:12px; color:var(--text-muted);">Язык:</span>
+              <select class="form-control" data-setting="smartDictionaryLang" style="height:32px; font-size:12px; padding:0 8px;">
+                <option value="auto" ${this.state.settings.smartDictionaryLang === 'auto' ? 'selected' : ''}>Авто (Украинский / Русский / English)</option>
+                <option value="uk" ${this.state.settings.smartDictionaryLang === 'uk' ? 'selected' : ''}>Українська</option>
+                <option value="ru" ${this.state.settings.smartDictionaryLang === 'ru' ? 'selected' : ''}>Русский</option>
+                <option value="en" ${this.state.settings.smartDictionaryLang === 'en' ? 'selected' : ''}>English</option>
+              </select>
+            </div>
+          </div>
+          ` : ''}
           <div class="dictionary-search-row">
             <div class="dictionary-search" style="flex: 1; min-width: 0;">
               <i class="bx bx-search"></i>
@@ -18998,8 +19025,9 @@ class NocturneWriter {
     if (key === 'readability') {
       this.updateReadabilityHighlights();
     }
-    if (['strictSpellcheck', 'smartDictionary'].includes(key)) {
+    if (['strictSpellcheck', 'smartDictionary', 'smartDictionaryProvider', 'smartDictionaryLang'].includes(key)) {
       this.disableBrowserSpellcheck();
+      if (this.spellerCache) this.spellerCache.clear();
       this.updateTypoHighlights();
     }
     if (['writerSyntax', 'showDontTell', 'dialogueLens'].includes(key)) this.renderWorkspace();
