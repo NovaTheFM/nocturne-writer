@@ -13690,14 +13690,14 @@ class NocturneWriter {
           <div class="dictionary-control-row">
             <label class="dictionary-toggle"><span>Проверка частых ошибок</span><div class="toggle ${this.state.settings.strictSpellcheck ? 'on' : ''}" data-setting="strictSpellcheck" data-kind="toggle"></div></label>
             <label class="dictionary-toggle smart-dictionary-toggle"><span>Smart-словарь <em>Экспериментально</em></span><div class="toggle ${this.state.settings.smartDictionary ? 'on' : ''}" data-setting="smartDictionary" data-kind="toggle"></div></label>
-            <div style="display: flex; gap: 8px; align-items: center; min-width: 0;">
-              <div class="dictionary-search" style="flex: 1; min-width: 0;">
-                <i class="bx bx-search"></i>
-                <input class="form-control" data-dictionary-search placeholder="Поиск правил..." value="${escapeHtml(this.state.dictionarySearch || '')}">
-              </div>
-              <button class="pill-btn" data-action="dictionary-import" title="Импортировать правила" style="height:38px; width:38px; display:flex; align-items:center; justify-content:center; padding:0; flex-shrink:0; border-radius: 9px;"><i class="bx bx-import" style="font-size: 18px;"></i></button>
-              <button class="pill-btn" data-action="dictionary-export" title="Экспортировать правила" style="height:38px; width:38px; display:flex; align-items:center; justify-content:center; padding:0; flex-shrink:0; border-radius: 9px;"><i class="bx bx-export" style="font-size: 18px;"></i></button>
+          </div>
+          <div class="dictionary-search-row">
+            <div class="dictionary-search" style="flex: 1; min-width: 0;">
+              <i class="bx bx-search"></i>
+              <input class="form-control" data-dictionary-search placeholder="Поиск правил..." value="${escapeHtml(this.state.dictionarySearch || '')}">
             </div>
+            <button class="pill-btn" data-action="dictionary-import" title="Импортировать правила" style="height:38px; width:38px; display:flex; align-items:center; justify-content:center; padding:0; flex-shrink:0; border-radius: 9px;"><i class="bx bx-import" style="font-size: 18px;"></i></button>
+            <button class="pill-btn" data-action="dictionary-export" title="Экспортировать правила" style="height:38px; width:38px; display:flex; align-items:center; justify-content:center; padding:0; flex-shrink:0; border-radius: 9px;"><i class="bx bx-export" style="font-size: 18px;"></i></button>
           </div>
           <div class="dictionary-filters-row" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-top:8px;">
             <div class="dictionary-filters" style="margin:0;">

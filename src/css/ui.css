@@ -1912,6 +1912,13 @@ body.ctrl-pressed .entity-family-link:hover {
   font-size: 10px;
   font-weight: 700;
 }
+.dictionary-search-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+}
 .dictionary-search {
   position: relative;
   min-width: 0;
