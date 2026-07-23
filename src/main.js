@@ -12639,10 +12639,15 @@ class NocturneWriter {
     block.html = this.replaceInHtmlRange(block.html, match.startOffset, match.endOffset, match.correct);
     doc.updatedAt = Date.now();
     doc.summary = doc.description || buildSummary(doc.ast);
+    delete doc.pmJson;
+    const paneId = match.paneId || this.state.workspace?.focusedPaneId || 'primary';
+    if (this.nocturneEditor?.instances.has(paneId)) {
+      this.nocturneEditor.destroy(paneId);
+    }
     this.bumpDocRenderRevision(doc);
     this.writeLiveDraft(doc.id);
     this.saveDocByIdDebounced(doc.id);
-    this.renderWorkspacePane(match.paneId || this.state.workspace?.focusedPaneId || 'primary');
+    this.renderWorkspacePane(paneId);
     this.updateTypoHighlightsDebounced();
     return true;
   }
@@ -13702,17 +13707,17 @@ class NocturneWriter {
           </div>
           <div class="smart-dictionary-subpanel ${this.state.settings.smartDictionary ? 'open' : ''}">
             <div class="smart-dictionary-subpanel-inner">
-              <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-                <div style="display:flex; align-items:center; gap:8px; flex:1.2; min-width:240px;">
-                  <span style="font-size:12px; color:var(--text-muted); font-weight:500;">Режим:</span>
+              <div class="smart-dictionary-row">
+                <div class="smart-dictionary-field" style="flex:1.2; min-width:230px;">
+                  <span class="smart-dictionary-label">Режим:</span>
                   ${this.renderSettingsSelect('smartDictionaryMode', [
                     ['local', 'Только Оффлайн (Hunspell)'],
                     ['hybrid', 'Гибридный (Hunspell + API)'],
                     ['api', 'Только Онлайн (LanguageTool API)']
                   ])}
                 </div>
-                <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:180px;">
-                  <span style="font-size:12px; color:var(--text-muted); font-weight:500;">Язык:</span>
+                <div class="smart-dictionary-field" style="flex:1; min-width:180px;">
+                  <span class="smart-dictionary-label">Язык:</span>
                   ${this.renderSettingsSelect('smartDictionaryLang', [
                     ['auto', 'Авто-определение'],
                     ['uk', 'Українська'],
@@ -13722,22 +13727,21 @@ class NocturneWriter {
                 </div>
               </div>
 
-              <!-- Notice Banner -->
-              ${this.state.settings.smartDictionaryMode === 'local' ? `
-              <div class="smart-dictionary-notice notice-success">
-                <i class="bx bx-shield-check"></i>
-                <div>
-                  <strong>100% Локальный режим:</strong> Проверки выполняются прямо на устройстве через Hunspell. Данные не передаются в сеть.
+              <!-- Notice Banners Shell (Both rendered for 100% smooth cross-fade transition) -->
+              <div class="smart-dictionary-notices-shell">
+                <div class="smart-dictionary-notice notice-success ${this.state.settings.smartDictionaryMode === 'local' ? 'active' : ''}">
+                  <i class="bx bx-shield-check"></i>
+                  <div>
+                    <strong>100% Локальный режим:</strong> Проверки выполняются прямо на устройстве через Hunspell. Данные не передаются в сеть.
+                  </div>
+                </div>
+                <div class="smart-dictionary-notice notice-info ${this.state.settings.smartDictionaryMode !== 'local' ? 'active' : ''}">
+                  <i class="bx bx-cloud-upload"></i>
+                  <div>
+                    <strong>Внешнее API:</strong> Проверка использует открытый сервис <code>api.languagetool.org</code>. Текст не сохраняется на серверах.
+                  </div>
                 </div>
               </div>
-              ` : `
-              <div class="smart-dictionary-notice notice-info">
-                <i class="bx bx-cloud-upload"></i>
-                <div>
-                  <strong>Внешнее API:</strong> Проверка использует открытый сервис <code>api.languagetool.org</code>. Текст не сохраняется на серверах.
-                </div>
-              </div>
-              `}
             </div>
           </div>
           <div class="dictionary-search-row">
@@ -19056,14 +19060,11 @@ class NocturneWriter {
       const subpanel = document.querySelector('.smart-dictionary-subpanel');
       if (subpanel) {
         subpanel.classList.toggle('open', Boolean(this.state.settings.smartDictionary));
-        const noticeEl = subpanel.querySelector('.smart-dictionary-notice');
-        if (noticeEl) {
-          const isLocal = this.state.settings.smartDictionaryMode === 'local';
-          noticeEl.className = `smart-dictionary-notice ${isLocal ? 'notice-success' : 'notice-info'}`;
-          noticeEl.innerHTML = isLocal
-            ? `<i class="bx bx-shield-check"></i><div><strong>100% Локальный режим:</strong> Проверки выполняются прямо на устройстве через Hunspell. Данные не передаются в сеть.</div>`
-            : `<i class="bx bx-cloud-upload"></i><div><strong>Внешнее API:</strong> Проверка использует открытый сервис <code>api.languagetool.org</code>. Текст не сохраняется на серверах.</div>`;
-        }
+        const successNotice = subpanel.querySelector('.smart-dictionary-notice.notice-success');
+        const infoNotice = subpanel.querySelector('.smart-dictionary-notice.notice-info');
+        const isLocal = this.state.settings.smartDictionaryMode === 'local';
+        if (successNotice) successNotice.classList.toggle('active', isLocal);
+        if (infoNotice) infoNotice.classList.toggle('active', !isLocal);
       }
     }
     if (['writerSyntax', 'showDontTell', 'dialogueLens'].includes(key)) this.renderWorkspace();

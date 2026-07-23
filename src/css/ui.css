@@ -1698,13 +1698,13 @@ body.resizing-workspace {
   text-shadow: 0 0 6px rgba(255, 126, 118, .16);
 }
 ::highlight(typo-smart-errors) {
-  background: rgba(251, 191, 36, .08);
+  background: transparent;
   text-decoration-line: underline;
-  text-decoration-style: dashed;
-  text-decoration-color: rgba(251, 191, 36, .78);
-  text-decoration-thickness: 1.15px;
-  text-underline-offset: 4px;
-  text-shadow: 0 0 6px rgba(251, 191, 36, .12);
+  text-decoration-style: wavy;
+  text-decoration-color: rgba(245, 158, 11, .75);
+  text-decoration-thickness: 1.2px;
+  text-underline-offset: 3.5px;
+  text-shadow: 0 0 6px rgba(245, 158, 11, .15);
 }
 ::highlight(review-orthography) {
   background: rgba(255, 126, 118, .17);
@@ -1913,55 +1913,92 @@ body.ctrl-pressed .entity-family-link:hover {
 
 /* Smart Dictionary Smooth Accordion Subpanel */
 .smart-dictionary-subpanel {
-  display: grid;
-  grid-template-rows: 0fr;
+  max-height: 0;
   opacity: 0;
-  transform: translateY(-4px);
-  transition: grid-template-rows 0.35s cubic-bezier(0.16, 1, 0.3, 1),
-              opacity 0.3s ease,
-              transform 0.3s ease,
+  transform: translateY(-6px);
+  overflow: hidden;
+  transition: max-height 0.38s cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 0.28s ease,
+              transform 0.32s cubic-bezier(0.16, 1, 0.3, 1),
               margin-top 0.35s ease;
   margin-top: 0;
   pointer-events: none;
 }
 
 .smart-dictionary-subpanel.open {
-  grid-template-rows: 1fr;
+  max-height: 240px;
   opacity: 1;
   transform: translateY(0);
-  margin-top: 4px;
+  margin-top: 8px;
   pointer-events: auto;
+  overflow: visible;
 }
 
 .smart-dictionary-subpanel-inner {
-  overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   padding: 12px 14px;
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.05);
+  position: relative;
+  overflow: visible;
 }
 
-.smart-dictionary-subpanel .setting-row {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-  padding-bottom: 8px;
+.smart-dictionary-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  position: relative;
+  z-index: 10;
 }
-.smart-dictionary-subpanel .setting-row:last-of-type {
-  border-bottom: none;
-  padding-bottom: 0;
+
+.smart-dictionary-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 180px;
+}
+
+.smart-dictionary-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.smart-dictionary-notices-shell {
+  position: relative;
+  height: 48px;
+  margin-top: 2px;
 }
 
 .smart-dictionary-notice {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 8px 12px;
+  padding: 10px 12px;
   border-radius: 8px;
   font-size: 11.5px;
   line-height: 1.4;
-  margin-top: 4px;
+  opacity: 0;
+  transform: translateY(6px) scale(0.98);
+  pointer-events: none;
+  transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.smart-dictionary-notice.active {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
 }
 
 .smart-dictionary-notice i {
