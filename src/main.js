@@ -12695,20 +12695,12 @@ class NocturneWriter {
       block.html = this.replaceInHtmlRange(block.html, match.startOffset, match.endOffset, correctWord);
     }
 
-    doc.updatedAt = Date.now();
-    doc.summary = doc.description || buildSummary(doc.ast);
-
     delete doc.pmJson;
     const paneId = match.paneId || this.state.workspace?.focusedPaneId || 'primary';
-    const editorInstance = this.nocturneEditor?.instances.get(paneId);
-    if (editorInstance?.editor) {
-      editorInstance.editor.commands.setContent(legacyAstToHtml(doc.ast), false);
-    } else {
-      this.renderWorkspacePane(paneId);
-    }
     this.bumpDocRenderRevision(doc);
     this.writeLiveDraft(doc.id);
     this.saveDocByIdDebounced(doc.id);
+    this.renderWorkspacePane(paneId);
 
     this.typoMatchIndex = [];
     if (CSS.highlights) {
