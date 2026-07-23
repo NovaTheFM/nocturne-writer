@@ -1692,7 +1692,7 @@ body.resizing-workspace {
   background: transparent;
   text-decoration-line: underline;
   text-decoration-style: wavy;
-  text-decoration-color: color-mix(in srgb, var(--accent) 70%, #ff4757 30%);
+  text-decoration-color: color-mix(in srgb, var(--accent) 65%, transparent);
   text-decoration-thickness: 1.2px;
   text-underline-offset: 1.5px;
 }
@@ -1700,7 +1700,7 @@ body.resizing-workspace {
   background: transparent;
   text-decoration-line: underline;
   text-decoration-style: wavy;
-  text-decoration-color: color-mix(in srgb, var(--accent) 80%, #f59e0b 20%);
+  text-decoration-color: color-mix(in srgb, var(--accent) 75%, transparent);
   text-decoration-thickness: 1.2px;
   text-underline-offset: 1.5px;
 }
