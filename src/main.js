@@ -6025,12 +6025,12 @@ class NocturneWriter {
           rect = freshRange.getBoundingClientRect();
         }
       }
-      if (rect && rect.width && rect.height) {
-        const padX = 12;
-        const padY = 20;
-        if (x < rect.left - padX || x > rect.right + padX || y < rect.top - padY || y > rect.bottom + padY) {
-          return null;
-        }
+      if (!rect || !rect.width || !rect.height) return null;
+      const padX = 2;
+      const padTop = 2;
+      const padBottom = 6;
+      if (x < rect.left - padX || x > rect.right + padX || y < rect.top - padTop || y > rect.bottom + padBottom) {
+        return null;
       }
     }
     return candidate;
