@@ -25,6 +25,7 @@ import { CommandPalette } from './features/command-palette.js';
 import { buildAiContext, serializeAiContextSafe } from './features/ai-context.js';
 import { NocturneEditorBridge } from './editor/nocturne-editor.js';
 import { aiIcon, iconSvg } from './ui/icons.js';
+import { MasterpiecePreloader } from './core/test-preloader-masterpiece.js';
 import Sortable from './vendor/sortablejs/sortable.complete.esm.js';
 
 if (typeof window !== 'undefined' && !window.Sortable) {
@@ -406,12 +407,16 @@ class NocturneWriter {
     });
   }
 
-  async init() {
-    const fill = document.querySelector('.preloader-progress-fill');
+  setStartupProgress(percent) {
+    const fill = document.querySelector('#preloader .preloader-progress-fill');
     if (fill) {
-      fill.style.transition = 'width 1.2s cubic-bezier(0.22, 1, 0.36, 1)';
-      fill.style.width = '70%';
+      fill.style.transition = 'width 260ms cubic-bezier(0.16, 1, 0.3, 1)';
+      fill.style.width = `${percent}%`;
     }
+  }
+
+  async init() {
+    this.setStartupProgress(20);
     this.clearLegacyStorage();
     await this.db.open();
     const settings = await this.db.get('settings', 'app');
@@ -429,12 +434,13 @@ class NocturneWriter {
           <feComposite in="flood" in2="SourceAlpha" operator="atop" />
         </filter>
       `;
-      document.body.appendChild(svg);
+      document.body ? document.body.appendChild(svg) : null;
     }
     this.state.sessionPassword = safeGetStorageItem(sessionStorage, 'nocturne-master-password', '');
-                if (!safeGetStorageItem(localStorage, 'nocturne-writing-animation-choice', '') && this.state.settings.writingAnimation === 'off') {
+    if (!safeGetStorageItem(localStorage, 'nocturne-writing-animation-choice', '') && this.state.settings.writingAnimation === 'off') {
       this.state.settings.writingAnimation = defaultSettings.writingAnimation;
     }
+    this.setStartupProgress(45);
     this.state.folders = this.validateFolders(await this.db.getAll('folders'));
     this.state.docs = await this.loadDocs();
     // Only calculate word baseline for active document on startup to avoid startup lag
@@ -452,6 +458,7 @@ class NocturneWriter {
     // Check daily goal streak on startup
     await this.checkStreakOnStartup();
 
+    this.setStartupProgress(70);
     this.state.lore = await this.loadLore();
     await this.loadFloatingNotes();
     await this.loadTypoRules();
@@ -463,6 +470,7 @@ class NocturneWriter {
     this.initElectronTitlebar();
     this.showStorageWarnings();
     this.applySettings();
+    this.setStartupProgress(90);
     this.renderAll();
     this.startPreloader();
     this.bindGlobalEvents();
@@ -7570,6 +7578,7 @@ class NocturneWriter {
       'demo-remove-timeline': () => this.removeDemoTimeline(),
       'demo-add-all': () => this.addFullDemoSet(),
       'demo-remove-all': () => this.removeFullDemoSet(),
+      'test-new-preloader': () => this.runTestPreloader(),
       'clear-temp-notes': () => this.clearTemporaryNotes(),
       'clear-current-review-marks': () => this.clearCurrentDocumentReviewMarks(),
       'reset-hidden-floating-notes': () => this.resetHiddenFloatingNotes(),
@@ -7585,6 +7594,43 @@ class NocturneWriter {
       this.state.noteMode = notesMode;
       this.renderNotes();
     }
+  }
+
+  runTestPreloader() {
+    document.getElementById('settings-overlay')?.classList.remove('active');
+    const existing = document.getElementById('cosmic-preloader');
+    if (existing) existing.remove();
+
+    const engine = new MasterpiecePreloader({
+      onComplete: () => {
+        this.toast('Тест Masterpiece Preloader v2.0 завершён!');
+      }
+    });
+
+    engine.mount();
+    engine.setProgress(15, 'Подключение к локальному хранилищу...');
+
+    const steps = [
+      { p: 32, msg: 'Загрузка структуры рукописей и томов...' },
+      { p: 58, msg: 'Инициализация векторов персонажей и локаций...' },
+      { p: 78, msg: 'Калибровка движка TipTap и рендеринга...' },
+      { p: 94, msg: 'Оптимизация фокус-режима и слоев GPU...' },
+      { p: 100, msg: 'Мастер-система полностью готова к работе.' }
+    ];
+
+    let currentStep = 0;
+    const interval = setInterval(() => {
+      if (currentStep < steps.length) {
+        const { p, msg } = steps[currentStep];
+        engine.setProgress(p, msg);
+        currentStep++;
+      } else {
+        clearInterval(interval);
+        setTimeout(() => {
+          engine.destroy();
+        }, 1100);
+      }
+    }, 950);
   }
 
   togglePanel(id) {
@@ -7624,42 +7670,117 @@ class NocturneWriter {
     });
   }
 
+  applyDocSearch(query = this.state.docSearch) {
+    const q = (query || '').toLowerCase().trim();
+    const container = document.getElementById('docs-container');
+    if (!container) return;
+
+    container.querySelectorAll('.global-doc-search-empty').forEach((el) => el.remove());
+    
+    let totalVisibleDocs = 0;
+
+    container.querySelectorAll('.folder-docs').forEach((folderDocs) => {
+      const folderTitle = folderDocs.previousElementSibling;
+      const folderId = folderTitle?.dataset?.folderId;
+      const items = folderDocs.querySelectorAll('.doc-item');
+      let visibleCount = 0;
+
+      items.forEach((item) => {
+        const docId = item.dataset.docId;
+        const doc = this.state.docs.find((d) => d.id === docId);
+        if (!doc) return;
+
+        let matches = true;
+        if (q) {
+          const title = (doc.title || '').toLowerCase();
+          const desc = (doc.description || doc.summary || '').toLowerCase();
+          const workTitle = (doc.workTitle || '').toLowerCase();
+          const volume = (doc.volume || '').toLowerCase();
+          const chapterNum = (doc.chapterNumber || '').toLowerCase();
+          const status = (doc.bookStatus || '').toLowerCase();
+
+          matches = title.includes(q) || desc.includes(q) || 
+                    workTitle.includes(q) || volume.includes(q) || 
+                    chapterNum.includes(q) || status.includes(q);
+        }
+
+        item.classList.toggle('hidden', !matches);
+        if (matches) visibleCount++;
+      });
+
+      totalVisibleDocs += visibleCount;
+
+      if (q) {
+        const hasMatches = visibleCount > 0;
+        if (folderTitle) folderTitle.classList.toggle('hidden', !hasMatches);
+        folderDocs.classList.toggle('hidden', !hasMatches);
+        if (hasMatches) {
+          folderDocs.classList.remove('collapsed');
+        }
+      } else {
+        const isCollapsed = folderId ? this.state.collapsedFolders.includes(folderId) : false;
+        if (folderTitle) {
+          folderTitle.classList.remove('hidden');
+          const chevron = folderTitle.querySelector('.folder-chevron');
+          if (chevron) {
+            chevron.className = `bx bx-chevron-${isCollapsed ? 'right' : 'down'} folder-chevron`;
+          }
+        }
+        folderDocs.classList.remove('hidden');
+        folderDocs.classList.toggle('collapsed', isCollapsed);
+      }
+    });
+
+    if (q && totalVisibleDocs === 0) {
+      const scrollEl = container.querySelector('.docs-list-scroll');
+      if (scrollEl) {
+        const emptyEl = document.createElement('div');
+        emptyEl.className = 'global-doc-search-empty';
+        emptyEl.style.cssText = 'padding: 36px 16px; text-align: center; color: var(--text-muted); font-size: 13px; display: flex; flex-direction: column; align-items: center; gap: 8px;';
+        emptyEl.innerHTML = `<i class="bx bx-search-alt" style="font-size: 28px; opacity: 0.5;"></i><span>Ничего не найдено</span>`;
+        scrollEl.appendChild(emptyEl);
+      }
+    }
+  }
+
   renderDocs() {
     this.cleanupSortableDragState();
     const container = document.getElementById('docs-container');
     if (!container) return;
     this.closeDocContextMenu();
-    const scrollEl = container.querySelector('.docs-list-scroll');
+
+    let searchWrap = container.querySelector('.doc-search-wrap');
+    let scrollEl = container.querySelector('.docs-list-scroll');
+
+    if (!searchWrap || !scrollEl) {
+      container.innerHTML = `
+        <div class="doc-search-wrap">
+          <div class="doc-search-field">
+            <i class="bx bx-search"></i>
+            <input class="doc-search" id="doc-search" placeholder="Поиск документов..." value="${escapeHtml(this.state.docSearch)}">
+          </div>
+          <button class="btn-icon folder-add-btn" data-action="new-folder" title="Создать папку"><i class="bx bx-folder-plus"></i></button>
+        </div>
+        <div class="docs-list-scroll"></div>
+      `;
+      scrollEl = container.querySelector('.docs-list-scroll');
+      const searchInput = container.querySelector('#doc-search');
+      if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+          this.state.docSearch = e.target.value;
+          this.applyDocSearch();
+        });
+      }
+    }
+
     const savedScrollTop = scrollEl ? scrollEl.scrollTop : 0;
     const q = this.state.docSearch.toLowerCase().trim();
-    const isFocused = document.activeElement?.id === 'doc-search';
-    
-    container.innerHTML = `
-      <div class="doc-search-wrap">
-        <div class="doc-search-field">
-          <i class="bx bx-search"></i>
-          <input class="doc-search" id="doc-search" placeholder="Поиск документов..." value="${escapeHtml(this.state.docSearch)}">
-        </div>
-        <button class="btn-icon folder-add-btn" data-action="new-folder" title="Создать папку"><i class="bx bx-folder-plus"></i></button>
-      </div>
-      <div class="docs-list-scroll">
 
-      ${this.state.folders.map((folder) => {
+    scrollEl.innerHTML = this.state.folders.map((folder) => {
       const collapsed = this.state.collapsedFolders.includes(folder.id);
       let docs = this.state.docs
         .filter((doc) => doc.folderId === folder.id)
         .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || a.order - b.order);
-      if (q) {
-        const byTitle = docs.filter((d) => d.title.toLowerCase().includes(q));
-        const byDesc = docs.filter((d) => !byTitle.includes(d) && (d.description || d.summary || '').toLowerCase().includes(q));
-        const byMeta = docs.filter((d) => !byTitle.includes(d) && !byDesc.includes(d) && d.docType === 'book-chapter' && (
-          (d.workTitle || '').toLowerCase().includes(q) ||
-          (d.volume || '').toLowerCase().includes(q) ||
-          (d.chapterNumber || '').toLowerCase().includes(q) ||
-          (d.bookStatus || '').toLowerCase().includes(q)
-        ));
-        docs = [...byTitle, ...byDesc, ...byMeta];
-      }
       return `
         <div class="section-title" data-folder-id="${folder.id}">
           <div class="section-title-left" data-action="toggle-folder" data-folder="${folder.id}">
@@ -7699,28 +7820,14 @@ class NocturneWriter {
         `}).join('') : this.folderEmptyState(folder.id, q)}
         </div>
       `;
-    }).join('')}
-      </div>`;
-    
-    const newScrollEl = container.querySelector('.docs-list-scroll');
-    if (newScrollEl) {
-      newScrollEl.scrollTop = savedScrollTop;
+    }).join('');
+
+    if (scrollEl) {
+      scrollEl.scrollTop = savedScrollTop;
     }
 
     this.setupDocSortables();
-    const searchInput = document.getElementById('doc-search');
-    if (searchInput) {
-      searchInput.addEventListener('input', (e) => {
-        this.state.docSearch = e.target.value;
-        this.renderDocs();
-      });
-      if (isFocused) {
-        setTimeout(() => {
-          searchInput.focus();
-          searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
-        }, 0);
-      }
-    }
+    this.applyDocSearch();
 
     if (this.state.newlyCreatedId) {
       const targetId = this.state.newlyCreatedId;
@@ -7819,11 +7926,11 @@ class NocturneWriter {
       return;
     }
     
-    // 1. Record current positions of all children
-    const children = Array.from(container.children);
-    const oldRects = children.map(child => ({
-      element: child,
-      rect: child.getBoundingClientRect()
+    // 1. Record current positions of all animated elements inside container
+    const targets = Array.from(container.querySelectorAll('.doc-item, .section-title, .char-card, .loc-card, .timeline-item, .note-card'));
+    const oldRects = (targets.length ? targets : Array.from(container.children)).map(el => ({
+      element: el,
+      rect: el.getBoundingClientRect()
     }));
 
     // 2. Perform DOM mutation
@@ -7844,7 +7951,7 @@ class NocturneWriter {
 
     // 4. Immediately invert synchronously to keep layout position visually unchanged
     newRects.forEach(item => {
-      if (item.dx === 0 && item.dy === 0) return;
+      if (Math.abs(item.dx) < 0.5 && Math.abs(item.dy) < 0.5) return;
       item.element.style.transition = 'none';
       item.element.style.transform = `translate(${item.dx}px, ${item.dy}px)`;
     });
@@ -7853,14 +7960,14 @@ class NocturneWriter {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         newRects.forEach(item => {
-          if (item.dx === 0 && item.dy === 0) return;
-          item.element.style.transition = 'transform 0.45s cubic-bezier(0.16, 1, 0.3, 1)';
+          if (Math.abs(item.dx) < 0.5 && Math.abs(item.dy) < 0.5) return;
+          item.element.style.transition = 'transform 380ms cubic-bezier(0.16, 1, 0.3, 1)';
           item.element.style.transform = 'translate(0, 0)';
           
           setTimeout(() => {
             item.element.style.transition = '';
             item.element.style.transform = '';
-          }, 450);
+          }, 380);
         });
       });
     });
@@ -8871,8 +8978,9 @@ class NocturneWriter {
       this.animateShatter(docEl, async () => {
         if (docEl) {
           const parentGrid = docEl.parentElement;
+          const listScroll = docEl.closest('.docs-list-scroll') || parentGrid;
           const folderId = doc.folderId;
-          this.animateLayoutTransition(parentGrid, () => {
+          this.animateLayoutTransition(listScroll, () => {
             docEl.remove();
             if (parentGrid && parentGrid.children.length === 0) {
               parentGrid.innerHTML = this.folderEmptyState(folderId);
@@ -8894,11 +9002,7 @@ class NocturneWriter {
     this.state.reviewMarks = this.state.reviewMarks.filter((mark) => mark.docId !== doc.id);
     this.state.docs = this.state.docs.filter((item) => item.id !== doc.id);
     
-    let activeChanged = false;
-    if (this.state.activeDocId === id) {
-      this.state.activeDocId = this.state.docs[0]?.id || null;
-      activeChanged = true;
-    }
+    const wasActiveDoc = this.state.activeDocId === id;
     if (this.state.suggestion?.docId === id) this.clearSuggestion();
     safeRemoveStorageItem(localStorage, `${LIVE_PREFIX}${doc.id}`);
     const snapshots = (await this.db.getAll('snapshots')).filter((snap) => snap.docId === doc.id);
@@ -8913,12 +9017,18 @@ class NocturneWriter {
     });
     this.persistWorkspaceState();
     
-    if (localOnly) {
-      if (openedInPane || activeChanged) {
-        this.renderAll();
+    if (wasActiveDoc) {
+      const nextDoc = this.state.docs[0];
+      if (nextDoc) {
+        this.selectDoc(nextDoc.id);
+      } else {
+        this.state.activeDocId = null;
+        this.renderWorkspace();
       }
+    } else if (openedInPane) {
+      this.renderWorkspace();
     } else {
-      this.renderAll();
+      this.updateActiveDocHighlight();
     }
   }
 
@@ -9056,18 +9166,32 @@ class NocturneWriter {
       setTimeout(async () => {
         doc.updatedAt = Date.now();
         await this.db.put('docs', doc);
-        this.renderAll();
+        this.renderDocs();
+        this.renderWorkspaceHeader();
       }, 100);
     };
   }
 
   toggleFolder(folderId) {
     const idx = this.state.collapsedFolders.indexOf(folderId);
+    const collapsed = idx < 0;
     if (idx >= 0) this.state.collapsedFolders.splice(idx, 1);
     else this.state.collapsedFolders.push(folderId);
     safeSetStorageItem(localStorage, 'nocturne-collapsed-folders', JSON.stringify(this.state.collapsedFolders));
-    this.renderDocs();
-    this.renderMobileShell();
+
+    const folderTitle = document.querySelector(`.section-title[data-folder-id="${folderId}"]`);
+    if (folderTitle) {
+      const chevron = folderTitle.querySelector('.folder-chevron');
+      if (chevron) {
+        chevron.className = `bx bx-chevron-${collapsed ? 'right' : 'down'} folder-chevron`;
+      }
+      const folderDocs = folderTitle.nextElementSibling;
+      if (folderDocs && folderDocs.classList.contains('folder-docs')) {
+        folderDocs.classList.toggle('collapsed', collapsed);
+      }
+    } else {
+      this.renderDocs();
+    }
   }
 
   cleanupSortableDragState() {
@@ -13957,10 +14081,23 @@ class NocturneWriter {
             ${action('bx-trash', 'Удалить весь демо-набор', 'demo-remove-all', true)}
           </div>
         </section>
+        <section class="misc-card misc-dev-card" style="border-color: rgba(var(--accent-rgb, 139, 92, 246), 0.3); background: rgba(var(--accent-rgb, 139, 92, 246), 0.04);">
+          <div class="misc-card-head">
+            <div>
+              <h3 style="color: var(--accent);">Тестирование нового прелоадера</h3>
+              <p>Запускает новый 3D/Cosmic Preloader с анимацией световой гиперскорости и партиклами.</p>
+            </div>
+          </div>
+          <div class="misc-action-grid compact">
+            <button class="pill-btn ai-btn" data-action="test-new-preloader" style="font-weight: 700; gap: 8px;">
+              <i class="bx bx-play-circle" style="font-size: 18px;"></i> TEST (Запустить новый прелоадер)
+            </button>
+          </div>
+        </section>
         <section class="misc-card misc-dev-card">
           <div class="misc-card-head">
             <div>
-              <h3>Сервисные действия</h3>
+              <h3 style="color: var(--text-main);">Сервисные действия</h3>
               <p>Отладка и обслуживание. Блок можно удалить целиком без зависимости от демо-контента.</p>
             </div>
           </div>
@@ -15093,12 +15230,14 @@ class NocturneWriter {
           ${activeSubtimeline ? this.subtimelinePanel(activeSubtimeline) : ''}
         `;
         if (this.kbTransitioning) {
-          main.style.animation = 'none';
+          main.classList.remove('kb-entering');
           main.offsetHeight; // trigger reflow
-          main.style.animation = 'pane-content-refresh 250ms ease-out';
+          main.classList.add('kb-entering');
+          clearTimeout(this._kbEntranceTimeout);
+          this._kbEntranceTimeout = setTimeout(() => {
+            main.classList.remove('kb-entering');
+          }, 800);
           this.kbTransitioning = false;
-        } else {
-          main.style.animation = 'none';
         }
       }
       if (!detail) {
@@ -16680,6 +16819,8 @@ class NocturneWriter {
       },
       onStart: (event) => {
         document.body.classList.add('sortable-active');
+        const kbMain = document.querySelector('#kb-modal .kb-main');
+        if (kbMain) kbMain.classList.remove('kb-entering');
         if (window.Capacitor?.Plugins?.Haptics?.impact) {
           window.Capacitor.Plugins.Haptics.impact({ style: 'light' }).catch(() => {});
         }
@@ -16965,11 +17106,9 @@ class NocturneWriter {
     this.state.activeLoreDetail = null;
     if (tab !== 'timeline') this.state.activeSubtimelineId = null;
     this.kbTransitioning = true;
-    // Wipe HTML to force full re-render on open so tab switches
     const modal = document.getElementById('kb-modal');
-    modal.innerHTML = ''; 
-    this.renderKb();
     modal.classList.add('active');
+    this.renderKb();
     this.closeFloatingMenu('kb');
   }
 

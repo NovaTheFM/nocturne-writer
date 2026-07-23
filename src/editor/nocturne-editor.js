@@ -610,6 +610,7 @@ export class NocturneEditorBridge {
           horizontalRule: false,
           bulletList: false,
           orderedList: false,
+          underline: false,
         }),
         HorizontalRule.extend({
           addInputRules() {
