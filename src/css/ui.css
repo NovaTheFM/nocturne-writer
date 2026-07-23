@@ -1913,24 +1913,35 @@ body.ctrl-pressed .entity-family-link:hover {
 
 /* Smart Dictionary Smooth Accordion Subpanel */
 .smart-dictionary-subpanel {
-  max-height: 0;
+  display: grid;
+  grid-template-rows: 0fr;
   opacity: 0;
-  transform: translateY(-6px);
-  overflow: hidden;
-  transition: max-height 0.38s cubic-bezier(0.16, 1, 0.3, 1),
+  transform: translateY(-4px);
+  transition: grid-template-rows 0.35s cubic-bezier(0.16, 1, 0.3, 1),
               opacity 0.28s ease,
-              transform 0.32s cubic-bezier(0.16, 1, 0.3, 1),
-              margin-top 0.35s ease;
+              transform 0.3s ease,
+              margin-top 0.32s ease;
   margin-top: 0;
   pointer-events: none;
+  position: relative;
+  z-index: 50;
 }
 
 .smart-dictionary-subpanel.open {
-  max-height: 240px;
+  grid-template-rows: 1fr;
   opacity: 1;
   transform: translateY(0);
   margin-top: 8px;
   pointer-events: auto;
+}
+
+.smart-dictionary-subpanel-wrapper {
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.smart-dictionary-subpanel.open .smart-dictionary-subpanel-wrapper {
   overflow: visible;
 }
 
@@ -1955,6 +1966,10 @@ body.ctrl-pressed .entity-family-link:hover {
   z-index: 10;
 }
 
+.smart-dictionary-row .nocturne-select-menu {
+  z-index: 9999;
+}
+
 .smart-dictionary-field {
   display: flex;
   align-items: center;
@@ -1974,6 +1989,16 @@ body.ctrl-pressed .entity-family-link:hover {
   position: relative;
   height: 48px;
   margin-top: 2px;
+}
+
+.dictionary-search-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  position: relative;
+  z-index: 1;
 }
 
 .smart-dictionary-notice {

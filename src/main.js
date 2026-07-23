@@ -13706,39 +13706,41 @@ class NocturneWriter {
             <label class="dictionary-toggle smart-dictionary-toggle"><span>Smart-словарь <em>Экспериментально</em></span><div class="toggle ${this.state.settings.smartDictionary ? 'on' : ''}" data-setting="smartDictionary" data-kind="toggle"></div></label>
           </div>
           <div class="smart-dictionary-subpanel ${this.state.settings.smartDictionary ? 'open' : ''}">
-            <div class="smart-dictionary-subpanel-inner">
-              <div class="smart-dictionary-row">
-                <div class="smart-dictionary-field" style="flex:1.2; min-width:230px;">
-                  <span class="smart-dictionary-label">Режим:</span>
-                  ${this.renderSettingsSelect('smartDictionaryMode', [
-                    ['local', 'Только Оффлайн (Hunspell)'],
-                    ['hybrid', 'Гибридный (Hunspell + API)'],
-                    ['api', 'Только Онлайн (LanguageTool API)']
-                  ])}
-                </div>
-                <div class="smart-dictionary-field" style="flex:1; min-width:180px;">
-                  <span class="smart-dictionary-label">Язык:</span>
-                  ${this.renderSettingsSelect('smartDictionaryLang', [
-                    ['auto', 'Авто-определение'],
-                    ['uk', 'Українська'],
-                    ['ru', 'Русский'],
-                    ['en', 'English']
-                  ])}
-                </div>
-              </div>
-
-              <!-- Notice Banners Shell (Both rendered for 100% smooth cross-fade transition) -->
-              <div class="smart-dictionary-notices-shell">
-                <div class="smart-dictionary-notice notice-success ${this.state.settings.smartDictionaryMode === 'local' ? 'active' : ''}">
-                  <i class="bx bx-shield-check"></i>
-                  <div>
-                    <strong>100% Локальный режим:</strong> Проверки выполняются прямо на устройстве через Hunspell. Данные не передаются в сеть.
+            <div class="smart-dictionary-subpanel-wrapper">
+              <div class="smart-dictionary-subpanel-inner">
+                <div class="smart-dictionary-row">
+                  <div class="smart-dictionary-field" style="flex:1.2; min-width:230px;">
+                    <span class="smart-dictionary-label">Режим:</span>
+                    ${this.renderSettingsSelect('smartDictionaryMode', [
+                      ['local', 'Только Оффлайн (Hunspell)'],
+                      ['hybrid', 'Гибридный (Hunspell + API)'],
+                      ['api', 'Только Онлайн (LanguageTool API)']
+                    ])}
+                  </div>
+                  <div class="smart-dictionary-field" style="flex:1; min-width:180px;">
+                    <span class="smart-dictionary-label">Язык:</span>
+                    ${this.renderSettingsSelect('smartDictionaryLang', [
+                      ['auto', 'Авто-определение'],
+                      ['uk', 'Українська'],
+                      ['ru', 'Русский'],
+                      ['en', 'English']
+                    ])}
                   </div>
                 </div>
-                <div class="smart-dictionary-notice notice-info ${this.state.settings.smartDictionaryMode !== 'local' ? 'active' : ''}">
-                  <i class="bx bx-cloud-upload"></i>
-                  <div>
-                    <strong>Внешнее API:</strong> Проверка использует открытый сервис <code>api.languagetool.org</code>. Текст не сохраняется на серверах.
+
+                <!-- Notice Banners Shell -->
+                <div class="smart-dictionary-notices-shell">
+                  <div class="smart-dictionary-notice notice-success ${this.state.settings.smartDictionaryMode === 'local' ? 'active' : ''}">
+                    <i class="bx bx-shield-check"></i>
+                    <div>
+                      <strong>100% Локальный режим:</strong> Проверки выполняются прямо на устройстве через Hunspell. Данные не передаются в сеть.
+                    </div>
+                  </div>
+                  <div class="smart-dictionary-notice notice-info ${this.state.settings.smartDictionaryMode !== 'local' ? 'active' : ''}">
+                    <i class="bx bx-cloud-upload"></i>
+                    <div>
+                      <strong>Внешнее API:</strong> Проверка использует открытый сервис <code>api.languagetool.org</code>. Текст не сохраняется на серверах.
+                    </div>
                   </div>
                 </div>
               </div>
