@@ -6006,8 +6006,9 @@ class NocturneWriter {
     const item = this._typoHighlightRangesMap.get(key);
     if (item?.range) {
       const rect = item.range.getBoundingClientRect();
-      const pad = 3;
-      if (x < rect.left - pad || x > rect.right + pad || y < rect.top - pad || y > rect.bottom + pad) {
+      const padX = 8;
+      const padY = 14;
+      if (x < rect.left - padX || x > rect.right + padX || y < rect.top - padY || y > rect.bottom + padY) {
         return null;
       }
     }
@@ -6017,6 +6018,9 @@ class NocturneWriter {
   renderTypoSvgOverlays() {
     document.querySelectorAll('.typo-svg-overlay').forEach((el) => el.remove());
     if (!this._typoHighlightRangesMap || !this.state.settings.strictSpellcheck) return;
+
+    const activeContextMenuTypo = this.state?.contextMenu?.typoMatch;
+    const contextKey = activeContextMenuTypo ? `${activeContextMenuTypo.blockId}:${activeContextMenuTypo.startOffset}:${activeContextMenuTypo.endOffset}` : null;
 
     for (const [key, item] of this._typoHighlightRangesMap.entries()) {
       if (!item?.range) continue;
@@ -6038,7 +6042,8 @@ class NocturneWriter {
       const width = rect.width;
 
       const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      svgEl.setAttribute('class', 'typo-svg-overlay');
+      const isHovered = key === contextKey || key === this._hoveredTypoKey;
+      svgEl.setAttribute('class', `typo-svg-overlay${isHovered ? ' hovered' : ''}`);
       svgEl.setAttribute('data-key', key);
       svgEl.setAttribute('height', '12');
       svgEl.setAttribute('width', `${width}`);
@@ -6078,18 +6083,23 @@ class NocturneWriter {
 
   handleTypoMouseMove(event) {
     if (!CSS.highlights || typeof Highlight === 'undefined') return;
+    const activeContextMenuTypo = this.state?.contextMenu?.typoMatch;
+    const contextKey = activeContextMenuTypo ? `${activeContextMenuTypo.blockId}:${activeContextMenuTypo.startOffset}:${activeContextMenuTypo.endOffset}` : null;
+
     const editable = event.target.closest?.('.page-content');
     if (!editable) {
-      if (this._hoveredTypoKey) {
-        this.clearTypoHoverState();
+      if (this._hoveredTypoKey && this._hoveredTypoKey !== contextKey) {
+        this.clearTypoHoverState(contextKey);
       }
       return;
     }
     const match = this.findTypoMatchAtPoint(event.clientX, event.clientY, editable);
-    const key = match ? `${match.blockId}:${match.startOffset}:${match.endOffset}` : null;
+    const key = match ? `${match.blockId}:${match.startOffset}:${match.endOffset}` : (contextKey || null);
     if (this._hoveredTypoKey !== key) {
       this._hoveredTypoKey = key;
-      document.querySelectorAll('.typo-svg-overlay.hovered').forEach((el) => el.classList.remove('hovered'));
+      document.querySelectorAll('.typo-svg-overlay.hovered').forEach((el) => {
+        if (el.dataset.key !== contextKey) el.classList.remove('hovered');
+      });
       CSS.highlights.delete('typo-hover');
       if (key) {
         const item = this._typoHighlightRangesMap?.get(key);
@@ -6102,10 +6112,14 @@ class NocturneWriter {
     }
   }
 
-  clearTypoHoverState() {
-    this._hoveredTypoKey = null;
-    CSS.highlights.delete('typo-hover');
-    document.querySelectorAll('.typo-svg-overlay.hovered').forEach((el) => el.classList.remove('hovered'));
+  clearTypoHoverState(preserveKey = null) {
+    this._hoveredTypoKey = preserveKey || null;
+    if (!preserveKey) CSS.highlights.delete('typo-hover');
+    document.querySelectorAll('.typo-svg-overlay.hovered').forEach((el) => {
+      if (!preserveKey || el.dataset.key !== preserveKey) {
+        el.classList.remove('hovered');
+      }
+    });
   }
 
   renderContextMenu() {
@@ -6174,6 +6188,7 @@ class NocturneWriter {
     if (menu) menu.style.pointerEvents = 'none';
     if (this.activeFloatingMenuKey === 'context') this.activeFloatingMenuKey = '';
     this.state.contextMenu = null;
+    this.clearTypoHoverState();
   }
 
   restoreContextRange() {
