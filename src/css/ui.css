@@ -1709,25 +1709,22 @@ body.resizing-workspace {
   text-shadow: none;
   text-decoration-line: underline;
   text-decoration-style: wavy;
-  text-decoration-color: var(--accent);
+  text-decoration-color: transparent;
   text-decoration-thickness: 1.2px;
   text-underline-offset: 1.5px;
 }
 
-.typo-ambient-glow {
+.typo-glow-svg {
   position: absolute;
   pointer-events: none;
-  height: 6px;
-  border-radius: 6px;
-  background: radial-gradient(ellipse at center, color-mix(in srgb, var(--accent) 85%, transparent) 0%, transparent 75%);
-  filter: blur(2px);
+  z-index: 12;
   opacity: 0;
   transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-  z-index: 1;
+  overflow: visible;
 }
 
-.typo-ambient-glow.active {
-  opacity: 0.85;
+.typo-glow-svg.active {
+  opacity: 1;
 }
 ::highlight(review-orthography) {
   background: rgba(255, 126, 118, .17);

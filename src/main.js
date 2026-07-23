@@ -6048,19 +6048,41 @@ class NocturneWriter {
         if (pageShell && pageOverlay) {
           const rect = item.range.getBoundingClientRect();
           const overlayRect = pageOverlay.getBoundingClientRect();
-          let bar = pageOverlay.querySelector('.typo-ambient-glow');
-          if (!bar) {
-            bar = document.createElement('div');
-            bar.className = 'typo-ambient-glow';
-            pageOverlay.appendChild(bar);
+          let svgEl = pageOverlay.querySelector('.typo-glow-svg');
+          if (!svgEl) {
+            svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svgEl.setAttribute('class', 'typo-glow-svg');
+            svgEl.setAttribute('height', '10');
+            svgEl.innerHTML = `
+              <defs>
+                <filter id="typo-line-glow-filter" x="-20%" y="-100%" width="140%" height="300%">
+                  <feGaussianBlur stdDeviation="1.2" result="blur1"/>
+                  <feGaussianBlur stdDeviation="2.4" result="blur2"/>
+                  <feMerge>
+                    <feMergeNode in="blur2"/>
+                    <feMergeNode in="blur1"/>
+                    <feMergeNode in="SourceGraphic"/>
+                  </feMerge>
+                </filter>
+              </defs>
+              <path class="typo-glow-path" stroke="var(--accent)" stroke-width="1.3" stroke-linecap="round" fill="none" filter="url(#typo-line-glow-filter)"/>
+            `;
+            pageOverlay.appendChild(svgEl);
           }
+          const fontMetric = parseFloat(window.getComputedStyle(editable).fontSize) || 16;
           const left = rect.left - overlayRect.left;
-          const top = (rect.bottom - overlayRect.top) - 3;
+          const top = (rect.bottom - overlayRect.top) - (fontMetric * 0.28);
           const width = rect.width;
-          bar.style.left = `${left}px`;
-          bar.style.top = `${top}px`;
-          bar.style.width = `${width}px`;
-          requestAnimationFrame(() => bar.classList.add('active'));
+
+          svgEl.style.left = `${left}px`;
+          svgEl.style.top = `${top}px`;
+          svgEl.style.width = `${width}px`;
+          svgEl.setAttribute('width', `${width}`);
+          const pathEl = svgEl.querySelector('.typo-glow-path');
+          if (pathEl) {
+            pathEl.setAttribute('d', this.generateWavySvgPath(width));
+          }
+          requestAnimationFrame(() => svgEl.classList.add('active'));
         }
       } else {
         this.clearTypoHoverState();
@@ -6071,7 +6093,7 @@ class NocturneWriter {
   clearTypoHoverState() {
     this._hoveredTypoKey = null;
     CSS.highlights.delete('typo-hover');
-    document.querySelectorAll('.typo-ambient-glow').forEach((el) => {
+    document.querySelectorAll('.typo-glow-svg').forEach((el) => {
       el.classList.remove('active');
       setTimeout(() => {
         if (!el.classList.contains('active')) el.remove();
