@@ -5988,17 +5988,33 @@ class NocturneWriter {
     if (!CSS.highlights || typeof Highlight === 'undefined') return;
     const editable = event.target.closest?.('.page-content');
     if (!editable) {
-      if (this._hoveredTypoId) {
-        this._hoveredTypoId = null;
-        this.updateTypoHighlights();
+      if (this._hoveredTypoKey) {
+        this._hoveredTypoKey = null;
+        CSS.highlights.delete('typo-hover');
       }
       return;
     }
     const match = this.findTypoMatchAtPoint(event.clientX, event.clientY, editable);
-    const newHoverId = match ? match.id : null;
-    if (this._hoveredTypoId !== newHoverId) {
-      this._hoveredTypoId = newHoverId;
-      this.updateTypoHighlights();
+    const key = match ? `${match.blockId}:${match.startOffset}:${match.endOffset}` : null;
+    if (this._hoveredTypoKey !== key) {
+      this._hoveredTypoKey = key;
+      if (match) {
+        const block = editable.querySelector(`[data-block-id="${CSS.escape(match.blockId)}"], [data-source-block-id="${CSS.escape(match.blockId)}"]`);
+        if (block) {
+          const { textNodes } = this.textNodesForHighlightBlock(block);
+          const fragmentBase = Number(block.dataset.fragmentStart || 0);
+          const localStart = match.startOffset - fragmentBase;
+          const localEnd = match.endOffset - fragmentBase;
+          const range = this.rangeFromBlockOffsets(textNodes, localStart, localEnd);
+          if (range) {
+            const h = new Highlight(range);
+            h.priority = 10;
+            CSS.highlights.set('typo-hover', h);
+            return;
+          }
+        }
+      }
+      CSS.highlights.delete('typo-hover');
     }
   }
 
@@ -10259,6 +10275,7 @@ class NocturneWriter {
     CSS.highlights.delete('typo-errors');
     CSS.highlights.delete('typo-smart-errors');
     CSS.highlights.delete('typo-hover');
+    this._hoveredTypoKey = null;
     this.typoMatchIndex = [];
     this.disableBrowserSpellcheck();
     if (!this.state.settings.strictSpellcheck) return;
@@ -10269,7 +10286,7 @@ class NocturneWriter {
     const phraseRules = this.getEffectiveTypoPhraseRules();
     const typoRanges = [];
     const smartRanges = [];
-    const hoverRanges = [];
+
     document.querySelectorAll('.page-content p, .page-content blockquote, .page-content h2').forEach((block) => {
       const { textNodes, fullText } = this.textNodesForHighlightBlock(block);
       if (!fullText.trim()) return;
@@ -10293,12 +10310,8 @@ class NocturneWriter {
           ) {
             const range = this.rangeFromBlockOffsets(textNodes, start, end);
             if (range) {
-              const item = this.registerTypoMatch({ docId, paneId, blockId: block.dataset.sourceBlockId || block.dataset.blockId, start: fragmentBase + start, end: fragmentBase + end, rawText: phraseMatch[2], rule, source: 'exact' });
-              if (item && item.id === this._hoveredTypoId) {
-                hoverRanges.push(range);
-              } else {
-                typoRanges.push(range);
-              }
+              typoRanges.push(range);
+              this.registerTypoMatch({ docId, paneId, blockId: block.dataset.sourceBlockId || block.dataset.blockId, start: fragmentBase + start, end: fragmentBase + end, rawText: phraseMatch[2], rule, source: 'exact' });
               occupied.push([start, end]);
             }
           }
@@ -10322,24 +10335,28 @@ class NocturneWriter {
         ) {
           const range = this.rangeFromBlockOffsets(textNodes, start, end);
           if (range) {
-            const item = this.registerTypoMatch({ docId, paneId, blockId: block.dataset.sourceBlockId || block.dataset.blockId, start: fragmentBase + start, end: fragmentBase + end, rawText: rawWord, rule: typo, source: 'exact' });
-            if (item && item.id === this._hoveredTypoId) {
-              hoverRanges.push(range);
-            } else {
-              typoRanges.push(range);
-            }
+            typoRanges.push(range);
+            this.registerTypoMatch({ docId, paneId, blockId: block.dataset.sourceBlockId || block.dataset.blockId, start: fragmentBase + start, end: fragmentBase + end, rawText: rawWord, rule: typo, source: 'exact' });
             occupied.push([start, end]);
           }
         }
         match = tokenRegex.exec(fullText);
       }
       if (this.state.settings.smartDictionary) {
-        this.collectSmartTypoMatches({ block, textNodes, fullText, occupied, protectedLexicon, tokenLookup, active, docId, paneId, fragmentBase, smartRanges, hoverRanges });
+        this.collectSmartTypoMatches({ block, textNodes, fullText, occupied, protectedLexicon, tokenLookup, active, docId, paneId, fragmentBase, smartRanges });
       }
     });
-    if (typoRanges.length) CSS.highlights.set('typo-errors', new Highlight(...typoRanges));
-    if (smartRanges.length) CSS.highlights.set('typo-smart-errors', new Highlight(...smartRanges));
-    if (hoverRanges.length) CSS.highlights.set('typo-hover', new Highlight(...hoverRanges));
+
+    if (typoRanges.length) {
+      const h = new Highlight(...typoRanges);
+      h.priority = 0;
+      CSS.highlights.set('typo-errors', h);
+    }
+    if (smartRanges.length) {
+      const h = new Highlight(...smartRanges);
+      h.priority = 1;
+      CSS.highlights.set('typo-smart-errors', h);
+    }
   }
 
   scheduleSpellerCheck() {
@@ -10409,7 +10426,7 @@ class NocturneWriter {
     return item;
   }
 
-  collectSmartTypoMatches({ block, textNodes, fullText, occupied, protectedLexicon, tokenLookup, active, docId, paneId, fragmentBase = 0, smartRanges, hoverRanges = [] }) {
+  collectSmartTypoMatches({ block, textNodes, fullText, occupied, protectedLexicon, tokenLookup, active, docId, paneId, fragmentBase = 0, smartRanges }) {
     this.spellerCache = this.spellerCache || new Map();
     this.spellerQueue = this.spellerQueue || new Set();
     this.spellerPending = this.spellerPending || new Set();
@@ -10436,8 +10453,9 @@ class NocturneWriter {
           if (cachedTypo && cachedTypo.correct && normalizeTypoToken(cachedTypo.correct) !== normalized) {
             const range = this.rangeFromBlockOffsets(textNodes, start, end);
             if (range) {
+              smartRanges.push(range);
               occupied.push([start, end]);
-              const item = this.registerTypoMatch({
+              this.registerTypoMatch({
                 docId,
                 paneId,
                 blockId: block.dataset.sourceBlockId || block.dataset.blockId,
@@ -10453,11 +10471,6 @@ class NocturneWriter {
                 },
                 source: 'smart'
               });
-              if (item && item.id === this._hoveredTypoId) {
-                hoverRanges.push(range);
-              } else {
-                smartRanges.push(range);
-              }
             }
           }
         } else {
