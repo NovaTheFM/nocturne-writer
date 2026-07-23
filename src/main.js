@@ -383,6 +383,7 @@ class NocturneWriter {
         this.updateEditorSelectionState();
         this.updateToolbarState();
         this.updateReviewHighlights();
+        this.updateTypoHighlightsDebounced();
       },
       onChange: ({ paneId, doc, transaction }) => this.handleRichEditorChange(paneId, doc, transaction),
       onKeydown: (event) => {
@@ -3536,6 +3537,7 @@ class NocturneWriter {
       
       this.updateToolbarState();
       this.renderReviewToolbarSlot();
+      this.updateTypoHighlightsDebounced();
 
       // Clear active bookmark on user-initiated cursor/selection movement
       if (!this._isJumpingToBookmark) {

@@ -41,20 +41,7 @@ const NocturnePagination = Extension.create({
         props: {
           decorations(state) {
             const paginationState = paginationPluginKey.getState(state);
-            let decos = paginationState.decorations;
-            const { selection } = state;
-            const $anchor = selection.$anchor;
-            const depth = $anchor.depth;
-            if (depth > 0) {
-              const start = $anchor.before(depth);
-              const end = $anchor.after(depth);
-              try {
-                const activeBlockDeco = Decoration.node(start, end, { class: 'active-block' });
-                decos = decos.add(state.doc, [activeBlockDeco]);
-              } catch (e) {
-              }
-            }
-            return decos;
+            return paginationState.decorations;
           },
         },
         view(editorView) {
