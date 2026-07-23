@@ -826,6 +826,7 @@ export class NocturneEditorBridge {
         overlay: instance.overlay,
         flexible: !settings.autoPaginate,
       });
+      this.onVisualPagesCalculated?.({ paneId, editor: instance.editor });
     });
     this.visualPageRaf.set(paneId, raf);
   }

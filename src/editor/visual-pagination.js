@@ -90,7 +90,6 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
 
     if (overlay) {
       overlay.style.height = '0px';
-      overlay.replaceChildren();
     }
 
     return [{ page: 1, y: 0 }];
@@ -435,7 +434,6 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
 
   if (overlay) {
     overlay.style.height = '0px';
-    overlay.replaceChildren();
   }
 
   const pages = [];

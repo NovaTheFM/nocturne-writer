@@ -385,6 +385,9 @@ class NocturneWriter {
         this.updateReviewHighlights();
         this.renderTypoSvgOverlays();
       },
+      onVisualPagesCalculated: () => {
+        this.renderTypoSvgOverlays();
+      },
       onChange: ({ paneId, doc, transaction }) => this.handleRichEditorChange(paneId, doc, transaction),
       onKeydown: (event) => {
         const editable = event.target.closest?.('.page-content');
@@ -6006,12 +6009,25 @@ class NocturneWriter {
     if (!candidate || !this._typoHighlightRangesMap) return null;
     const key = `${candidate.blockId}:${candidate.startOffset}:${candidate.endOffset}`;
     const item = this._typoHighlightRangesMap.get(key);
-    if (item?.range) {
-      const rect = item.range.getBoundingClientRect();
-      const padX = 12;
-      const padY = 20;
-      if (x < rect.left - padX || x > rect.right + padX || y < rect.top - padY || y > rect.bottom + padY) {
-        return null;
+    if (item) {
+      let rect = item.range ? item.range.getBoundingClientRect() : null;
+      if (!rect || !rect.width || !rect.height) {
+        const fragmentBase = Number(block.dataset.fragmentStart || 0);
+        const localStart = candidate.startOffset >= fragmentBase ? candidate.startOffset - fragmentBase : candidate.startOffset;
+        const localEnd = candidate.endOffset >= fragmentBase ? candidate.endOffset - fragmentBase : candidate.endOffset;
+        const { textNodes } = this.textNodesForHighlightBlock(block);
+        const freshRange = this.rangeFromBlockOffsets(textNodes, localStart, localEnd);
+        if (freshRange) {
+          item.range = freshRange;
+          rect = freshRange.getBoundingClientRect();
+        }
+      }
+      if (rect && rect.width && rect.height) {
+        const padX = 12;
+        const padY = 20;
+        if (x < rect.left - padX || x > rect.right + padX || y < rect.top - padY || y > rect.bottom + padY) {
+          return null;
+        }
       }
     }
     return candidate;
