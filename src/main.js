@@ -10577,12 +10577,12 @@ class NocturneWriter {
           }
         });
         
-        this.updateTypoHighlightsDebounced();
+        this.updateTypoHighlights();
       } catch (e) {
         console.error('Smart Speller error:', e);
         words.forEach((w) => this.spellerPending.delete(w));
       }
-    }, 600);
+    }, 50);
   }
 
   registerTypoMatch({ docId, paneId, blockId, start, end, rawText, rule, source = 'exact', smartConfidence = null }) {
@@ -12254,6 +12254,14 @@ class NocturneWriter {
     if (this.searchSession?.docId === doc.id) this.searchRefreshDebounced();
     this.nocturneEditor?.scheduleVisualPages(paneId);
     this.updateReviewHighlights();
+
+    const lastKey = this.lastEditKey || '';
+    const isDelimiter = /[\s.,!?;:()\[\]{}"'\u00ab\u00bb\u201c\u201d\u2018\u2019\u2014\u2013-]/u.test(lastKey) || lastKey === 'Enter';
+    if (isDelimiter) {
+      this.updateTypoHighlights();
+    } else {
+      this.updateTypoHighlightsDebounced();
+    }
   }
 
   editorInput(editable, inputEvent = null) {
