@@ -1704,7 +1704,7 @@ body.resizing-workspace {
 
 .typo-svg-path-base {
   stroke: color-mix(in srgb, var(--accent) 70%, transparent);
-  stroke-width: 1.3px;
+  stroke-width: 1.15px;
   stroke-linecap: round;
   fill: none;
   transition: stroke 0.22s cubic-bezier(0.16, 1, 0.3, 1);
@@ -1712,7 +1712,7 @@ body.resizing-workspace {
 
 .typo-svg-path-glow {
   stroke: var(--accent);
-  stroke-width: 2.2px;
+  stroke-width: 1.15px;
   stroke-linecap: round;
   fill: none;
   filter: url(#typo-custom-glow-filter);

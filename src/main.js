@@ -6054,13 +6054,12 @@ class NocturneWriter {
         svgDefContainer.style.height = '0';
         svgDefContainer.innerHTML = `
           <defs id="typo-custom-defs">
-            <filter id="typo-custom-glow-filter" x="-30%" y="-150%" width="160%" height="400%">
-              <feGaussianBlur stdDeviation="1.2" result="blur1"/>
-              <feGaussianBlur stdDeviation="2.4" result="blur2"/>
+            <filter id="typo-custom-glow-filter" x="-40%" y="-200%" width="180%" height="500%">
+              <feGaussianBlur stdDeviation="1.0" result="blur1"/>
+              <feGaussianBlur stdDeviation="2.0" result="blur2"/>
               <feMerge>
                 <feMergeNode in="blur2"/>
                 <feMergeNode in="blur1"/>
-                <feMergeNode in="SourceGraphic"/>
               </feMerge>
             </filter>
           </defs>
