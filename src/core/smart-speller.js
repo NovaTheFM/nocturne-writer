@@ -4,7 +4,7 @@
  * Supports Ukrainian (uk), Russian (ru), and English (en)
  */
 
-import { normalizeTypoToken } from './utils.js';
+import { normalizeTypoToken } from './typos.js';
 
 // Cache for checked words in memory
 const spellerCache = new Map();
