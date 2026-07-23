@@ -5959,14 +5959,14 @@ class NocturneWriter {
   }
 
   generateWavySvgPath(width) {
-    let d = 'M 0 4';
+    let d = 'M 0 2';
     const half = 3;
     let x = 0;
     let up = false;
     while (x < width) {
       const nextX = Math.min(x + half, width);
-      const controlY = up ? 2 : 6;
-      d += ` Q ${x + half / 2} ${controlY} ${nextX} 4`;
+      const controlY = up ? 0 : 4;
+      d += ` Q ${x + half / 2} ${controlY} ${nextX} 2`;
       up = !up;
       x += half;
     }
@@ -6052,7 +6052,7 @@ class NocturneWriter {
           if (!svgEl) {
             svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
             svgEl.setAttribute('class', 'typo-glow-svg');
-            svgEl.setAttribute('height', '14');
+            svgEl.setAttribute('height', '10');
             svgEl.innerHTML = `
               <defs>
                 <filter id="typo-glow-soft-filter" x="-40%" y="-150%" width="180%" height="400%">
@@ -6069,8 +6069,9 @@ class NocturneWriter {
             `;
             pageOverlay.appendChild(svgEl);
           }
+          const fontMetric = parseFloat(window.getComputedStyle(editable).fontSize) || 16;
           const left = rect.left - overlayRect.left;
-          const top = (rect.bottom - overlayRect.top) - 1;
+          const top = (rect.bottom - overlayRect.top) - (fontMetric * 0.28);
           const width = rect.width;
 
           svgEl.style.left = `${left}px`;
