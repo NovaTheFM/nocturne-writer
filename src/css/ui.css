@@ -1705,12 +1705,16 @@ body.resizing-workspace {
   text-underline-offset: 1.5px;
 }
 ::highlight(typo-hover) {
-  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  background: transparent;
   text-decoration-line: underline;
   text-decoration-style: wavy;
   text-decoration-color: var(--accent);
-  text-decoration-thickness: 1.8px;
+  text-decoration-thickness: 1.3px;
   text-underline-offset: 1.5px;
+  text-shadow: 
+    0 0 4px color-mix(in srgb, var(--accent) 85%, transparent),
+    0 0 10px color-mix(in srgb, var(--accent) 55%, transparent),
+    0 0 18px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 ::highlight(review-orthography) {
   background: rgba(255, 126, 118, .17);
