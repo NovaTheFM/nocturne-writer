@@ -1167,11 +1167,10 @@ body[data-active-review-mode="finalization"] .toolbar .save-indicator {
   opacity: 1;
   transform: translateX(0);
 }
-.workspace-pane.active-pane {
+.workspace-stage[data-mode="split"] .workspace-pane.active-pane {
   border-color: rgba(var(--accent-rgb, 139, 92, 246),.45);
-  box-shadow: inset 0 2px 0 var(--accent);
 }
-.workspace-pane.active-pane .workspace-pane-header {
+.workspace-stage[data-mode="split"] .workspace-pane.active-pane .workspace-pane-header {
   background: rgba(var(--accent-rgb, 139, 92, 246),.08);
 }
 .pane-header-actions {
