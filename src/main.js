@@ -520,6 +520,10 @@ class NocturneWriter {
   validateSettings(raw = {}) {
     const source = isPlainObject(raw) ? raw : {};
     const merged = { ...defaultSettings, ...source };
+    // Migrate legacy non-ergonomic default values if uncustomized
+    if (source.lineHeight === 1.8) merged.lineHeight = defaultSettings.lineHeight;
+    if (source.paragraphSpacing === 1) merged.paragraphSpacing = defaultSettings.paragraphSpacing;
+    if (source.textContrast === 82) merged.textContrast = defaultSettings.textContrast;
     const clamp = (key, min, max, fallback = defaultSettings[key]) => {
       const value = Number(merged[key]);
       merged[key] = Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
