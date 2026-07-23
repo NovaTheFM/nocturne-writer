@@ -1717,16 +1717,17 @@ body.resizing-workspace {
 .typo-ambient-glow {
   position: absolute;
   pointer-events: none;
-  height: 0px;
-  background: transparent;
-  box-shadow: 0 3px 12px 1px color-mix(in srgb, var(--accent) 40%, transparent);
+  height: 6px;
+  border-radius: 6px;
+  background: radial-gradient(ellipse at center, color-mix(in srgb, var(--accent) 85%, transparent) 0%, transparent 75%);
+  filter: blur(2px);
   opacity: 0;
-  transition: opacity 0.25s ease-out;
+  transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   z-index: 1;
 }
 
 .typo-ambient-glow.active {
-  opacity: 0.45;
+  opacity: 0.85;
 }
 ::highlight(review-orthography) {
   background: rgba(255, 126, 118, .17);
