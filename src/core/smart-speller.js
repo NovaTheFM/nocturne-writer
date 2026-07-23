@@ -137,7 +137,7 @@ async function checkLanguageTool(words, lang = 'auto') {
  * Main Smart Speller entry point
  */
 export async function getSmartSpellerMatches(words, options = {}) {
-  const { mode = 'hybrid', provider = 'languagetool', lang = 'auto' } = options;
+  const { mode = 'local', provider = 'languagetool', lang = 'auto' } = options;
   const uncachedWords = [];
   const results = new Map();
 

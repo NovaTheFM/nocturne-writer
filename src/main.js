@@ -10325,7 +10325,7 @@ class NocturneWriter {
       
       try {
         const matches = await getSmartSpellerMatches(words, {
-          mode: this.state.settings.smartDictionaryMode || 'hybrid',
+          mode: this.state.settings.smartDictionaryMode || 'local',
           provider: this.state.settings.smartDictionaryProvider || 'languagetool',
           lang: this.state.settings.smartDictionaryLang || 'auto',
         });
