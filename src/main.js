@@ -6015,26 +6015,6 @@ class NocturneWriter {
         if (normalSmart.length) CSS.highlights.set('typo-smart-errors', new Highlight(...normalSmart));
         else CSS.highlights.delete('typo-smart-errors');
         CSS.highlights.set('typo-hover', new Highlight(item.range));
-
-        const pageShell = editable.closest('.visual-page-shell') || editable.closest('.page') || editable.parentElement;
-        const pageOverlay = pageShell?.querySelector('.page-overlay') || pageShell;
-        if (pageShell && pageOverlay) {
-          const rect = item.range.getBoundingClientRect();
-          const pageRect = pageShell.getBoundingClientRect();
-          let glowEl = pageOverlay.querySelector('.typo-hover-glow-pill');
-          if (!glowEl) {
-            glowEl = document.createElement('div');
-            glowEl.className = 'typo-hover-glow-pill';
-            pageOverlay.appendChild(glowEl);
-          }
-          const left = rect.left - pageRect.left;
-          const top = rect.top - pageRect.top;
-          glowEl.style.left = `${left - 3}px`;
-          glowEl.style.top = `${top - 1}px`;
-          glowEl.style.width = `${rect.width + 6}px`;
-          glowEl.style.height = `${rect.height + 2}px`;
-          glowEl.classList.add('active');
-        }
       } else {
         this.clearTypoHoverState();
       }
@@ -6044,9 +6024,6 @@ class NocturneWriter {
   clearTypoHoverState() {
     this._hoveredTypoKey = null;
     CSS.highlights.delete('typo-hover');
-    document.querySelectorAll('.typo-hover-glow-pill.active').forEach((el) => {
-      el.classList.remove('active');
-    });
     if (this._typoHighlightRangesMap) {
       const normalExact = [];
       const normalSmart = [];
@@ -10094,6 +10071,7 @@ class NocturneWriter {
     this.renderBookmarksMenu(paneId);
     this.renderReviewNavigator();
     this.updateReviewHighlights();
+    this.updateTypoHighlightsDebounced();
   }
 
   disableBrowserSpellcheck() {
@@ -12748,8 +12726,7 @@ class NocturneWriter {
     const normRaw = normalizeTypoToken(rawWord);
     const normCorrect = normalizeTypoToken(correctWord);
 
-    if (this.spellerCache) {
-      this.spellerCache.delete(normRaw);
+    if (this.spellerCache && normCorrect) {
       this.spellerCache.set(normCorrect, null);
     }
 
@@ -12768,14 +12745,7 @@ class NocturneWriter {
     const pattern = this.escapeRegExp(rawWord);
     const replaceRegex = new RegExp(`(^|[^\\p{L}\\p{N}_])(${pattern})(?=$|[^\\p{L}\\p{N}_])`, 'u');
 
-    let updatedHtml = block.html;
-    if (replaceRegex.test(block.html)) {
-      updatedHtml = block.html.replace(replaceRegex, `$1${correctWord}`);
-    } else {
-      updatedHtml = this.replaceInHtmlRange(block.html, localStart, localEnd, correctWord);
-    }
-
-    block.html = updatedHtml;
+    block.html = this.replaceInHtmlRange(block.html, localStart, localEnd, correctWord);
     doc.updatedAt = Date.now();
     doc.summary = doc.description || buildSummary(doc.ast);
 

@@ -179,7 +179,7 @@ async function runAppSmoke(page) {
     const wrongType = app.validateParsedAiProtocol(app.parseAiJsonResponse(JSON.stringify({ type: 'review', thinking: '', issues: [] })), 'style');
     assertInPage(!!wrongType, 'wrong AI response type was not rejected');
 
-    // TEST: Typo replacement live DOM update without reloading document
+    // TEST: Typo replacement live DOM update without leaving document
     setEditorContent('<p>тут сдесь ошибка в слове</p>');
     app.updateTypoHighlights();
     const typoMatch = app.typoMatchIndex.find((m) => m.rawText === 'сдесь');
@@ -189,12 +189,20 @@ async function runAppSmoke(page) {
     const liveTextAfterReplace = getBlock().textContent || getBlock().innerText;
     assertInPage(liveTextAfterReplace.includes('здесь'), 'applyTypoReplacement failed to update DOM live without leaving document');
 
-    // TEST: Typo hover glow pill animation state
+    // TEST: Multiple identical typos - replacing 1 does NOT clear error state for remaining identical typos
+    setEditorContent('<p>сдесь мы сидим и сдесь мы едим</p>');
+    app.updateTypoHighlights();
+    const matchesBefore = app.typoMatchIndex.filter((m) => m.rawText === 'сдесь');
+    assertInPage(matchesBefore.length === 2, 'multiple typos "сдесь" were not indexed');
+    app.applyTypoReplacement(matchesBefore[0]);
+    const matchesAfter = app.typoMatchIndex.filter((m) => m.rawText === 'сдесь');
+    assertInPage(matchesAfter.length === 1, 'remaining identical typo lost its error state after replacing first one');
+
+    // TEST: Typo hover highlight using CSS.highlights
     setEditorContent('<p>тут сдесь снова</p>');
     app.updateTypoHighlights();
     const typoMatch2 = app.typoMatchIndex.find((m) => m.rawText === 'сдесь');
     if (typoMatch2) {
-      const key = `${typoMatch2.blockId}:${typoMatch2.startOffset}:${typoMatch2.endOffset}`;
       const fakeEvent = {
         target: editable,
         clientX: 100,
@@ -202,10 +210,9 @@ async function runAppSmoke(page) {
       };
       app.findTypoMatchAtPoint = () => typoMatch2;
       app.handleTypoMouseMove(fakeEvent);
-      const glowPill = document.querySelector('.typo-hover-glow-pill.active');
-      assertInPage(glowPill, 'typo-hover-glow-pill active class was not added on hover');
+      assertInPage(CSS.highlights.has('typo-hover'), 'CSS highlight "typo-hover" was not set on mouseover');
       app.clearTypoHoverState();
-      assertInPage(!document.querySelector('.typo-hover-glow-pill.active'), 'typo-hover-glow-pill active class was not removed on clear');
+      assertInPage(!CSS.highlights.has('typo-hover'), 'CSS highlight "typo-hover" was not cleared');
     }
     const contradictoryReview = app.validateParsedAiProtocol(
       app.parseAiJsonResponse(JSON.stringify({ type: 'review', thinking: 'Найдено несколько механических опечаток.', issues: [] })),
