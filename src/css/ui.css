@@ -1706,12 +1706,12 @@ body.resizing-workspace {
 }
 ::highlight(typo-hover) {
   background: transparent;
-  text-shadow: none;
   text-decoration-line: underline;
   text-decoration-style: wavy;
   text-decoration-color: var(--accent);
-  text-decoration-thickness: 1.6px;
+  text-decoration-thickness: 1.2px;
   text-underline-offset: 1.5px;
+  text-shadow: 0 0 6px color-mix(in srgb, var(--accent) 75%, transparent), 0 1px 8px color-mix(in srgb, var(--accent) 50%, transparent);
 }
 ::highlight(review-orthography) {
   background: rgba(255, 126, 118, .17);
