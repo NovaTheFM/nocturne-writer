@@ -5987,20 +5987,6 @@ class NocturneWriter {
     )) || null;
   }
 
-  generateWavySvgPath(width) {
-    let d = 'M 0 3';
-    const step = 4;
-    let up = true;
-    for (let x = 0; x < width; x += step) {
-      const nextX = Math.min(x + step, width);
-      const controlX = x + step / 2;
-      const controlY = up ? 0 : 6;
-      d += ` Q ${controlX} ${controlY} ${nextX} 3`;
-      up = !up;
-    }
-    return d;
-  }
-
   handleTypoMouseMove(event) {
     if (!CSS.highlights || typeof Highlight === 'undefined') return;
     const editable = event.target.closest?.('.page-content');
@@ -6029,46 +6015,6 @@ class NocturneWriter {
         if (normalSmart.length) CSS.highlights.set('typo-smart-errors', new Highlight(...normalSmart));
         else CSS.highlights.delete('typo-smart-errors');
         CSS.highlights.set('typo-hover', new Highlight(item.range));
-
-        const pageShell = editable.closest('.visual-page-shell') || editable.closest('.page') || editable.parentElement;
-        const pageOverlay = pageShell?.querySelector('.page-overlay') || pageShell;
-        if (pageShell && pageOverlay) {
-          const rect = item.range.getBoundingClientRect();
-          const pageRect = pageShell.getBoundingClientRect();
-          let svgEl = pageOverlay.querySelector('.typo-wavy-glow-svg');
-          if (!svgEl) {
-            svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            svgEl.setAttribute('class', 'typo-wavy-glow-svg');
-            svgEl.setAttribute('height', '12');
-            svgEl.innerHTML = `
-              <defs>
-                <filter id="typo-glow-filter" x="-20%" y="-50%" width="140%" height="200%">
-                  <feGaussianBlur stdDeviation="1.5" result="blur1"/>
-                  <feGaussianBlur stdDeviation="3" result="blur2"/>
-                  <feMerge>
-                    <feMergeNode in="blur2"/>
-                    <feMergeNode in="blur1"/>
-                    <feMergeNode in="SourceGraphic"/>
-                  </feMerge>
-                </filter>
-              </defs>
-              <path class="typo-wavy-glow-path" stroke="var(--accent)" stroke-width="1.6" fill="none" filter="url(#typo-glow-filter)"/>
-            `;
-            pageOverlay.appendChild(svgEl);
-          }
-          const left = rect.left - pageRect.left;
-          const top = rect.bottom - pageRect.top - 4;
-          const width = rect.width;
-          svgEl.style.left = `${left}px`;
-          svgEl.style.top = `${top}px`;
-          svgEl.style.width = `${width}px`;
-          svgEl.setAttribute('width', `${width}`);
-          const pathEl = svgEl.querySelector('.typo-wavy-glow-path');
-          if (pathEl) {
-            pathEl.setAttribute('d', this.generateWavySvgPath(width));
-          }
-          svgEl.classList.add('active');
-        }
       } else {
         this.clearTypoHoverState();
       }
@@ -6078,9 +6024,6 @@ class NocturneWriter {
   clearTypoHoverState() {
     this._hoveredTypoKey = null;
     CSS.highlights.delete('typo-hover');
-    document.querySelectorAll('.typo-wavy-glow-svg.active').forEach((el) => {
-      el.classList.remove('active');
-    });
     if (this._typoHighlightRangesMap) {
       const normalExact = [];
       const normalSmart = [];
