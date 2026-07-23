@@ -3514,6 +3514,7 @@ class NocturneWriter {
     document.addEventListener('pointerdown', (event) => this.handlePointerDown(event));
     document.addEventListener('mouseover', (event) => this.handleEntityMouseOver(event));
     document.addEventListener('mousemove', (event) => this.handleEntityMouseMove(event));
+    document.addEventListener('mousemove', (event) => this.handleTypoMouseMove(event));
     document.addEventListener('mouseout', (event) => this.handleEntityMouseOut(event));
     document.addEventListener('mouseover', (event) => this.handleFloatingNoteMenuMouseOver(event));
     document.addEventListener('mouseout', (event) => this.handleFloatingNoteMenuMouseOut(event));
@@ -5981,6 +5982,38 @@ class NocturneWriter {
       && offset >= match.startOffset
       && offset <= match.endOffset
     )) || null;
+  }
+
+  handleTypoMouseMove(event) {
+    if (!CSS.highlights || typeof Highlight === 'undefined') return;
+    const editable = event.target.closest?.('.page-content');
+    if (!editable) {
+      if (this._typoHoverActive) {
+        this._typoHoverActive = false;
+        CSS.highlights.delete('typo-hover');
+      }
+      return;
+    }
+    const match = this.findTypoMatchAtPoint(event.clientX, event.clientY, editable);
+    if (match) {
+      const block = editable.querySelector(`[data-block-id="${CSS.escape(match.blockId)}"]`);
+      if (block) {
+        const { textNodes } = this.textNodesForHighlightBlock(block);
+        const fragmentBase = Number(block.dataset.fragmentStart || 0);
+        const localStart = match.startOffset - fragmentBase;
+        const localEnd = match.endOffset - fragmentBase;
+        const range = this.rangeFromBlockOffsets(textNodes, localStart, localEnd);
+        if (range) {
+          CSS.highlights.set('typo-hover', new Highlight(range));
+          this._typoHoverActive = true;
+          return;
+        }
+      }
+    }
+    if (this._typoHoverActive) {
+      this._typoHoverActive = false;
+      CSS.highlights.delete('typo-hover');
+    }
   }
 
   renderContextMenu() {
@@ -10335,11 +10368,15 @@ class NocturneWriter {
           this.spellerPending.delete(w);
           if (matches.has(w)) {
             const matchData = matches.get(w);
-            this.spellerCache.set(w, {
-              correct: matchData.correct,
-              suggestions: matchData.suggestions || [matchData.correct],
-              label: matchData.label || 'Smart-словарь: опечатка'
-            });
+            if (matchData?.correct && normalizeTypoToken(matchData.correct) !== normalizeTypoToken(w)) {
+              this.spellerCache.set(w, {
+                correct: matchData.correct,
+                suggestions: matchData.suggestions || [matchData.correct],
+                label: matchData.label || 'Smart-словарь: опечатка'
+              });
+            } else {
+              this.spellerCache.set(w, null);
+            }
           } else {
             this.spellerCache.set(w, null);
           }
@@ -10399,7 +10436,7 @@ class NocturneWriter {
       ) {
         if (this.spellerCache.has(normalized)) {
           const cachedTypo = this.spellerCache.get(normalized);
-          if (cachedTypo) {
+          if (cachedTypo && cachedTypo.correct && normalizeTypoToken(cachedTypo.correct) !== normalized) {
             const range = this.rangeFromBlockOffsets(textNodes, start, end);
             if (range) {
               smartRanges.push(range);
@@ -12633,10 +12670,18 @@ class NocturneWriter {
     if (!doc || !block) return false;
 
     const rawWord = match.rawText;
-    const normWord = normalizeTypoToken(rawWord);
+    const correctWord = match.correct;
+    const normRaw = normalizeTypoToken(rawWord);
+    const normCorrect = normalizeTypoToken(correctWord);
+
+    if (this.spellerCache) {
+      this.spellerCache.delete(normRaw);
+      this.spellerCache.set(normCorrect, null);
+    }
+
     const blockPlain = normalizeTypoToken(blockText(block));
 
-    if (!blockPlain.includes(normWord)) {
+    if (!blockPlain.includes(normRaw)) {
       this.toast('Фрагмент уже изменился. Повторите действие.');
       this.updateTypoHighlightsDebounced();
       return false;
@@ -12645,9 +12690,9 @@ class NocturneWriter {
     const pattern = this.escapeRegExp(rawWord);
     const regex = new RegExp(`(^|[^\\p{L}\\p{N}_])(${pattern})(?=$|[^\\p{L}\\p{N}_])`, 'gu');
     if (regex.test(block.html)) {
-      block.html = block.html.replace(regex, `$1${match.correct}`);
+      block.html = block.html.replace(regex, `$1${correctWord}`);
     } else {
-      block.html = this.replaceInHtmlRange(block.html, match.startOffset, match.endOffset, match.correct);
+      block.html = this.replaceInHtmlRange(block.html, match.startOffset, match.endOffset, correctWord);
     }
 
     doc.updatedAt = Date.now();
@@ -12664,7 +12709,12 @@ class NocturneWriter {
     this.bumpDocRenderRevision(doc);
     this.writeLiveDraft(doc.id);
     this.saveDocByIdDebounced(doc.id);
-    this.updateTypoHighlightsDebounced();
+
+    this.typoMatchIndex = [];
+    if (CSS.highlights) {
+      CSS.highlights.delete('typo-hover');
+    }
+    this.updateTypoHighlights();
     return true;
   }
 
