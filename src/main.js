@@ -16304,24 +16304,34 @@ class NocturneWriter {
         const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card')).filter(el => !el.classList.contains('hidden'));
         if (!cards.length) continue;
 
+        const anyCardShifted = cards.some(card => {
+          if (!prevPosMap.has(card)) return false;
+          const prev = prevPosMap.get(card);
+          const visTranslate = this.getVisualTranslate(card);
+          const rect = card.getBoundingClientRect();
+          const currentLeft = rect.left - visTranslate.x;
+          const currentTop = rect.top - visTranslate.y;
+          const currentWidth = rect.width;
+          return Math.abs(prev.left - currentLeft) > 12 || Math.abs(prev.top - currentTop) > 12 || Math.abs(prev.width - currentWidth) > 12;
+        });
+
         cards.forEach(card => {
           const visTranslate = this.getVisualTranslate(card);
           const rect = card.getBoundingClientRect();
           
-          // Pure CSS layout position (unaffected by active transform)
+          // Pure CSS layout position and size (unaffected by active transform)
           const currentLayoutLeft = rect.left - visTranslate.x;
           const currentLayoutTop = rect.top - visTranslate.y;
+          const currentLayoutWidth = rect.width;
 
           if (prevPosMap.has(card)) {
             const prev = prevPosMap.get(card);
             
             const dx = prev.left - currentLayoutLeft;
             const dy = prev.top - currentLayoutTop;
+            const dw = Math.abs(prev.width - currentLayoutWidth);
 
-            // Trigger FLIP slide animation when card position shifts discretely (row wrap or column breakpoint reflow)
-            const isLayoutBreak = Math.abs(dx) > 12 || Math.abs(dy) > 12;
-
-            if (isLayoutBreak) {
+            if (anyCardShifted || dw > 12) {
               this.cancelElementAnimations(card);
               card._isFlippingGrid = true;
               
@@ -16349,7 +16359,8 @@ class NocturneWriter {
 
           prevPosMap.set(card, {
             left: currentLayoutLeft,
-            top: currentLayoutTop
+            top: currentLayoutTop,
+            width: currentLayoutWidth
           });
         });
       }
