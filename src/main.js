@@ -1631,6 +1631,7 @@ class NocturneWriter {
     this.updateAssistantPanelState();
     this.updateSplitMenuState();
     this.updateElectronTitlebarTitle();
+    this.setupKbDragDrop();
   }
 
   renderWorkspacePane(paneId) {
@@ -16283,7 +16284,11 @@ class NocturneWriter {
   }
 
   observeKbGridResize(zone) {
-    if (!zone || zone._gridResizeObserver) return;
+    if (!zone) return;
+    if (zone._gridResizeObserver) {
+      zone._gridResizeObserver.disconnect();
+      zone._gridResizeObserver = null;
+    }
     let prevWidth = zone.clientWidth;
     const prevRects = new Map();
 
