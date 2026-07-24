@@ -6402,17 +6402,45 @@ class NocturneWriter {
     if (!stage || this.state.workspace.mode !== 'split') return;
     const rect = stage.getBoundingClientRect();
     document.body.classList.add('resizing-workspace');
-    const move = (moveEvent) => {
-      const ratio = (moveEvent.clientX - rect.left) / Math.max(1, rect.width);
+
+    let rafId = null;
+    let pendingX = null;
+
+    const updateRatio = (clientX) => {
+      const ratio = (clientX - rect.left) / Math.max(1, rect.width);
       this.state.workspace.splitRatio = Math.min(.78, Math.max(.32, ratio));
       stage.style.setProperty('--split-primary', `${this.state.workspace.splitRatio * 100}%`);
       stage.style.setProperty('--split-secondary', `${(1 - this.state.workspace.splitRatio) * 100}%`);
     };
+
+    const move = (moveEvent) => {
+      pendingX = moveEvent.clientX;
+      if (!rafId) {
+        rafId = requestAnimationFrame(() => {
+          rafId = null;
+          if (pendingX !== null) {
+            updateRatio(pendingX);
+          }
+        });
+      }
+    };
+
     const up = () => {
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      if (pendingX !== null) {
+        updateRatio(pendingX);
+      }
       document.body.classList.remove('resizing-workspace');
       this.persistWorkspaceState();
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
+
+      ['primary', 'secondary'].forEach((paneId) => {
+        this.nocturneEditor?.scheduleVisualPages(paneId);
+      });
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up, { once: true });
