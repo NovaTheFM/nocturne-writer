@@ -16315,7 +16315,7 @@ class NocturneWriter {
             const scaleX = oldRect.width ? oldRect.width / Math.max(1, newRect.width) : 1;
             const scaleY = oldRect.height ? oldRect.height / Math.max(1, newRect.height) : 1;
 
-            const isColumnBreak = Math.abs(dy) > 12 || Math.abs(dx) > 40 || Math.abs(scaleX - 1) > 0.08;
+            const isColumnBreak = Math.abs(dy) > 12 || Math.abs(dx) > 40;
             
             if (isColumnBreak) {
               this.cancelElementAnimations(card);
