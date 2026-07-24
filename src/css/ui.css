@@ -4861,7 +4861,7 @@ body.sortable-active .note-card,
   box-sizing: border-box;
   transform: translateZ(0);
   backface-visibility: hidden;
-  transition: border-color 180ms ease, background-color 180ms ease, box-shadow 220ms ease, opacity 180ms ease;
+  transition: width 250ms cubic-bezier(0.16, 1, 0.3, 1), border-color 180ms ease, background-color 180ms ease, box-shadow 220ms ease, opacity 180ms ease;
 }
 .doc-item,
 .char-card,

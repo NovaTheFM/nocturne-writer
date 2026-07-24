@@ -149,7 +149,7 @@ npm run smoke:desktop
 6. **`backup.zip`** is gitignored and is never part of the codebase.
 7. **ALWAYS MAKE A GIT COMMIT BEFORE STARTING WORK** — immediately commit the current state before executing any tasks or editing any files to ensure no uncommitted changes are ever lost.
 8. **DO NOT TOUCH OR REMOVE `1fr` FROM CARD GRIDS (`.character-grid`, `.locations-grid`)** — the Nocturne grid system strictly relies on `1fr` (`repeat(auto-fill, minmax(220px, 1fr))`) for natural responsive layout and card stretching. Never remove `1fr` or replace it with fixed pixel widths.
-9. **MANDATORY USER INTENT CONFIRMATION PROTOCOL** — For EVERY user request, before modifying code or executing non-trivial edits, the AI agent MUST first parse, interpret, and state back to the user in simple, plain, clear words (without overly complex jargon) exactly how it understood the request. The agent MUST wait for the user to confirm or clarify the interpretation before making changes.
+9. **MANDATORY USER INTENT CONFIRMATION PROTOCOL** — For EVERY user request, before modifying code or executing non-trivial edits, the AI agent MUST first parse, interpret, and state back to the user in simple, plain, everyday human language (STRICTLY NO code snippets, NO CSS/JS syntax, NO technical jargon) exactly how it understood the request. The agent MUST wait for the user to confirm or clarify the interpretation before making changes.
 
 ---
 
