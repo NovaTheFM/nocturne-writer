@@ -16279,96 +16279,12 @@ class NocturneWriter {
     this.kbSortables.forEach((sortable) => sortable.destroy?.());
     this.kbSortables = [];
     document.querySelectorAll('[data-dnd-zone]').forEach(zone => {
-      this.setupKbSortable(zone);
-      this.observeKbGridResize(zone);
-    });
-  }
-
-  observeKbGridResize(zone) {
-    if (!zone) return;
-    if (zone._gridResizeObserver) {
-      zone._gridResizeObserver.disconnect();
-      zone._gridResizeObserver = null;
-    }
-    let prevZoneWidth = zone.clientWidth;
-    const prevPosMap = new Map();
-
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const currentZoneWidth = entry.contentRect.width;
-        if (Math.abs(currentZoneWidth - prevZoneWidth) < 1) continue;
-        prevZoneWidth = currentZoneWidth;
-
-        if (document.body.classList.contains('sortable-active')) continue;
-
-        const isResizingWorkspace = document.body.classList.contains('resizing-workspace');
-        const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card')).filter(el => !el.classList.contains('hidden'));
-        if (!cards.length) continue;
-
-        if (isResizingWorkspace) {
-          cards.forEach(card => {
-            const visTranslate = this.getVisualTranslate(card);
-            const rect = card.getBoundingClientRect();
-            prevPosMap.set(card, {
-              left: rect.left - visTranslate.x,
-              top: rect.top - visTranslate.y
-            });
-          });
-          continue;
-        }
-
-        cards.forEach(card => {
-          const visTranslate = this.getVisualTranslate(card);
-          const rect = card.getBoundingClientRect();
-          
-          // Pure CSS layout position (unaffected by active transform)
-          const currentLayoutLeft = rect.left - visTranslate.x;
-          const currentLayoutTop = rect.top - visTranslate.y;
-
-          if (prevPosMap.has(card)) {
-            const prev = prevPosMap.get(card);
-            const dx = prev.left - currentLayoutLeft;
-            const dy = prev.top - currentLayoutTop;
-
-            // Trigger smooth FLIP translate animation when card position actually shifts in grid (row wrap or column shift)
-            const isPositionShift = Math.abs(dx) > 8 || Math.abs(dy) > 8;
-
-            if (isPositionShift) {
-              this.cancelElementAnimations(card);
-              card._isFlippingGrid = true;
-              
-              const startX = dx + visTranslate.x;
-              const startY = dy + visTranslate.y;
-
-              const anim = card.animate([
-                { transform: `translate3d(${startX}px, ${startY}px, 0)` },
-                { transform: 'translate3d(0px, 0px, 0)' }
-              ], {
-                duration: 300,
-                easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
-                fill: 'none'
-              });
-              
-              card._activeNocturneAnim = anim;
-              anim.onfinish = () => {
-                card._isFlippingGrid = false;
-                if (card._activeNocturneAnim === anim) {
-                  card._activeNocturneAnim = null;
-                }
-              };
-            }
-          }
-
-          prevPosMap.set(card, {
-            left: currentLayoutLeft,
-            top: currentLayoutTop
-          });
-        });
+      if (zone._gridResizeObserver) {
+        zone._gridResizeObserver.disconnect();
+        zone._gridResizeObserver = null;
       }
+      this.setupKbSortable(zone);
     });
-
-    observer.observe(zone);
-    zone._gridResizeObserver = observer;
   }
 
   showCharExportModal(char, cleanName) {
