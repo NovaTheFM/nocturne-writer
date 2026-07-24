@@ -16321,10 +16321,9 @@ class NocturneWriter {
             
             const dx = prev.left - currentLayoutLeft;
             const dy = prev.top - currentLayoutTop;
-            const scaleX = prev.width > 0 && currentLayoutWidth > 0 ? prev.width / currentLayoutWidth : 1;
-            const scaleY = prev.height > 0 && currentLayoutHeight > 0 ? prev.height / currentLayoutHeight : 1;
+            const dw = Math.abs(prev.width - currentLayoutWidth);
 
-            const hasShifted = Math.abs(dx) > 4 || Math.abs(dy) > 4 || Math.abs(scaleX - 1) > 0.03 || Math.abs(scaleY - 1) > 0.03;
+            const hasShifted = Math.abs(dx) > 4 || Math.abs(dy) > 4 || dw > 6;
 
             if (hasShifted) {
               this.cancelElementAnimations(card);
@@ -16334,8 +16333,8 @@ class NocturneWriter {
               const startY = dy + visTranslate.y;
 
               const anim = card.animate([
-                { transform: `translate(${startX}px, ${startY}px) scale(${scaleX}, ${scaleY})`, transformOrigin: 'top left' },
-                { transform: 'translate(0px, 0px) scale(1, 1)', transformOrigin: 'top left' }
+                { transform: `translate(${startX}px, ${startY}px)`, width: `${prev.width}px` },
+                { transform: 'translate(0px, 0px)', width: `${currentLayoutWidth}px` }
               ], {
                 duration: 320,
                 easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
