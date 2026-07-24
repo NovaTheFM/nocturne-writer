@@ -16321,7 +16321,9 @@ class NocturneWriter {
             const scaleX = rect.width ? prev.width / rect.width : 1;
             const scaleY = rect.height ? prev.height / rect.height : 1;
 
-            const isPosShift = Math.abs(dx) > 1 || Math.abs(dy) > 1;
+            const isPosShift = isDragging
+              ? (Math.abs(dx) >= 50 || Math.abs(dy) >= 50)
+              : (Math.abs(dx) > 1 || Math.abs(dy) > 1);
             const isScaleShift = Math.abs(scaleX - 1) > 0.01 || Math.abs(scaleY - 1) > 0.01;
 
             const shouldAnimate = isDragging ? isPosShift : (isPosShift || isScaleShift);
