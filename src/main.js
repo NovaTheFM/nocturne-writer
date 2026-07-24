@@ -16290,14 +16290,14 @@ class NocturneWriter {
       zone._gridResizeObserver.disconnect();
       zone._gridResizeObserver = null;
     }
-    let prevWidth = zone.clientWidth;
+    let prevZoneWidth = zone.clientWidth;
     const prevPosMap = new Map();
 
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        const currentWidth = entry.contentRect.width;
-        if (Math.abs(currentWidth - prevWidth) < 1) continue;
-        prevWidth = currentWidth;
+        const currentZoneWidth = entry.contentRect.width;
+        if (Math.abs(currentZoneWidth - prevZoneWidth) < 1) continue;
+        prevZoneWidth = currentZoneWidth;
 
         if (document.body.classList.contains('sortable-active')) continue;
 
@@ -16310,20 +16310,23 @@ class NocturneWriter {
           const visTranslate = this.getVisualTranslate(card);
           const rect = card.getBoundingClientRect();
           
-          // Pure CSS layout position (unaffected by active transform)
+          // Pure CSS layout position and size (unaffected by active transform)
           const currentLayoutLeft = rect.left - visTranslate.x;
           const currentLayoutTop = rect.top - visTranslate.y;
+          const currentLayoutWidth = rect.width;
+          const currentLayoutHeight = rect.height;
 
-          if (prevPosMap.has(card)) {
+          if (prevPosMap.has(card) && !isResizingWorkspace) {
             const prev = prevPosMap.get(card);
             
             const dx = prev.left - currentLayoutLeft;
             const dy = prev.top - currentLayoutTop;
+            const scaleX = prev.width > 0 && currentLayoutWidth > 0 ? prev.width / currentLayoutWidth : 1;
+            const scaleY = prev.height > 0 && currentLayoutHeight > 0 ? prev.height / currentLayoutHeight : 1;
 
-            // Only trigger FLIP slide animation when card actually wraps to a new row (dy > 12)
-            const isRowBreak = Math.abs(dy) > 12;
+            const hasShifted = Math.abs(dx) > 4 || Math.abs(dy) > 4 || Math.abs(scaleX - 1) > 0.03 || Math.abs(scaleY - 1) > 0.03;
 
-            if (isRowBreak) {
+            if (hasShifted) {
               this.cancelElementAnimations(card);
               card._isFlippingGrid = true;
               
@@ -16331,8 +16334,8 @@ class NocturneWriter {
               const startY = dy + visTranslate.y;
 
               const anim = card.animate([
-                { transform: `translate(${startX}px, ${startY}px)` },
-                { transform: 'translate(0px, 0px)' }
+                { transform: `translate(${startX}px, ${startY}px) scale(${scaleX}, ${scaleY})`, transformOrigin: 'top left' },
+                { transform: 'translate(0px, 0px) scale(1, 1)', transformOrigin: 'top left' }
               ], {
                 duration: 320,
                 easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
@@ -16351,7 +16354,9 @@ class NocturneWriter {
 
           prevPosMap.set(card, {
             left: currentLayoutLeft,
-            top: currentLayoutTop
+            top: currentLayoutTop,
+            width: currentLayoutWidth,
+            height: currentLayoutHeight
           });
         });
       }
