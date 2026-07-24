@@ -16308,20 +16308,22 @@ class NocturneWriter {
           const visTranslate = this.getVisualTranslate(card);
           const rect = card.getBoundingClientRect();
           
-          // Pure CSS layout position (unaffected by active transform)
+          // Pure CSS layout position and size (unaffected by active transform)
           const currentLayoutLeft = rect.left - visTranslate.x;
           const currentLayoutTop = rect.top - visTranslate.y;
+          const currentLayoutWidth = rect.width;
 
           if (prevPosMap.has(card)) {
             const prev = prevPosMap.get(card);
             
             const dx = prev.left - currentLayoutLeft;
             const dy = prev.top - currentLayoutTop;
+            const scaleX = prev.width > 0 && currentLayoutWidth > 0 ? prev.width / currentLayoutWidth : 1;
 
-            // Trigger FLIP slide animation strictly when card wraps to a new row (dy > 12)
             const isRowBreak = Math.abs(dy) > 12;
+            const isWidthBreak = Math.abs(prev.width - currentLayoutWidth) > 10;
 
-            if (isRowBreak) {
+            if (isRowBreak || isWidthBreak) {
               this.cancelElementAnimations(card);
               card._isFlippingGrid = true;
               
@@ -16329,8 +16331,8 @@ class NocturneWriter {
               const startY = dy + visTranslate.y;
 
               const anim = card.animate([
-                { transform: `translate(${startX}px, ${startY}px)` },
-                { transform: 'translate(0px, 0px)' }
+                { transform: `translate(${startX}px, ${startY}px) scale(${scaleX}, 1)`, transformOrigin: 'top left' },
+                { transform: 'translate(0px, 0px) scale(1, 1)', transformOrigin: 'top left' }
               ], {
                 duration: 320,
                 easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
@@ -16349,7 +16351,8 @@ class NocturneWriter {
 
           prevPosMap.set(card, {
             left: currentLayoutLeft,
-            top: currentLayoutTop
+            top: currentLayoutTop,
+            width: currentLayoutWidth
           });
         });
       }
