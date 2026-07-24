@@ -148,6 +148,7 @@ npm run smoke:desktop
 5. **CSS partials** in `src/css/` are the canonical stylesheets. Edits go to `src/css/*`. `src/styles.css` is considered legacy.
 6. **`backup.zip`** is gitignored and is never part of the codebase.
 7. **ALWAYS MAKE A GIT COMMIT BEFORE STARTING WORK** — immediately commit the current state before executing any tasks or editing any files to ensure no uncommitted changes are ever lost.
+8. **DO NOT TOUCH OR REMOVE `1fr` FROM CARD GRIDS (`.character-grid`, `.locations-grid`)** — the Nocturne grid system strictly relies on `1fr` (`repeat(auto-fill, minmax(220px, 1fr))`) for natural responsive layout and card stretching. Never remove `1fr` or replace it with fixed pixel widths.
 
 ---
 

@@ -16313,10 +16313,10 @@ class NocturneWriter {
             const dx = (oldRect.left + visTranslate.x) - newRect.left;
             const dy = (oldRect.top + visTranslate.y) - newRect.top;
 
-            // Trigger smooth FLIP translate animation if card position changed in grid
-            const hasMoved = Math.abs(dx) > 8 || Math.abs(dy) > 8;
+            // Only trigger FLIP animation when card actually wraps to another row (dy > 12)
+            const isRowBreak = Math.abs(dy) > 12;
             
-            if (hasMoved) {
+            if (isRowBreak) {
               this.cancelElementAnimations(card);
               card._isFlippingGrid = true;
               const anim = card.animate([
