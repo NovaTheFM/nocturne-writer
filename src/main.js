@@ -16279,12 +16279,106 @@ class NocturneWriter {
     this.kbSortables.forEach((sortable) => sortable.destroy?.());
     this.kbSortables = [];
     document.querySelectorAll('[data-dnd-zone]').forEach(zone => {
-      if (zone._gridResizeObserver) {
-        zone._gridResizeObserver.disconnect();
-        zone._gridResizeObserver = null;
-      }
       this.setupKbSortable(zone);
+      this.observeKbGridResize(zone);
     });
+  }
+
+  observeKbGridResize(zone) {
+    if (!zone) return;
+    if (zone._gridResizeObserver) {
+      zone._gridResizeObserver.disconnect();
+      zone._gridResizeObserver = null;
+    }
+    let prevZoneWidth = zone.clientWidth;
+    const prevPosMap = new Map();
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const currentZoneWidth = entry.contentRect.width;
+        if (Math.abs(currentZoneWidth - prevZoneWidth) < 1) continue;
+        prevZoneWidth = currentZoneWidth;
+
+        if (document.body.classList.contains('sortable-active')) continue;
+
+        const isResizingWorkspace = document.body.classList.contains('resizing-workspace');
+        const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card')).filter(el => !el.classList.contains('hidden'));
+        if (!cards.length) continue;
+
+        if (isResizingWorkspace) {
+          cards.forEach(card => {
+            const visTranslate = this.getVisualTranslate(card);
+            const rect = card.getBoundingClientRect();
+            prevPosMap.set(card, {
+              left: rect.left - visTranslate.x,
+              top: rect.top - visTranslate.y,
+              width: rect.width,
+              height: rect.height
+            });
+          });
+          continue;
+        }
+
+        cards.forEach(card => {
+          const visTranslate = this.getVisualTranslate(card);
+          const rect = card.getBoundingClientRect();
+          
+          // Pure CSS layout position and dimensions (unaffected by active transform)
+          const currentLayoutLeft = rect.left - visTranslate.x;
+          const currentLayoutTop = rect.top - visTranslate.y;
+          const currentLayoutWidth = rect.width;
+          const currentLayoutHeight = rect.height;
+
+          if (prevPosMap.has(card)) {
+            const prev = prevPosMap.get(card);
+            const dx = prev.left - currentLayoutLeft;
+            const dy = prev.top - currentLayoutTop;
+            const scaleX = currentLayoutWidth ? prev.width / currentLayoutWidth : 1;
+            const scaleY = currentLayoutHeight ? prev.height / currentLayoutHeight : 1;
+
+            const isPosShift = Math.abs(dx) > 2 || Math.abs(dy) > 2;
+            const isScaleShift = Math.abs(scaleX - 1) > 0.015 || Math.abs(scaleY - 1) > 0.015;
+
+            if (isPosShift || isScaleShift) {
+              this.cancelElementAnimations(card);
+              card._isFlippingGrid = true;
+              card.style.transformOrigin = '0 0';
+
+              const startX = dx + visTranslate.x;
+              const startY = dy + visTranslate.y;
+
+              const anim = card.animate([
+                { transform: `translate3d(${startX}px, ${startY}px, 0) scale(${scaleX}, ${scaleY})` },
+                { transform: 'translate3d(0px, 0px, 0) scale(1, 1)' }
+              ], {
+                duration: 320,
+                easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+                fill: 'none'
+              });
+              
+              card._activeNocturneAnim = anim;
+              anim.onfinish = () => {
+                card._isFlippingGrid = false;
+                card.style.transformOrigin = '';
+                if (card._activeNocturneAnim === anim) {
+                  card._activeNocturneAnim = null;
+                }
+              };
+            }
+          }
+
+          prevPosMap.set(card, {
+            left: currentLayoutLeft,
+            top: currentLayoutTop,
+            width: currentLayoutWidth,
+            height: currentLayoutHeight
+          });
+        });
+      }
+    });
+
+    observer.observe(zone);
+    zone._gridResizeObserver = observer;
   }
 
   showCharExportModal(char, cleanName) {
