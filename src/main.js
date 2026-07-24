@@ -484,7 +484,7 @@ class NocturneWriter {
     this.startGitAutosave();
 
     // Check if new version first run (specifically for Electron desktop users)
-    const currentVersion = '1.1.3';
+    const currentVersion = '1.1.4';
     const showWhatsNew = this.runtime.isElectron && this.state.settings.lastSeenVersion !== currentVersion;
     if (showWhatsNew) {
       setTimeout(() => {
@@ -20874,7 +20874,7 @@ ${raw}`;
       format: 'nocturnedump',
       version: 1,
       appName: 'Nocturne Writer',
-      appVersion: '1.1.3',
+      appVersion: '1.1.4',
       schemaVersion: 3,
       exportedAt: new Date().toISOString(),
       encrypted: !!this.state.settings.e2e,
@@ -21296,6 +21296,17 @@ ${raw}`;
             <h2 style="text-align: center; margin: 0 0 4px; font-size: 22px; color: var(--text-main); font-weight: 700;">Что нового</h2>
             <p style="text-align: center; margin: 0 0 20px; font-size: 13px; color: var(--text-muted, #a1a1aa);">Луна хочет рассказать вам о новинках!</p>
             <div class="whats-new-body" style="max-height: 280px; overflow-y: auto; padding-right: 8px; font-size: 14px; line-height: 1.6; color: var(--text-main);">
+              <p style="margin: 0 0 16px; font-weight: 600; color: var(--accent);">Версия 1.1.4</p>
+
+              <p style="margin: 0 0 4px; font-weight: 600;">⚡ Устранение лагов при изменении размера Split-Screen:</p>
+              <ul style="margin: 0 0 16px; padding-left: 20px;">
+                <li><b>Троттлинг перерисовки сетки (RAF)</b>: Перетаскивание разделителя переведено на батчинг через <code>requestAnimationFrame</code> без перегрузки проца и видеокарты.</li>
+                <li><b>Приостановка тяжелой пагинации при ресайзе</b>: Во время перетаскивания приостановлен бинарный поиск разрывов страниц. Перерасчет происходит мгновенно при отпускании мыши.</li>
+                <li><b>Блокировка паразитных ивентов</b>: Включен <code>pointer-events: none</code> на панелях во время драга для устранения подлипания подсветок и наведений.</li>
+              </ul>
+
+              <hr style="border: 0; border-top: 1px solid var(--border); margin: 20px 0;">
+
               <p style="margin: 0 0 16px; font-weight: 600; color: var(--accent);">Версия 1.1.3</p>
 
               <p style="margin: 0 0 4px; font-weight: 600;">✨ Исправление системы подсветок и Smart-словаря:</p>
