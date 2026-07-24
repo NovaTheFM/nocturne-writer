@@ -16300,14 +16300,18 @@ class NocturneWriter {
 
         cards.forEach(card => {
           if (prevRects.has(card)) {
+            if (card._isFlippingGrid) return;
             const oldRect = prevRects.get(card);
             const visTranslate = this.getVisualTranslate(card);
             const newRect = card.getBoundingClientRect();
             const dx = (oldRect.left + visTranslate.x) - newRect.left;
             const dy = (oldRect.top + visTranslate.y) - newRect.top;
-            if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+            
+            // Grid column break occurs when card shifts rows (|dy| > 12) or significantly across columns (|dx| > 40)
+            if (Math.abs(dy) > 12 || Math.abs(dx) > 40) {
               this.cancelElementAnimations(card);
-              card.animate([
+              card._isFlippingGrid = true;
+              const anim = card.animate([
                 { transform: `translate(${dx}px, ${dy}px)` },
                 { transform: 'translate(0px, 0px)' }
               ], {
@@ -16315,6 +16319,13 @@ class NocturneWriter {
                 easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
                 fill: 'none'
               });
+              card._activeNocturneAnim = anim;
+              anim.onfinish = () => {
+                card._isFlippingGrid = false;
+                if (card._activeNocturneAnim === anim) {
+                  card._activeNocturneAnim = null;
+                }
+              };
             }
           }
         });
