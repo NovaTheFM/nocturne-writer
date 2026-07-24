@@ -16339,8 +16339,8 @@ class NocturneWriter {
               const startY = dy + visTranslate.y;
 
               const anim = card.animate([
-                { transform: `translate(${startX}px, ${startY}px)` },
-                { transform: 'translate(0px, 0px)' }
+                { transform: `translate(${startX}px, ${startY}px)`, width: `${prev.width}px` },
+                { transform: 'translate(0px, 0px)', width: `${currentLayoutWidth}px` }
               ], {
                 duration: 320,
                 easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
