@@ -16314,7 +16314,7 @@ class NocturneWriter {
           const currentLayoutLeft = rect.left - visTranslate.x;
           const currentLayoutTop = rect.top - visTranslate.y;
 
-          if (prevPosMap.has(card) && !isResizingWorkspace) {
+          if (prevPosMap.has(card)) {
             const prev = prevPosMap.get(card);
             
             const dx = prev.left - currentLayoutLeft;
