@@ -16318,10 +16318,10 @@ class NocturneWriter {
             const dx = prev.left - currentLayoutLeft;
             const dy = prev.top - currentLayoutTop;
 
-            // Trigger FLIP slide animation strictly when card wraps to a new row (dy > 12)
-            const isRowBreak = Math.abs(dy) > 12;
+            // Trigger FLIP slide animation when card position shifts discretely (row wrap or column breakpoint reflow)
+            const isLayoutBreak = Math.abs(dx) > 12 || Math.abs(dy) > 12;
 
-            if (isRowBreak) {
+            if (isLayoutBreak) {
               this.cancelElementAnimations(card);
               card._isFlippingGrid = true;
               
