@@ -16300,60 +16300,53 @@ class NocturneWriter {
 
         if (document.body.classList.contains('sortable-active')) continue;
 
-        const isResizingWorkspace = document.body.classList.contains('resizing-workspace');
         const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card')).filter(el => !el.classList.contains('hidden'));
         if (!cards.length) continue;
 
-        if (!isResizingWorkspace) {
-          cards.forEach(card => {
-            if (prevRects.has(card)) {
-              if (card._isFlippingGrid) return;
+        cards.forEach(card => {
+          if (prevRects.has(card)) {
+            if (card._isFlippingGrid) return;
 
-              const oldRect = prevRects.get(card);
-              const visTranslate = this.getVisualTranslate(card);
-              const newRect = card.getBoundingClientRect();
-              const dx = (oldRect.left + visTranslate.x) - newRect.left;
-              const dy = (oldRect.top + visTranslate.y) - newRect.top;
-              const scaleX = oldRect.width ? oldRect.width / Math.max(1, newRect.width) : 1;
-              const scaleY = oldRect.height ? oldRect.height / Math.max(1, newRect.height) : 1;
+            const oldRect = prevRects.get(card);
+            const visTranslate = this.getVisualTranslate(card);
+            const newRect = card.getBoundingClientRect();
+            const dx = (oldRect.left + visTranslate.x) - newRect.left;
+            const dy = (oldRect.top + visTranslate.y) - newRect.top;
 
-              // Only trigger FLIP animation if card actually moved to another row/column layout slot
-              const isColumnBreak = Math.abs(dy) > 12 || (Math.abs(dx) > 60 && Math.abs(dy) > 6);
-              
-              if (isColumnBreak) {
-                this.cancelElementAnimations(card);
-                card._isFlippingGrid = true;
-                card.style.transformOrigin = '0 0';
-                const anim = card.animate([
-                  { transform: `translate(${dx}px, ${dy}px) scale(${scaleX}, ${scaleY})` },
-                  { transform: 'translate(0px, 0px) scale(1, 1)' }
-                ], {
-                  duration: 340,
-                  easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
-                  fill: 'none'
-                });
-                card._activeNocturneAnim = anim;
-                anim.onfinish = () => {
-                  card._isFlippingGrid = false;
-                  card.style.transformOrigin = '';
-                  if (card._activeNocturneAnim === anim) {
-                    card._activeNocturneAnim = null;
-                  }
-                  if (card.parentNode) {
-                    const finalVis = this.getVisualTranslate(card);
-                    const finalRect = card.getBoundingClientRect();
-                    prevRects.set(card, {
-                      left: finalRect.left - finalVis.x,
-                      top: finalRect.top - finalVis.y,
-                      width: finalRect.width,
-                      height: finalRect.height,
-                    });
-                  }
-                };
-              }
+            // Trigger smooth FLIP translate animation if card position changed in grid
+            const hasMoved = Math.abs(dx) > 8 || Math.abs(dy) > 8;
+            
+            if (hasMoved) {
+              this.cancelElementAnimations(card);
+              card._isFlippingGrid = true;
+              const anim = card.animate([
+                { transform: `translate(${dx}px, ${dy}px)` },
+                { transform: 'translate(0px, 0px)' }
+              ], {
+                duration: 320,
+                easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+                fill: 'none'
+              });
+              card._activeNocturneAnim = anim;
+              anim.onfinish = () => {
+                card._isFlippingGrid = false;
+                if (card._activeNocturneAnim === anim) {
+                  card._activeNocturneAnim = null;
+                }
+                if (card.parentNode) {
+                  const finalVis = this.getVisualTranslate(card);
+                  const finalRect = card.getBoundingClientRect();
+                  prevRects.set(card, {
+                    left: finalRect.left - finalVis.x,
+                    top: finalRect.top - finalVis.y,
+                    width: finalRect.width,
+                    height: finalRect.height,
+                  });
+                }
+              };
             }
-          });
-        }
+          }
+        });
 
         requestAnimationFrame(() => {
           cards.forEach(card => {
