@@ -8238,7 +8238,8 @@ class NocturneWriter {
     
     // 1. Record current positions of all animated elements inside container
     const targets = Array.from(container.querySelectorAll('.doc-item, .section-title, .char-card, .loc-card, .timeline-item, .note-card'));
-    const candidateList = targets.length ? targets : Array.from(container.children);
+    const rawCandidates = targets.length ? targets : Array.from(container.children);
+    const candidateList = rawCandidates.filter(el => !el.matches('h1, h2, h3, h4, header, .kb-header, .kb-pane-breadcrumb, .pane-back-btn'));
     
     const oldRects = candidateList.map((el) => {
       const visTranslate = this.getVisualTranslate(el);
@@ -16317,10 +16318,10 @@ class NocturneWriter {
             const dx = prev.left - currentLayoutLeft;
             const dy = prev.top - currentLayoutTop;
 
-            // Trigger FLIP animation if layout position shifted (row/column wrap)
-            const hasMoved = Math.abs(dx) > 6 || Math.abs(dy) > 6;
+            // Only trigger FLIP slide animation when card actually wraps to a new row (dy > 12)
+            const isRowBreak = Math.abs(dy) > 12;
 
-            if (hasMoved) {
+            if (isRowBreak) {
               this.cancelElementAnimations(card);
               card._isFlippingGrid = true;
               
