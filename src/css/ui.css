@@ -4829,7 +4829,7 @@ body.sortable-active .note-card,
 .kb-entering .timeline-container > *:nth-child(10) { animation-delay: 315ms; }
 .kb-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 34px; }
 .kb-header h1 { margin: 0; font: 500 28px 'Lora', serif; }
-.character-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 24px; justify-content: start; transition: grid-template-columns 300ms cubic-bezier(0.16, 1, 0.3, 1); }
+.character-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 24px; justify-content: start; }
 .custom-select, .modal-select, .form-control {
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -4861,7 +4861,7 @@ body.sortable-active .note-card,
   box-sizing: border-box;
   transform: translateZ(0);
   backface-visibility: hidden;
-  transition: width 250ms cubic-bezier(0.16, 1, 0.3, 1), border-color 180ms ease, background-color 180ms ease, box-shadow 220ms ease, opacity 180ms ease;
+  transition: width 320ms cubic-bezier(0.16, 1, 0.3, 1), border-color 180ms ease, background-color 180ms ease, box-shadow 220ms ease, opacity 180ms ease;
 }
 .doc-item,
 .char-card,
@@ -4892,7 +4892,7 @@ body.sortable-active * {
 .char-card.note-card .char-info h3 { padding-right: 148px; }
 .char-info p, .loc-info p, .timeline-content p { margin: 0; color: var(--text-muted); font-size: 13px; line-height: 1.5; }
 .char-info p { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; }
-.locations-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px; justify-content: start; transition: grid-template-columns 300ms cubic-bezier(0.16, 1, 0.3, 1); }
+.locations-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px; justify-content: start; }
 .loc-card { display: flex; height: 140px; border-radius: var(--radius-md); overflow: hidden; width: 100%; }
 .loc-card:hover { border-color: rgba(var(--accent-rgb, 139, 92, 246),.5); transform: translateY(-3px); box-shadow: 0 10px 30px rgba(0,0,0,.5); transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), border-color 180ms ease, box-shadow 220ms ease; }
 .loc-img { width: 120px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: #1a1a22; border-right: 1px solid var(--border); }
