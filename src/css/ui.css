@@ -1403,7 +1403,7 @@ body.resizing-workspace .note-card {
   height: 100%;
   overflow-y: auto;
   scrollbar-gutter: stable;
-  padding: 24px;
+  padding: 20px;
   container-type: inline-size;
   container-name: kb-container;
 }
@@ -5010,9 +5010,6 @@ body.sortable-active .timeline-line,
 
 /* Fluid Container Query Responsive Rules for KB Split Screen Panes */
 @container kb-container (max-width: 580px) {
-  .kb-pane-section {
-    padding: 16px;
-  }
   .loc-card {
     height: auto;
     min-height: 130px;
