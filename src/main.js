@@ -16301,37 +16301,39 @@ class NocturneWriter {
 
         if (document.body.classList.contains('sortable-active')) continue;
 
+        const isResizingWorkspace = document.body.classList.contains('resizing-workspace');
         const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card')).filter(el => !el.classList.contains('hidden'));
         if (!cards.length) continue;
 
-        const anyCardShifted = cards.some(card => {
-          if (!prevPosMap.has(card)) return false;
-          const prev = prevPosMap.get(card);
-          const visTranslate = this.getVisualTranslate(card);
-          const rect = card.getBoundingClientRect();
-          const currentLeft = rect.left - visTranslate.x;
-          const currentTop = rect.top - visTranslate.y;
-          const currentWidth = rect.width;
-          return Math.abs(prev.left - currentLeft) > 12 || Math.abs(prev.top - currentTop) > 12 || Math.abs(prev.width - currentWidth) > 12;
-        });
+        if (isResizingWorkspace) {
+          cards.forEach(card => {
+            const visTranslate = this.getVisualTranslate(card);
+            const rect = card.getBoundingClientRect();
+            prevPosMap.set(card, {
+              left: rect.left - visTranslate.x,
+              top: rect.top - visTranslate.y
+            });
+          });
+          continue;
+        }
 
         cards.forEach(card => {
           const visTranslate = this.getVisualTranslate(card);
           const rect = card.getBoundingClientRect();
           
-          // Pure CSS layout position and size (unaffected by active transform)
+          // Pure CSS layout position (unaffected by active transform)
           const currentLayoutLeft = rect.left - visTranslate.x;
           const currentLayoutTop = rect.top - visTranslate.y;
-          const currentLayoutWidth = rect.width;
 
           if (prevPosMap.has(card)) {
             const prev = prevPosMap.get(card);
-            
             const dx = prev.left - currentLayoutLeft;
             const dy = prev.top - currentLayoutTop;
-            const dw = Math.abs(prev.width - currentLayoutWidth);
 
-            if (anyCardShifted || dw > 12) {
+            // Trigger smooth FLIP translate animation when card position actually shifts in grid (row wrap or column shift)
+            const isPositionShift = Math.abs(dx) > 8 || Math.abs(dy) > 8;
+
+            if (isPositionShift) {
               this.cancelElementAnimations(card);
               card._isFlippingGrid = true;
               
@@ -16339,10 +16341,10 @@ class NocturneWriter {
               const startY = dy + visTranslate.y;
 
               const anim = card.animate([
-                { transform: `translate(${startX}px, ${startY}px)`, width: `${prev.width}px` },
-                { transform: 'translate(0px, 0px)', width: `${currentLayoutWidth}px` }
+                { transform: `translate3d(${startX}px, ${startY}px, 0)` },
+                { transform: 'translate3d(0px, 0px, 0)' }
               ], {
-                duration: 320,
+                duration: 300,
                 easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
                 fill: 'none'
               });
@@ -16359,8 +16361,7 @@ class NocturneWriter {
 
           prevPosMap.set(card, {
             left: currentLayoutLeft,
-            top: currentLayoutTop,
-            width: currentLayoutWidth
+            top: currentLayoutTop
           });
         });
       }
