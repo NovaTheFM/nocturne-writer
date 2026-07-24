@@ -16306,14 +16306,19 @@ class NocturneWriter {
             const newRect = card.getBoundingClientRect();
             const dx = (oldRect.left + visTranslate.x) - newRect.left;
             const dy = (oldRect.top + visTranslate.y) - newRect.top;
+            const scaleX = oldRect.width ? oldRect.width / Math.max(1, newRect.width) : 1;
+            const scaleY = oldRect.height ? oldRect.height / Math.max(1, newRect.height) : 1;
+
+            const isPosShift = Math.abs(dy) > 12 || Math.abs(dx) > 40;
+            const isScaleShift = Math.abs(scaleX - 1) > 0.04 || Math.abs(scaleY - 1) > 0.04;
             
-            // Grid column break occurs when card shifts rows (|dy| > 12) or significantly across columns (|dx| > 40)
-            if (Math.abs(dy) > 12 || Math.abs(dx) > 40) {
+            if (isPosShift || isScaleShift) {
               this.cancelElementAnimations(card);
               card._isFlippingGrid = true;
+              card.style.transformOrigin = '0 0';
               const anim = card.animate([
-                { transform: `translate(${dx}px, ${dy}px)` },
-                { transform: 'translate(0px, 0px)' }
+                { transform: `translate(${dx}px, ${dy}px) scale(${scaleX}, ${scaleY})` },
+                { transform: 'translate(0px, 0px) scale(1, 1)' }
               ], {
                 duration: 380,
                 easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
@@ -16322,6 +16327,7 @@ class NocturneWriter {
               card._activeNocturneAnim = anim;
               anim.onfinish = () => {
                 card._isFlippingGrid = false;
+                card.style.transformOrigin = '';
                 if (card._activeNocturneAnim === anim) {
                   card._activeNocturneAnim = null;
                 }
@@ -16338,6 +16344,8 @@ class NocturneWriter {
               prevRects.set(card, {
                 left: rect.left - visTranslate.x,
                 top: rect.top - visTranslate.y,
+                width: rect.width,
+                height: rect.height,
               });
             }
           });
