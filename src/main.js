@@ -6402,7 +6402,6 @@ class NocturneWriter {
     if (!stage || this.state.workspace.mode !== 'split') return;
     const rect = stage.getBoundingClientRect();
     document.body.classList.add('resizing-workspace');
-    this.recordKbGridRects();
 
     let rafId = null;
     let pendingX = null;
@@ -6438,8 +6437,6 @@ class NocturneWriter {
       this.persistWorkspaceState();
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
-
-      this.triggerKbGridFlipTransition();
 
       ['primary', 'secondary'].forEach((paneId) => {
         this.nocturneEditor?.scheduleVisualPages(paneId);
@@ -16276,66 +16273,6 @@ class NocturneWriter {
     return this.state.lore[type]?.find((item) => item.id === id) || null;
   }
 
-  recordKbGridRects() {
-    this._kbPreDragRects = new Map();
-    document.querySelectorAll('[data-dnd-zone]').forEach(zone => {
-      const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card')).filter(el => !el.classList.contains('hidden'));
-      cards.forEach(card => {
-        const visTranslate = this.getVisualTranslate(card);
-        const rect = card.getBoundingClientRect();
-        this._kbPreDragRects.set(card, {
-          left: rect.left - visTranslate.x,
-          top: rect.top - visTranslate.y,
-          width: rect.width,
-          height: rect.height,
-        });
-      });
-    });
-  }
-
-  triggerKbGridFlipTransition() {
-    if (!this._kbPreDragRects || !this._kbPreDragRects.size) return;
-    if (document.body.classList.contains('sortable-active')) return;
-
-    const preRects = this._kbPreDragRects;
-    this._kbPreDragRects = null;
-
-    preRects.forEach((oldRect, card) => {
-      if (!card.parentNode || card.classList.contains('hidden')) return;
-      const visTranslate = this.getVisualTranslate(card);
-      const newRect = card.getBoundingClientRect();
-      const dx = (oldRect.left + visTranslate.x) - newRect.left;
-      const dy = (oldRect.top + visTranslate.y) - newRect.top;
-      const scaleX = oldRect.width ? oldRect.width / Math.max(1, newRect.width) : 1;
-      const scaleY = oldRect.height ? oldRect.height / Math.max(1, newRect.height) : 1;
-
-      const isPosShift = Math.abs(dy) > 12 || Math.abs(dx) > 40;
-      const isScaleShift = Math.abs(scaleX - 1) > 0.05 || Math.abs(scaleY - 1) > 0.05;
-
-      if (isPosShift || isScaleShift) {
-        this.cancelElementAnimations(card);
-        card._isFlippingGrid = true;
-        card.style.transformOrigin = '0 0';
-        const anim = card.animate([
-          { transform: `translate(${dx}px, ${dy}px) scale(${scaleX}, ${scaleY})` },
-          { transform: 'translate(0px, 0px) scale(1, 1)' }
-        ], {
-          duration: 380,
-          easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
-          fill: 'none'
-        });
-        card._activeNocturneAnim = anim;
-        anim.onfinish = () => {
-          card._isFlippingGrid = false;
-          card.style.transformOrigin = '';
-          if (card._activeNocturneAnim === anim) {
-            card._activeNocturneAnim = null;
-          }
-        };
-      }
-    });
-  }
-
   setupKbDragDrop() {
     this.kbSortables.forEach((sortable) => sortable.destroy?.());
     this.kbSortables = [];
@@ -16356,29 +16293,15 @@ class NocturneWriter {
         if (Math.abs(currentWidth - prevWidth) < 2) continue;
         prevWidth = currentWidth;
 
+        if (document.body.classList.contains('sortable-active')) continue;
+
         const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card')).filter(el => !el.classList.contains('hidden'));
-
-        if (document.body.classList.contains('resizing-workspace') || document.body.classList.contains('sortable-active')) {
-          cards.forEach(card => {
-            if (card.parentNode) {
-              const visTranslate = this.getVisualTranslate(card);
-              const rect = card.getBoundingClientRect();
-              prevRects.set(card, {
-                left: rect.left - visTranslate.x,
-                top: rect.top - visTranslate.y,
-                width: rect.width,
-                height: rect.height,
-              });
-            }
-          });
-          continue;
-        }
-
         if (!cards.length) continue;
 
         cards.forEach(card => {
           if (prevRects.has(card)) {
             if (card._isFlippingGrid) return;
+
             const oldRect = prevRects.get(card);
             const visTranslate = this.getVisualTranslate(card);
             const newRect = card.getBoundingClientRect();
@@ -16387,7 +16310,7 @@ class NocturneWriter {
             const scaleX = oldRect.width ? oldRect.width / Math.max(1, newRect.width) : 1;
             const scaleY = oldRect.height ? oldRect.height / Math.max(1, newRect.height) : 1;
 
-            const isColumnBreak = Math.abs(dy) > 12 || Math.abs(dx) > 60 || Math.abs(scaleX - 1) > 0.05;
+            const isColumnBreak = Math.abs(dy) > 12 || Math.abs(dx) > 40 || Math.abs(scaleX - 1) > 0.08;
             
             if (isColumnBreak) {
               this.cancelElementAnimations(card);
@@ -16397,7 +16320,7 @@ class NocturneWriter {
                 { transform: `translate(${dx}px, ${dy}px) scale(${scaleX}, ${scaleY})` },
                 { transform: 'translate(0px, 0px) scale(1, 1)' }
               ], {
-                duration: 380,
+                duration: 340,
                 easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
                 fill: 'none'
               });
@@ -16409,11 +16332,11 @@ class NocturneWriter {
                   card._activeNocturneAnim = null;
                 }
                 if (card.parentNode) {
-                  const finalTranslate = this.getVisualTranslate(card);
+                  const finalVis = this.getVisualTranslate(card);
                   const finalRect = card.getBoundingClientRect();
                   prevRects.set(card, {
-                    left: finalRect.left - finalTranslate.x,
-                    top: finalRect.top - finalTranslate.y,
+                    left: finalRect.left - finalVis.x,
+                    top: finalRect.top - finalVis.y,
                     width: finalRect.width,
                     height: finalRect.height,
                   });
