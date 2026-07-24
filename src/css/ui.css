@@ -1310,6 +1310,12 @@ body.resizing-workspace {
   cursor: col-resize;
   user-select: none;
 }
+body.resizing-workspace .char-card,
+body.resizing-workspace .loc-card,
+body.resizing-workspace .timeline-content,
+body.resizing-workspace .note-card {
+  transition: none !important;
+}
 .workspace-empty {
   height: 100%;
   display: grid;
@@ -4861,7 +4867,7 @@ body.sortable-active .note-card,
   box-sizing: border-box;
   transform: translateZ(0);
   backface-visibility: hidden;
-  transition: width 320ms cubic-bezier(0.16, 1, 0.3, 1), border-color 180ms ease, background-color 180ms ease, box-shadow 220ms ease, opacity 180ms ease;
+  transition: border-color 180ms ease, background-color 180ms ease, box-shadow 220ms ease, opacity 180ms ease;
 }
 .doc-item,
 .char-card,

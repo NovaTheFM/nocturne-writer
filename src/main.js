@@ -16292,6 +16292,7 @@ class NocturneWriter {
     }
     let prevZoneWidth = zone.clientWidth;
     const prevPosMap = new Map();
+    zone._prevPosMap = prevPosMap;
 
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
@@ -16301,65 +16302,69 @@ class NocturneWriter {
 
         if (document.body.classList.contains('sortable-active')) continue;
 
-        // While user is dragging split divider, don't trigger FLIP or overwrite pre-drag layout map
-        if (document.body.classList.contains('resizing-workspace')) continue;
-
+        const isDragging = document.body.classList.contains('resizing-workspace');
         const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card')).filter(el => !el.classList.contains('hidden'));
         if (!cards.length) continue;
 
+        console.log(`[FLIP] observer fired: zoneWidth=${currentZoneWidth.toFixed(0)}, cards=${cards.length}, isDragging=${isDragging}, mapSize=${prevPosMap.size}`);
+
         cards.forEach(card => {
-          const visTranslate = this.getVisualTranslate(card);
+          if (card._isFlippingGrid) return;
+
+          this.cancelElementAnimations(card);
           const rect = card.getBoundingClientRect();
-          
-          // Pure CSS layout position and dimensions (unaffected by active transform)
-          const currentLayoutLeft = rect.left - visTranslate.x;
-          const currentLayoutTop = rect.top - visTranslate.y;
-          const currentLayoutWidth = rect.width;
-          const currentLayoutHeight = rect.height;
 
           if (prevPosMap.has(card)) {
             const prev = prevPosMap.get(card);
-            const dx = prev.left - currentLayoutLeft;
-            const dy = prev.top - currentLayoutTop;
-            const scaleX = currentLayoutWidth ? prev.width / currentLayoutWidth : 1;
-            const scaleY = currentLayoutHeight ? prev.height / currentLayoutHeight : 1;
+            const dx = prev.left - rect.left;
+            const dy = prev.top - rect.top;
+            const scaleX = rect.width ? prev.width / rect.width : 1;
+            const scaleY = rect.height ? prev.height / rect.height : 1;
 
             const isPosShift = Math.abs(dx) > 1 || Math.abs(dy) > 1;
             const isScaleShift = Math.abs(scaleX - 1) > 0.01 || Math.abs(scaleY - 1) > 0.01;
 
-            if (isPosShift || isScaleShift) {
-              this.cancelElementAnimations(card);
+            const shouldAnimate = isDragging ? isPosShift : (isPosShift || isScaleShift);
+
+            if (shouldAnimate) {
+              console.log(`[FLIP] ANIMATING card: dx=${dx.toFixed(1)}, dy=${dy.toFixed(1)}, scaleX=${scaleX.toFixed(3)}, isDragging=${isDragging}`);
               card._isFlippingGrid = true;
               card.style.transformOrigin = '0 0';
 
-              const startX = dx + visTranslate.x;
-              const startY = dy + visTranslate.y;
+              const fromTransform = isDragging
+                ? `translate3d(${dx}px, ${dy}px, 0)`
+                : `translate3d(${dx}px, ${dy}px, 0) scale(${scaleX}, ${scaleY})`;
 
               const anim = card.animate([
-                { transform: `translate3d(${startX}px, ${startY}px, 0) scale(${scaleX}, ${scaleY})` },
+                { transform: fromTransform },
                 { transform: 'translate3d(0px, 0px, 0) scale(1, 1)' }
               ], {
-                duration: 320,
+                duration: isDragging ? 280 : 320,
                 easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
                 fill: 'none'
               });
-              
+
               card._activeNocturneAnim = anim;
               anim.onfinish = () => {
                 card._isFlippingGrid = false;
                 card.style.transformOrigin = '';
-                if (card._activeNocturneAnim === anim) {
-                  card._activeNocturneAnim = null;
-                }
+                if (card._activeNocturneAnim === anim) card._activeNocturneAnim = null;
+                const r = card.getBoundingClientRect();
+                prevPosMap.set(card, { left: r.left, top: r.top, width: r.width, height: r.height });
               };
+              return;
+            } else {
+              console.log(`[FLIP] SKIP: dx=${dx.toFixed(1)}, dy=${dy.toFixed(1)}, scaleX=${scaleX.toFixed(3)}, isPosShift=${isPosShift}, isScaleShift=${isScaleShift}`);
             }
+          } else {
+            console.log(`[FLIP] Card not in prevPosMap yet, initializing`);
           }
 
           prevPosMap.set(card, {
-            left: currentLayoutLeft,
-            top: currentLayoutTop,
-            width: currentLayoutWidth,
-            height: currentLayoutHeight
+            left: rect.left,
+            top: rect.top,
+            width: rect.width,
+            height: rect.height
           });
         });
       }
@@ -16367,6 +16372,69 @@ class NocturneWriter {
 
     observer.observe(zone);
     zone._gridResizeObserver = observer;
+
+    requestAnimationFrame(() => {
+      const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card'))
+        .filter(el => !el.classList.contains('hidden'));
+      cards.forEach(card => {
+        if (!prevPosMap.has(card)) {
+          const r = card.getBoundingClientRect();
+          prevPosMap.set(card, { left: r.left, top: r.top, width: r.width, height: r.height });
+        }
+      });
+    });
+  }
+
+  triggerDeferredFlip(zone) {
+    const prevPosMap = zone._prevPosMap;
+    if (!prevPosMap || !prevPosMap.size) return;
+
+    const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card'))
+      .filter(el => !el.classList.contains('hidden'));
+
+    cards.forEach(card => {
+      const prev = prevPosMap.get(card);
+      if (!prev) return;
+
+      this.cancelElementAnimations(card);
+      const rect = card.getBoundingClientRect();
+
+      const dx = prev.left - rect.left;
+      const dy = prev.top - rect.top;
+      const scaleX = rect.width ? prev.width / rect.width : 1;
+      const scaleY = rect.height ? prev.height / rect.height : 1;
+
+      const isPosShift = Math.abs(dx) > 1 || Math.abs(dy) > 1;
+      const isScaleShift = Math.abs(scaleX - 1) > 0.01 || Math.abs(scaleY - 1) > 0.01;
+
+      if (isPosShift || isScaleShift) {
+        card._isFlippingGrid = true;
+        card.style.transformOrigin = '0 0';
+
+        const anim = card.animate([
+          { transform: `translate3d(${dx}px, ${dy}px, 0) scale(${scaleX}, ${scaleY})` },
+          { transform: 'translate3d(0px, 0px, 0) scale(1, 1)' }
+        ], {
+          duration: 320,
+          easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+          fill: 'none'
+        });
+
+        card._activeNocturneAnim = anim;
+        anim.onfinish = () => {
+          card._isFlippingGrid = false;
+          card.style.transformOrigin = '';
+          if (card._activeNocturneAnim === anim) card._activeNocturneAnim = null;
+        };
+      }
+
+      prevPosMap.set(card, {
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height
+      });
+    });
   }
 
   showCharExportModal(char, cleanName) {
