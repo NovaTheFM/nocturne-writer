@@ -16290,12 +16290,12 @@ class NocturneWriter {
       zone._gridResizeObserver = null;
     }
     let prevWidth = zone.clientWidth;
-    const prevRects = new Map();
+    const prevPosMap = new Map();
 
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const currentWidth = entry.contentRect.width;
-        if (Math.abs(currentWidth - prevWidth) < 2) continue;
+        if (Math.abs(currentWidth - prevWidth) < 1) continue;
         prevWidth = currentWidth;
 
         if (document.body.classList.contains('sortable-active')) continue;
@@ -16304,62 +16304,51 @@ class NocturneWriter {
         if (!cards.length) continue;
 
         cards.forEach(card => {
-          if (prevRects.has(card)) {
-            if (card._isFlippingGrid) return;
+          const visTranslate = this.getVisualTranslate(card);
+          const rect = card.getBoundingClientRect();
+          
+          // Pure CSS layout position (unaffected by active transform)
+          const currentLayoutLeft = rect.left - visTranslate.x;
+          const currentLayoutTop = rect.top - visTranslate.y;
 
-            const oldRect = prevRects.get(card);
-            const visTranslate = this.getVisualTranslate(card);
-            const newRect = card.getBoundingClientRect();
-            const dx = (oldRect.left + visTranslate.x) - newRect.left;
-            const dy = (oldRect.top + visTranslate.y) - newRect.top;
-
-            // Only trigger FLIP animation when card actually wraps to another row (dy > 12)
-            const isRowBreak = Math.abs(dy) > 12;
+          if (prevPosMap.has(card)) {
+            const prev = prevPosMap.get(card);
             
-            if (isRowBreak) {
+            const dx = prev.left - currentLayoutLeft;
+            const dy = prev.top - currentLayoutTop;
+
+            // Trigger FLIP animation if layout position shifted (row/column wrap)
+            const hasMoved = Math.abs(dx) > 6 || Math.abs(dy) > 6;
+
+            if (hasMoved) {
               this.cancelElementAnimations(card);
               card._isFlippingGrid = true;
+              
+              const startX = dx + visTranslate.x;
+              const startY = dy + visTranslate.y;
+
               const anim = card.animate([
-                { transform: `translate(${dx}px, ${dy}px)` },
+                { transform: `translate(${startX}px, ${startY}px)` },
                 { transform: 'translate(0px, 0px)' }
               ], {
                 duration: 320,
                 easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
                 fill: 'none'
               });
+              
               card._activeNocturneAnim = anim;
               anim.onfinish = () => {
                 card._isFlippingGrid = false;
                 if (card._activeNocturneAnim === anim) {
                   card._activeNocturneAnim = null;
                 }
-                if (card.parentNode) {
-                  const finalVis = this.getVisualTranslate(card);
-                  const finalRect = card.getBoundingClientRect();
-                  prevRects.set(card, {
-                    left: finalRect.left - finalVis.x,
-                    top: finalRect.top - finalVis.y,
-                    width: finalRect.width,
-                    height: finalRect.height,
-                  });
-                }
               };
             }
           }
-        });
 
-        requestAnimationFrame(() => {
-          cards.forEach(card => {
-            if (card.parentNode && !card._isFlippingGrid) {
-              const visTranslate = this.getVisualTranslate(card);
-              const rect = card.getBoundingClientRect();
-              prevRects.set(card, {
-                left: rect.left - visTranslate.x,
-                top: rect.top - visTranslate.y,
-                width: rect.width,
-                height: rect.height,
-              });
-            }
+          prevPosMap.set(card, {
+            left: currentLayoutLeft,
+            top: currentLayoutTop
           });
         });
       }
