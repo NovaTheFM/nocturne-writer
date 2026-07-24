@@ -16314,10 +16314,9 @@ class NocturneWriter {
             if (isColumnBreak) {
               this.cancelElementAnimations(card);
               card._isFlippingGrid = true;
-              card.style.transformOrigin = '0 0';
               const anim = card.animate([
-                { transform: `translate(${dx}px, ${dy}px) scale(${scaleX}, ${scaleY})` },
-                { transform: 'translate(0px, 0px) scale(1, 1)' }
+                { transform: `translate(${dx}px, ${dy}px)` },
+                { transform: 'translate(0px, 0px)' }
               ], {
                 duration: 380,
                 easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
@@ -16326,7 +16325,6 @@ class NocturneWriter {
               card._activeNocturneAnim = anim;
               anim.onfinish = () => {
                 card._isFlippingGrid = false;
-                card.style.transformOrigin = '';
                 if (card._activeNocturneAnim === anim) {
                   card._activeNocturneAnim = null;
                 }
