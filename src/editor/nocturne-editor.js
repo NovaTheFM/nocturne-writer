@@ -815,7 +815,6 @@ export class NocturneEditorBridge {
   }
 
   scheduleVisualPages(paneId) {
-    if (document.body.classList.contains('resizing-workspace')) return;
     const instance = this.instances.get(paneId);
     if (!instance) return;
     cancelAnimationFrame(this.visualPageRaf.get(paneId));

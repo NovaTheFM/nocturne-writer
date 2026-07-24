@@ -1308,11 +1308,13 @@ body.resizing-workspace {
   cursor: col-resize;
   user-select: none;
 }
-body.resizing-workspace .workspace-pane {
-  pointer-events: none;
-}
-body.resizing-workspace .workspace-divider {
-  pointer-events: auto;
+body.resizing-workspace .workspace-stage,
+body.resizing-workspace .workspace-pane,
+body.resizing-workspace .page,
+body.resizing-workspace .page-content,
+body.resizing-workspace .editor-scroll-area {
+  transition: none !important;
+  animation: none !important;
 }
 .workspace-empty {
   height: 100%;
