@@ -16301,23 +16301,11 @@ class NocturneWriter {
 
         if (document.body.classList.contains('sortable-active')) continue;
 
-        const isResizingWorkspace = document.body.classList.contains('resizing-workspace');
+        // While user is dragging split divider, don't trigger FLIP or overwrite pre-drag layout map
+        if (document.body.classList.contains('resizing-workspace')) continue;
+
         const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card')).filter(el => !el.classList.contains('hidden'));
         if (!cards.length) continue;
-
-        if (isResizingWorkspace) {
-          cards.forEach(card => {
-            const visTranslate = this.getVisualTranslate(card);
-            const rect = card.getBoundingClientRect();
-            prevPosMap.set(card, {
-              left: rect.left - visTranslate.x,
-              top: rect.top - visTranslate.y,
-              width: rect.width,
-              height: rect.height
-            });
-          });
-          continue;
-        }
 
         cards.forEach(card => {
           const visTranslate = this.getVisualTranslate(card);
@@ -16336,8 +16324,8 @@ class NocturneWriter {
             const scaleX = currentLayoutWidth ? prev.width / currentLayoutWidth : 1;
             const scaleY = currentLayoutHeight ? prev.height / currentLayoutHeight : 1;
 
-            const isPosShift = Math.abs(dx) > 2 || Math.abs(dy) > 2;
-            const isScaleShift = Math.abs(scaleX - 1) > 0.015 || Math.abs(scaleY - 1) > 0.015;
+            const isPosShift = Math.abs(dx) > 1 || Math.abs(dy) > 1;
+            const isScaleShift = Math.abs(scaleX - 1) > 0.01 || Math.abs(scaleY - 1) > 0.01;
 
             if (isPosShift || isScaleShift) {
               this.cancelElementAnimations(card);
