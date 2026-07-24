@@ -5008,14 +5008,6 @@ body.sortable-active .timeline-line,
   .kb-pane-section {
     padding: 16px;
   }
-  .character-grid {
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 16px;
-  }
-  .locations-grid {
-    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-    gap: 16px;
-  }
   .loc-card {
     height: auto;
     min-height: 130px;

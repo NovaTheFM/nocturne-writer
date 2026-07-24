@@ -16304,6 +16304,8 @@ class NocturneWriter {
         const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card')).filter(el => !el.classList.contains('hidden'));
         if (!cards.length) continue;
 
+        const isResizingWorkspace = document.body.classList.contains('resizing-workspace');
+
         cards.forEach(card => {
           const visTranslate = this.getVisualTranslate(card);
           const rect = card.getBoundingClientRect();
@@ -16312,7 +16314,7 @@ class NocturneWriter {
           const currentLayoutLeft = rect.left - visTranslate.x;
           const currentLayoutTop = rect.top - visTranslate.y;
 
-          if (prevPosMap.has(card)) {
+          if (prevPosMap.has(card) && !isResizingWorkspace) {
             const prev = prevPosMap.get(card);
             
             const dx = prev.left - currentLayoutLeft;
