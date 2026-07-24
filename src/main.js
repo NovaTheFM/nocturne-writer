@@ -8278,6 +8278,7 @@ class NocturneWriter {
     newRects.forEach((item) => {
       if (Math.abs(item.dx) < 0.5 && Math.abs(item.dy) < 0.5) return;
       
+      item.element._isFlippingGrid = true;
       const anim = item.element.animate([
         { transform: `translate(${item.dx}px, ${item.dy}px)` },
         { transform: 'translate(0px, 0px)' }
@@ -8289,10 +8290,16 @@ class NocturneWriter {
       
       item.element._activeNocturneAnim = anim;
       anim.onfinish = () => {
+        item.element._isFlippingGrid = false;
         if (item.element._activeNocturneAnim === anim) {
           item.element._activeNocturneAnim = null;
           item.element.style.transform = '';
           item.element.style.transition = '';
+        }
+        const zone = item.element.closest('[data-dnd-zone]');
+        if (zone && zone._prevPosMap) {
+          const r = item.element.getBoundingClientRect();
+          zone._prevPosMap.set(item.element, { left: r.left, top: r.top, width: r.width, height: r.height });
         }
       };
     });
@@ -17990,28 +17997,34 @@ class NocturneWriter {
     });
     overlay.querySelector('[data-delete-lore]')?.addEventListener('click', async () => {
       overlay.classList.remove('active');
-      const cardEl = document.querySelector(`[data-lore-id="${id}"]`);
-      let shatterEl = cardEl;
-      if ((type === 'timeline' || type === 'subtimeline') && cardEl) {
-        shatterEl = cardEl.querySelector('.timeline-content') || cardEl;
+      const cardEls = Array.from(document.querySelectorAll(`[data-lore-id="${id}"]`));
+      if (!cardEls.length) {
+        await this.deleteLore(type, id, parentEvent?.id, false);
+        return;
+      }
+      let shatterEl = cardEls[0];
+      if ((type === 'timeline' || type === 'subtimeline') && shatterEl) {
+        shatterEl = shatterEl.querySelector('.timeline-content') || shatterEl;
       }
       this.animateShatter(shatterEl, async () => {
-        if (cardEl) {
-          const parentGrid = cardEl.parentElement;
-          cardEl.remove();
-          if (parentGrid && parentGrid.children.length === 0) {
-            const typeClassMap = {
-              characters: { icon: 'bx-user-pin', title: 'Персонажей пока нет.', desc: 'Создайте первый профиль, чтобы Nocturne начал узнавать имена в тексте.', action: 'new-lore', btnText: 'Создать профиль', attr: 'data-lore-type="characters"' },
-              locations: { icon: 'bx-map-alt', title: 'Локации пока нет.', desc: 'Добавьте первое место мира или сцены.', action: 'new-lore', btnText: 'Добавить место', attr: 'data-lore-type="locations"' },
-              notes: { icon: 'bx-note', title: 'Записей пока нет.', desc: 'Добавьте первую свободную запись или заметку к миру.', action: 'new-lore', btnText: 'Создать запись', attr: 'data-lore-type="notes"' },
-              timeline: { icon: 'bx-git-commit', title: 'Хронология пока пуста.', desc: 'Добавьте первое событие, чтобы выстроить историю.', action: 'new-lore', btnText: 'Добавить событие', attr: 'data-lore-type="timeline"' }
-            };
-            const config = typeClassMap[type];
-            if (config) {
-              parentGrid.innerHTML = this.emptyStateMarkup(config.icon, config.title, config.desc, config.action, config.btnText, config.attr);
+        const parentGrids = new Set(cardEls.map(el => el.parentElement).filter(Boolean));
+        parentGrids.forEach(parentGrid => {
+          this.animateLayoutTransition(parentGrid, () => {
+            cardEls.filter(el => el.parentElement === parentGrid).forEach(el => el.remove());
+            if (parentGrid && parentGrid.children.length === 0) {
+              const typeClassMap = {
+                characters: { icon: 'bx-user-pin', title: 'Персонажей пока нет.', desc: 'Создайте первый профиль, чтобы Nocturne начал узнавать имена в тексте.', action: 'new-lore', btnText: 'Создать профиль', attr: 'data-lore-type="characters"' },
+                locations: { icon: 'bx-map-alt', title: 'Локации пока нет.', desc: 'Добавьте первое место мира или сцены.', action: 'new-lore', btnText: 'Добавить место', attr: 'data-lore-type="locations"' },
+                notes: { icon: 'bx-note', title: 'Записей пока нет.', desc: 'Создайте первую свободную запись или заметку к миру.', action: 'new-lore', btnText: 'Создать запись', attr: 'data-lore-type="notes"' },
+                timeline: { icon: 'bx-git-commit', title: 'Хронология пока пуста.', desc: 'Добавьте первое событие, чтобы выстроить историю.', action: 'new-lore', btnText: 'Добавить событие', attr: 'data-lore-type="timeline"' }
+              };
+              const config = typeClassMap[type];
+              if (config) {
+                parentGrid.innerHTML = this.emptyStateMarkup(config.icon, config.title, config.desc, config.action, config.btnText, config.attr);
+              }
             }
-          }
-        }
+          });
+        });
         await this.deleteLore(type, id, parentEvent?.id, true);
       });
     });
@@ -18230,16 +18243,20 @@ class NocturneWriter {
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('[data-confirm-delete-lore]').onclick = async () => {
       overlay.classList.remove('active');
-      const cardEl = document.querySelector(`[data-lore-id="${id}"]`);
-      let shatterEl = cardEl;
-      if ((type === 'timeline' || type === 'subtimeline') && cardEl) {
-        shatterEl = cardEl.querySelector('.timeline-content') || cardEl;
+      const cardEls = Array.from(document.querySelectorAll(`[data-lore-id="${id}"]`));
+      if (!cardEls.length) {
+        await this.deleteLore(type, id, parentEvent?.id, false);
+        return;
+      }
+      let shatterEl = cardEls[0];
+      if ((type === 'timeline' || type === 'subtimeline') && shatterEl) {
+        shatterEl = shatterEl.querySelector('.timeline-content') || shatterEl;
       }
       this.animateShatter(shatterEl, async () => {
-        if (cardEl) {
-          const parentGrid = cardEl.parentElement;
+        const parentGrids = new Set(cardEls.map(el => el.parentElement).filter(Boolean));
+        parentGrids.forEach(parentGrid => {
           this.animateLayoutTransition(parentGrid, () => {
-            cardEl.remove();
+            cardEls.filter(el => el.parentElement === parentGrid).forEach(el => el.remove());
             if (parentGrid && parentGrid.children.length === 0) {
               const typeClassMap = {
                 characters: { icon: 'bx-user-pin', title: 'Персонажей пока нет.', desc: 'Создайте первый профиль, чтобы Nocturne начал узнавать имена в тексте.', action: 'new-lore', btnText: 'Создать профиль', attr: 'data-lore-type="characters"' },
@@ -18253,7 +18270,7 @@ class NocturneWriter {
               }
             }
           });
-        }
+        });
         await this.deleteLore(type, id, parentEvent?.id, true);
       });
     };
@@ -18265,12 +18282,18 @@ class NocturneWriter {
       if (!parentEvent?.subEvents) return;
       parentEvent.subEvents = parentEvent.subEvents.filter((entry) => entry.id !== id).map((entry, order) => ({ ...entry, order }));
       await this.saveLore();
-      this.renderKb();
+      if (!localOnly) {
+        this.renderKb();
+      }
       this.refreshVisibleEntityLinks();
       ['primary', 'secondary'].forEach((paneId) => {
         const pane = this.getPane(paneId);
-        if (pane && (pane.type === 'kb-tab' || (pane.type && pane.type.endsWith('-detail')))) {
-          this.renderWorkspacePane(paneId);
+        if (pane) {
+          if (pane.type && pane.type.endsWith('-detail') && pane.loreId === id) {
+            this.renderWorkspacePane(paneId);
+          } else if (!localOnly && pane.type === 'kb-tab') {
+            this.renderWorkspacePane(paneId);
+          }
         }
       });
       return;
@@ -18307,8 +18330,12 @@ class NocturneWriter {
     this.refreshVisibleEntityLinks();
     ['primary', 'secondary'].forEach((paneId) => {
       const pane = this.getPane(paneId);
-      if (pane && (pane.type === 'kb-tab' || (pane.type && pane.type.endsWith('-detail')))) {
-        this.renderWorkspacePane(paneId);
+      if (pane) {
+        if (pane.type && pane.type.endsWith('-detail') && pane.loreId === id) {
+          this.renderWorkspacePane(paneId);
+        } else if (!localOnly && pane.type === 'kb-tab') {
+          this.renderWorkspacePane(paneId);
+        }
       }
     });
   }
