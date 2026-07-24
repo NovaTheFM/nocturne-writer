@@ -16278,7 +16278,64 @@ class NocturneWriter {
     this.kbSortables = [];
     document.querySelectorAll('[data-dnd-zone]').forEach(zone => {
       this.setupKbSortable(zone);
+      this.observeKbGridResize(zone);
     });
+  }
+
+  observeKbGridResize(zone) {
+    if (!zone || zone._gridResizeObserver) return;
+    let prevWidth = zone.clientWidth;
+    const prevRects = new Map();
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const currentWidth = entry.contentRect.width;
+        if (Math.abs(currentWidth - prevWidth) < 2) continue;
+        prevWidth = currentWidth;
+
+        if (document.body.classList.contains('sortable-active')) return;
+
+        const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card')).filter(el => !el.classList.contains('hidden'));
+        if (!cards.length) return;
+
+        cards.forEach(card => {
+          if (prevRects.has(card)) {
+            const oldRect = prevRects.get(card);
+            const visTranslate = this.getVisualTranslate(card);
+            const newRect = card.getBoundingClientRect();
+            const dx = (oldRect.left + visTranslate.x) - newRect.left;
+            const dy = (oldRect.top + visTranslate.y) - newRect.top;
+            if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+              this.cancelElementAnimations(card);
+              card.animate([
+                { transform: `translate(${dx}px, ${dy}px)` },
+                { transform: 'translate(0px, 0px)' }
+              ], {
+                duration: 380,
+                easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+                fill: 'none'
+              });
+            }
+          }
+        });
+
+        requestAnimationFrame(() => {
+          cards.forEach(card => {
+            if (card.parentNode) {
+              const visTranslate = this.getVisualTranslate(card);
+              const rect = card.getBoundingClientRect();
+              prevRects.set(card, {
+                left: rect.left - visTranslate.x,
+                top: rect.top - visTranslate.y,
+              });
+            }
+          });
+        });
+      }
+    });
+
+    observer.observe(zone);
+    zone._gridResizeObserver = observer;
   }
 
   showCharExportModal(char, cleanName) {
