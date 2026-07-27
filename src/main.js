@@ -16308,13 +16308,12 @@ class NocturneWriter {
         prevZoneWidth = currentZoneWidth;
 
         if (document.body.classList.contains('sortable-active')) continue;
-        if (document.body.classList.contains('resizing-workspace')) continue;
 
-        const isDragging = false;
+        const isDragging = document.body.classList.contains('resizing-workspace');
         const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card')).filter(el => !el.classList.contains('hidden'));
         if (!cards.length) continue;
 
-
+        console.log(`[FLIP] observer fired: zoneWidth=${currentZoneWidth.toFixed(0)}, cards=${cards.length}, isDragging=${isDragging}, mapSize=${prevPosMap.size}`);
 
         cards.forEach(card => {
           if (card._isFlippingGrid) return;
@@ -16337,7 +16336,7 @@ class NocturneWriter {
             const shouldAnimate = isDragging ? isPosShift : (isPosShift || isScaleShift);
 
             if (shouldAnimate) {
-
+              console.log(`[FLIP] ANIMATING card: dx=${dx.toFixed(1)}, dy=${dy.toFixed(1)}, scaleX=${scaleX.toFixed(3)}, isDragging=${isDragging}`);
               card._isFlippingGrid = true;
               card.style.transformOrigin = '0 0';
 
@@ -16364,10 +16363,10 @@ class NocturneWriter {
               };
               return;
             } else {
-
+              console.log(`[FLIP] SKIP: dx=${dx.toFixed(1)}, dy=${dy.toFixed(1)}, scaleX=${scaleX.toFixed(3)}, isPosShift=${isPosShift}, isScaleShift=${isScaleShift}`);
             }
           } else {
-
+            console.log(`[FLIP] Card not in prevPosMap yet, initializing`);
           }
 
           prevPosMap.set(card, {
