@@ -6418,10 +6418,10 @@ class NocturneWriter {
       pendingX = moveEvent.clientX;
       if (!rafId) {
         rafId = requestAnimationFrame(() => {
-          rafId = null;
           if (pendingX !== null) {
             updateRatio(pendingX);
           }
+          requestAnimationFrame(() => { rafId = null; });
         });
       }
     };
