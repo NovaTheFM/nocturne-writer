@@ -484,7 +484,7 @@ class NocturneWriter {
     this.startGitAutosave();
 
     // Check if new version first run (specifically for Electron desktop users)
-    const currentVersion = '1.1.4';
+    const currentVersion = '1.1.9';
     const showWhatsNew = this.runtime.isElectron && this.state.settings.lastSeenVersion !== currentVersion;
     if (showWhatsNew) {
       setTimeout(() => {
@@ -21059,7 +21059,7 @@ ${raw}`;
       format: 'nocturnedump',
       version: 1,
       appName: 'Nocturne Writer',
-      appVersion: '1.1.4',
+      appVersion: '1.1.9',
       schemaVersion: 3,
       exportedAt: new Date().toISOString(),
       encrypted: !!this.state.settings.e2e,
@@ -21481,6 +21481,18 @@ ${raw}`;
             <h2 style="text-align: center; margin: 0 0 4px; font-size: 22px; color: var(--text-main); font-weight: 700;">Что нового</h2>
             <p style="text-align: center; margin: 0 0 20px; font-size: 13px; color: var(--text-muted, #a1a1aa);">Луна хочет рассказать вам о новинках!</p>
             <div class="whats-new-body" style="max-height: 280px; overflow-y: auto; padding-right: 8px; font-size: 14px; line-height: 1.6; color: var(--text-main);">
+              <p style="margin: 0 0 16px; font-weight: 600; color: var(--accent);">Версия 1.1.9</p>
+
+              <p style="margin: 0 0 4px; font-weight: 600;">✨ Совершенствование FLIP-анимаций и Split-Screen:</p>
+              <ul style="margin: 0 0 16px; padding-left: 20px;">
+                <li><b>Шелковые анимации карточек БЗ</b>: Физический масштаб <code>scale</code> и вектор сдвига переведены на прямой кадр Web Animations API. Карточки плавно перестраиваются и ужимаются без скачков.</li>
+                <li><b>Плавный ресайз сплит-скрина</b>: Исключены микро-дергания и конфликты CSS transitions. Анимация переноса карточек запускается при отпускании разделителя.</li>
+                <li><b>Стабильность заголовков</b>: Устранен 8px скачок заголовков («Персонажи», «Локации») и карточек при сужении панелей.</li>
+                <li><b>Плавное удаление карточек</b>: При удалении элемента в Split-Screen остальные карточки плавно подтягиваются без мгновенного сброса анимаций.</li>
+              </ul>
+
+              <hr style="border: 0; border-top: 1px solid var(--border); margin: 20px 0;">
+
               <p style="margin: 0 0 16px; font-weight: 600; color: var(--accent);">Версия 1.1.4</p>
 
               <p style="margin: 0 0 4px; font-weight: 600;">⚡ Устранение лагов при изменении размера Split-Screen:</p>
