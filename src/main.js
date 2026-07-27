@@ -16300,6 +16300,7 @@ class NocturneWriter {
     let prevZoneWidth = zone.clientWidth;
     const prevPosMap = new Map();
     zone._prevPosMap = prevPosMap;
+    let lastFlipTime = 0;
 
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
@@ -16310,17 +16311,27 @@ class NocturneWriter {
         if (document.body.classList.contains('sortable-active')) continue;
 
         const isDragging = document.body.classList.contains('resizing-workspace');
+
+        if (isDragging) {
+          const now = performance.now();
+          if (now - lastFlipTime < 100) continue;
+          lastFlipTime = now;
+        }
+
         const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card')).filter(el => !el.classList.contains('hidden'));
         if (!cards.length) continue;
 
-        console.log(`[FLIP] observer fired: zoneWidth=${currentZoneWidth.toFixed(0)}, cards=${cards.length}, isDragging=${isDragging}, mapSize=${prevPosMap.size}`);
+        const eligible = cards.filter(card => !card._isFlippingGrid);
+        if (!eligible.length) continue;
 
-        cards.forEach(card => {
-          if (card._isFlippingGrid) return;
+        eligible.forEach(c => this.cancelElementAnimations(c));
 
-          this.cancelElementAnimations(card);
-          const rect = card.getBoundingClientRect();
+        const cardData = eligible.map(card => ({
+          card,
+          rect: card.getBoundingClientRect()
+        }));
 
+        cardData.forEach(({card, rect}) => {
           if (prevPosMap.has(card)) {
             const prev = prevPosMap.get(card);
             const dx = prev.left - rect.left;
@@ -16336,7 +16347,6 @@ class NocturneWriter {
             const shouldAnimate = isDragging ? isPosShift : (isPosShift || isScaleShift);
 
             if (shouldAnimate) {
-              console.log(`[FLIP] ANIMATING card: dx=${dx.toFixed(1)}, dy=${dy.toFixed(1)}, scaleX=${scaleX.toFixed(3)}, isDragging=${isDragging}`);
               card._isFlippingGrid = true;
               card.style.transformOrigin = '0 0';
 
@@ -16362,11 +16372,7 @@ class NocturneWriter {
                 prevPosMap.set(card, { left: r.left, top: r.top, width: r.width, height: r.height });
               };
               return;
-            } else {
-              console.log(`[FLIP] SKIP: dx=${dx.toFixed(1)}, dy=${dy.toFixed(1)}, scaleX=${scaleX.toFixed(3)}, isPosShift=${isPosShift}, isScaleShift=${isScaleShift}`);
             }
-          } else {
-            console.log(`[FLIP] Card not in prevPosMap yet, initializing`);
           }
 
           prevPosMap.set(card, {
