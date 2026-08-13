@@ -2,7 +2,7 @@ import { Editor, Extension, StarterKit, TextAlign, Underline, Placeholder, Plugi
 import { ensureTiptapBlockIds, legacyAstToHtml, tiptapJsonToLegacyAst } from './document-adapter.js';
 import { calculateVisualPages, updateActivePageHighlight } from './visual-pagination.js';
 import { normalizeTypoToken } from '../core/typos.js';
-import { uid } from '../core/utils.js';
+import { uid, buildSummary } from '../core/utils.js';
 
 export const paginationPluginKey = new PluginKey('nocturnePagination');
 
@@ -80,6 +80,9 @@ const BlockIdentity = Extension.create({
           if (!transactions.some(tr => tr.docChanged)) {
             return;
           }
+          if (oldState.doc.childCount === newState.doc.childCount && !transactions.some(tr => tr.steps.some(s => s.toJSON?.()?.stepType === 'replace' && (s.from !== s.to || s.slice?.content?.length > 1)))) {
+            return;
+          }
           let tr = newState.tr;
           let modified = false;
           const seenIds = new Set();
@@ -112,19 +115,57 @@ function isEntityBoundary(char) {
   return !char || !/[\p{L}\p{N}_]/u.test(char);
 }
 
-function findEntityMatches(text, index) {
+function buildEntityLookupMap(index) {
+  const map = new Map();
+  if (!index || !index.length) return map;
+  for (let i = 0; i < index.length; i++) {
+    const item = index[i];
+    const firstChar = item.normalized ? item.normalized[0] : '';
+    if (firstChar) {
+      if (!map.has(firstChar)) map.set(firstChar, []);
+      map.get(firstChar).push(item);
+    }
+  }
+  return map;
+}
+
+function findEntityMatches(text, index, lookupMap = null) {
+  if (!text || !index || !index.length) return [];
   const normalizedText = normalizeTypoToken(text);
   const matches = [];
+  const map = lookupMap || buildEntityLookupMap(index);
+  const len = text.length;
   let pos = 0;
-  while (pos < text.length) {
-    const entry = index.find((candidate) => (
-      normalizedText.startsWith(candidate.normalized, pos)
-      && isEntityBoundary(text[pos - 1])
-      && isEntityBoundary(text[pos + candidate.mention.length])
-    ));
-    if (entry) {
-      matches.push({ ...entry, start: pos, end: pos + entry.mention.length });
-      pos += entry.mention.length;
+
+  while (pos < len) {
+    if (!isEntityBoundary(text[pos - 1])) {
+      while (pos < len && !isEntityBoundary(text[pos])) {
+        pos++;
+      }
+      pos++;
+      continue;
+    }
+
+    const firstChar = normalizedText[pos];
+    const candidates = map.get(firstChar);
+    let matched = null;
+
+    if (candidates && candidates.length > 0) {
+      for (let i = 0; i < candidates.length; i++) {
+        const candidate = candidates[i];
+        const mLen = candidate.mention.length;
+        if (pos + mLen <= len &&
+            normalizedText.startsWith(candidate.normalized, pos) &&
+            isEntityBoundary(text[pos + mLen])) {
+          matched = candidate;
+          break;
+        }
+      }
+    }
+
+    if (matched) {
+      matches.push({ ...matched, start: pos, end: pos + matched.mention.length });
+      pos += matched.mention.length;
     } else {
       pos += 1;
     }
@@ -142,24 +183,33 @@ const NocturneEntityMentions = Extension.create({
   addProseMirrorPlugins() {
     const extension = this;
     const key = new PluginKey('nocturneEntityMentions');
-    
-    const buildDecos = (doc, index) => {
+    let cachedMentionIndex = null;
+    let cachedLookupMap = null;
+
+    const getIndexAndMap = () => {
+      const index = extension.options.getMentionIndex() || [];
+      if (index !== cachedMentionIndex) {
+        cachedMentionIndex = index;
+        cachedLookupMap = buildEntityLookupMap(index);
+      }
+      return { index: cachedMentionIndex, lookupMap: cachedLookupMap };
+    };
+
+    const scanNodeForDecos = (doc, fromPos, toPos, index, lookupMap) => {
       const decos = [];
-      if (!index || !index.length) return DecorationSet.empty;
-      
-      doc.descendants((node, pos) => {
+      doc.nodesBetween(fromPos, toPos, (node, pos) => {
         if (node.isText) {
           const text = node.text || '';
-          const matches = findEntityMatches(text, index);
+          const matches = findEntityMatches(text, index, lookupMap);
           matches.forEach((match) => {
             const from = pos + match.start;
             const to = pos + match.end;
-            
+
             const attrs = {
               class: match.type === 'family-group' ? 'entity-link entity-family-link' : 'entity-link',
               tabindex: '0',
             };
-            
+
             if (match.type === 'family-group') {
               attrs['data-entity-kind'] = 'family';
               attrs['data-family-name'] = match.familyName;
@@ -171,12 +221,18 @@ const NocturneEntityMentions = Extension.create({
               attrs['data-entity-label'] = match.entity.displayName || match.entity.name;
               attrs['aria-label'] = match.entity.displayName || match.entity.name;
             }
-            
+
             decos.push(Decoration.inline(from, to, attrs));
           });
         }
       });
-      
+      return decos;
+    };
+
+    const buildFullDecos = (doc) => {
+      const { index, lookupMap } = getIndexAndMap();
+      if (!index || !index.length) return DecorationSet.empty;
+      const decos = scanNodeForDecos(doc, 0, doc.content.size, index, lookupMap);
       return DecorationSet.create(doc, decos);
     };
 
@@ -185,14 +241,45 @@ const NocturneEntityMentions = Extension.create({
         key,
         state: {
           init(config, instance) {
-            return buildDecos(instance.doc, extension.options.getMentionIndex());
+            return buildFullDecos(instance.doc);
           },
           apply(tr, value, oldState, newState) {
             const forced = tr.getMeta('nocturneEntityMentionsForceUpdate');
-            if (tr.docChanged || forced) {
-              return buildDecos(newState.doc, extension.options.getMentionIndex());
+            if (forced) {
+              return buildFullDecos(newState.doc);
             }
-            return value.map(tr.mapping, tr.doc);
+            if (!tr.docChanged) {
+              return value;
+            }
+
+            const { index, lookupMap } = getIndexAndMap();
+            if (!index || !index.length) {
+              return DecorationSet.empty;
+            }
+
+            let decos = value.map(tr.mapping, newState.doc);
+
+            tr.steps.forEach(step => {
+              step.getMap().forEach((oldStart, oldEnd, newStart, newEnd) => {
+                const docSize = newState.doc.content.size;
+                if (docSize <= 0) return;
+                const safeStart = Math.max(0, Math.min(newStart, docSize));
+                const safeEnd = Math.max(0, Math.min(newEnd, docSize));
+                const $from = newState.doc.resolve(safeStart);
+                const $to = newState.doc.resolve(safeEnd);
+                const blockStart = $from.start($from.depth);
+                const blockEnd = $to.end($to.depth);
+
+                decos = decos.remove(decos.find(blockStart, blockEnd));
+
+                const newBlockDecos = scanNodeForDecos(newState.doc, blockStart, blockEnd, index, lookupMap);
+                if (newBlockDecos.length > 0) {
+                  decos = decos.add(newState.doc, newBlockDecos);
+                }
+              });
+            });
+
+            return decos;
           },
         },
         props: {
@@ -203,7 +290,9 @@ const NocturneEntityMentions = Extension.create({
       }),
     ];
   },
-});function bridgeFindBestQuoteOffset(text, quote, prefix = '', suffix = '', oldOffset = 0) {
+});
+
+function bridgeFindBestQuoteOffset(text, quote, prefix = '', suffix = '', oldOffset = 0) {
   if (!quote) return -1;
   const matches = [];
   let index = text.indexOf(quote);
@@ -267,6 +356,7 @@ const NocturneBookmarks = Extension.create({
     const buildDecos = (doc) => {
       const decos = [];
       const bookmarks = extension.options.getBookmarks() || [];
+      if (!bookmarks.length) return DecorationSet.empty;
       const activeId = extension.options.getActiveBookmarkId() || null;
       
       bookmarks.forEach((b) => {
@@ -305,7 +395,6 @@ const NocturneBookmarks = Extension.create({
       
       decos.sort((a, b) => {
         if (a.from !== b.from) return a.from - b.from;
-        // Keep inline decoration before widget decoration if at same position
         return a.isInline ? -1 : 1;
       });
       return DecorationSet.create(doc, decos);
@@ -320,10 +409,10 @@ const NocturneBookmarks = Extension.create({
           },
           apply(tr, value, oldState, newState) {
             const forced = tr.getMeta('nocturneBookmarksForceUpdate');
-            if (tr.docChanged || forced) {
+            if (forced) {
               return buildDecos(newState.doc);
             }
-            return value.map(tr.mapping, tr.doc);
+            return value.map(tr.mapping, newState.doc);
           }
         },
         props: {
@@ -650,8 +739,7 @@ export class NocturneEditorBridge {
         if (transaction && !transaction.docChanged) {
           return;
         }
-        doc.pmJson = ensureTiptapBlockIds(updatedEditor.getJSON());
-        doc.ast = tiptapJsonToLegacyAst(doc.pmJson);
+        doc._needsModelSync = true;
         this.onChange?.({ paneId, doc, transaction });
         this.scheduleVisualPages(paneId);
         
@@ -680,6 +768,28 @@ export class NocturneEditorBridge {
     const instance = { paneId, docId: doc.id, editor, host, pageShell, overlay };
     this.instances.set(paneId, instance);
     return instance;
+  }
+
+  syncDocFromEditor(paneId) {
+    const instance = this.instances.get(paneId);
+    if (!instance?.editor) return null;
+    const doc = (window.nocturneApp?.state?.docs || []).find(d => d.id === instance.docId);
+    if (doc) {
+      doc.pmJson = ensureTiptapBlockIds(instance.editor.getJSON());
+      doc.ast = tiptapJsonToLegacyAst(doc.pmJson);
+      doc.summary = doc.description || buildSummary(doc.ast);
+      doc._needsModelSync = false;
+      return doc;
+    }
+    return null;
+  }
+
+  syncDocFromEditorByDocId(docId) {
+    const instance = [...this.instances.values()].find(inst => inst.docId === docId);
+    if (instance) {
+      return this.syncDocFromEditor(instance.paneId);
+    }
+    return null;
   }
 
   applyTypewriterScroll(editor, instance) {

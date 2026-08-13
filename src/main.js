@@ -6163,6 +6163,11 @@ class NocturneWriter {
       const editable = block.closest('.page-content');
       if (!editable) continue;
 
+      const scrollArea = editable.closest('.editor-scroll-area') || window;
+      const scrollRect = (scrollArea !== window && scrollArea.getBoundingClientRect) ? scrollArea.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+      const viewportTop = scrollRect.top - 200;
+      const viewportBottom = scrollRect.bottom + 200;
+
       let rect = range ? range.getBoundingClientRect() : null;
       if (!rect || !rect.width || !rect.height) {
         const fragmentBase = Number(block.dataset.fragmentStart || 0);
@@ -6180,6 +6185,12 @@ class NocturneWriter {
       const pageShell = editable.closest('.visual-page-shell') || editable.closest('.page') || editable.parentElement;
       const pageOverlay = pageShell?.querySelector('.page-overlay') || pageShell;
       if (!pageOverlay) continue;
+
+      if (rect.bottom < viewportTop || rect.top > viewportBottom) {
+        const activeSvg = pageOverlay.querySelector(`.typo-svg-overlay[data-key="${CSS.escape(key)}"]`);
+        if (activeSvg) activeSvg.remove();
+        continue;
+      }
 
       validKeys.add(key);
 
@@ -12428,17 +12439,15 @@ class NocturneWriter {
     if (this.state.workspace?.focusedPaneId !== paneId) this.setFocusedPane(paneId);
     if (this.state.suggestion?.docId === doc.id) {
       this.clearSuggestion();
-      this.toast('AI-РїСЂРµРґР»РѕР¶РµРЅРёРµ РѕС‚РјРµРЅРµРЅРѕ: РґРѕРєСѓРјРµРЅС‚ Р±С‹Р» РёР·РјРµРЅС‘РЅ.');
+      this.toast('AI-предложение отменено: документ был изменён.');
       this.renderWorkspacePane(paneId);
       return;
     }
 
     this.bumpDocRenderRevision(doc);
-    doc.summary = doc.description || buildSummary(doc.ast);
     doc.updatedAt = Date.now();
     this.updateActiveBlock();
     this.renderGoal();
-    this.writeLiveDraft(doc.id);
     this.saveDocByIdDebounced(doc.id);
     this.scheduleSyncForDoc(doc.id, { inputType: transaction?.getMeta?.('uiEvent') || 'prosemirrorTransaction' });
     if (this.searchSession?.docId === doc.id) this.searchRefreshDebounced();
@@ -13353,6 +13362,7 @@ class NocturneWriter {
   }
 
   writeLiveDraft(docId = this.getFocusedDoc()?.id || this.state.activeDocId) {
+    this.nocturneEditor?.syncDocFromEditorByDocId(docId);
     const doc = this.state.docs.find((item) => item.id === docId);
     if (!doc || doc.locked || !this.state.settings.liveSave) return;
     if (this.state.settings.e2e) {
@@ -13419,8 +13429,10 @@ class NocturneWriter {
   }
 
   async saveDocById(docId, options = {}) {
+    this.nocturneEditor?.syncDocFromEditorByDocId(docId);
     const doc = this.state.docs.find((item) => item.id === docId);
     if (!doc || doc.locked) return;
+    this.writeLiveDraft(doc.id);
     this.setSaveStatus('saving', doc.id);
     if (this.state.settings.e2e && !this.state.sessionPassword) {
       this.setSaveStatus('error', doc.id, 'Нужен мастер-пароль сессии для зашифрованного сохранения.');
@@ -16450,9 +16462,7 @@ class NocturneWriter {
         const isDragging = document.body.classList.contains('resizing-workspace');
 
         if (isDragging) {
-          const now = performance.now();
-          if (now - lastFlipTime < 100) continue;
-          lastFlipTime = now;
+          return;
         }
 
         const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card')).filter(el => !el.classList.contains('hidden'));
@@ -17687,14 +17697,14 @@ class NocturneWriter {
   }
 
   characterCard(item, draggable = false) {
-    const visual = item.image ? `<img src="${item.image}" alt="">` : `<i class="bx ${item.icon || 'bx-user'}"></i>`;
+    const visual = item.image ? `<img src="${item.image}" alt="" loading="lazy" decoding="async">` : `<i class="bx ${item.icon || 'bx-user'}"></i>`;
     const isNew = this.state.newlyCreatedId === item.id;
     const entranceClass = isNew ? ' new-card-entrance' : '';
     return `<div class="char-card${entranceClass}" data-lore-type="characters" data-lore-id="${item.id}">${this.loreCardActions('characters', item.id)}<div class="char-img">${visual}</div><div class="char-info"><h3>${escapeHtml(this.entityDisplayName(item))}</h3><p>${escapeHtml(item.role || item.body)}</p></div></div>`;
   }
 
   locationCard(item, draggable = false) {
-    const visual = item.image ? `<img src="${escapeHtml(item.image)}" alt="">` : `<i class="bx ${escapeHtml(item.icon || 'bx-buildings')}"></i>`;
+    const visual = item.image ? `<img src="${escapeHtml(item.image)}" alt="" loading="lazy" decoding="async">` : `<i class="bx ${escapeHtml(item.icon || 'bx-buildings')}"></i>`;
     const isNew = this.state.newlyCreatedId === item.id;
     const entranceClass = isNew ? ' new-card-entrance' : '';
     return `<div class="loc-card${entranceClass}" data-lore-type="locations" data-lore-id="${item.id}">${this.loreCardActions('locations', item.id)}<div class="loc-img">${visual}</div><div class="loc-info"><h3>${escapeHtml(this.entityDisplayName(item))}</h3><p>${escapeHtml(item.role || item.body)}</p></div></div>`;
