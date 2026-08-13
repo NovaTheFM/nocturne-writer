@@ -52,12 +52,8 @@ textarea::selection {
     linear-gradient(135deg, color-mix(in srgb, var(--accent) 42%, transparent), color-mix(in srgb, var(--accent-hover) 24%, transparent));
   box-shadow: 0 0 0 1px rgba(255,255,255,.025) inset, 0 0 18px color-mix(in srgb, var(--accent) 28%, transparent);
   mix-blend-mode: screen;
-  will-change: left, top, width, height, opacity;
-  transition: left 80ms cubic-bezier(0.16, 1, 0.3, 1),
-              top 80ms cubic-bezier(0.16, 1, 0.3, 1),
-              width 80ms cubic-bezier(0.16, 1, 0.3, 1),
-              height 80ms cubic-bezier(0.16, 1, 0.3, 1),
-              opacity 120ms ease;
+  will-change: left, top, width, height;
+  transition: opacity 140ms ease;
 }
 
 #nocturne-selection-layer .nocturne-selection-handle {
@@ -4842,8 +4838,11 @@ body.sortable-active .note-card,
 .kb-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 34px; }
 .character-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 24px; justify-content: start; }
 .locations-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px; justify-content: start; }
-.is-flipping { transition: none !important; z-index: 10; }
-.char-card, .loc-card, .note-card, .timeline-item { will-change: transform; }
+.char-card, .loc-card, .note-card, .timeline-item {
+  will-change: transform;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 240px 300px;
+}
 .custom-select, .modal-select, .form-control {
   background: var(--bg-panel);
   border: 1px solid var(--border);

@@ -3542,12 +3542,11 @@ class NocturneWriter {
     document.addEventListener('focusout', (event) => this.handleSettingsTooltipLeave(event));
     let selectionRaf = null;
     document.addEventListener('selectionchange', () => {
-      this.updateCustomCaret();
-      this.renderNocturneSelectionLayer();
-
       if (!selectionRaf) {
         selectionRaf = requestAnimationFrame(() => {
           selectionRaf = null;
+          this.updateCustomCaret();
+          this.renderNocturneSelectionLayer();
           this.captureSelectionSnapshot();
           this.updateEditorSelectionState();
           this.updateActiveBlock();
@@ -8369,7 +8368,7 @@ class NocturneWriter {
       const state = Flip.getState(candidateList);
       mutateDOM();
       Flip.from(state, {
-        duration: 0.38,
+        duration: 0.46,
         ease: 'power3.out',
         absolute: false,
         nested: true,
@@ -15410,12 +15409,16 @@ class NocturneWriter {
 
   updateCustomCaret() {
     const caret = document.getElementById('custom-caret');
-    if (!caret || !document.getElementById('app-shell').classList.contains('custom-caret-enabled')) return;
+    if (!caret || !document.getElementById('app-shell')?.classList.contains('custom-caret-enabled')) return;
     if (!document.hasFocus()) {
       if (caret.style.display !== 'none') caret.style.display = 'none';
       return;
     }
     const sel = getSelection();
+    if (!sel || !sel.rangeCount || !sel.isCollapsed) {
+      if (caret.style.display !== 'none') caret.style.display = 'none';
+      return;
+    }
     
     let activeEditable = document.activeElement?.closest?.('.page-content');
     let isFocused = !!activeEditable;
@@ -16531,14 +16534,20 @@ class NocturneWriter {
                 const prev = prevPosMap.get(card);
                 let dx = (prev.relLeft - relLeft) + vis.x;
                 let dy = (prev.relTop - relTop) + vis.y;
+                let scaleX = prev.width && width ? prev.width / width : 1;
+                let scaleY = prev.height && height ? prev.height / height : 1;
 
                 if (Math.abs(dx) > zoneRect.width * 1.2) {
                   dx = 0;
                 }
 
+                if (scaleX < 0.3 || scaleX > 3.0) scaleX = 1;
+                if (scaleY < 0.3 || scaleY > 3.0) scaleY = 1;
+
                 const isPosShift = isDragging
                   ? (Math.abs(dy) > 3 || Math.abs(dx) >= 24)
                   : (Math.abs(dx) > 1 || Math.abs(dy) > 1);
+                const isScaleShift = Math.abs(scaleX - 1) > 0.03 || Math.abs(scaleY - 1) > 0.03;
 
                 prevPosMap.set(card, {
                   relLeft,
@@ -16547,16 +16556,20 @@ class NocturneWriter {
                   height
                 });
 
-                if (isVisible && isPosShift) {
+                if (isVisible && (isPosShift || isScaleShift)) {
                   card._isFlippingGrid = true;
                   card.classList.add('is-flipping');
                   card.style.transformOrigin = '0 0';
 
+                  const fromTransform = (scaleX !== 1 || scaleY !== 1)
+                    ? `translate3d(${dx}px, ${dy}px, 0) scale(${scaleX}, ${scaleY})`
+                    : `translate3d(${dx}px, ${dy}px, 0)`;
+
                   const anim = card.animate([
-                    { transform: `translate3d(${dx}px, ${dy}px, 0)` },
-                    { transform: 'translate3d(0px, 0px, 0)' }
+                    { transform: fromTransform },
+                    { transform: 'translate3d(0px, 0px, 0) scale(1, 1)' }
                   ], {
-                    duration: isDragging ? 360 : 380,
+                    duration: isDragging ? 440 : 480,
                     easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
                     fill: 'none'
                   });
