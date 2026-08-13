@@ -28,6 +28,7 @@ import { NocturneEditorBridge } from './editor/nocturne-editor.js';
 import { legacyAstToHtml } from './editor/document-adapter.js';
 import { aiIcon, iconSvg } from './ui/icons.js';
 import Sortable from './vendor/sortablejs/sortable.complete.esm.js';
+import { fastdom } from './vendor/fastdom/fastdom.js';
 
 if (typeof window !== 'undefined' && !window.Sortable) {
   window.Sortable = Sortable;
@@ -5163,6 +5164,68 @@ class NocturneWriter {
     return layer;
   }
 
+  hideNocturneSelectionLayer(layer) {
+    if (!layer) return;
+    layer.classList.remove('active');
+    if (layer._rectPool) {
+      layer._rectPool.forEach(el => el.style.display = 'none');
+    }
+    if (layer._startHandle) layer._startHandle.style.display = 'none';
+    if (layer._endHandle) layer._endHandle.style.display = 'none';
+    this._lastSerializedRects = '';
+  }
+
+  updateNocturneSelectionPool(layer, merged, custom) {
+    layer.classList.add('active');
+    if (!layer._rectPool) layer._rectPool = [];
+
+    while (layer._rectPool.length < merged.length) {
+      const rectEl = document.createElement('span');
+      rectEl.className = 'nocturne-selection-rect';
+      layer.appendChild(rectEl);
+      layer._rectPool.push(rectEl);
+    }
+
+    for (let i = 0; i < layer._rectPool.length; i++) {
+      const rectEl = layer._rectPool[i];
+      if (i < merged.length) {
+        const r = merged[i];
+        rectEl.style.cssText = `left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;display:block;`;
+      } else {
+        rectEl.style.display = 'none';
+      }
+    }
+
+    if (custom && merged.length) {
+      if (!layer._startHandle) {
+        const startH = document.createElement('span');
+        startH.className = 'nocturne-selection-handle start';
+        startH.dataset.selectionHandle = 'start';
+        layer.appendChild(startH);
+        layer._startHandle = startH;
+      }
+      if (!layer._endHandle) {
+        const endH = document.createElement('span');
+        endH.className = 'nocturne-selection-handle end';
+        endH.dataset.selectionHandle = 'end';
+        layer.appendChild(endH);
+        layer._endHandle = endH;
+      }
+      const first = merged[0];
+      const last = merged[merged.length - 1];
+      const startLeft = Math.max(8, first.left - 8);
+      const startTop = Math.max(8, first.top + first.height - 2);
+      const endLeft = Math.max(8, last.left + last.width - 8);
+      const endTop = Math.max(8, last.top + last.height - 2);
+
+      layer._startHandle.style.cssText = `left:${startLeft}px;top:${startTop}px;display:block;`;
+      layer._endHandle.style.cssText = `left:${endLeft}px;top:${endTop}px;display:block;`;
+    } else {
+      if (layer._startHandle) layer._startHandle.style.display = 'none';
+      if (layer._endHandle) layer._endHandle.style.display = 'none';
+    }
+  }
+
   renderNocturneSelectionLayer() {
     const layer = this.ensureNocturneSelectionLayer();
     const custom = !!(this.selectionController?.active && this.selectionController.range && this.selectionController.editable);
@@ -5170,9 +5233,7 @@ class NocturneWriter {
     const editable = custom ? this.selectionController.editable : this.editableFromSelection();
     const range = custom ? this.selectionController.range.cloneRange() : (sel?.rangeCount ? sel.getRangeAt(0) : null);
     if (!range || range.collapsed || !editable) {
-      layer.classList.remove('active');
-      layer.innerHTML = '';
-      this._lastSerializedRects = '';
+      this.hideNocturneSelectionLayer(layer);
       return;
     }
 
@@ -5186,9 +5247,7 @@ class NocturneWriter {
       }));
 
     if (!rects.length) {
-      layer.classList.remove('active');
-      layer.innerHTML = '';
-      this._lastSerializedRects = '';
+      this.hideNocturneSelectionLayer(layer);
       return;
     }
 
@@ -5211,22 +5270,7 @@ class NocturneWriter {
       }
     });
 
-    layer.classList.add('active');
-    const highlights = merged.map((rect) => `<span class="nocturne-selection-rect" style="left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px"></span>`).join('');
-    const handles = custom && merged.length
-      ? (() => {
-          const first = merged[0];
-          const last = merged[merged.length - 1];
-          const startLeft = Math.max(8, first.left - 8);
-          const startTop = Math.max(8, first.top + first.height - 2);
-          const endLeft = Math.max(8, last.left + last.width - 8);
-          const endTop = Math.max(8, last.top + last.height - 2);
-          return `
-            <span class="nocturne-selection-handle start" data-selection-handle="start" style="left:${startLeft}px;top:${startTop}px"></span>
-            <span class="nocturne-selection-handle end" data-selection-handle="end" style="left:${endLeft}px;top:${endTop}px"></span>`;
-        })()
-      : '';
-    layer.innerHTML = `${highlights}${handles}`;
+    this.updateNocturneSelectionPool(layer, merged, custom);
   }
 
   setCurrentBlockAlign(align) {
@@ -5384,6 +5428,11 @@ class NocturneWriter {
       this.hideEntityHoverCards();
       this.removeSoftEmptyLinePlaceholders(editable);
       this.clearSoftEmptyLineIfStale(editable);
+      const activeBlock = this.currentBlockElement();
+      const blockId = activeBlock?.dataset?.sourceBlockId || activeBlock?.dataset?.blockId;
+      if (blockId) {
+        this.invalidateTypoIndexForBlock(blockId);
+      }
       this.editorInput(editable, event);
     }
     if (event.target.id === 'notes-input') this.saveCurrentNote();
@@ -5983,6 +6032,38 @@ class NocturneWriter {
     return d;
   }
 
+  isRangeValid(range) {
+    if (!range) return false;
+    const start = range.startContainer;
+    const end = range.endContainer;
+    return !!(
+      start &&
+      start.isConnected &&
+      end &&
+      end.isConnected &&
+      start.ownerDocument?.body?.contains(start)
+    );
+  }
+
+  invalidateTypoIndexForBlock(blockId) {
+    if (!blockId) return;
+    if (this._typoHighlightRangesMap) {
+      for (const [key, item] of this._typoHighlightRangesMap.entries()) {
+        if (item?.blockId === blockId) {
+          this._typoHighlightRangesMap.delete(key);
+          const svg = document.querySelector(`.typo-svg-overlay[data-key="${CSS.escape(key)}"]`);
+          if (svg) svg.remove();
+        }
+      }
+    }
+    if (this.typoMatchIndex) {
+      this.typoMatchIndex = this.typoMatchIndex.filter(m => m.blockId !== blockId);
+    }
+    if (this.typoMatchByBlock) {
+      this.typoMatchByBlock.delete(blockId);
+    }
+  }
+
   findTypoMatchAtPoint(x, y, editable) {
     if (document.elementFromPoint?.(x, y)?.closest?.('#app-context-menu, .popover-surface, .cleaner-overlay, .form-modal, .settings-modal')) {
       return null;
@@ -6006,10 +6087,12 @@ class NocturneWriter {
     const offset = Number(block.dataset.fragmentStart || 0) + pre.toString().length;
     const docId = editable.dataset.docId || null;
     const paneId = editable.dataset.paneId || 'primary';
-    const candidate = this.typoMatchIndex.find((match) => (
+    const targetBlockId = block.dataset.sourceBlockId || block.dataset.blockId;
+    const candidates = this.typoMatchByBlock?.get(targetBlockId) || this.typoMatchIndex;
+    const candidate = candidates.find((match) => (
       match.docId === docId
       && match.paneId === paneId
-      && match.blockId === (block.dataset.sourceBlockId || block.dataset.blockId)
+      && match.blockId === targetBlockId
       && offset >= match.startOffset
       && offset <= match.endOffset
     )) || null;
@@ -6018,6 +6101,10 @@ class NocturneWriter {
     const key = `${candidate.blockId}:${candidate.startOffset}:${candidate.endOffset}`;
     const item = this._typoHighlightRangesMap.get(key);
     if (item) {
+      if (!this.isRangeValid(item.range)) {
+        this._typoHighlightRangesMap.delete(key);
+        return null;
+      }
       let rect = item.range ? item.range.getBoundingClientRect() : null;
       if (!rect || !rect.width || !rect.height) {
         const fragmentBase = Number(block.dataset.fragmentStart || 0);
@@ -6025,9 +6112,12 @@ class NocturneWriter {
         const localEnd = candidate.endOffset >= fragmentBase ? candidate.endOffset - fragmentBase : candidate.endOffset;
         const { textNodes } = this.textNodesForHighlightBlock(block);
         const freshRange = this.rangeFromBlockOffsets(textNodes, localStart, localEnd);
-        if (freshRange) {
+        if (freshRange && this.isRangeValid(freshRange)) {
           item.range = freshRange;
           rect = freshRange.getBoundingClientRect();
+        } else {
+          this._typoHighlightRangesMap.delete(key);
+          return null;
         }
       }
       if (!rect || !rect.width || !rect.height) return null;
@@ -6055,6 +6145,13 @@ class NocturneWriter {
       if (!item) continue;
       const { blockId, startOffset, endOffset } = item;
       let range = item.range;
+
+      if (range && !this.isRangeValid(range)) {
+        this._typoHighlightRangesMap.delete(key);
+        const activeSvg = document.querySelector(`.typo-svg-overlay[data-key="${CSS.escape(key)}"]`);
+        if (activeSvg) activeSvg.remove();
+        continue;
+      }
 
       let block = document.querySelector(`[data-block-id="${CSS.escape(blockId)}"], [data-source-block-id="${CSS.escape(blockId)}"]`);
       if (!block && range?.startContainer) {
@@ -6144,6 +6241,7 @@ class NocturneWriter {
   }
 
   handleTypoMouseMove(event) {
+    if ((event.buttons & 1) !== 0 || this.mobileSelectionDrag || this.isSelectingText) return;
     if (!CSS.highlights || typeof Highlight === 'undefined') return;
     const activeContextMenuTypo = this.state?.contextMenu?.typoMatch;
     const contextKey = activeContextMenuTypo ? `${activeContextMenuTypo.blockId}:${activeContextMenuTypo.startOffset}:${activeContextMenuTypo.endOffset}` : null;
@@ -6188,6 +6286,11 @@ class NocturneWriter {
     const menu = document.getElementById('app-context-menu');
     const ctx = this.state.contextMenu;
     if (!menu || !ctx) return;
+    if (!menu._hasPointerPreventer) {
+      menu._hasPointerPreventer = true;
+      menu.addEventListener('pointerdown', (e) => e.preventDefault());
+      menu.addEventListener('mousedown', (e) => e.preventDefault());
+    }
     const hasSelection = !!ctx.selectedText;
     const canEdit = ctx.reviewMode !== 'editor';
     const selectedPreview = hasSelection ? `<div class="context-selection">"${escapeHtml(ctx.selectedText.slice(0, 90))}${ctx.selectedText.length > 90 ? '...' : ''}"</div>` : '';
@@ -6470,6 +6573,7 @@ class NocturneWriter {
   }
 
   handleEntityMouseMove(event) {
+    if ((event.buttons & 1) !== 0 || this.mobileSelectionDrag || this.isSelectingText) return;
     if (event.target.closest?.('#entity-hover-card')) this.entityPopupHovered = true;
     if (event.target.closest?.('#entity-preview-card')) this.entityPreviewHovered = true;
     const link = event.target.closest?.('.entity-link');
@@ -8267,6 +8371,20 @@ class NocturneWriter {
       const newRect = item.element.getBoundingClientRect();
       const dx = (item.rect.left + item.visTranslate.x) - newRect.left;
       const dy = (item.rect.top + item.visTranslate.y) - newRect.top;
+      
+      const zone = item.element.closest('[data-dnd-zone]');
+      if (zone && zone._prevPosMap) {
+        const zoneRect = zone.getBoundingClientRect();
+        zone._prevPosMap.set(item.element, {
+          relLeft: newRect.left - zoneRect.left,
+          relTop: newRect.top - zoneRect.top,
+          left: newRect.left,
+          top: newRect.top,
+          width: newRect.width,
+          height: newRect.height
+        });
+      }
+
       return {
         element: item.element,
         dx,
@@ -8297,9 +8415,17 @@ class NocturneWriter {
           item.element.style.transition = '';
         }
         const zone = item.element.closest('[data-dnd-zone]');
-        if (zone && zone._prevPosMap) {
+        if (zone && zone._prevPosMap && item.element.parentNode) {
+          const zoneRect = zone.getBoundingClientRect();
           const r = item.element.getBoundingClientRect();
-          zone._prevPosMap.set(item.element, { left: r.left, top: r.top, width: r.width, height: r.height });
+          zone._prevPosMap.set(item.element, {
+            relLeft: r.left - zoneRect.left,
+            relTop: r.top - zoneRect.top,
+            left: r.left,
+            top: r.top,
+            width: r.width,
+            height: r.height
+          });
         }
       };
     });
@@ -10500,6 +10626,7 @@ class NocturneWriter {
     CSS.highlights.delete('typo-hover');
     this._hoveredTypoKey = null;
     this.typoMatchIndex = [];
+    this.typoMatchByBlock = new Map();
     this._typoHighlightRangesMap = new Map();
     this.disableBrowserSpellcheck();
     if (!this.state.settings.strictSpellcheck) return;
@@ -10657,6 +10784,9 @@ class NocturneWriter {
       smartConfidence,
     };
     this.typoMatchIndex.push(item);
+    if (!this.typoMatchByBlock) this.typoMatchByBlock = new Map();
+    if (!this.typoMatchByBlock.has(blockId)) this.typoMatchByBlock.set(blockId, []);
+    this.typoMatchByBlock.get(blockId).push(item);
     return item;
   }
 
@@ -10862,15 +10992,22 @@ class NocturneWriter {
   }
 
   rangeFromBlockOffsets(textNodes, start, end) {
+    if (!textNodes || !textNodes.length) return null;
     const startPart = textNodes.find((part) => start >= part.start && start < part.end)
       || textNodes.find((part) => start === part.end);
     const endPart = textNodes.find((part) => end > part.start && end <= part.end)
       || textNodes.find((part) => end === part.start);
-    if (!startPart || !endPart) return null;
-    const range = new Range();
-    range.setStart(startPart.node, Math.max(0, start - startPart.start));
-    range.setEnd(endPart.node, Math.max(0, end - endPart.start));
-    return range;
+    if (!startPart || !endPart || !startPart.node?.isConnected || !endPart.node?.isConnected) return null;
+    try {
+      const range = new Range();
+      const startOffset = Math.max(0, Math.min(start - startPart.start, startPart.node.textContent.length));
+      const endOffset = Math.max(0, Math.min(end - endPart.start, endPart.node.textContent.length));
+      range.setStart(startPart.node, startOffset);
+      range.setEnd(endPart.node, endOffset);
+      return range;
+    } catch {
+      return null;
+    }
   }
 
   getBlockFromNode(node, offset) {
@@ -16321,65 +16458,93 @@ class NocturneWriter {
         const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card')).filter(el => !el.classList.contains('hidden'));
         if (!cards.length) continue;
 
-        const eligible = cards.filter(card => !card._isFlippingGrid);
-        if (!eligible.length) continue;
-
-        eligible.forEach(c => this.cancelElementAnimations(c));
-
-        const cardData = eligible.map(card => ({
-          card,
-          rect: card.getBoundingClientRect()
-        }));
-
-        cardData.forEach(({card, rect}) => {
-          if (prevPosMap.has(card)) {
-            const prev = prevPosMap.get(card);
-            const dx = prev.left - rect.left;
-            const dy = prev.top - rect.top;
-            const scaleX = rect.width ? prev.width / rect.width : 1;
-            const scaleY = rect.height ? prev.height / rect.height : 1;
-
-            const isPosShift = isDragging
-              ? (Math.abs(dx) >= 50 || Math.abs(dy) >= 50)
-              : (Math.abs(dx) > 1 || Math.abs(dy) > 1);
-            const isScaleShift = Math.abs(scaleX - 1) > 0.01 || Math.abs(scaleY - 1) > 0.01;
-
-            const shouldAnimate = isDragging ? isPosShift : (isPosShift || isScaleShift);
-
-            if (shouldAnimate) {
-              card._isFlippingGrid = true;
-              card.style.transformOrigin = '0 0';
-
-              const fromTransform = isDragging
-                ? `translate3d(${dx}px, ${dy}px, 0)`
-                : `translate3d(${dx}px, ${dy}px, 0) scale(${scaleX}, ${scaleY})`;
-
-              const anim = card.animate([
-                { transform: fromTransform },
-                { transform: 'translate3d(0px, 0px, 0) scale(1, 1)' }
-              ], {
-                duration: isDragging ? 280 : 320,
-                easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
-                fill: 'none'
-              });
-
-              card._activeNocturneAnim = anim;
-              anim.onfinish = () => {
-                card._isFlippingGrid = false;
-                card.style.transformOrigin = '';
-                if (card._activeNocturneAnim === anim) card._activeNocturneAnim = null;
-                const r = card.getBoundingClientRect();
-                prevPosMap.set(card, { left: r.left, top: r.top, width: r.width, height: r.height });
-              };
-              return;
-            }
+        // Reset ongoing animations so fastdom.measure gets clean un-transformed layout rects
+        cards.forEach(card => {
+          if (card._isFlippingGrid || card._activeNocturneAnim) {
+            card.classList.remove('is-flipping');
+            card._isFlippingGrid = false;
+            this.cancelElementAnimations(card);
           }
+        });
 
-          prevPosMap.set(card, {
-            left: rect.left,
-            top: rect.top,
-            width: rect.width,
-            height: rect.height
+        fastdom.measure(() => {
+          const zoneRect = zone.getBoundingClientRect();
+          const cardData = cards.map(card => {
+            const rect = card.getBoundingClientRect();
+            const relLeft = rect.left - zoneRect.left;
+            const relTop = rect.top - zoneRect.top;
+            const isVisible = rect.bottom >= (zoneRect.top - 150) && rect.top <= (zoneRect.bottom + 150);
+            return { card, rect, relLeft, relTop, isVisible };
+          });
+
+          fastdom.mutate(() => {
+            cardData.forEach(({ card, rect, relLeft, relTop, isVisible }) => {
+              if (prevPosMap.has(card)) {
+                const prev = prevPosMap.get(card);
+                let dx = (prev.relLeft !== undefined ? prev.relLeft : (prev.left - zoneRect.left)) - relLeft;
+                let dy = (prev.relTop !== undefined ? prev.relTop : (prev.top - zoneRect.top)) - relTop;
+                const scaleX = rect.width ? prev.width / rect.width : 1;
+                const scaleY = rect.height ? prev.height / rect.height : 1;
+
+                // Validate extreme deltas caused by tab switches or pane hiding
+                if (Math.abs(dx) > zoneRect.width * 1.2) {
+                  dx = 0;
+                }
+
+                const isPosShift = isDragging
+                  ? (Math.abs(dy) > 2 || Math.abs(dx) >= 40)
+                  : (Math.abs(dx) > 1 || Math.abs(dy) > 1);
+                const isScaleShift = Math.abs(scaleX - 1) > 0.01 || Math.abs(scaleY - 1) > 0.01;
+
+                const shouldAnimate = isVisible && (isDragging ? isPosShift : (isPosShift || isScaleShift));
+
+                // Always update prevPosMap immediately with current un-transformed container-relative layout rect
+                prevPosMap.set(card, {
+                  relLeft,
+                  relTop,
+                  left: rect.left,
+                  top: rect.top,
+                  width: rect.width,
+                  height: rect.height
+                });
+
+                if (shouldAnimate) {
+                  card._isFlippingGrid = true;
+                  card.classList.add('is-flipping');
+                  card.style.transformOrigin = '0 0';
+
+                  const fromTransform = isDragging
+                    ? `translate3d(${dx}px, ${dy}px, 0)`
+                    : `translate3d(${dx}px, ${dy}px, 0) scale(${scaleX}, ${scaleY})`;
+
+                  const anim = card.animate([
+                    { transform: fromTransform },
+                    { transform: 'translate3d(0px, 0px, 0) scale(1, 1)' }
+                  ], {
+                    duration: isDragging ? 240 : 320,
+                    easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+                    fill: 'none'
+                  });
+
+                  card._activeNocturneAnim = anim;
+                  anim.onfinish = () => {
+                    card.classList.remove('is-flipping');
+                    card._isFlippingGrid = false;
+                    card.style.transformOrigin = '';
+                    if (card._activeNocturneAnim === anim) card._activeNocturneAnim = null;
+                  };
+                }
+              } else {
+                prevPosMap.set(card, {
+                  relLeft,
+                  relTop,
+                  left: rect.left,
+                  top: rect.top,
+                  width: rect.width,
+                  height: rect.height
+                });
+              }
+            });
           });
         });
       }
@@ -16389,12 +16554,20 @@ class NocturneWriter {
     zone._gridResizeObserver = observer;
 
     requestAnimationFrame(() => {
+      const zoneRect = zone.getBoundingClientRect();
       const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card'))
         .filter(el => !el.classList.contains('hidden'));
       cards.forEach(card => {
         if (!prevPosMap.has(card)) {
           const r = card.getBoundingClientRect();
-          prevPosMap.set(card, { left: r.left, top: r.top, width: r.width, height: r.height });
+          prevPosMap.set(card, {
+            relLeft: r.left - zoneRect.left,
+            relTop: r.top - zoneRect.top,
+            left: r.left,
+            top: r.top,
+            width: r.width,
+            height: r.height
+          });
         }
       });
     });
@@ -16404,6 +16577,7 @@ class NocturneWriter {
     const prevPosMap = zone._prevPosMap;
     if (!prevPosMap || !prevPosMap.size) return;
 
+    const zoneRect = zone.getBoundingClientRect();
     const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card'))
       .filter(el => !el.classList.contains('hidden'));
 
@@ -16413,9 +16587,11 @@ class NocturneWriter {
 
       this.cancelElementAnimations(card);
       const rect = card.getBoundingClientRect();
+      const relLeft = rect.left - zoneRect.left;
+      const relTop = rect.top - zoneRect.top;
 
-      const dx = prev.left - rect.left;
-      const dy = prev.top - rect.top;
+      const dx = (prev.relLeft !== undefined ? prev.relLeft : (prev.left - zoneRect.left)) - relLeft;
+      const dy = (prev.relTop !== undefined ? prev.relTop : (prev.top - zoneRect.top)) - relTop;
       const scaleX = rect.width ? prev.width / rect.width : 1;
       const scaleY = rect.height ? prev.height / rect.height : 1;
 
@@ -16444,6 +16620,8 @@ class NocturneWriter {
       }
 
       prevPosMap.set(card, {
+        relLeft,
+        relTop,
         left: rect.left,
         top: rect.top,
         width: rect.width,

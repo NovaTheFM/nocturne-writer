@@ -4835,7 +4835,9 @@ body.sortable-active .note-card,
 .kb-entering .timeline-container > *:nth-child(10) { animation-delay: 315ms; }
 .kb-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 34px; }
 .kb-header h1 { margin: 0; font: 500 28px 'Lora', serif; }
-.character-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 24px; justify-content: start; }
+.character-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 24px; justify-content: start; contain: layout paint; }
+.locations-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px; justify-content: start; contain: layout paint; }
+.is-flipping { transition: none !important; }
 .custom-select, .modal-select, .form-control {
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -4866,6 +4868,7 @@ body.sortable-active .note-card,
   cursor: pointer;
   box-sizing: border-box;
   transform: translateZ(0);
+  will-change: transform;
   backface-visibility: hidden;
   transition: border-color 180ms ease, background-color 180ms ease, box-shadow 220ms ease, opacity 180ms ease;
 }
