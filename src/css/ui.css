@@ -37,6 +37,7 @@ textarea::selection {
   pointer-events: none;
   contain: strict;
   display: none;
+  transition: opacity 140ms ease;
 }
 
 #nocturne-selection-layer.active {
@@ -54,8 +55,18 @@ textarea::selection {
     linear-gradient(135deg, color-mix(in srgb, var(--accent) 42%, transparent), color-mix(in srgb, var(--accent-hover) 24%, transparent));
   box-shadow: 0 0 0 1px rgba(255,255,255,.025) inset, 0 0 18px color-mix(in srgb, var(--accent) 28%, transparent);
   mix-blend-mode: screen;
-  will-change: transform, width, height;
-  transition: opacity 140ms ease;
+  will-change: transform, width, height, opacity;
+  transition: transform 120ms cubic-bezier(0.16, 1, 0.3, 1),
+              width 120ms cubic-bezier(0.16, 1, 0.3, 1),
+              height 120ms cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 140ms ease;
+}
+
+#nocturne-selection-layer.no-transition .nocturne-selection-rect,
+#nocturne-selection-layer.no-transition .nocturne-selection-handle,
+body.is-selecting-text #nocturne-selection-layer .nocturne-selection-rect,
+body.is-scrolling #nocturne-selection-layer .nocturne-selection-rect {
+  transition: none !important;
 }
 
 #nocturne-selection-layer .nocturne-selection-handle {
@@ -72,6 +83,11 @@ textarea::selection {
     linear-gradient(145deg, color-mix(in srgb, var(--accent-hover) 86%, #fff 8%), color-mix(in srgb, var(--accent) 78%, #050509 8%));
   box-shadow: 0 0 0 2px rgba(10,10,15,.72), 0 8px 22px rgba(0,0,0,.42), 0 0 22px color-mix(in srgb, var(--accent) 38%, transparent);
   transform: translate(-50%, -4px);
+  will-change: left, top, transform, opacity;
+  transition: left 120ms cubic-bezier(0.16, 1, 0.3, 1),
+              top 120ms cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 140ms ease,
+              transform 140ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .app-error-screen {

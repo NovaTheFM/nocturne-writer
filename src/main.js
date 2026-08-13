@@ -3538,6 +3538,17 @@ class NocturneWriter {
     document.addEventListener('mouseout', (event) => this.handleSettingsTooltipLeave(event));
     document.addEventListener('focusin', (event) => this.handleSettingsTooltipEnter(event));
     document.addEventListener('focusout', (event) => this.handleSettingsTooltipLeave(event));
+    document.addEventListener('pointerdown', (e) => {
+      if (e.target.closest?.('.page-content')) {
+        document.body.classList.add('is-selecting-text');
+      }
+    }, { passive: true });
+    document.addEventListener('pointerup', () => {
+      if (document.body.classList.contains('is-selecting-text')) {
+        document.body.classList.remove('is-selecting-text');
+        requestAnimationFrame(() => this.renderNocturneSelectionLayer());
+      }
+    }, { passive: true });
     let selectionRaf = null;
     document.addEventListener('selectionchange', () => {
       if (!selectionRaf) {
@@ -3582,7 +3593,11 @@ class NocturneWriter {
       this.closeDocContextMenu();
       this.mobileResizeDebounced();
     });
+    let _scrollStateTimeout = null;
     window.addEventListener('scroll', () => {
+      document.body.classList.add('is-scrolling');
+      if (_scrollStateTimeout) clearTimeout(_scrollStateTimeout);
+      _scrollStateTimeout = setTimeout(() => document.body.classList.remove('is-scrolling'), 90);
       if (this.selectionController?.active || this.state.editorSelection?.active) {
         requestAnimationFrame(() => this.renderNocturneSelectionLayer());
       }
@@ -4948,17 +4963,36 @@ class NocturneWriter {
   }
 
   textNodesInRange(range) {
+    if (!range) return [];
+    if (range.startContainer === range.endContainer && range.startContainer.nodeType === Node.TEXT_NODE) {
+      return range.startContainer.textContent.trim() ? [range.startContainer] : [];
+    }
     const root = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
       ? range.commonAncestorContainer
       : range.commonAncestorContainer.parentElement;
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-      acceptNode: (node) => this.rangeIntersectsNode(range, node) && node.textContent.trim()
-        ? NodeFilter.FILTER_ACCEPT
-        : NodeFilter.FILTER_REJECT,
-    });
+    if (!root) return [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     const nodes = [];
+    let startNode = range.startContainer;
+    if (startNode.nodeType !== Node.TEXT_NODE && startNode.firstChild) {
+      startNode = startNode.firstChild;
+    }
+    walker.currentNode = startNode.nodeType === Node.TEXT_NODE ? startNode : (startNode.firstChild || startNode);
+    if (walker.currentNode.nodeType === Node.TEXT_NODE && this.rangeIntersectsNode(range, walker.currentNode) && walker.currentNode.textContent.trim()) {
+      nodes.push(walker.currentNode);
+    }
     let node;
-    while ((node = walker.nextNode())) nodes.push(node);
+    while ((node = walker.nextNode())) {
+      try {
+        if (range.comparePoint(node, 0) > 0) break;
+      } catch (e) {
+        if (!this.rangeIntersectsNode(range, node)) break;
+      }
+      if (this.rangeIntersectsNode(range, node) && node.textContent.trim()) {
+        nodes.push(node);
+      }
+      if (node === range.endContainer) break;
+    }
     return nodes;
   }
 
@@ -5089,7 +5123,7 @@ class NocturneWriter {
     if (!sel?.rangeCount) return null;
     const editable = this.editableFromSelection();
     if (!editable) return null;
-    if (sel.isCollapsed || !sel.toString().trim()) {
+    if (sel.isCollapsed) {
       const activeEditable = document.activeElement?.closest?.('.page-content');
       if (!activeEditable && this.selectionSnapshot?.range && this.selectionSnapshot.text && this.selectionSnapshot.docId === (editable.dataset.docId || null)) {
         return this.selectionSnapshot;
@@ -5101,7 +5135,7 @@ class NocturneWriter {
       caret: this.getCaretSnapshot(),
       paneId,
       docId: editable.dataset.docId || null,
-      text: sel.toString(),
+      text: sel.isCollapsed ? '' : sel.toString(),
     };
     this.selectionSnapshot = snapshot;
     return snapshot;
@@ -5147,7 +5181,7 @@ class NocturneWriter {
     }
     const sel = getSelection();
     const editable = this.editableFromSelection();
-    const active = !!(sel?.rangeCount && editable && !sel.isCollapsed && sel.toString().trim());
+    const active = !!(sel?.rangeCount && editable && !sel.isCollapsed);
     this.state.editorSelection = {
       active,
       text: active ? sel.toString() : '',
@@ -5172,7 +5206,10 @@ class NocturneWriter {
     if (!layer) return;
     layer.classList.remove('active');
     if (layer._rectPool) {
-      layer._rectPool.forEach(el => el.style.display = 'none');
+      layer._rectPool.forEach(el => {
+        el.style.display = 'none';
+        el.style.opacity = '0';
+      });
     }
     if (layer._startHandle) layer._startHandle.style.display = 'none';
     if (layer._endHandle) layer._endHandle.style.display = 'none';
@@ -5198,8 +5235,10 @@ class NocturneWriter {
         rectEl.style.width = `${r.width}px`;
         rectEl.style.height = `${r.height}px`;
         rectEl.style.display = 'block';
+        rectEl.style.opacity = '1';
       } else {
         rectEl.style.display = 'none';
+        rectEl.style.opacity = '0';
       }
     }
 
@@ -5225,8 +5264,8 @@ class NocturneWriter {
       const endLeft = Math.max(8, last.left + last.width - 8);
       const endTop = Math.max(8, last.top + last.height - 2);
 
-      layer._startHandle.style.cssText = `left:${startLeft}px;top:${startTop}px;display:block;`;
-      layer._endHandle.style.cssText = `left:${endLeft}px;top:${endTop}px;display:block;`;
+      layer._startHandle.style.cssText = `left:${startLeft}px;top:${startTop}px;display:block;opacity:1;`;
+      layer._endHandle.style.cssText = `left:${endLeft}px;top:${endTop}px;display:block;opacity:1;`;
     } else {
       if (layer._startHandle) layer._startHandle.style.display = 'none';
       if (layer._endHandle) layer._endHandle.style.display = 'none';
@@ -5244,14 +5283,28 @@ class NocturneWriter {
       return;
     }
 
-    const rects = [...range.getClientRects()]
-      .filter((rect) => rect.width > 1 && rect.height > 1)
-      .map((rect) => ({
-        left: Math.round(rect.left - 2),
-        top: Math.round(rect.top - 1),
-        width: Math.round(rect.width + 4),
-        height: Math.round(rect.height + 2),
-      }));
+    const rawRects = range.getClientRects();
+    if (!rawRects || !rawRects.length) {
+      this.hideNocturneSelectionLayer(layer);
+      return;
+    }
+
+    const vh = window.innerHeight || 800;
+    const isLongSelection = rawRects.length > 40;
+    const rects = [];
+    for (let i = 0; i < rawRects.length; i++) {
+      const rect = rawRects[i];
+      if (rect.width > 1 && rect.height > 1) {
+        if (!isLongSelection || (rect.bottom >= -150 && rect.top <= vh + 150)) {
+          rects.push({
+            left: Math.round(rect.left - 2),
+            top: Math.round(rect.top - 1),
+            width: Math.round(rect.width + 4),
+            height: Math.round(rect.height + 2),
+          });
+        }
+      }
+    }
 
     if (!rects.length) {
       this.hideNocturneSelectionLayer(layer);
@@ -8334,8 +8387,11 @@ class NocturneWriter {
     return { x: 0, y: 0 };
   }
 
-  cancelElementAnimations(el) {
+  cancelElementAnimations(el, { smooth = false } = {}) {
     if (!el) return;
+    const vis = this.getVisualTranslate(el);
+    const hasActiveMotion = !!(el._activeNocturneAnim || (typeof el.getAnimations === 'function' && el.getAnimations().length > 0) || Math.abs(vis.x) > 0.5 || Math.abs(vis.y) > 0.5);
+
     if (el._activeNocturneAnim) {
       try {
         el._activeNocturneAnim.cancel();
@@ -8352,6 +8408,30 @@ class NocturneWriter {
     }
     el.classList.remove('new-card-entrance', 'new-doc-entrance', 'kb-card-stagger-in', 'is-flipping');
     el._isFlippingGrid = false;
+
+    if (smooth && hasActiveMotion && (Math.abs(vis.x) > 0.5 || Math.abs(vis.y) > 0.5)) {
+      const cancelAnim = el.animate([
+        { transform: `translate3d(${vis.x}px, ${vis.y}px, 0)` },
+        { transform: 'translate3d(0px, 0px, 0)' }
+      ], {
+        duration: 220,
+        easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+        fill: 'none'
+      });
+      el._activeNocturneAnim = cancelAnim;
+      cancelAnim.onfinish = () => {
+        if (el._activeNocturneAnim === cancelAnim) {
+          el._activeNocturneAnim = null;
+          el.style.transition = '';
+          el.style.transform = '';
+          el.style.zIndex = '';
+          el.style.boxShadow = '';
+          el.style.transformOrigin = '';
+        }
+      };
+      return;
+    }
+
     el.style.transition = '';
     el.style.transform = '';
     el.style.zIndex = '';
@@ -10495,11 +10575,19 @@ class NocturneWriter {
         offset: fragmentBase + pre.toString().length
       };
     }
-    const range = sel.getRangeAt(0).cloneRange();
-    const pre = range.cloneRange();
-    pre.selectNodeContents(pageContent);
-    pre.setEnd(range.endContainer, range.endOffset);
-    return { paneId, docId, pageContentOffset: pre.toString().length };
+    let offset = 0;
+    const targetNode = sel.getRangeAt(0).endContainer;
+    const targetOffset = sel.getRangeAt(0).endOffset;
+    const walker = document.createTreeWalker(pageContent, NodeFilter.SHOW_TEXT);
+    let n;
+    while ((n = walker.nextNode())) {
+      if (n === targetNode) {
+        offset += Math.min(n.textContent.length, targetOffset);
+        break;
+      }
+      offset += n.textContent.length;
+    }
+    return { paneId, docId, pageContentOffset: offset };
   }
 
   restoreCaret(snapshot) {
@@ -15747,17 +15835,21 @@ class NocturneWriter {
   }
 
   updateActiveBlock() {
-    const editables = document.querySelectorAll('.page-content');
-    editables.forEach(node => node.classList.remove('active-selection'));
     const sel = getSelection();
-    const isSelectionActive = sel && !sel.isCollapsed && sel.toString().length > 0;
+    const isSelectionActive = !!(sel && !sel.isCollapsed && sel.rangeCount);
     const block = sel?.anchorNode?.parentElement?.closest?.('.page-content p,.page-content h2,.page-content blockquote');
-    if (block) {
-      const editable = block.closest('.page-content');
-      if (isSelectionActive && editable) {
+    const editable = block?.closest?.('.page-content');
+    const currentActive = document.querySelector('.page-content.active-selection');
+    if (isSelectionActive && editable) {
+      if (currentActive !== editable) {
+        if (currentActive) currentActive.classList.remove('active-selection');
         editable.classList.add('active-selection');
       }
-      const paneId = editable?.dataset.paneId;
+    } else if (currentActive) {
+      currentActive.classList.remove('active-selection');
+    }
+    if (block && editable) {
+      const paneId = editable.dataset.paneId;
       if (paneId && this.state.workspace?.focusedPaneId !== paneId) this.setFocusedPane(paneId);
     }
   }
@@ -16500,7 +16592,7 @@ class NocturneWriter {
     let prevZoneWidth = zone.clientWidth;
     const prevPosMap = new Map();
     zone._prevPosMap = prevPosMap;
-    let lastFlipTime = 0;
+    let resizeRaf = null;
 
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
@@ -16510,18 +16602,13 @@ class NocturneWriter {
 
         if (document.body.classList.contains('sortable-active')) continue;
 
-        const isDragging = document.body.classList.contains('resizing-workspace');
-        if (isDragging) {
-          const now = performance.now();
-          if (now - lastFlipTime < 45) continue;
-          lastFlipTime = now;
-        }
+        if (resizeRaf) cancelAnimationFrame(resizeRaf);
+        resizeRaf = requestAnimationFrame(() => {
+          resizeRaf = null;
+          const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card'))
+            .filter(el => !el.classList.contains('hidden'));
+          if (!cards.length) return;
 
-        const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card'))
-          .filter(el => !el.classList.contains('hidden'));
-        if (!cards.length) continue;
-
-        fastdom.measure(() => {
           const zoneRect = zone.getBoundingClientRect();
           const cardData = cards.map(card => {
             const vis = this.getVisualTranslate(card);
@@ -16530,50 +16617,51 @@ class NocturneWriter {
             const baseTop = rawRect.top - vis.y;
             const relLeft = baseLeft - zoneRect.left;
             const relTop = baseTop - zoneRect.top;
-            const isVisible = rawRect.bottom >= (zoneRect.top - 150) && rawRect.top <= (zoneRect.bottom + 150);
+            const isVisible = rawRect.bottom >= (zoneRect.top - 200) && rawRect.top <= (zoneRect.bottom + 200);
             return { card, rawRect, relLeft, relTop, width: rawRect.width, height: rawRect.height, vis, isVisible };
           });
 
-          fastdom.mutate(() => {
-            cardData.forEach(({ card, relLeft, relTop, width, height, vis, isVisible }) => {
-              if (prevPosMap.has(card)) {
-                const prev = prevPosMap.get(card);
-                let dx = (prev.relLeft - relLeft) + vis.x;
-                let dy = (prev.relTop - relTop) + vis.y;
+          cardData.forEach(({ card, relLeft, relTop, width, height, vis, isVisible }) => {
+            if (prevPosMap.has(card)) {
+              const prev = prevPosMap.get(card);
+              const dx = (prev.relLeft - relLeft) + vis.x;
+              const dy = (prev.relTop - relTop) + vis.y;
 
-                if (Math.abs(dx) > zoneRect.width * 1.2) dx = 0;
+              // Only trigger FLIP animation if card actually shifted row or column slot significantly
+              const isSlotWrap = isVisible && (Math.abs(dy) >= 14 || Math.abs(dx) >= 32);
 
-                const isShift = isVisible && (Math.abs(dx) > 1 || Math.abs(dy) > 1);
+              prevPosMap.set(card, { relLeft, relTop, width, height });
 
-                prevPosMap.set(card, { relLeft, relTop, width, height });
-
-                if (isShift) {
-                  card._isFlippingGrid = true;
-                  card.classList.add('is-flipping');
-
-                  const anim = card.animate([
-                    { transform: `translate3d(${dx}px, ${dy}px, 0)` },
-                    { transform: 'translate3d(0px, 0px, 0)' }
-                  ], {
-                    duration: 380,
-                    easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
-                    fill: 'none'
-                  });
-
-                  card._activeNocturneAnim = anim;
-                  anim.onfinish = () => {
-                    card.classList.remove('is-flipping');
-                    card._isFlippingGrid = false;
-                    if (card._activeNocturneAnim === anim) {
-                      card._activeNocturneAnim = null;
-                      card.style.transform = '';
-                    }
-                  };
+              if (isSlotWrap && Math.abs(dx) < zoneRect.width * 1.5) {
+                if (card._activeNocturneAnim) {
+                  try { card._activeNocturneAnim.cancel(); } catch (e) {}
+                  card._activeNocturneAnim = null;
                 }
-              } else {
-                prevPosMap.set(card, { relLeft, relTop, width, height });
+                card._isFlippingGrid = true;
+                card.classList.add('is-flipping');
+
+                const anim = card.animate([
+                  { transform: `translate3d(${dx}px, ${dy}px, 0)` },
+                  { transform: 'translate3d(0px, 0px, 0)' }
+                ], {
+                  duration: 320,
+                  easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+                  fill: 'none'
+                });
+
+                card._activeNocturneAnim = anim;
+                anim.onfinish = () => {
+                  card.classList.remove('is-flipping');
+                  card._isFlippingGrid = false;
+                  if (card._activeNocturneAnim === anim) {
+                    card._activeNocturneAnim = null;
+                    card.style.transform = '';
+                  }
+                };
               }
-            });
+            } else {
+              prevPosMap.set(card, { relLeft, relTop, width, height });
+            }
           });
         });
       }
