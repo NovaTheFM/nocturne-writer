@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.mjs",
     "dev": "node server.mjs",
-    "build:editor": "node scripts/build-editor-vendor.mjs",
+    "build:editor": "node scripts/build-editor-vendor.mjs && node scripts/build-gsap-vendor.mjs",
     "build": "npm run build:editor && node scripts/build-web.mjs",
     "check": "npm run build:editor && node --check server.mjs && node --check src/main.js && node --check src/core/db.js && node --check src/core/utils.js && node --check src/core/crypto.js && node --check src/features/command-palette.js && node --check src/features/ai-context.js && node --check src/features/local-sync.js && node --check src/ui/icons.js && node --check src/editor/document-adapter.js && node --check src/editor/visual-pagination.js && node --check src/editor/nocturne-editor.js && node --check scripts/sync-server.mjs && node --check scripts/desktop-smoke.mjs && node scripts/test-editor-adapter.mjs",
     "smoke:desktop": "node scripts/desktop-smoke.mjs",

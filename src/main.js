@@ -29,9 +29,12 @@ import { legacyAstToHtml } from './editor/document-adapter.js';
 import { aiIcon, iconSvg } from './ui/icons.js';
 import Sortable from './vendor/sortablejs/sortable.complete.esm.js';
 import { fastdom } from './vendor/fastdom/fastdom.js';
+import { gsap, Flip } from './vendor/gsap/gsap-flip.bundle.js';
 
-if (typeof window !== 'undefined' && !window.Sortable) {
-  window.Sortable = Sortable;
+if (typeof window !== 'undefined') {
+  if (!window.Sortable) window.Sortable = Sortable;
+  if (!window.gsap) window.gsap = gsap;
+  if (!window.Flip) window.Flip = Flip;
 }
 
 const LIVE_PREFIX = 'nocturne-live-v3-';
@@ -8362,6 +8365,39 @@ class NocturneWriter {
     const rawCandidates = targets.length ? targets : Array.from(container.children);
     const candidateList = rawCandidates.filter(el => !el.matches('h1, h2, h3, h4, header, .kb-header, .kb-pane-breadcrumb, .pane-back-btn'));
     
+    if (typeof Flip !== 'undefined' && candidateList.length) {
+      const state = Flip.getState(candidateList);
+      mutateDOM();
+      Flip.from(state, {
+        duration: 0.32,
+        ease: 'power2.out',
+        absolute: false,
+        nested: true,
+        onStart: () => {
+          candidateList.forEach(el => { el._isFlippingGrid = true; });
+        },
+        onComplete: () => {
+          candidateList.forEach(el => {
+            el._isFlippingGrid = false;
+            const zone = el.closest('[data-dnd-zone]');
+            if (zone && zone._prevPosMap) {
+              const zoneRect = zone.getBoundingClientRect();
+              const newRect = el.getBoundingClientRect();
+              zone._prevPosMap.set(el, {
+                relLeft: newRect.left - zoneRect.left,
+                relTop: newRect.top - zoneRect.top,
+                left: newRect.left,
+                top: newRect.top,
+                width: newRect.width,
+                height: newRect.height
+              });
+            }
+          });
+        }
+      });
+      return;
+    }
+
     const oldRects = candidateList.map((el) => {
       const visTranslate = this.getVisualTranslate(el);
       const baseRect = el.getBoundingClientRect();
