@@ -5194,7 +5194,10 @@ class NocturneWriter {
       const rectEl = layer._rectPool[i];
       if (i < merged.length) {
         const r = merged[i];
-        rectEl.style.cssText = `left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;display:block;`;
+        rectEl.style.transform = `translate3d(${r.left}px, ${r.top}px, 0)`;
+        rectEl.style.width = `${r.width}px`;
+        rectEl.style.height = `${r.height}px`;
+        rectEl.style.display = 'block';
       } else {
         rectEl.style.display = 'none';
       }
@@ -5233,10 +5236,6 @@ class NocturneWriter {
   renderNocturneSelectionLayer() {
     const layer = this.ensureNocturneSelectionLayer();
     const custom = !!(this.selectionController?.active && this.selectionController.range && this.selectionController.editable);
-    if (!custom) {
-      if (layer && layer.classList.contains('active')) this.hideNocturneSelectionLayer(layer);
-      return;
-    }
     const sel = getSelection();
     const editable = custom ? this.selectionController.editable : this.editableFromSelection();
     const range = custom ? this.selectionController.range.cloneRange() : (sel?.rangeCount ? sel.getRangeAt(0) : null);
@@ -16499,6 +16498,9 @@ class NocturneWriter {
       zone._gridResizeObserver = null;
     }
     let prevZoneWidth = zone.clientWidth;
+    const prevPosMap = new Map();
+    zone._prevPosMap = prevPosMap;
+    let lastFlipTime = 0;
 
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
@@ -16508,22 +16510,72 @@ class NocturneWriter {
 
         if (document.body.classList.contains('sortable-active')) continue;
 
+        const isDragging = document.body.classList.contains('resizing-workspace');
+        if (isDragging) {
+          const now = performance.now();
+          if (now - lastFlipTime < 45) continue;
+          lastFlipTime = now;
+        }
+
         const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card'))
           .filter(el => !el.classList.contains('hidden'));
         if (!cards.length) continue;
 
-        if (typeof Flip !== 'undefined' && zone._flipState) {
-          Flip.from(zone._flipState, {
-            duration: 0.42,
-            ease: 'power3.out',
-            nested: true,
-            absolute: false,
-            overwrite: 'auto'
+        fastdom.measure(() => {
+          const zoneRect = zone.getBoundingClientRect();
+          const cardData = cards.map(card => {
+            const vis = this.getVisualTranslate(card);
+            const rawRect = card.getBoundingClientRect();
+            const baseLeft = rawRect.left - vis.x;
+            const baseTop = rawRect.top - vis.y;
+            const relLeft = baseLeft - zoneRect.left;
+            const relTop = baseTop - zoneRect.top;
+            const isVisible = rawRect.bottom >= (zoneRect.top - 150) && rawRect.top <= (zoneRect.bottom + 150);
+            return { card, rawRect, relLeft, relTop, width: rawRect.width, height: rawRect.height, vis, isVisible };
           });
-        }
-        if (typeof Flip !== 'undefined') {
-          zone._flipState = Flip.getState(cards);
-        }
+
+          fastdom.mutate(() => {
+            cardData.forEach(({ card, relLeft, relTop, width, height, vis, isVisible }) => {
+              if (prevPosMap.has(card)) {
+                const prev = prevPosMap.get(card);
+                let dx = (prev.relLeft - relLeft) + vis.x;
+                let dy = (prev.relTop - relTop) + vis.y;
+
+                if (Math.abs(dx) > zoneRect.width * 1.2) dx = 0;
+
+                const isShift = isVisible && (Math.abs(dx) > 1 || Math.abs(dy) > 1);
+
+                prevPosMap.set(card, { relLeft, relTop, width, height });
+
+                if (isShift) {
+                  card._isFlippingGrid = true;
+                  card.classList.add('is-flipping');
+
+                  const anim = card.animate([
+                    { transform: `translate3d(${dx}px, ${dy}px, 0)` },
+                    { transform: 'translate3d(0px, 0px, 0)' }
+                  ], {
+                    duration: 380,
+                    easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+                    fill: 'none'
+                  });
+
+                  card._activeNocturneAnim = anim;
+                  anim.onfinish = () => {
+                    card.classList.remove('is-flipping');
+                    card._isFlippingGrid = false;
+                    if (card._activeNocturneAnim === anim) {
+                      card._activeNocturneAnim = null;
+                      card.style.transform = '';
+                    }
+                  };
+                }
+              } else {
+                prevPosMap.set(card, { relLeft, relTop, width, height });
+              }
+            });
+          });
+        });
       }
     });
 
@@ -16531,11 +16583,20 @@ class NocturneWriter {
     zone._gridResizeObserver = observer;
 
     requestAnimationFrame(() => {
+      const zoneRect = zone.getBoundingClientRect();
       const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card'))
         .filter(el => !el.classList.contains('hidden'));
-      if (cards.length && typeof Flip !== 'undefined') {
-        zone._flipState = Flip.getState(cards);
-      }
+      cards.forEach(card => {
+        if (!prevPosMap.has(card)) {
+          const r = card.getBoundingClientRect();
+          prevPosMap.set(card, {
+            relLeft: r.left - zoneRect.left,
+            relTop: r.top - zoneRect.top,
+            width: r.width,
+            height: r.height
+          });
+        }
+      });
     });
   }
 
@@ -17529,6 +17590,16 @@ class NocturneWriter {
       e.preventDefault();
       e.stopPropagation();
     }, { capture: true });
+
+    // Instantly cancel ongoing animations on all cards on pointerdown for immediate grab-and-drag
+    zone.addEventListener('pointerdown', (e) => {
+      const card = e.target.closest('.char-card, .loc-card, .timeline-item, .note-card');
+      if (card) {
+        zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card').forEach((child) => {
+          this.cancelElementAnimations(child);
+        });
+      }
+    }, { capture: true, passive: true });
 
     const zoneType = zone.dataset.dndZone;
     const isTimelineZone = ['timeline', 'subtimeline'].includes(zoneType);

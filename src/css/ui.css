@@ -26,8 +26,8 @@ textarea::selection {
 }
 
 .page-content ::selection {
-  color: var(--selection-text, #fff);
-  background: color-mix(in srgb, var(--accent) 48%, rgba(255,255,255,.14));
+  color: currentColor;
+  background: transparent !important;
 }
 
 #nocturne-selection-layer {
@@ -45,6 +45,8 @@ textarea::selection {
 
 #nocturne-selection-layer .nocturne-selection-rect {
   position: fixed;
+  top: 0;
+  left: 0;
   pointer-events: none !important;
   border: 1px solid color-mix(in srgb, var(--accent-hover) 64%, rgba(255,255,255,.18));
   border-radius: 7px;
@@ -52,7 +54,7 @@ textarea::selection {
     linear-gradient(135deg, color-mix(in srgb, var(--accent) 42%, transparent), color-mix(in srgb, var(--accent-hover) 24%, transparent));
   box-shadow: 0 0 0 1px rgba(255,255,255,.025) inset, 0 0 18px color-mix(in srgb, var(--accent) 28%, transparent);
   mix-blend-mode: screen;
-  will-change: left, top, width, height;
+  will-change: transform, width, height;
   transition: opacity 140ms ease;
 }
 
