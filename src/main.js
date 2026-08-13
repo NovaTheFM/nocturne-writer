@@ -3537,24 +3537,30 @@ class NocturneWriter {
     document.addEventListener('mouseout', (event) => this.handleSettingsTooltipLeave(event));
     document.addEventListener('focusin', (event) => this.handleSettingsTooltipEnter(event));
     document.addEventListener('focusout', (event) => this.handleSettingsTooltipLeave(event));
+    let selectionRaf = null;
     document.addEventListener('selectionchange', () => {
-      this.captureSelectionSnapshot();
-      this.updateEditorSelectionState();
-      this.renderNocturneSelectionLayer();
       this.updateCustomCaret();
-      this.updateActiveBlock();
-      
-      this.updateToolbarState();
-      this.renderReviewToolbarSlot();
-      this.renderTypoSvgOverlays();
+      this.renderNocturneSelectionLayer();
 
-      // Clear active bookmark on user-initiated cursor/selection movement
-      if (!this._isJumpingToBookmark) {
-        const focusedPaneId = this.state.workspace?.focusedPaneId;
-        if (focusedPaneId && this.state.activeBookmarkIndexByPane && this.state.activeBookmarkIndexByPane[focusedPaneId] !== undefined) {
-          delete this.state.activeBookmarkIndexByPane[focusedPaneId];
-          this.updateBookmarkHighlights();
-        }
+      if (!selectionRaf) {
+        selectionRaf = requestAnimationFrame(() => {
+          selectionRaf = null;
+          this.captureSelectionSnapshot();
+          this.updateEditorSelectionState();
+          this.updateActiveBlock();
+          this.updateToolbarState();
+          this.renderReviewToolbarSlot();
+          this.renderTypoSvgOverlays();
+
+          // Clear active bookmark on user-initiated cursor/selection movement
+          if (!this._isJumpingToBookmark) {
+            const focusedPaneId = this.state.workspace?.focusedPaneId;
+            if (focusedPaneId && this.state.activeBookmarkIndexByPane && this.state.activeBookmarkIndexByPane[focusedPaneId] !== undefined) {
+              delete this.state.activeBookmarkIndexByPane[focusedPaneId];
+              this.updateBookmarkHighlights();
+            }
+          }
+        });
       }
     });
     window.addEventListener('visibilitychange', () => {
@@ -16462,7 +16468,9 @@ class NocturneWriter {
         const isDragging = document.body.classList.contains('resizing-workspace');
 
         if (isDragging) {
-          return;
+          const now = performance.now();
+          if (now - lastFlipTime < 60) continue;
+          lastFlipTime = now;
         }
 
         const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card')).filter(el => !el.classList.contains('hidden'));
@@ -16502,11 +16510,11 @@ class NocturneWriter {
                 }
 
                 const isPosShift = isDragging
-                  ? (Math.abs(dy) > 2 || Math.abs(dx) >= 40)
+                  ? (Math.abs(dy) > 4 || Math.abs(dx) >= 30)
                   : (Math.abs(dx) > 1 || Math.abs(dy) > 1);
-                const isScaleShift = Math.abs(scaleX - 1) > 0.01 || Math.abs(scaleY - 1) > 0.01;
+                const isScaleShift = !isDragging && (Math.abs(scaleX - 1) > 0.01 || Math.abs(scaleY - 1) > 0.01);
 
-                const shouldAnimate = isVisible && (isDragging ? isPosShift : (isPosShift || isScaleShift));
+                const shouldAnimate = isVisible && (isPosShift || isScaleShift);
 
                 // Always update prevPosMap immediately with current un-transformed container-relative layout rect
                 prevPosMap.set(card, {
@@ -16531,7 +16539,7 @@ class NocturneWriter {
                     { transform: fromTransform },
                     { transform: 'translate3d(0px, 0px, 0) scale(1, 1)' }
                   ], {
-                    duration: isDragging ? 240 : 320,
+                    duration: isDragging ? 220 : 300,
                     easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
                     fill: 'none'
                   });

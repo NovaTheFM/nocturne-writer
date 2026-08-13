@@ -26,21 +26,19 @@ export function updateActivePageHighlight(editor, pageShell) {
   const rect = blockDom.getBoundingClientRect();
   const blockTop = rect.top - editorRect.top;
 
-  const pageStyle = window.getComputedStyle(pageShell);
-  const pageWidth = parseFloat(pageStyle.width) || 794;
+  const pageWidth = pageShell.clientWidth || 794;
   const pageHeight = Math.round(pageWidth * 1.4143577);
   const gap = 60;
 
   const pageIndex = Math.floor(blockTop / (pageHeight + gap));
 
-  const sheets = bgContainer.querySelectorAll('.page-sheet-bg');
-  sheets.forEach((sheet, idx) => {
-    if (idx === pageIndex) {
-      sheet.classList.add('active');
-    } else {
-      sheet.classList.remove('active');
-    }
-  });
+  const currentActive = bgContainer.querySelector('.page-sheet-bg.active');
+  const sheets = bgContainer.children;
+  const targetSheet = sheets[pageIndex];
+  if (currentActive !== targetSheet) {
+    if (currentActive) currentActive.classList.remove('active');
+    if (targetSheet) targetSheet.classList.add('active');
+  }
 }
 
 export function calculateVisualPages({ editor, pageShell, overlay, flexible = false }) {
