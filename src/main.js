@@ -386,8 +386,6 @@ class NocturneWriter {
         this.updateActiveBlock();
         this.updateEditorSelectionState();
         this.updateToolbarState();
-        this.updateReviewHighlights();
-        this.renderTypoSvgOverlays();
       },
       onVisualPagesCalculated: () => {
         this.renderTypoSvgOverlays();
@@ -3551,8 +3549,6 @@ class NocturneWriter {
           this.updateEditorSelectionState();
           this.updateActiveBlock();
           this.updateToolbarState();
-          this.renderReviewToolbarSlot();
-          this.renderTypoSvgOverlays();
 
           // Clear active bookmark on user-initiated cursor/selection movement
           if (!this._isJumpingToBookmark) {
@@ -16534,20 +16530,15 @@ class NocturneWriter {
                 const prev = prevPosMap.get(card);
                 let dx = (prev.relLeft - relLeft) + vis.x;
                 let dy = (prev.relTop - relTop) + vis.y;
-                let scaleX = prev.width && width ? prev.width / width : 1;
-                let scaleY = prev.height && height ? prev.height / height : 1;
 
                 if (Math.abs(dx) > zoneRect.width * 1.2) {
                   dx = 0;
                 }
 
-                if (scaleX < 0.3 || scaleX > 3.0) scaleX = 1;
-                if (scaleY < 0.3 || scaleY > 3.0) scaleY = 1;
-
-                const isPosShift = isDragging
-                  ? (Math.abs(dy) > 3 || Math.abs(dx) >= 24)
-                  : (Math.abs(dx) > 1 || Math.abs(dy) > 1);
-                const isScaleShift = Math.abs(scaleX - 1) > 0.03 || Math.abs(scaleY - 1) > 0.03;
+                // During split drag resizing, only animate cards that actually changed row (dy > 8) to eliminate stretching/jitter
+                const shouldAnimate = isVisible && (isDragging
+                  ? (Math.abs(dy) > 8)
+                  : (Math.abs(dx) > 1 || Math.abs(dy) > 1));
 
                 prevPosMap.set(card, {
                   relLeft,
@@ -16556,20 +16547,15 @@ class NocturneWriter {
                   height
                 });
 
-                if (isVisible && (isPosShift || isScaleShift)) {
+                if (shouldAnimate) {
                   card._isFlippingGrid = true;
                   card.classList.add('is-flipping');
-                  card.style.transformOrigin = '0 0';
-
-                  const fromTransform = (scaleX !== 1 || scaleY !== 1)
-                    ? `translate3d(${dx}px, ${dy}px, 0) scale(${scaleX}, ${scaleY})`
-                    : `translate3d(${dx}px, ${dy}px, 0)`;
 
                   const anim = card.animate([
-                    { transform: fromTransform },
-                    { transform: 'translate3d(0px, 0px, 0) scale(1, 1)' }
+                    { transform: `translate3d(${dx}px, ${dy}px, 0)` },
+                    { transform: 'translate3d(0px, 0px, 0)' }
                   ], {
-                    duration: isDragging ? 440 : 480,
+                    duration: isDragging ? 380 : 420,
                     easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
                     fill: 'none'
                   });
@@ -16578,7 +16564,6 @@ class NocturneWriter {
                   anim.onfinish = () => {
                     card.classList.remove('is-flipping');
                     card._isFlippingGrid = false;
-                    card.style.transformOrigin = '';
                     if (card._activeNocturneAnim === anim) {
                       card._activeNocturneAnim = null;
                       card.style.transform = '';
@@ -17617,7 +17602,7 @@ class NocturneWriter {
     const isTimelineZone = ['timeline', 'subtimeline'].includes(zoneType);
     const mobile = this.isMobileLayout?.();
     const sortable = new window.Sortable(zone, {
-      animation: mobile ? 190 : 220,
+      animation: mobile ? 280 : 380,
       easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
       forceFallback: true,
       fallbackOnBody: !mobile,
