@@ -8369,8 +8369,8 @@ class NocturneWriter {
       const state = Flip.getState(candidateList);
       mutateDOM();
       Flip.from(state, {
-        duration: 0.32,
-        ease: 'power2.out',
+        duration: 0.38,
+        ease: 'power3.out',
         absolute: false,
         nested: true,
         onStart: () => {
@@ -16512,70 +16512,51 @@ class NocturneWriter {
         const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card')).filter(el => !el.classList.contains('hidden'));
         if (!cards.length) continue;
 
-        // Reset ongoing animations so fastdom.measure gets clean un-transformed layout rects
-        cards.forEach(card => {
-          if (card._isFlippingGrid || card._activeNocturneAnim) {
-            card.classList.remove('is-flipping');
-            card._isFlippingGrid = false;
-            this.cancelElementAnimations(card);
-          }
-        });
-
         fastdom.measure(() => {
           const zoneRect = zone.getBoundingClientRect();
           const cardData = cards.map(card => {
-            const rect = card.getBoundingClientRect();
-            const relLeft = rect.left - zoneRect.left;
-            const relTop = rect.top - zoneRect.top;
-            const isVisible = rect.bottom >= (zoneRect.top - 150) && rect.top <= (zoneRect.bottom + 150);
-            return { card, rect, relLeft, relTop, isVisible };
+            const vis = this.getVisualTranslate(card);
+            const rawRect = card.getBoundingClientRect();
+            const baseLeft = rawRect.left - vis.x;
+            const baseTop = rawRect.top - vis.y;
+            const relLeft = baseLeft - zoneRect.left;
+            const relTop = baseTop - zoneRect.top;
+            const isVisible = rawRect.bottom >= (zoneRect.top - 150) && rawRect.top <= (zoneRect.bottom + 150);
+            return { card, rawRect, relLeft, relTop, width: rawRect.width, height: rawRect.height, vis, isVisible };
           });
 
           fastdom.mutate(() => {
-            cardData.forEach(({ card, rect, relLeft, relTop, isVisible }) => {
+            cardData.forEach(({ card, relLeft, relTop, width, height, vis, isVisible }) => {
               if (prevPosMap.has(card)) {
                 const prev = prevPosMap.get(card);
-                let dx = (prev.relLeft !== undefined ? prev.relLeft : (prev.left - zoneRect.left)) - relLeft;
-                let dy = (prev.relTop !== undefined ? prev.relTop : (prev.top - zoneRect.top)) - relTop;
-                const scaleX = rect.width ? prev.width / rect.width : 1;
-                const scaleY = rect.height ? prev.height / rect.height : 1;
+                let dx = (prev.relLeft - relLeft) + vis.x;
+                let dy = (prev.relTop - relTop) + vis.y;
 
-                // Validate extreme deltas caused by tab switches or pane hiding
                 if (Math.abs(dx) > zoneRect.width * 1.2) {
                   dx = 0;
                 }
 
                 const isPosShift = isDragging
-                  ? (Math.abs(dy) > 4 || Math.abs(dx) >= 30)
+                  ? (Math.abs(dy) > 3 || Math.abs(dx) >= 24)
                   : (Math.abs(dx) > 1 || Math.abs(dy) > 1);
-                const isScaleShift = !isDragging && (Math.abs(scaleX - 1) > 0.01 || Math.abs(scaleY - 1) > 0.01);
 
-                const shouldAnimate = isVisible && (isPosShift || isScaleShift);
-
-                // Always update prevPosMap immediately with current un-transformed container-relative layout rect
                 prevPosMap.set(card, {
                   relLeft,
                   relTop,
-                  left: rect.left,
-                  top: rect.top,
-                  width: rect.width,
-                  height: rect.height
+                  width,
+                  height
                 });
 
-                if (shouldAnimate) {
+                if (isVisible && isPosShift) {
                   card._isFlippingGrid = true;
                   card.classList.add('is-flipping');
                   card.style.transformOrigin = '0 0';
 
-                  const fromTransform = isDragging
-                    ? `translate3d(${dx}px, ${dy}px, 0)`
-                    : `translate3d(${dx}px, ${dy}px, 0) scale(${scaleX}, ${scaleY})`;
-
                   const anim = card.animate([
-                    { transform: fromTransform },
-                    { transform: 'translate3d(0px, 0px, 0) scale(1, 1)' }
+                    { transform: `translate3d(${dx}px, ${dy}px, 0)` },
+                    { transform: 'translate3d(0px, 0px, 0)' }
                   ], {
-                    duration: isDragging ? 220 : 300,
+                    duration: isDragging ? 360 : 380,
                     easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
                     fill: 'none'
                   });
@@ -16585,17 +16566,18 @@ class NocturneWriter {
                     card.classList.remove('is-flipping');
                     card._isFlippingGrid = false;
                     card.style.transformOrigin = '';
-                    if (card._activeNocturneAnim === anim) card._activeNocturneAnim = null;
+                    if (card._activeNocturneAnim === anim) {
+                      card._activeNocturneAnim = null;
+                      card.style.transform = '';
+                    }
                   };
                 }
               } else {
                 prevPosMap.set(card, {
                   relLeft,
                   relTop,
-                  left: rect.left,
-                  top: rect.top,
-                  width: rect.width,
-                  height: rect.height
+                  width,
+                  height
                 });
               }
             });

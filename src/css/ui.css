@@ -52,6 +52,12 @@ textarea::selection {
     linear-gradient(135deg, color-mix(in srgb, var(--accent) 42%, transparent), color-mix(in srgb, var(--accent-hover) 24%, transparent));
   box-shadow: 0 0 0 1px rgba(255,255,255,.025) inset, 0 0 18px color-mix(in srgb, var(--accent) 28%, transparent);
   mix-blend-mode: screen;
+  will-change: left, top, width, height, opacity;
+  transition: left 80ms cubic-bezier(0.16, 1, 0.3, 1),
+              top 80ms cubic-bezier(0.16, 1, 0.3, 1),
+              width 80ms cubic-bezier(0.16, 1, 0.3, 1),
+              height 80ms cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 120ms ease;
 }
 
 #nocturne-selection-layer .nocturne-selection-handle {
