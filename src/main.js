@@ -1673,6 +1673,7 @@ class NocturneWriter {
     this.updateAssistantPanelState();
     this.updateElectronTitlebarTitle();
     this.updateTypoHighlightsDebounced();
+    this.updateReadabilityHighlights();
   }
 
   renderPane(paneId) {
@@ -10538,6 +10539,7 @@ class NocturneWriter {
     this.renderReviewNavigator();
     this.updateReviewHighlights();
     this.updateTypoHighlightsDebounced();
+    this.updateReadabilityHighlights();
   }
 
   disableBrowserSpellcheck() {
@@ -10727,34 +10729,31 @@ class NocturneWriter {
     const active = options.skipActiveSentence ? this.getCaretSnapshot() : null;
     const shortRanges = [];
     const longRanges = [];
-    document.querySelectorAll('.page-content p').forEach((block) => {
-      const textNodes = [];
-      let fullText = '';
-      const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, {
-        acceptNode: (node) => node.nodeValue?.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT,
-      });
-      let node = walker.nextNode();
-      while (node) {
-        const text = cleanAnalysisResidue(node.nodeValue || '');
-        textNodes.push({ node, start: fullText.length, end: fullText.length + text.length });
-        fullText += text;
-        node = walker.nextNode();
-      }
+    document.querySelectorAll('.page-content p, .page-content blockquote, .page-content h2').forEach((block) => {
+      const { textNodes, fullText } = this.textNodesForHighlightBlock(block);
+      if (!fullText.trim()) return;
+      const blockId = block.dataset.sourceBlockId || block.dataset.blockId;
 
-      const sentenceRegex = /[^.!?…]+[.!?…]+/gu;
+      const sentenceRegex = /[^.!?…\n]+(?:[.!?…]+|$)/gu;
       let match = sentenceRegex.exec(fullText);
       while (match) {
-        const sentence = match[0];
-        const start = match.index;
-        const end = start + sentence.length;
-        const isActiveSentence = active?.blockId === block.dataset.blockId && active.offset >= start && active.offset <= end;
-        if (sentence.trim() && !isActiveSentence) {
-          const words = countWords(sentence);
-          if (words > 24 || words <= 7) {
-            const range = this.rangeFromBlockOffsets(textNodes, start, end);
-            if (range) {
-              if (words > 24) longRanges.push(range);
-              else shortRanges.push(range);
+        const raw = match[0];
+        const leadingWs = (raw.match(/^\s+/) || [''])[0].length;
+        const trailingWs = (raw.match(/\s+$/) || [''])[0].length;
+        const actualStart = match.index + leadingWs;
+        const actualEnd = match.index + raw.length - trailingWs;
+        const sentenceText = fullText.slice(actualStart, actualEnd);
+
+        if (sentenceText.trim()) {
+          const isActiveSentence = active && active.blockId === blockId && active.offset >= actualStart && active.offset <= actualEnd;
+          if (!isActiveSentence) {
+            const words = countWords(sentenceText);
+            if (words > 24 || (words <= 7 && words > 0)) {
+              const range = this.rangeFromBlockOffsets(textNodes, actualStart, actualEnd);
+              if (range) {
+                if (words > 24) longRanges.push(range);
+                else shortRanges.push(range);
+              }
             }
           }
         }
@@ -12595,6 +12594,14 @@ class NocturneWriter {
       this.updateTypoHighlights();
     } else {
       this.updateTypoHighlightsDebounced();
+    }
+
+    if (this.state.settings.readability) {
+      if (isDelimiter) {
+        this.updateReadabilityHighlights();
+      } else {
+        this.updateReadabilityDebounced();
+      }
     }
   }
 

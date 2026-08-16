@@ -1678,13 +1678,15 @@ body.resizing-workspace {
 
 /* Readability Rhythms */
 ::highlight(sentence-short) {
-  background: transparent;
-  color: #34f5a6;
+  background-color: transparent !important;
+  text-decoration: none !important;
+  color: var(--sentence-short-color, #34f5a6);
   text-shadow: 0 0 5px rgba(52, 245, 166, .34);
 }
 ::highlight(sentence-long) {
-  background: transparent;
-  color: #ff5f7d;
+  background-color: transparent !important;
+  text-decoration: none !important;
+  color: var(--sentence-long-color, #ff5f7d);
   text-shadow: 0 0 5px rgba(255, 95, 125, .34);
 }
 ::highlight(typo-errors) {

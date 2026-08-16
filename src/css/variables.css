@@ -47,4 +47,6 @@
   --button-text-strong: #fff;
   --selection-bg: color-mix(in srgb, var(--accent) 46%, rgba(255,255,255,.08));
   --selection-text: #fff;
+  --sentence-short-color: #34f5a6;
+  --sentence-long-color: #ff5f7d;
 }

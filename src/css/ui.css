@@ -1710,13 +1710,15 @@ body.resizing-workspace .note-card {
 
 /* Readability Rhythms */
 ::highlight(sentence-short) {
-  background: transparent;
-  color: #34f5a6;
+  background-color: transparent !important;
+  text-decoration: none !important;
+  color: var(--sentence-short-color, #34f5a6);
   text-shadow: 0 0 5px rgba(52, 245, 166, .34);
 }
 ::highlight(sentence-long) {
-  background: transparent;
-  color: #ff5f7d;
+  background-color: transparent !important;
+  text-decoration: none !important;
+  color: var(--sentence-long-color, #ff5f7d);
   text-shadow: 0 0 5px rgba(255, 95, 125, .34);
 }
 ::highlight(typo-errors),
@@ -5810,6 +5812,8 @@ body.mobile-shell-active .sortable-fallback-drag.timeline-item {
   --card-bg: rgba(91,72,48,.045);
   --pane-header-bg: rgba(248,241,229,.82);
   --button-text-strong: #241f19;
+  --sentence-short-color: #059669;
+  --sentence-long-color: #e11d48;
 }
 .theme-paper .page-content h1,
 .theme-paper .page-content h2,
