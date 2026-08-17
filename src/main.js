@@ -21569,21 +21569,27 @@ ${raw}`;
     overlay.classList.remove('active');
   }
 
+  getCleanerRegexes() {
+    return {
+      pcHeader: /^[ \t\u00A0]*(\[(?:\d{1,4}[./-]\d{1,2}[./-]\d{2,4}(?:,\s*|\s+))?\d{1,2}:\d{2}(?::\d{2})?(?:\s*[APap][Mm])?\]\s+([^:\r\n\s][^:\r\n]{0,120}?)(?:,?\s+(?:in\s+reply\s+to|в\s+ответ\s+(?:на)?)\s+([^:\r\n]+))?:\s*)/i,
+      mobileTimestampHeader: /^[ \t\u00A0]*(([^:\r\n\s\[][^:\r\n\[]{0,120}?),\s*\[(?:\d{1,4}[./-]\d{1,2}[./-]\d{2,4}(?:,\s*|\s+))?\d{1,2}:\d{2}(?::\d{2})?(?:\s*[APap][Mm])?\](?::\s*|\s*))/i,
+      mobileStandaloneUser: /^[ \t\u00A0]*(?!(?:[Гг]лава|[Сс]цена|[Зз]аметка|[Ии]дея|[Вв]опрос|[Оо]твет|[Оо]писание|[Вв]ажно|[Пп]римечание|[Вв]нимание|[Сс]уть|[Ии]тог|[Вв]ывод|[Пп]ример|[Шш]аг|[Ии]нгредиенты|[Пп]ерсонажи|[Кк]онтекст|[Сс]южет|[Cc]hapter|[Ss]cene|[Nn]ote|[Ii]dea|[Qq]uestion|[Aa]nswer|[Dd]escription|[Ii]mportant|[Aa]ttention|[Ss]ummary|[Cc]onclusion|[Ee]xample|[Ss]tep|[Ii]ngredients|[Cc]haracters|[Cc]ontext|[Pp]lot|[Ww]arning|[Ii]nfo|[Tt]odo|[Dd]raft|[Ff]ix|[Uu]pd|[Pp]\.[Ss])(?![a-zA-Z0-9_а-яА-ЯёЁ]))(?!\d+(?![a-zA-Z0-9_а-яА-ЯёЁ]))(([^:\r\n\s\.\?!,]+(?:\s+[^:\r\n\s\.\?!,]+)?)(?:\s+(?:in\s+reply\s+to|в\s+ответ\s+(?:на)?)\s+([^:\r\n]+))?:\s*)$/i,
+      forwardHeader: /^[ \t\u00A0]*(\[?(?:Forwarded\s+from|Переслано\s+от|Forwarded\s+Message|Пересланное\s+сообщение)\s+[^\]\r\n]+\]?:?\s*)$/i,
+      replyHeader: /^[ \t\u00A0]*(\[?(?:in\s+reply\s+to|в\s+ответ\s+(?:на)?)\s+[^\]\r\n]+\]?:?\s*)$/i,
+    };
+  }
+
   findTelegramArtifacts(text) {
     if (!text) return [];
     const matches = [];
     const lines = text.split(/\r?\n/);
-    
-    // Regular expressions for PC and Mobile headers (including in reply to / в ответ на)
-    const pcHeaderRegex = /^[ \t\u00A0]*\[(?:\d{1,4}[./-]\d{1,2}[./-]\d{2,4}(?:,\s+|\s+))?\d{1,2}:\d{2}(?::\d{2})?(?:\s*[APap][Mm])?\]\s+([^:\r\n\s][^:\r\n]{0,120}?)(?:\s+(?:in\s+reply\s+to|в\s+ответ\s+(?:на)?)\s+([^:\r\n]+))?:\s*$/i;
-    const mobileHeaderRegex = /^[ \t\u00A0]*(?!(?:[Гг]лава|[Сс]цена|[Зз]аметка|[Ии]дея|[Вв]опрос|[Оо]твет|[Оо]писание|[Вв]ажно|[Пп]римечание|[Вв]нимание|[Сс]уть|[Ии]тог|[Вв]ывод|[Пп]ример|[Шш]аг|[Ии]нгредиенты|[Пп]ерсонажи|[Кк]онтекст|[Сс]южет|[Cc]hapter|[Ss]cene|[Nn]ote|[Ii]dea|[Qq]uestion|[Aa]nswer|[Dd]escription|[Ii]mportant|[Aa]ttention|[Ss]ummary|[Cc]onclusion|[Ee]xample|[Ss]tep|[Ii]ngredients|[Cc]haracters|[Cc]ontext|[Pp]lot|[Ww]arning|[Ii]nfo|[Tt]odo|[Dd]raft|[Ff]ix|[Uu]pd|[Pp]\.[Ss])(?![a-zA-Z0-9_а-яА-ЯёЁ]))(?!\d+(?![a-zA-Z0-9_а-яА-ЯёЁ]))(([^:\r\n\s\.\?!,]+(?:\s+[^:\r\n\s\.\?!,]+)?)(?:\s+(?:in\s+reply\s+to|в\s+ответ\s+(?:на)?)\s+([^:\r\n]+))?:\s*)$/i;
+    const regexes = this.getCleanerRegexes();
 
-    // Collect all plain text lines (excluding headers and > quote lines) for duplicate content matching
     const plainTextLines = lines
       .filter(line => {
         const trimmed = line.trim();
         if (!trimmed) return false;
-        if (pcHeaderRegex.test(trimmed) || mobileHeaderRegex.test(trimmed)) return false;
+        if (regexes.pcHeader.test(trimmed) || regexes.mobileTimestampHeader.test(trimmed) || regexes.mobileStandaloneUser.test(trimmed) || regexes.forwardHeader.test(trimmed) || regexes.replyHeader.test(trimmed)) return false;
         if (trimmed.startsWith('>')) return false;
         return true;
       })
@@ -21596,30 +21602,57 @@ ${raw}`;
       const trimmed = line.trim();
       if (!trimmed) return;
 
-      const pcMatch = trimmed.match(pcHeaderRegex);
-      const mobileMatch = !pcMatch ? trimmed.match(mobileHeaderRegex) : null;
+      const pcMatch = line.match(regexes.pcHeader);
+      const mobileTsMatch = !pcMatch ? line.match(regexes.mobileTimestampHeader) : null;
+      const forwardMatch = !pcMatch && !mobileTsMatch ? line.match(regexes.forwardHeader) : null;
+      const replyMatch = !pcMatch && !mobileTsMatch && !forwardMatch ? line.match(regexes.replyHeader) : null;
+      const mobileUserMatch = !pcMatch && !mobileTsMatch && !forwardMatch && !replyMatch ? line.match(regexes.mobileStandaloneUser) : null;
 
-      if (pcMatch || mobileMatch) {
-        const matchInfo = pcMatch || mobileMatch;
-        const isReplyHeader = Boolean(matchInfo[2] || /in\s+reply\s+to|в\s+ответ/i.test(trimmed));
+      if (pcMatch || mobileTsMatch || forwardMatch || replyMatch || mobileUserMatch) {
+        const isReply = replyMatch || /in\s+reply\s+to|в\s+ответ/i.test(trimmed);
+        let type = 'pc';
+        let rawHeader = '';
+        let isInline = false;
+        let headerLength = 0;
+
+        if (pcMatch) {
+          type = isReply ? 'pc_reply' : 'pc';
+          rawHeader = pcMatch[1];
+          isInline = pcMatch[0].length < line.trimEnd().length;
+          headerLength = pcMatch[0].length;
+        } else if (mobileTsMatch) {
+          type = isReply ? 'mobile_reply' : 'mobile';
+          rawHeader = mobileTsMatch[1];
+          isInline = mobileTsMatch[0].length < line.trimEnd().length;
+          headerLength = mobileTsMatch[0].length;
+        } else if (forwardMatch) {
+          type = 'forward';
+          rawHeader = forwardMatch[1];
+        } else if (replyMatch) {
+          type = 'reply';
+          rawHeader = replyMatch[1];
+        } else if (mobileUserMatch) {
+          type = isReply ? 'mobile_reply' : 'mobile';
+          rawHeader = mobileUserMatch[1];
+        }
+
         matches.push({
-          type: pcMatch ? (isReplyHeader ? 'pc_reply' : 'pc') : (isReplyHeader ? 'mobile_reply' : 'mobile'),
-          raw: line,
+          type,
+          raw: rawHeader.trim(),
           lineIndex: idx,
+          isInline,
+          headerLength,
         });
+
         lastWasHeader = true;
-        lastHeaderWasReply = isReplyHeader;
+        lastHeaderWasReply = isReply;
         return;
       }
 
       if (trimmed.startsWith('>')) {
         const quoteContent = trimmed.replace(/^>\s*/, '').trim();
         const quoteContentLower = quoteContent.toLowerCase();
-        
-        // Rule 1: Follows a Telegram header (standard or in-reply-to)
         const followsHeader = lastWasHeader;
-        
-        // Rule 2: Quote text matches or is contained within any plain text line in the note
         const isDuplicateContent = quoteContentLower.length > 2 && plainTextLines.some(plain => plain.includes(quoteContentLower) || quoteContentLower.includes(plain));
 
         if (followsHeader || isDuplicateContent) {
@@ -21629,7 +21662,6 @@ ${raw}`;
             lineIndex: idx,
             reason: followsHeader ? (lastHeaderWasReply ? 'after_reply_header' : 'after_header') : 'duplicate_text',
           });
-          // Preserve lastWasHeader = true so consecutive multiline > quote blocks following a header are also matched
           return;
         }
       }
@@ -21646,11 +21678,27 @@ ${raw}`;
     const matches = this.findTelegramArtifacts(text);
     if (!matches.length) return text;
 
-    const matchedLineIndices = new Set(matches.map(m => m.lineIndex));
+    const matchesByLine = new Map();
+    matches.forEach(m => matchesByLine.set(m.lineIndex, m));
+
     const lines = text.split(/\r?\n/);
-    
-    const cleanedLines = lines.filter((_, idx) => !matchedLineIndices.has(idx));
-    
+    const cleanedLines = [];
+
+    lines.forEach((line, idx) => {
+      const match = matchesByLine.get(idx);
+      if (!match) {
+        cleanedLines.push(line);
+        return;
+      }
+
+      if (match.isInline && match.headerLength > 0) {
+        const remainder = line.slice(match.headerLength);
+        if (remainder.trim()) {
+          cleanedLines.push(remainder);
+        }
+      }
+    });
+
     // Format blank lines neatly (max 2 consecutive empty lines)
     const result = [];
     let blankCount = 0;
@@ -22167,7 +22215,7 @@ ${raw}`;
       let matches = [];
       let totalNotesScanned = 0;
       if (noteId) {
-        const note = this.state.lore.notes.find(n => n.id === noteId);
+        const note = (this.state.lore.notes || []).find(n => n.id === noteId);
         if (note) {
           matches = this.findTelegramArtifacts(note.body || '');
           totalNotesScanned = 1;
@@ -22266,7 +22314,7 @@ ${raw}`;
       let errorOccurred = false;
       try {
         if (noteId) {
-          const noteIndex = this.state.lore.notes.findIndex(n => n.id === noteId);
+          const noteIndex = (this.state.lore.notes || []).findIndex(n => n.id === noteId);
           if (noteIndex !== -1) {
             const note = this.state.lore.notes[noteIndex];
             note.body = this.cleanTelegramArtifacts(note.body || '');
