@@ -1558,6 +1558,7 @@ body.resizing-workspace {
   position: relative;
   min-height: calc(var(--font-size-editor) * var(--line-height-editor));
   white-space: pre-wrap;
+  transition: color 240ms cubic-bezier(0.16, 1, 0.3, 1), opacity 240ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 .pm-editor-host .ProseMirror h1,
 .pm-editor-host .ProseMirror h2,
@@ -1568,6 +1569,7 @@ body.resizing-workspace {
   color: white;
   margin: 0 0 1.2em;
   white-space: pre-wrap;
+  transition: color 240ms cubic-bezier(0.16, 1, 0.3, 1), opacity 240ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 .page-overlay {
   position: absolute;
@@ -1797,7 +1799,36 @@ body.ctrl-pressed .entity-family-link:hover {
 .syntax-dialogue { color: #f0f7ff; text-shadow: 0 0 10px rgba(139, 183, 255, .16); }
 .syntax-thought { color: #aaaabd; font-style: italic; }
 .weak-word { text-decoration: underline wavy rgba(245, 158, 11, .85); text-underline-offset: 3px; }
-.sentence-focus-on .page-content:not(.active-selection) p:not(.active-block), .sentence-focus-on .page-content:not(.active-selection) h2:not(.active-block), .sentence-focus-on .page-content:not(.active-selection) blockquote:not(.active-block) { opacity: .28; transition: opacity 180ms ease; }
+.sentence-focus-on .page-content:not(.active-selection) p:not(.active-block),
+.sentence-focus-on .page-content:not(.active-selection) h1:not(.active-block),
+.sentence-focus-on .page-content:not(.active-selection) h2:not(.active-block),
+.sentence-focus-on .page-content:not(.active-selection) h3:not(.active-block),
+.sentence-focus-on .page-content:not(.active-selection) blockquote:not(.active-block),
+.sentence-focus-on .page-content:not(.active-selection) .ProseMirror > *:not(.active-block) {
+  opacity: .28;
+  transition: opacity 280ms cubic-bezier(0.16, 1, 0.3, 1), color 280ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sentence-focus-on .page-content .active-block,
+.sentence-focus-on .page-content p.active-block,
+.sentence-focus-on .page-content h1.active-block,
+.sentence-focus-on .page-content h2.active-block,
+.sentence-focus-on .page-content h3.active-block,
+.sentence-focus-on .page-content blockquote.active-block,
+.sentence-focus-on .ProseMirror > *.active-block {
+  opacity: 1 !important;
+  transition: opacity 280ms cubic-bezier(0.16, 1, 0.3, 1), color 280ms cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.sentence-focus-on .page-content.active-selection p,
+.sentence-focus-on .page-content.active-selection h1,
+.sentence-focus-on .page-content.active-selection h2,
+.sentence-focus-on .page-content.active-selection h3,
+.sentence-focus-on .page-content.active-selection blockquote,
+.sentence-focus-on .page-content.active-selection .ProseMirror > * {
+  opacity: 1 !important;
+  transition: opacity 280ms cubic-bezier(0.16, 1, 0.3, 1), color 280ms cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
 .lens-dialogues .page-content p { opacity: .22; }
 .lens-dialogues .syntax-dialogue { opacity: 1; color: white; }
 .lens-descriptions .syntax-dialogue { opacity: .18; }
@@ -5495,13 +5526,14 @@ body.theme-paper .mini-text-btn:hover {
   flex-direction: column;
   gap: 8px;
   transition: max-height 0.3s ease, opacity 0.3s ease;
-  overflow: hidden;
+  overflow: visible;
   max-height: 2000px;
   opacity: 1;
 }
 .folder-docs.collapsed {
   max-height: 0;
   opacity: 0;
+  overflow: hidden;
   pointer-events: none;
 }
 .doc-item.pinned {

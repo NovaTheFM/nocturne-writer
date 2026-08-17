@@ -434,6 +434,11 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
     overlay.style.height = '0px';
   }
 
+  try {
+    options.bridge?.updateReadabilityHighlights?.();
+    options.bridge?.updateActiveBlock?.();
+  } catch (e) {}
+
   const pages = [];
   for (let i = 0; i < pageCount; i++) {
     pages.push({ page: i + 1, y: i * (pageHeight + gap) });

@@ -8393,6 +8393,13 @@ class NocturneWriter {
     const vis = this.getVisualTranslate(el);
     const hasActiveMotion = !!(el._activeNocturneAnim || (typeof el.getAnimations === 'function' && el.getAnimations().length > 0) || Math.abs(vis.x) > 0.5 || Math.abs(vis.y) > 0.5);
 
+    if (el._activeFlightClone) {
+      try {
+        el._activeFlightClone.remove();
+      } catch (err) {}
+      el._activeFlightClone = null;
+      el.style.visibility = '';
+    }
     if (el._activeNocturneAnim) {
       try {
         el._activeNocturneAnim.cancel();
@@ -9794,11 +9801,17 @@ class NocturneWriter {
   cleanupSortableDragState() {
     document.body.classList.remove('sortable-active');
     document.querySelectorAll('.is-dragging').forEach((el) => el.classList.remove('is-dragging'));
+    document.querySelectorAll('.sortable-flight-clone').forEach((clone) => clone.remove());
+    document.querySelectorAll('.doc-item, .char-card, .loc-card, .timeline-item, .note-card').forEach((el) => {
+      if (el.style.visibility === 'hidden') el.style.visibility = '';
+    });
     const selectors = ['.sortable-drag', '.sortable-fallback-drag', '.sortable-ghost', '.sortable-chosen'];
     selectors.forEach((selector) => {
       document.querySelectorAll(selector).forEach((el) => {
-        if (el.parentNode === document.body || el.style.position === 'absolute' || el.style.position === 'fixed') {
+        if (el.parentNode === document.body || ((el.style.position === 'absolute' || el.style.position === 'fixed') && (el.classList.contains('sortable-drag') || el.classList.contains('sortable-fallback-drag')))) {
           el.remove();
+        } else {
+          el.classList.remove('sortable-ghost', 'sortable-drag', 'sortable-chosen', 'sortable-fallback-drag', 'sortable-fallback');
         }
       });
     });
@@ -9809,13 +9822,34 @@ class NocturneWriter {
     this.cancelElementAnimations(item);
     
     const finalRect = item.getBoundingClientRect();
+    if (finalRect.width === 0 || finalRect.height === 0) return;
+
     const startX = lastMousePos.x - clickOffset.x;
     const startY = lastMousePos.y - clickOffset.y;
     const dx = startX - finalRect.left;
     const dy = startY - finalRect.top;
     
-    item.style.zIndex = '9999';
-    const anim = item.animate([
+    if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
+
+    // Render flight on document.body so it is always on top of editor window and never clipped
+    const clone = item.cloneNode(true);
+    clone.classList.add('sortable-flight-clone');
+    clone.classList.remove('sortable-ghost', 'sortable-drag', 'sortable-fallback-drag', 'sortable-chosen', 'is-dragging', 'new-doc-entrance', 'new-card-entrance');
+    clone.style.position = 'fixed';
+    clone.style.left = `${finalRect.left}px`;
+    clone.style.top = `${finalRect.top}px`;
+    clone.style.width = `${finalRect.width}px`;
+    clone.style.height = `${finalRect.height}px`;
+    clone.style.margin = '0';
+    clone.style.boxSizing = 'border-box';
+    clone.style.pointerEvents = 'none';
+    clone.style.zIndex = '9999999';
+    clone.style.transformOrigin = 'center center';
+    
+    item.style.visibility = 'hidden';
+    document.body.appendChild(clone);
+
+    const anim = clone.animate([
       { transform: `translate3d(${dx}px, ${dy}px, 0) scale(1.015)`, boxShadow: '0 20px 40px rgba(0,0,0,.6), 0 0 20px var(--accent-glow)' },
       { transform: 'translate3d(0, 0, 0) scale(1)', boxShadow: 'none' }
     ], {
@@ -9824,15 +9858,40 @@ class NocturneWriter {
       fill: 'none'
     });
     
+    item._activeFlightClone = clone;
     item._activeNocturneAnim = anim;
+
     anim.onfinish = () => {
-      if (item._activeNocturneAnim === anim) {
+      clone.remove();
+      item.style.visibility = '';
+      if (item._activeFlightClone === clone) {
+        item._activeFlightClone = null;
         item._activeNocturneAnim = null;
-        item.style.zIndex = '';
-        item.style.transform = '';
-        item.style.boxShadow = '';
       }
     };
+    anim.oncancel = () => {
+      clone.remove();
+      item.style.visibility = '';
+      if (item._activeFlightClone === clone) {
+        item._activeFlightClone = null;
+        item._activeNocturneAnim = null;
+      }
+    };
+  }
+
+  updateFolderEmptyPlaceholders() {
+    document.querySelectorAll('.folder-docs').forEach((zone) => {
+      const hasDocs = zone.querySelectorAll('.doc-item').length > 0;
+      let emptyPlaceholder = zone.querySelector('.doc-folder-empty');
+      if (!hasDocs && !emptyPlaceholder) {
+        emptyPlaceholder = document.createElement('div');
+        emptyPlaceholder.className = 'doc-folder-empty';
+        emptyPlaceholder.textContent = 'В этой папке пока нет документов';
+        zone.appendChild(emptyPlaceholder);
+      } else if (hasDocs && emptyPlaceholder) {
+        emptyPlaceholder.remove();
+      }
+    });
   }
 
   setupDocSortables() {
@@ -9888,12 +9947,8 @@ class NocturneWriter {
           document.body.classList.remove('sortable-active');
           event.from.classList.remove('is-dragging');
           event.to.classList.remove('is-dragging');
+          this.kbSuppressClickUntil = Date.now() + 260;
           
-          // Trigger FLIP landing animation
-          if (event.item && this.lastDragMousePos && this.dragClickOffset) {
-            this.animateSortableDrop(event.item, this.lastDragMousePos, this.dragClickOffset);
-          }
-
           if (paneDrop) {
             this.renderDocs();
             this.kbSuppressClickUntil = Date.now() + 360;
@@ -9901,13 +9956,21 @@ class NocturneWriter {
           }
           if (this.shouldCancelSingleModeDocDrag(event)) {
             await this.restoreDocDragSnapshot();
-            this.kbSuppressClickUntil = Date.now() + 260;
             return;
           }
-          await this.persistDocsDomOrder();
+
+          // Update folder empty placeholders without full sidebar re-render
+          this.updateFolderEmptyPlaceholders();
+
+          // Trigger FLIP landing animation
+          if (event.item && this.lastDragMousePos && this.dragClickOffset) {
+            this.animateSortableDrop(event.item, this.lastDragMousePos, this.dragClickOffset);
+          }
+
+          if (event.oldIndex !== event.newIndex || event.from !== event.to) {
+            await this.persistDocsDomOrder();
+          }
           this.docDragSnapshot = null;
-          this.renderDocs();
-          this.kbSuppressClickUntil = Date.now() + 260;
         },
       });
       zone.__sortable = sortable;
@@ -10729,7 +10792,11 @@ class NocturneWriter {
     const active = options.skipActiveSentence ? this.getCaretSnapshot() : null;
     const shortRanges = [];
     const longRanges = [];
-    document.querySelectorAll('.page-content p, .page-content blockquote, .page-content h2').forEach((block) => {
+    const blocks = Array.from(new Set(document.querySelectorAll(
+      '.page-content .ProseMirror > p, .page-content .ProseMirror > h1, .page-content .ProseMirror > h2, .page-content .ProseMirror > h3, .page-content .ProseMirror > blockquote, ' +
+      '.page-content p, .page-content h1, .page-content h2, .page-content h3, .page-content blockquote'
+    )));
+    blocks.forEach((block) => {
       const { textNodes, fullText } = this.textNodesForHighlightBlock(block);
       if (!fullText.trim()) return;
       const blockId = block.dataset.sourceBlockId || block.dataset.blockId;
@@ -10747,8 +10814,10 @@ class NocturneWriter {
         if (sentenceText.trim()) {
           const isActiveSentence = active && active.blockId === blockId && active.offset >= actualStart && active.offset <= actualEnd;
           if (!isActiveSentence) {
+            const trimmed = sentenceText.trim();
+            const hasTerminalPunctuation = /[.!?…]$/u.test(trimmed);
             const words = countWords(sentenceText);
-            if (words > 24 || (words <= 7 && words > 0)) {
+            if (words > 24 || (words <= 7 && words > 0 && hasTerminalPunctuation)) {
               const range = this.rangeFromBlockOffsets(textNodes, actualStart, actualEnd);
               if (range) {
                 if (words > 24) longRanges.push(range);
@@ -15844,8 +15913,33 @@ class NocturneWriter {
   updateActiveBlock() {
     const sel = getSelection();
     const isSelectionActive = !!(sel && !sel.isCollapsed && sel.rangeCount);
-    const block = sel?.anchorNode?.parentElement?.closest?.('.page-content p,.page-content h2,.page-content blockquote');
-    const editable = block?.closest?.('.page-content');
+
+    let block = null;
+    const focusedPaneId = this.state.workspace?.focusedPaneId || 'primary';
+    const activeEditor = this.nocturneEditor?.get(focusedPaneId);
+    if (activeEditor?.view) {
+      try {
+        const { from } = activeEditor.view.state.selection;
+        const domInfo = activeEditor.view.domAtPos(from);
+        if (domInfo?.node) {
+          const domNode = domInfo.node.nodeType === 1 ? domInfo.node : domInfo.node.parentElement;
+          block = domNode?.closest?.('.ProseMirror > *, .page-content p, .page-content h1, .page-content h2, .page-content h3, .page-content blockquote');
+        }
+      } catch (e) {}
+    }
+
+    if (!block && sel?.anchorNode) {
+      const anchor = sel.anchorNode;
+      if (anchor.nodeType === 1 && anchor.classList.contains('ProseMirror')) {
+        block = anchor.children?.[Math.min(sel.anchorOffset, Math.max(0, (anchor.children?.length || 1) - 1))] || null;
+      } else {
+        block = (anchor.nodeType === 1 ? anchor : anchor.parentElement)?.closest?.(
+          '.ProseMirror > *, .page-content p, .page-content h1, .page-content h2, .page-content h3, .page-content blockquote'
+        );
+      }
+    }
+
+    const editable = block?.closest?.('.page-content, .pm-editor-host') || document.querySelector('.page-content.pm-editor-host');
     const currentActive = document.querySelector('.page-content.active-selection');
     if (isSelectionActive && editable) {
       if (currentActive !== editable) {
@@ -15855,6 +15949,15 @@ class NocturneWriter {
     } else if (currentActive) {
       currentActive.classList.remove('active-selection');
     }
+
+    const prevBlocks = document.querySelectorAll('.page-content .active-block, .ProseMirror > .active-block');
+    prevBlocks.forEach((el) => {
+      if (el !== block) el.classList.remove('active-block');
+    });
+    if (block && !block.classList.contains('active-block')) {
+      block.classList.add('active-block');
+    }
+
     if (block && editable) {
       const paneId = editable.dataset.paneId;
       if (paneId && this.state.workspace?.focusedPaneId !== paneId) this.setFocusedPane(paneId);

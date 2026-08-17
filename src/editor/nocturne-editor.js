@@ -5,6 +5,32 @@ import { normalizeTypoToken } from '../core/typos.js';
 import { uid, buildSummary } from '../core/utils.js';
 
 export const paginationPluginKey = new PluginKey('nocturnePagination');
+export const activeBlockPluginKey = new PluginKey('nocturneActiveBlock');
+
+const NocturneActiveBlock = Extension.create({
+  name: 'nocturneActiveBlock',
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: activeBlockPluginKey,
+        props: {
+          decorations(state) {
+            const { $from } = state.selection;
+            if (!$from || $from.depth < 1) return DecorationSet.empty;
+            try {
+              const start = $from.before(1);
+              const end = $from.after(1);
+              const dec = Decoration.node(start, end, { class: 'active-block' });
+              return DecorationSet.create(state.doc, [dec]);
+            } catch (e) {
+              return DecorationSet.empty;
+            }
+          },
+        },
+      }),
+    ];
+  },
+});
 
 const NocturnePagination = Extension.create({
   name: 'nocturnePagination',
@@ -696,6 +722,7 @@ export class NocturneEditorBridge {
         Underline,
         TextAlign.configure({ types: ['heading', 'paragraph'] }),
         Placeholder.configure({ placeholder: '' }),
+        NocturneActiveBlock,
         BlockIdentity,
         NocturnePagination.configure({ bridge: this }),
         NocturneEntityMentions.configure({
