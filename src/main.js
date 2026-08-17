@@ -486,7 +486,7 @@ class NocturneWriter {
     this.startGitAutosave();
 
     // Check if new version first run (specifically for Electron desktop users)
-    const currentVersion = '1.1.9';
+    const currentVersion = '1.2.0';
     const showWhatsNew = this.runtime.isElectron && this.state.settings.lastSeenVersion !== currentVersion;
     if (showWhatsNew) {
       setTimeout(() => {
@@ -21478,7 +21478,7 @@ ${raw}`;
       format: 'nocturnedump',
       version: 1,
       appName: 'Nocturne Writer',
-      appVersion: '1.1.9',
+      appVersion: '1.2.0',
       schemaVersion: 3,
       exportedAt: new Date().toISOString(),
       encrypted: !!this.state.settings.e2e,
@@ -21900,6 +21900,34 @@ ${raw}`;
             <h2 style="text-align: center; margin: 0 0 4px; font-size: 22px; color: var(--text-main); font-weight: 700;">Что нового</h2>
             <p style="text-align: center; margin: 0 0 20px; font-size: 13px; color: var(--text-muted, #a1a1aa);">Луна хочет рассказать вам о новинках!</p>
             <div class="whats-new-body" style="max-height: 280px; overflow-y: auto; padding-right: 8px; font-size: 14px; line-height: 1.6; color: var(--text-main);">
+              <p style="margin: 0 0 16px; font-weight: 600; color: var(--accent);">Версия 1.2.0</p>
+
+              <p style="margin: 0 0 4px; font-weight: 600;">✨ Плавный полёт документов и улучшение сайдбара:</p>
+              <ul style="margin: 0 0 16px; padding-left: 20px;">
+                <li><b>Кинематический полёт документов</b>: При перетаскивании документов в боковой панели карточка плавно летит из точки отпускания в свою ячейку поверх окна редактора (420мс, кривая замедления Apple).</li>
+                <li><b>Устранение мерцания папок</b>: Сайдбар больше не перерисовывается с нуля при перемещении заметок, сохраняя плавность и состояние дерева документов.</li>
+              </ul>
+
+              <p style="margin: 0 0 4px; font-weight: 600;">🎨 Ритм чтения и плавный фокус абзацев:</p>
+              <ul style="margin: 0 0 16px; padding-left: 20px;">
+                <li><b>Подсветка темпа предложений</b>: Восстановлена и оптимизирована подсветка длины предложений (неоново-зелёная для коротких, красно-розовая для длинных) прямо во время ввода в TipTap.</li>
+                <li><b>Шелковые переходы фокуса</b>: Плавное затухание неактивного текста и мягкое подсвечивание текущего абзаца без резких скачков.</li>
+              </ul>
+
+              <p style="margin: 0 0 4px; font-weight: 600;">🌟 Скользящее выделение текста (Apple Style Selection):</p>
+              <ul style="margin: 0 0 16px; padding-left: 20px;">
+                <li><b>Плавное скольжение рамки</b>: Неоновый слой выделения мягко скользит по тексту при навигации стрелками с клавиатуры и двойных кликах.</li>
+                <li><b>Мгновенный отклик при драге</b>: При выделении мышью и быстром скролле сохраняется идеальный отклик 1:1 без запаздываний.</li>
+              </ul>
+
+              <p style="margin: 0 0 4px; font-weight: 600;">⚡ Архитектурная оптимизация и Split-Screen:</p>
+              <ul style="margin: 0 0 16px; padding-left: 20px;">
+                <li><b>Виртуализация огромных рукописей</b>: Стабильные 60–120 FPS при разделении экрана даже в документах на 50+ страниц и 50 000+ слов.</li>
+                <li><b>Плавный рефлоу Базы Знаний</b>: Адаптивное масштабирование колонок и мягкое перенаправление движения карточек при прерывании анимаций.</li>
+              </ul>
+
+              <hr style="border: 0; border-top: 1px solid var(--border); margin: 20px 0;">
+
               <p style="margin: 0 0 16px; font-weight: 600; color: var(--accent);">Версия 1.1.9</p>
 
               <p style="margin: 0 0 4px; font-weight: 600;">✨ Совершенствование FLIP-анимаций и Split-Screen:</p>
