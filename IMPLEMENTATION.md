@@ -1,30 +1,126 @@
-# Reliability, Android and interface work
+# Nocturne Writer — отчёт о выполненной работе
 
-Requested: implement every confirmed audit fix and practical addition; restore bidirectional LAN database synchronization; deliver Android APK and polished responsive UI.
+Дата: 27 сентября 2026. Версия сборок: **1.2.0**. Рабочая папка: `D:\С диска С дампик\coding\today we steal the code 2`.
 
-## Sequence and acceptance
+Задача: исправить подтверждённые аудитом ошибки, добавить полезные инструменты для рукописи, вернуть Android и двустороннюю синхронизацию базы по локальной сети, улучшить интерфейс и производительность. Перед изменениями сохранён исходный проект коммитом `982aa2d`; исправления и воспроизводящие тесты сохранены отдельными коммитами. Основной модуль не переписывался целиком; сетки карточек сохраняют `1fr`.
 
-1. Protect manuscripts: one editor model, durable recovery, centralized encryption, validated atomic import, complete backups. Verify replacement, AI, history, crash recovery, malicious input and encrypted raw storage.
-2. Restore LAN database reconciliation: missing records in both directions, persistent pending changes, acknowledgements, stale-message rejection, conflict preservation and comparison. Test two isolated databases over the actual broker, including offline edits and deletes.
-3. Restore Android project and native integration: offline assets, file sharing/export, LAN cleartext configuration, keyboard/insets/back navigation and lifecycle saving. Produce and inspect APK.
-4. Practical tools: rotating external backups, recoverable trash, ordered book export with chapter selection and optional notes, return to manuscript position, cross-document review queue, AI cancellation and explicit chapter/world association.
-5. UI and performance: adaptive toolbar, readable contrast, opaque mobile surfaces, focus management, reduced motion, compact cards, concise settings, onboarding import/restore, local fonts, incremental spelling/analysis and lazy assets.
-6. Full verification: unit/integration, browser regression, desktop/mobile screenshots, production build, dependency audit, Android build. Log changes in updates.md. Preserve card-grid 1fr and existing animations.
+Полный перечень изменённых файлов: [docs/changed-files.txt](docs/changed-files.txt).
 
-## Evidence
+## 1. Сохранение, восстановление и защита данных
 
-- Start checkpoint: 982aa2d; clean master branch.
-- Previous audit artifacts: C:/Users/sasat/AppData/Local/Temp/nocturne-audit-ax0yk0qh.
-- Android platform/config absent at start; Java 21 available, SDK location not yet established.
+| Причина ошибки | Исправление и результат |
+| --- | --- |
+| Некоторые действия изменяли модель или DOM, оставляя прежний текст во внутреннем состоянии Tiptap. Следующее сохранение возвращало старую версию. | Замена текста, принятие AI-правок и восстановление истории проходят через единый адаптер живого редактора. Сохранения одного документа выполняются последовательно. |
+| Аварийные черновики зависели от локального хранилища и эвристик, обрезавших большой текст. | Черновики сохраняются в IndexedDB. Большие абзацы и старые аварийные записи сохраняются для восстановления. |
+| Сообщение об успехе появлялось до завершения записи. | Состояние сохранения и сообщения об экспорте отражают результат записи; ошибки показываются пользователю. |
+| При удалении главы отложенное сохранение могло записать её обратно. | Удаление ждёт текущую запись и блокирует новые записи удаляемого документа. Глава и связанные данные перемещаются в корзину одной транзакцией. |
+| Шифрование основного текста оставляло открытыми `pmJson`, историю, заметки и части настроек. | Централизованная защита записей распространяется на документы, миры, черновики, историю, заметки, правки, корзину, копии и очереди обмена. Ключи AI-провайдеров защищаются в настройках. При включении шифрования мигрируют существующие записи. |
+| Полученные с ПК зашифрованные заметки могли перезаписываться пустым текстом на телефоне до ввода пароля. После разблокировки новая правка могла сохраняться открыто. | Заблокированные записи не заменяются пустыми данными. После ввода пароля приложение распознаёт защищённый проект и включает защиту последующих локальных записей. |
+| Импорт сначала изменял часть базы и интерфейс, затем мог завершиться ошибкой. Объединение теряло дополнительные миры. | Проверяются структура, идентификаторы, глубина, версия и контрольная сумма. Замена и объединение проекта записываются атомарно; ошибка возвращает прежнее состояние. Объединение сохраняет все миры, связи глав, заметки, историю и правила. |
+| Экспорт проекта захватывал настройки конкретного устройства и мог раскрыть API-ключи. | Из дампа исключены идентификатор устройства, код подключения и дескриптор папки копий; открытый экспорт очищает секреты. Защищённый проект экспортируется с защищёнными записями. |
+| Escape закрывал подтверждение, не завершая ожидающий результат. | Escape возвращает отказ, продолжение действия не зависает. |
+| День для целей и статистики вычислялся по UTC. | Используется местная дата устройства. |
 
-## Progress
+Основные файлы: `src/main.js`, `src/core/db.js`, `src/core/record-protection.js`, `src/core/defaults.js`, `src/core/utils.js`, `src/editor/document-adapter.js`, `src/editor/nocturne-editor.js`.
 
-- Initial seven reliability regressions reproduced RED (908af0b) and passed GREEN (67d8eec).
-- DatabaseSync added: vector clocks, tombstones, durable versions and preserved conflicts. Five Node tests pass; coverage 98.39% lines, 86.09% branches, 90.63% functions.
-- Actual LAN broker test passed: isolated desktop/mobile browser databases reconciled both ways and later phone edit reached PC. Relay payloads use AES-GCM; acknowledgements sent after persistence; broker filters target IDs. Both standalone and Electron brokers moved to protocol 2.
-- Production CSS copied correctly; production references test passes. GSAP declared, Tiptap upgraded to 3.31.3; npm audit now 0 vulnerabilities.
-- Android SDK installed at C:/Users/sasat/AppData/Local/Android/Sdk, Java at C:/Program Files/Java/jdk-21. Capacitor Android platform and config restored. First Gradle build ongoing. Native plugin registration/file sharing/lifecycle and NSD discovery in progress.
-- Pending: encryption migration/rollback and other hardening; format adapters, DOCX/PDF, practical additions, design/accessibility/performance, Android build/native QA, desktop native broker test, broader offline/conflict integration, final verification.
-- First Android build succeeded after adding android.overridePathCheck=true for the Cyrillic workspace path. Initial APK exists at android/app/build/outputs/apk/debug/app-debug.apk, 27,598,774 bytes; it uses an earlier web bundle, so final packaging must be repeated.
-- Extended reliability suite now 10/10 passing (migration, history, focus added). Adapter, AI context, production references, LAN exchange and npm run check / smoke:desktop pass.
-- Physical Android devices: none connected. Ryzen 5 5500 virtualization firmware disabled. Installing software-emulator tooling to attempt native QA without acceleration.
+## 2. Настоящая связь ПК ↔ Android по Wi-Fi
+
+Прежний транспорт не обеспечивал полноценное сверение базы: соединение само по себе не переносило отсутствующие записи надёжно, а повторное подключение и одновременные изменения могли терять данные. Восстановлены обработчики интерфейса и добавлен журнал версий записей.
+
+- Отсутствующие главы, папки, миры, заметки, правки и связанные записи передаются в обе стороны.
+- Офлайн-изменения сохраняются в очереди и отправляются после повторного подключения. Подтверждение отправляется после записи в IndexedDB.
+- Удаления имеют собственные версии и не восстанавливаются устаревшим сообщением.
+- Независимые изменения персонажей, локаций, событий и заметок внутри одного мира объединяются. Если изменена одна и та же запись, оба варианта сохраняются как конфликт.
+- Окно «Разные версии» показывает локальный и полученный варианты. Для глав можно оставить оба документа.
+- Проверка актуальности записи внутри транзакции предотвращает перезапись правки, сделанной во время приёма данных.
+- Нормализация структуры редактором не создаёт ложные новые версии; разрешённый конфликт исчезает на обоих устройствах.
+- Передача защищена AES-GCM с кодом подключения. Защищённые записи проекта передаются без необходимости раскрывать их серверу.
+- На ПК сервер запускается и останавливается из интерфейса. На Android доступны поиск компьютера через NSD и ручной ввод адреса. Код подключения не публикуется службой поиска.
+
+Основные файлы: `src/features/database-sync.js`, `src/features/local-sync.js`, `scripts/sync-server.mjs`, `server.mjs`, `electron/main.cjs`, `electron/preload.cjs`, `src/platform/runtime.js`, `src/platform/file-adapter.js`, `src/main.js`.
+
+Инструкция подключения и поведения конфликтов: [docs/LAN_AND_ANDROID.md](docs/LAN_AND_ANDROID.md).
+
+## 3. Полезные инструменты
+
+- **Резервные копии всего проекта.** Автоматическое создание с интервалом автосохранения, ручная копия, последние 20 копий, предварительный просмотр и восстановление. Electron сохраняет файлы в отдельную папку, Android — в `Documents/Nocturne Backups`; в поддерживаемом браузере папку можно подключить. Без папки браузер честно сообщает, что копия находится в его IndexedDB. Ротация удаляет старые файлы копий в текущей внешней папке.
+- **Корзина рукописи.** Восстанавливает удалённую главу вместе с историей, правками и заметками. Корзина относится к главам; удаление карточек мира не стало универсальным отменяемым действием.
+- **Экспорт книги.** Выбор глав, порядок по томам и номерам, единый DOCX. Личные заметки по умолчанию исключены.
+- **Общая очередь правок.** Переход между замечаниями разных глав.
+- **Остановка AI-запроса.** Реальное прерывание через AbortController, с различением остановки пользователем и таймаута.
+- **Возврат к рукописи.** Сохраняются позиция курсора и прокрутка при переходе к базе знаний.
+- **Привязка главы к миру.** Контекст AI учитывает соответствующий мир, связанные карточки и правила, с ограничением размера.
+- **Правила мира и компактные карточки.** Доступны через видимые элементы управления.
+- **Начало работы.** В пустом проекте доступны импорт и восстановление; описание новой главы необязательно.
+
+Основные файлы: `src/features/backups.js`, `src/features/ai-context.js`, `src/features/command-palette.js`, `src/main.js`, `src/platform/file-adapter.js` и Electron IPC.
+
+## 4. Android и экспорт
+
+Восстановлены проект Capacitor, регистрация нативных плагинов, системные панели, обработка возврата, сохранение при уходе в фон и восстановление связи при возвращении. Добавлены разрешения локальной сети и multicast, настройка клавиатуры `adjustResize`, локальные ресурсы, значок и экран запуска.
+
+Бинарный экспорт на Android сохраняет файл через Filesystem и открывает системный Share. Печать/PDF реализованы через Android PrintManager. Сбой нативного сохранения не маскируется браузерным скачиванием.
+
+DOCX сохраняет уровни заголовков, абзацы цитат, выравнивание, подчёркивание, зачёркивание и разделители. Повреждённый DOCX отклоняется до импорта. PDF.js, worker, шрифты PDF, CMaps и WASM включены локально: импорт PDF не требует CDN.
+
+Основные файлы: `capacitor.config.json`, `android/`, `src/platform/native-entry.js`, `src/platform/runtime.js`, `src/platform/file-adapter.js`, `src/vendor/capacitor/`, `src/vendor/pdfjs/`, `scripts/build-android-apk.mjs`.
+
+## 5. Дизайн, доступность и производительность
+
+- Панель форматирования на ПК перестроена с сохранением доступных инструментов; устранены перекрытия кнопок на проверенных ширинах.
+- Мобильные вкладки получили непрозрачные поверхности: рукопись не просвечивает через библиотеку и базу знаний. Все четыре раздела мира доступны на узком экране.
+- Улучшены отступы, контраст, состояния фокуса, размеры сенсорных кнопок, безопасные отступы и небольшие служебные окна. Сохранены существующие эффекты и язык анимаций; предусмотрено уменьшение движения.
+- Модальные окна удерживают фокус, делают фон неактивным и возвращают фокус после закрытия. Переключатели и навигация доступны с клавиатуры.
+- Шрифты поставляются с приложением и лицензиями. Веб-сборка копирует канонические CSS; исправлена причина сломанного оформления в production.
+- Повторная проверка опечаток использует кэш неизменённых абзацев. Реальный локальный словарь заменил имитацию Hunspell; сетевые ошибки не кэшируются как отсутствие ошибок в тексте. Убраны обещания отсутствующих настроек.
+- На 300 абзацах / 50 518 символах медиана полного пересчёта составила **17,4 мс**, повторной проверки — **2,8 мс**: примерно в 6,2 раза быстрее в этом конкретном сценарии. Это не измерение ускорения всего приложения.
+
+Основные файлы: `src/css/polish.css`, `src/css/fonts.css`, `src/css/variables.css`, `src/ui/modal-focus.js`, `src/core/smart-speller.js`, `src/assets/fonts/`, `index.html`, `scripts/build-web.mjs`.
+
+## 6. Проверки и доказательства
+
+Единый запуск: `python scripts/run-silent.py node scripts/verify-project.mjs --artifacts`. Итоговый запуск 27 сентября в 17:57 завершился успешно: **17 из 17 групп прошли**. Результаты и логи сохранены в `release/qa/verification.json` и соседних `.log`.
+
+| Проверка | Что проверяется |
+| --- | --- |
+| Syntax и editor-adapter | Синтаксис исходных JS/MJS/CJS и сохранение структуры редактора. Отдельного настроенного ESLint в проекте нет. |
+| Unit | 11 сценариев версий и конфликтов DatabaseSync, 2 сценария копий, 2 сценария локальной/сетевой проверки опечаток. |
+| Reliability | 13 браузерных регрессий редактора, восстановления, импорта, шифрования, истории и фокуса. |
+| Workflow tools | 13 браузерных регрессий транзакций, слияния миров, экспорта, корзины, защищённых записей и остановки AI. |
+| LAN integration | Две отдельные IndexedDB через настоящий сервер: обмен в обе стороны, офлайн-изменения, удаления, конфликт, повторное подключение, защищённые документы. |
+| Native desktop | Настоящий скрытый Electron: IPC-сервер, отдельная мобильная база, внешняя копия и чтение. Повторено на упакованной версии с файловым origin. |
+| Offline / production / platform | Локальные шрифты и PDF; ссылки и CSS production; договорённости платформенных адаптеров. |
+| Desktop smoke / responsive UI | Работа приложения и снимки на 1440, 1280, 1024, 768, 390 и 360 px; отсутствие горизонтального переполнения, перекрытий кнопок и JS-ошибок. |
+| Mobile behavior | Настоящая форма главы, уменьшенный viewport под клавиатуру, альбомный экран, заметки мира, возврат из окон и контекст уменьшенного движения. |
+| Artifact inspections | Побайтовое сравнение всех локальных ресурсов приложения внутри APK и Electron ASAR с исходниками; размер и SHA256 артефактов. |
+
+Дополнительно: `npm run check`, `npm run build`, `npm audit --json`, Gradle debug build, Electron NSIS packaging, `apksigner verify --verbose`, `aapt dump badging`. Проверка зависимостей на дату работы сообщила **0 известных уязвимостей**. Покрытие именно нового DatabaseSync: **99,02% строк, 85,57% ветвей, 90,70% функций**; это не покрытие всей монолитной кодовой базы.
+
+Снимки интерфейса: `release/qa/writing-*.png`, `library-*.png`, `knowledge-*.png`, `book-export-*.png`. Замер: `release/qa/spelling-benchmark.json`. Сведения о пакетах: `release/qa/android-artifact.json`, `desktop-artifact.json`.
+
+Команды запускаются скрыто. Android SDK и большие сборочные кэши размещены на D:; системный JDK используется с C:.
+
+## 7. Готовые файлы
+
+| Артефакт | Путь | Размер |
+| --- | --- | ---: |
+| Android debug APK | `Nocturne-Writer-debug.apk` | **35 590 873 байта** |
+| Копия APK | `release/android/Nocturne-Writer-debug.apk` | **35 590 873 байта** |
+| Windows установщик | `release/electron/Nocturne Writer Setup 1.2.0.exe` | **128 580 374 байта** |
+| Android build output | `android/app/build/outputs/apk/debug/app-debug.apk` | **35 590 873 байта** |
+| Electron распакованная сборка | `.electron_build/dist/win-unpacked/Nocturne Writer.exe` | Проверена запуском настоящего Electron |
+| Веб-сборка | `dist/index.html` и `dist/src/` | Проверена разрешением локальных ссылок |
+
+SHA256 APK: `dc9ef9cbabebda191c06a0a3c978a25d4509d0d21feb217072c3c090f73abb26`.
+
+SHA256 установщика: `4abeb46ae0111a4d93e8b5a4a723a6f0b034baafb6e3709575ad06fe7d1bc983`.
+
+APK: `com.bebranova.nocturne`, Android 7+ (minSDK 24), targetSDK 36, версия 1.2.0, debug-подпись проверена. Версия проекта не повышалась: отдельная команда выпуска с обновлением «Что нового» не выполнялась.
+
+## 8. Что осталось непроверенным
+
+**Запуск на физическом Android не состоялся.** Подключённого телефона нет. Виртуализация в прошивке компьютера отключена; попытка программного эмулятора осталась в состоянии ADB offline. Поэтому нативные NSD, системный Share, разрешения файловой системы, PrintManager, настоящая экранная клавиатура и события жизненного цикла требуют проверки на телефоне. APK скомпилирован, подпись и содержимое проверены; адаптивные взаимодействия и обмен данными технически проверены в браузере и Electron.
+
+Конфликт текста не объединяет предложения автоматически: приложение сохраняет обе версии и предлагает явный выбор. Полноценный Hunspell/грамматический анализ не заявляется; локальный режим использует словарь опечаток. Для восстановления внешней копии из ранее выбранной папки её нужно снова подключить.
+
+Результаты относятся к перечисленным сценариям и сборкам, а не к утверждению об отсутствии любых ошибок во всём приложении.

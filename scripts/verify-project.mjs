@@ -17,11 +17,16 @@ const checks = [
   ['responsive-ui', ['scripts/ui-qa.mjs']],
   ['mobile-behavior', ['scripts/test-mobile-behavior.mjs']],
 ];
+if (process.argv.includes('--artifacts')) checks.push(
+  ['packaged-desktop', ['scripts/test-native-desktop.mjs', '--packaged']],
+  ['android-artifact', ['scripts/inspect-android-artifact.py'], 'python'],
+  ['desktop-artifact', ['scripts/inspect-desktop-artifact.mjs']],
+);
 const results = [];
 await mkdir('release/qa', { recursive: true });
-for (const [name, args] of checks) {
+for (const [name, args, executable = process.execPath] of checks) {
   const started = Date.now();
-  const result = spawnSync(process.execPath, args, { encoding: 'utf8', windowsHide: true, timeout: 120_000 });
+  const result = spawnSync(executable, args, { encoding: 'utf8', windowsHide: true, timeout: 120_000 });
   const output = `${result.stdout || ''}${result.stderr || ''}`;
   await writeFile(`release/qa/${name}.log`, output);
   results.push({ name, passed: result.status === 0, durationMs: Date.now() - started, error: result.error?.message });

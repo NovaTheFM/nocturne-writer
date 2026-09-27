@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-1.1.2-purple?style=for-the-badge" alt="Version 1.1.2" />
+  <img src="https://img.shields.io/badge/Version-1.2.0-purple?style=for-the-badge" alt="Version 1.2.0" />
   <img src="https://img.shields.io/badge/Security-E2E%20AES--GCM-success?style=for-the-badge" alt="Security" />
   <img src="https://img.shields.io/badge/Local--First-Offline%20Ready-orange?style=for-the-badge" alt="Local First" />
   <img src="https://img.shields.io/badge/Platform-Web%20%7C%20Electron%20%7C%20Android-blue?style=for-the-badge" alt="Platforms" />
@@ -20,7 +20,9 @@
 
 ## 🔍 Уникальность Nocturne Writer / Why Nocturne?
 
-Nocturne Writer спроектирован как **полностью независимый от облака (local-first)** инструмент. Приложение работает без серверов авторизации, не отправляет ваши тексты третьим лицам и хранит все данные в локальной базе данных IndexedDB вашего устройства. При необходимости весь проект может быть защищен **сквозным шифрованием (E2E)** по стандарту **AES-GCM** — расшифровка происходит исключительно в оперативной памяти на клиенте.
+Nocturne Writer спроектирован как **полностью независимый от облака (local-first)** инструмент. Приложение работает без серверов авторизации и хранит данные в локальной базе IndexedDB вашего устройства. Использование выбранного внешнего AI-провайдера отправляет ему текст и контекст по вашему запросу. При необходимости проект может быть защищён **сквозным шифрованием (E2E)** по стандарту **AES-GCM** — расшифровка происходит в оперативной памяти на клиенте.
+
+Отчёт об исправлениях, дизайне, проверках и готовых сборках: [IMPLEMENTATION.md](IMPLEMENTATION.md). Подключение телефона к ПК: [docs/LAN_AND_ANDROID.md](docs/LAN_AND_ANDROID.md).
 
 ---
 
@@ -65,8 +67,11 @@ Nocturne Writer спроектирован как **полностью неза�
 
 ### 6. Синхронизация и Экспорт (Sync & Export)
 * **Формат резервных копий**: `.nocturnedump` (содержит проекты, персонажей, таймлайны и настройки; может быть E2E-зашифрован).
-* **Локальный синхронизатор (LAN Sync)**: Встроенный локальный синхро-сервер (`scripts/sync-server.mjs`) для обмена данными между устройствами в локальной сети без интернета.
+* **Локальный синхронизатор (LAN Sync)**: Сервер запускается в приложении на ПК; Android подключается через «Ещё → Связь с компьютером». Двустороннее сверение записей, офлайн-очередь, версии удалений и сохранение конфликтов без облака. Для разработчиков доступен `scripts/sync-server.mjs`.
 * **Мгновенный экспорт**: Поддержка экспорта документов в Word (`.docx`) или резервную копию напрямую из контекстного меню сайдбара.
+* **Экспорт книги**: Выбранные главы собираются в DOCX по томам и номерам, личные заметки выключены по умолчанию.
+* **Копии и корзина**: Ротация 20 резервных копий проекта, внешняя папка в приложениях и восстановление удалённых глав вместе с историей и заметками.
+* **Работа с правками**: Общая очередь замечаний разных глав, остановка AI-запроса и возврат к позиции рукописи после просмотра базы знаний.
 
 ---
 
@@ -92,17 +97,25 @@ npm run electron:dev
 ```bash
 python web2exe_fixed.py
 ```
-Файл установщика появится по пути `dist/Nocturne Writer Setup 1.1.2.exe`.
+Файл установщика появится по пути `release/electron/Nocturne Writer Setup 1.2.0.exe`.
 
 ### 📱 Мобильная версия (Android APK)
 Сборка через Capacitor:
 ```bash
-npm run build
-npx cap add android
-npm run android:sync
 npm run android:build:debug
 ```
-APK-файл создается в `android/app/build/outputs/apk/debug/app-debug.apk`.
+Android-проект уже включён в репозиторий. Для сборки нужны JDK 21 и Android SDK. Команда собирает веб-ресурсы, синхронизирует Capacitor и создаёт APK в `android/app/build/outputs/apk/debug/app-debug.apk`, корне проекта и `release/android/Nocturne-Writer-debug.apk`.
+
+### Проверки и скрытый запуск в Windows
+
+```powershell
+python scripts/run-silent.py npm run check
+python scripts/run-silent.py npm test
+python scripts/run-silent.py npm run android:build:debug
+python scripts/run-silent.py python web2exe_fixed.py
+```
+
+`npm test` запускает регрессионные, интеграционные и адаптивные проверки; результаты находятся в `release/qa/`. После сборки добавьте проверку пакетов командой `python scripts/run-silent.py node scripts/verify-project.mjs --artifacts`.
 
 ---
 
@@ -112,6 +125,9 @@ APK-файл создается в `android/app/build/outputs/apk/debug/app-debu
 * `src/main.js` — Монолитный модуль логики интерфейса, событийной модели и PERSISTENCE-логики (~750 KB).
 * `src/core/db.js` — Обертка IndexedDB, описывающая схемы проектов, заметок, персонажей, целей и стриков.
 * `src/core/crypto.js` — Криптографический модуль (AES-GCM шифрование).
+* `src/core/record-protection.js` — Единая защита чувствительных записей хранилища.
+* `src/features/database-sync.js` — Версии записей, объединение независимых изменений и конфликты.
+* `src/features/backups.js` — Создание, ротация и чтение резервных копий проекта.
 * `src/editor/nocturne-editor.js` — Конфигурация редактора Tiptap/ProseMirror, плагинов верстки, каретки и автоформата.
 * `src/css/` — Набор модульных стилей интерфейса ( legacy-файл `src/styles.css` упразднен).
 * `electron/` — Главный и preload скрипты Electron-окружения.
