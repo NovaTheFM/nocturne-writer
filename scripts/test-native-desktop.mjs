@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { _electron, chromium } from 'playwright';
 
 const port = 5285, syncPort = 8885, url = `http://localhost:${port}`;
+const packaged = process.argv.includes('--packaged');
 const profile = resolve(`release/qa/electron-profile-${Date.now()}`), backups = resolve('release/qa/native-backups');
 await mkdir(profile, { recursive: true }); await mkdir(backups, { recursive: true });
 await writeFile(`${profile}/backup-directory.json`, JSON.stringify({ path: backups }));
@@ -14,7 +15,8 @@ try {
   for (let i = 0; i < 70; i++) { try { if ((await fetch(url)).ok) break; } catch {} await new Promise(resolve => setTimeout(resolve, 100)); }
   const environment = { ...process.env, NOCTURNE_DEV_URL: url, NOCTURNE_TEST_PROFILE: profile, SYNC_PORT: String(syncPort) };
   delete environment.ELECTRON_RUN_AS_NODE;
-  desktop = await _electron.launch({ executablePath: resolve('node_modules/electron/dist/electron.exe'), args: ['electron/main.cjs'], env: environment });
+  if (packaged) { delete environment.NOCTURNE_DEV_URL; delete environment.ELECTRON_DEV_URL; }
+  desktop = await _electron.launch({ executablePath: resolve(packaged ? '.electron_build/dist/win-unpacked/Nocturne Writer.exe' : 'node_modules/electron/dist/electron.exe'), args: packaged ? [] : ['electron/main.cjs'], env: environment });
   const pc = await desktop.firstWindow(); await pc.waitForFunction(() => window.nocturneApp?.databaseSync);
   assert.equal(await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible()), false);
   await pc.evaluate(async () => {
@@ -39,5 +41,5 @@ try {
   assert.match(await readFile(copy.copy.path, 'utf8'), /Electron document persisted externally/);
   await pc.evaluate(async () => { const a = window.nocturneApp; a.openSyncPanel(); document.querySelector('[data-action="sync-server-stop"]').click(); });
   await pc.waitForFunction(() => !window.nocturneApp.state.sync.server.running);
-  console.log('Hidden Electron: real IPC broker start/stop, desktop-phone DB exchange and external backup/read passed.');
+  console.log(`Hidden Electron (${packaged ? 'packaged file origin' : 'development'}): real IPC broker start/stop, desktop-phone DB exchange and external backup/read passed.`);
 } finally { if (browser) await browser.close(); if (desktop) await desktop.close(); server.kill(); }

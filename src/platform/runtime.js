@@ -41,9 +41,11 @@ export function bindNativeLifecycle({ onBack, onSuspend, onResume }) {
   nativePlugins.App.addListener('appStateChange', ({ isActive }) => isActive ? onResume?.() : onSuspend?.());
 }
 
+let discoveryListener = null;
 export async function discoverNativeLan(onDevice) {
   if (!Capacitor.isNativePlatform()) return false;
-  await nativePlugins.NocturneLan.addListener('deviceFound', onDevice);
+  await discoveryListener?.remove();
+  discoveryListener = await nativePlugins.NocturneLan.addListener('deviceFound', onDevice);
   await nativePlugins.NocturneLan.discover();
   return true;
 }

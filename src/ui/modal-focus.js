@@ -4,13 +4,17 @@ export function manageModalFocus() {
   let previousFocus = null;
   const focusables = modal => [...modal.querySelectorAll('button, input, select, textarea, a[href], [tabindex="0"], [contenteditable="true"]')].filter(element => !element.disabled && element.getClientRects().length && getComputedStyle(element).visibility !== 'hidden');
   const update = () => {
+    for (const button of document.querySelectorAll('[data-settings-tab], [data-kb-tab], .kb-close-btn, .kb-project-switcher, .kb-project-item, .kb-project-action')) {
+      button.setAttribute('role', 'button'); button.tabIndex = 0;
+      if (button.classList.contains('kb-close-btn')) button.setAttribute('aria-label', 'Вернуться к рукописи');
+    }
     for (const toggle of document.querySelectorAll('[data-kind="toggle"]')) {
       toggle.setAttribute('role', 'switch'); toggle.tabIndex = 0; toggle.setAttribute('aria-checked', String(toggle.classList.contains('on')));
       toggle.setAttribute('aria-label', toggle.closest('.setting-row')?.querySelector('.setting-info strong, .setting-info > span')?.textContent || toggle.closest('.ai-context-head')?.querySelector('strong')?.textContent || 'Переключатель');
     }
     const overlays = [...document.querySelectorAll('#form-overlay.active, #settings-overlay.active, #kb-modal.active, .command-palette-overlay.active')];
     const overlay = overlays.sort((a, b) => (Number(getComputedStyle(a).zIndex) || 0) - (Number(getComputedStyle(b).zIndex) || 0)).at(-1);
-    const modal = overlay?.querySelector('.form-modal, .settings-modal, .kb-modal-dialog, [role="dialog"]') || overlay?.firstElementChild || overlay;
+    const modal = overlay?.id === 'kb-modal' ? overlay : overlay?.querySelector('.form-modal, .settings-modal, .kb-modal-dialog, [role="dialog"]') || overlay?.firstElementChild || overlay;
     if (overlay === active && modal === activeModal) return;
     if (active) {
       for (const element of document.querySelectorAll('[data-modal-inert]')) { element.inert = false; delete element.dataset.modalInert; }

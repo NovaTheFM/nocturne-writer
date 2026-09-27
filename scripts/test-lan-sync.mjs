@@ -72,5 +72,27 @@ try {
     const a = window.nocturneApp;
     return JSON.stringify(a.state.docs).includes('Phone concurrent offline text') && !(await a.db.getAll('syncConflicts')).length && !(await a.db.getAll('syncQueue')).length;
   });
-  console.log('LAN UI: bidirectional chapters, later edits, offline reconnect, deletions, independent world additions, conflicts, resolution and ACK queue drain passed.');
+  await m.evaluate(() => window.nocturneApp.syncClient.disconnect());
+  await p.waitForFunction(() => window.nocturneApp.syncClient.peers.size === 0);
+  for (const page of [p, m]) await page.evaluate(async () => {
+    const a = window.nocturneApp; a.state.sessionPassword = 'encrypted-project-test'; a.state.settings.e2e = true; await a.migrateEncryption();
+  });
+  await p.evaluate(async () => {
+    const a = window.nocturneApp, doc = a.state.docs.find(doc => doc.title === 'Phone chapter');
+    a.nocturneEditor.applyDocumentContent(doc, { ast: { type: 'doc', blocks: [{ id: 'encrypted-sync-text', type: 'paragraph', html: 'Encrypted revision delivered over Wi-Fi' }] } });
+    await a.saveDocById(doc.id, { silent: true });
+  });
+  await m.evaluate(async () => {
+    const a = window.nocturneApp; await a.createDoc(a.defaultFolderId(), 'Encrypted phone chapter', '');
+    a.state.sync.discovery.manualOpen = true; a.openMobilePanel('sync', 'more'); document.querySelector('[data-action="sync-connect"]').click();
+  });
+  for (const page of [p, m]) {
+    await waitForDatabase(page, async () => {
+      const a = window.nocturneApp;
+      return a.state.docs.length === 4 && JSON.stringify(a.state.docs).includes('Encrypted revision delivered over Wi-Fi') && !(await a.db.getAll('syncQueue')).length;
+    });
+    const raw = await page.evaluate(() => window.nocturneApp.db.getAllRaw('docs'));
+    assert.ok(raw.every(record => record.protectedStore)); assert.doesNotMatch(JSON.stringify(raw), /Encrypted revision delivered|Encrypted phone chapter/);
+  }
+  console.log('LAN UI: bidirectional/offline/encrypted exchange, deletions, world additions, conflict resolution and acknowledged queue drain passed.');
 } finally { await browser.close(); server.kill(); broker.kill(); }

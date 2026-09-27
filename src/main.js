@@ -669,6 +669,7 @@ class NocturneWriter {
   async loadFloatingNotes() {
     const notes = await this.db.getAll('floatingNotes');
     this.state.floatingNotes = notes
+      .filter(note => !note.locked)
       .map((note) => this.sanitizeFloatingNote(note))
       .sort((a, b) => (a.zIndex - b.zIndex) || (a.updatedAt - b.updatedAt));
   }
@@ -20348,6 +20349,7 @@ class NocturneWriter {
 
   async persistGlobalNotes() {
     if (this.state.settings.e2e && !this.state.sessionPassword) return;
+    if ((await this.db.get('settings', 'global-notes'))?.locked) return;
     await this.db.put('settings', { id: 'global-notes', text: this.state.globalNotes || '', updatedAt: Date.now() });
     safeRemoveStorageItem(localStorage, 'nocturne-global-notes');
   }
@@ -23272,6 +23274,10 @@ ${raw}`;
     if (notes && !notes.locked) this.state.globalNotes = notes.text || '';
     const preferences = await this.db.get('settings', 'app');
     if (preferences && !preferences.locked) this.state.settings = this.validateSettings(preferences.value);
+    if (!this.state.settings.e2e && value) {
+      const encryptedRecords = (await Promise.all(['docs', 'lore', 'settings', 'floatingNotes', 'snapshots', 'trash'].map(store => this.db.getAllRaw(store)))).flat().some(record => record.protectedStore);
+      if (encryptedRecords) { this.state.settings.e2e = true; await this.migrateEncryption(); }
+    }
     this.initWorkspace();
     this.renderAll();
     this.toast('Пароль сессии применен, документы перечитаны.');
@@ -24369,7 +24375,7 @@ async scanForSyncServers() {
       try {
         await discoverNativeLan(async nativeDevice => {
           const device = await this.probeSyncDiscoveryHost(nativeDevice.host, nativeDevice.port, 'mdns');
-          if (device) {
+          if (device && !token.cancelled && this.syncScanAbort === token) {
             found.set(device.id, device);
             this.state.sync.discoveredDevices = [...found.values()];
             this.renderSyncSurfaces();
