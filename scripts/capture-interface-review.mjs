@@ -34,7 +34,7 @@ try {
     await page.locator('[data-action="sync-toggle-options"]').click(); await shot('desktop-sync-options');
   } finally { await page.evaluate(() => window.nocturneApp.controlLanServer('stop')); }
   for (const mode of ['editor', 'finalization']) {
-    await page.evaluate(mode => { const a = window.nocturneApp; document.getElementById('form-overlay').classList.remove('active'); a.state.reviewMode = mode; a.applyReviewMode(); }, mode);
+    await page.evaluate(mode => { const a = window.nocturneApp; document.getElementById('form-overlay').classList.remove('active'); a.setReviewMode(mode); }, mode);
     await shot(`desktop-${mode}`);
   }
   await page.evaluate(() => { const a = window.nocturneApp; a.state.settings.theme = 'paper'; a.applySettings(); a.openBookExport(); }); await shot('paper-book');
@@ -49,6 +49,7 @@ try {
   await mobile.locator('[data-sync-field="host"]').fill('192.168.1.10');
   await mobile.screenshot({ path: `${directory}/mobile-sync-manual.png` });
   await mobile.setViewportSize({ width: 390, height: 430 });
+  await mobile.waitForTimeout(300);
   await mobile.locator('[data-sync-field="token"]').fill('CODE1234');
   await mobile.screenshot({ path: `${directory}/mobile-sync-keyboard.png` });
   assert.equal(await mobile.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);

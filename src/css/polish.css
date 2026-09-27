@@ -72,7 +72,7 @@ button.utility-row, label.utility-row { cursor: pointer; }
 .sync-disclosure { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 16px 0 0; margin-top: 22px; border: 0; border-top: 1px solid var(--border); background: transparent; color: var(--text-muted); text-align: left; font-size: 12px; cursor: pointer; transition: color 160ms ease; }
 .sync-disclosure:hover { color: var(--text-main); }
 .sync-disclosure i { font-size: 18px; }
-.sync-options-content { padding-top: 16px; animation: fadeIn 180ms ease; }
+.sync-options-content { padding-top: 16px; animation: fade-in 180ms ease; }
 .sync-secondary-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .sync-secondary-actions .pill-btn { font-size: 12px; }
 .sync-extra-fields { margin-bottom: 16px; }
