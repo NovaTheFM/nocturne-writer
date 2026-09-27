@@ -23,6 +23,23 @@ try {
     });
     assert.equal(result.failed, true); assert.equal(result.ui, 'Original survives'); assert.equal(result.db, 'Original survives');
   });
+  await test('merge import is atomic and includes every world and global notes', async page => {
+    const result = await page.evaluate(async () => {
+      const a = window.nocturneApp; await a.createDoc(a.defaultFolderId(), 'Existing chapter', '');
+      const dump = await a.buildNocturneDump(); delete dump.checksum;
+      dump.payload.docs[0].title = 'Imported chapter'; dump.payload.globalNotes = 'Imported global notes';
+      dump.payload.lores.push({ id: 'imported-world', title: 'Imported world', characters: [{ id: 'imported-character', name: 'Imported person' }], locations: [], timeline: [], notes: [] });
+      const write = a.db.atomicWrite.bind(a.db);
+      a.db.atomicWrite = async () => { throw new Error('simulated merge failure'); };
+      let failed = false; try { await a.importProjectDump(dump, { mode: 'merge' }); } catch { failed = true; }
+      const unchanged = (await a.db.getAll('docs')).length === 1 && a.state.docs.length === 1;
+      a.db.atomicWrite = write; await a.importProjectDump(dump, { mode: 'merge' });
+      return { failed, unchanged, worlds: await a.db.getAll('lore'), notes: a.state.globalNotes, docs: await a.db.getAll('docs') };
+    });
+    assert.equal(result.failed, true); assert.equal(result.unchanged, true);
+    assert.ok(result.worlds.some(world => world.id === 'imported-world' && world.characters.length === 1));
+    assert.match(result.notes, /Imported global notes/); assert.equal(result.docs.length, 2);
+  });
   await test('safe encrypted dump restores protected notes history credentials and all worlds', async page => {
     assert.equal(await page.evaluate(async () => {
       const a = window.nocturneApp; await a.createDoc(a.defaultFolderId(), 'Protected title', '');

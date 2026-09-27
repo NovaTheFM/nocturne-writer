@@ -11,10 +11,28 @@ class MemoryDb {
   async put(name, value, options = {}) { this.store(name).set(value.id, structuredClone(value)); this.onMutation?.({ store: name, id: value.id, action: 'put', origin: options.origin }); }
   async delete(name, id, options = {}) { this.store(name).delete(id); this.onMutation?.({ store: name, id, action: 'delete', origin: options.origin }); }
   async atomicWrite(entries, options = {}) {
+    for (const [store, records] of Object.entries(options.expect || {})) for (const record of records) {
+      if (JSON.stringify(await this.get(store, record.id)) !== JSON.stringify(record.value)) throw Object.assign(new Error('Concurrent write'), { code: 'SYNC_RETRY' });
+    }
     for (const [name, records] of Object.entries(entries)) for (const record of records) await this.put(name, record, options);
     for (const [name, ids] of Object.entries(options.deletes || {})) for (const id of ids) await this.delete(name, id, options);
   }
 }
+
+test('an edit committed during an incoming transaction is preserved as a conflict', async () => {
+  const { a, b, left, right } = await pair();
+  await left.put('docs', { id: 'racing-chapter', title: 'Original' }); await reconcile(a, b);
+  await right.put('docs', { id: 'racing-chapter', title: 'Phone edit' });
+  const atomicWrite = left.atomicWrite.bind(left); let edited = false;
+  left.atomicWrite = async (records, options) => {
+    if (records.docs && !edited) { edited = true; await left.put('docs', { id: 'racing-chapter', title: 'PC edit during receive' }); await a.work; }
+    return atomicWrite(records, options);
+  };
+  await a.receiveState(await b.buildState());
+  assert.equal((await left.get('docs', 'racing-chapter')).title, 'PC edit during receive');
+  const conflicts = await left.getAll('syncConflicts'); assert.equal(conflicts.length, 1);
+  assert.match(JSON.stringify(conflicts), /PC edit during receive/); assert.match(JSON.stringify(conflicts), /Phone edit/);
+});
 async function pair() {
   const left = new MemoryDb(), right = new MemoryDb();
   const a = new DatabaseSync({ db: left, deviceId: 'pc' });
