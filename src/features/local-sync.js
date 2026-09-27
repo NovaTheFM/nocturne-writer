@@ -120,7 +120,8 @@ export class LocalSyncClient {
 
       this.ws.onmessage = (event) => {
         if (sequence !== this.sequence) return;
-        if (JSON.parse(event.data).type === 'paired') window.clearTimeout(timeout);
+        try { if (JSON.parse(event.data).type === 'paired') window.clearTimeout(timeout); }
+        catch { this.fail('protocol', 'Сервер прислал некорректный ответ.'); return; }
         this.handleMessage(event.data).catch(error => this.fail('protocol', error.message));
       };
       this.ws.onerror = () => {

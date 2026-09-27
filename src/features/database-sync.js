@@ -121,44 +121,55 @@ export class DatabaseSync {
     await this.work;
     let received = 0, conflicts = 0;
       for (const incoming of state.records) {
+        for (let attempt = 0; attempt < 10; attempt++) {
         await this.work;
+        const pendingWork = this.work;
         const key = keyOf(incoming.store, incoming.id);
         const local = await this.db.get('syncJournal', key);
+        const raw = (await this.db.getAllRaw(incoming.store)).find(record => record.id === incoming.id);
+        await this.work;
+        if (pendingWork !== this.work) continue;
+        const expect = { [incoming.store]: [{ id: incoming.id, value: raw }], syncJournal: [{ id: key, value: local }] };
+        try {
         const comparison = local ? compareClocks(incoming.clock, local.clock) : 'newer';
         if (local && incoming.hash === local.hash && !!incoming.deleted === !!local.deleted) {
-          await this.db.put('syncJournal', { ...local, clock: mergeClocks(local.clock, incoming.clock) });
-          continue;
+          await this.db.atomicWrite({ syncJournal: [{ ...local, clock: mergeClocks(local.clock, incoming.clock) }] }, { origin: 'sync', expect });
+          break;
         }
-        if (comparison === 'older') continue;
+        if (comparison === 'older') break;
         if (comparison === 'concurrent' || (comparison === 'equal' && local)) {
           if (incoming.store === 'lore' && !incoming.deleted && !local.deleted) {
             const remoteValue = await this.db.decodeRecord?.('lore', incoming.value) || incoming.value;
             const merged = reconcileWorld(local, incoming, await this.db.get('lore', incoming.id), remoteValue);
             if (merged) {
-              await this.applyIncoming({ ...incoming, ...merged, clock: mergeClocks(local.clock, incoming.clock), hash: await contentHash(merged.value) });
-              received++; this.onPending(); continue;
+              await this.applyIncoming({ ...incoming, ...merged, clock: mergeClocks(local.clock, incoming.clock), hash: await contentHash(merged.value) }, expect);
+              received++; this.onPending(); break;
             }
           }
           const id = `conflict:${key}:${[local.hash, incoming.hash].sort().map(hash => hash.slice(0, 16)).join(':')}`;
           if (!await this.db.get('syncConflicts', id)) {
-            const raw = (await this.db.getAllRaw(incoming.store)).find(record => record.id === incoming.id);
             await this.db.put('syncConflicts', { id, type: 'database-record', store: incoming.store, recordId: incoming.id, local: { ...local, value: raw }, remote: incoming, deviceId: state.deviceId, createdAt: Date.now() });
             conflicts++;
           }
-          continue;
+          break;
         }
-        await this.applyIncoming(incoming);
+        await this.applyIncoming(incoming, expect);
         received++;
+        break;
+        } catch (error) {
+          if (error.code !== 'SYNC_RETRY' || attempt === 9) throw error;
+        }
+        }
       }
     await this.work;
     if (received || conflicts) await this.onChange({ received, conflicts });
     return { received, conflicts };
   }
-  async applyIncoming(record) {
+  async applyIncoming(record, expect = {}) {
     await this.db.atomicWrite({
       [record.store]: record.deleted ? [] : [record.value],
       syncJournal: [{ id: keyOf(record.store, record.id), store: record.store, recordId: record.id, clock: record.clock, hash: record.hash, members: record.members, deleted: !!record.deleted, updatedAt: Date.now() }],
-    }, { origin: 'sync', deletes: record.deleted ? { [record.store]: [record.id] } : {} });
+    }, { origin: 'sync', expect, deletes: record.deleted ? { [record.store]: [record.id] } : {} });
     for (const conflict of await this.db.getAll('syncConflicts')) {
       if (conflict.store === record.store && conflict.recordId === record.id && compareClocks(record.clock, mergeClocks(conflict.local?.clock, conflict.remote?.clock)) === 'newer') await this.db.delete('syncConflicts', conflict.id);
     }

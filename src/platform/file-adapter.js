@@ -74,12 +74,9 @@ export async function saveTextFile(data, suggestedName = 'nocturne.txt', mime = 
     return window.nocturneElectron.saveDumpFile(String(data || ''), suggestedName);
   }
   if (runtime.isCapacitor) {
-    try {
-      const result = await saveWithCapacitor(data, suggestedName, mime);
-      if (result) return result;
-    } catch (error) {
-      console.warn('Capacitor file save failed, falling back to browser download.', error);
-    }
+    const result = await saveWithCapacitor(data, suggestedName, mime);
+    if (!result) throw new Error('Не удалось сохранить файл на телефоне.');
+    return result;
   }
   downloadBlob(new Blob([String(data || '')], { type: mime }), suggestedName);
   return { path: suggestedName, fallback: 'browser-download' };

@@ -6,7 +6,7 @@ export function manageModalFocus() {
   const update = () => {
     for (const toggle of document.querySelectorAll('[data-kind="toggle"]')) {
       toggle.setAttribute('role', 'switch'); toggle.tabIndex = 0; toggle.setAttribute('aria-checked', String(toggle.classList.contains('on')));
-      toggle.setAttribute('aria-label', toggle.closest('.setting-row')?.querySelector('.setting-info strong')?.textContent || toggle.closest('.ai-context-head')?.querySelector('strong')?.textContent || 'Переключатель');
+      toggle.setAttribute('aria-label', toggle.closest('.setting-row')?.querySelector('.setting-info strong, .setting-info > span')?.textContent || toggle.closest('.ai-context-head')?.querySelector('strong')?.textContent || 'Переключатель');
     }
     const overlays = [...document.querySelectorAll('#form-overlay.active, #settings-overlay.active, #kb-modal.active, .command-palette-overlay.active')];
     const overlay = overlays.sort((a, b) => (Number(getComputedStyle(a).zIndex) || 0) - (Number(getComputedStyle(b).zIndex) || 0)).at(-1);
@@ -26,7 +26,7 @@ export function manageModalFocus() {
       if (!button.textContent.trim() && !button.hasAttribute('aria-label')) button.setAttribute('aria-label', button.title || (button.querySelector('.bx-x') ? 'Закрыть' : 'Действие'));
     }
     for (const input of modal.querySelectorAll('input:not([type="hidden"]), textarea, select')) {
-      if (!input.labels?.length && !input.hasAttribute('aria-label')) input.setAttribute('aria-label', input.closest('.setting-row')?.querySelector('.setting-info strong')?.textContent || input.placeholder || input.name || 'Поле ввода');
+      if (!input.labels?.length && !input.hasAttribute('aria-label')) input.setAttribute('aria-label', input.closest('.setting-row')?.querySelector('.setting-info strong, .setting-info > span')?.textContent || input.placeholder || input.name || 'Поле ввода');
     }
     for (const element of document.querySelectorAll('#app, .mobile-bottom-nav, .mobile-topbar, .mobile-system-bar')) {
       if (!element.contains(active) && !active.contains(element)) { element.inert = true; element.dataset.modalInert = 'true'; }

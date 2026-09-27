@@ -2322,11 +2322,13 @@ class NocturneWriter {
     const chars = [...this.state.lore.characters].sort((a, b) => a.order - b.order).filter(filter);
     const locs = [...this.state.lore.locations].sort((a, b) => a.order - b.order).filter(filter);
     const time = [...this.state.lore.timeline].sort((a, b) => (a.order - b.order) || parseTimelineRank(a.date) - parseTimelineRank(b.date)).filter(filter);
+    const notes = [...(this.state.lore.notes || [])].sort((a, b) => a.order - b.order).filter(filter);
     const list = active === 'characters'
       ? (chars.length ? chars.map((item, index) => this.mobileLoreCard('characters', item, index, chars.length)).join('') : this.emptyStateMarkup('bx-user-pin', 'Персонажей пока нет.', 'Создайте первый профиль.', 'new-lore', 'Создать', 'data-lore-type="characters"'))
       : active === 'locations'
         ? (locs.length ? locs.map((item, index) => this.mobileLoreCard('locations', item, index, locs.length)).join('') : this.emptyStateMarkup('bx-map-alt', 'Локаций пока нет.', 'Добавьте место.', 'new-lore', 'Добавить', 'data-lore-type="locations"'))
-        : (time.length ? time.map((item, i, arr) => this.timelineCard(item, { isLast: i === arr.length - 1, draggable: true })).join('') : this.emptyStateMarkup('bx-git-commit', 'Таймлайн пуст.', 'Добавьте событие.', 'new-lore', 'Добавить', 'data-lore-type="timeline"'));
+        : active === 'notes' ? (notes.length ? notes.map(item => this.mobileLoreCard('notes', item)).join('') : this.emptyStateMarkup('bx-note', 'Записей пока нет.', 'Сохраните идеи для своего мира.', 'new-lore', 'Добавить', 'data-lore-type="notes"'))
+          : (time.length ? time.map((item, i, arr) => this.timelineCard(item, { isLast: i === arr.length - 1, draggable: true })).join('') : this.emptyStateMarkup('bx-git-commit', 'Таймлайн пуст.', 'Добавьте событие.', 'new-lore', 'Добавить', 'data-lore-type="timeline"'));
     const zone = active === 'timeline' ? 'timeline' : active;
     return `
       ${options.asTab ? this.mobileTabHeader('База знаний', 'Персонажи, локации и таймлайн') : this.mobilePanelHeader('База знаний', 'Персонажи, локации и таймлайн')}
@@ -2357,8 +2359,9 @@ class NocturneWriter {
           </div>
         </div>
         <div class="mobile-segmented">
-          ${[['characters', 'Персонажи'], ['locations', 'Локации'], ['timeline', 'Таймлайн']].map(([id, label]) => `<button class="${active === id ? 'active' : ''}" data-mobile-kb-tab="${id}">${label}</button>`).join('')}
+          ${[['characters', 'Персонажи'], ['locations', 'Локации'], ['timeline', 'Таймлайн'], ['notes', 'Записи']].map(([id, label]) => `<button class="${active === id ? 'active' : ''}" data-mobile-kb-tab="${id}">${label}</button>`).join('')}
         </div>
+        ${this.kbViewTools()}
         <div class="mobile-search-field"><i class="bx bx-search"></i><input data-mobile-lore-search placeholder="Поиск в базе" value="${escapeHtml(this.state.mobile.loreSearch || '')}"></div>
         <div class="mobile-panel-actions"><button class="pill-btn ai-btn" data-action="new-lore" data-lore-type="${active}"><i class="bx bx-plus"></i> Добавить</button><span class="mobile-drag-hint"><i class="bx bx-grid-vertical"></i> Удерживайте карточку, чтобы перенести</span></div>
         <div class="mobile-kb-list ${active === 'timeline' ? 'timeline-container timeline-mobile-list' : ''}" data-dnd-zone="${escapeHtml(zone)}">${list}</div>
@@ -3043,7 +3046,7 @@ class NocturneWriter {
           </div>
           <div class="docs-container" id="docs-container"></div>
           <div class="sidebar-footer">
-            <div class="library-tools"><button class="btn-icon" data-action="export-book" title="Экспорт книги" aria-label="Экспорт книги"><i class="bx bx-book-open"></i></button><button class="btn-icon" data-action="open-review-queue" title="Все правки" aria-label="Все правки"><i class="bx bx-message-square-edit"></i></button><button class="btn-icon" data-action="open-trash" title="Корзина" aria-label="Корзина"><i class="bx bx-trash"></i></button><button class="btn-icon" data-action="open-backups" title="Резервные копии" aria-label="Резервные копии"><i class="bx bx-archive"></i></button></div>
+            <div class="library-tools"><button class="btn-icon" data-action="export-book" title="Экспорт книги" aria-label="Экспорт книги"><i class="bx bx-book-open"></i></button><button class="btn-icon" data-action="open-review-queue" title="Все правки" aria-label="Все правки"><i class="bx bx-message-square-edit"></i></button><button class="btn-icon" data-action="open-trash" title="Корзина" aria-label="Корзина"><i class="bx bx-trash"></i></button><button class="btn-icon" data-action="open-backups" title="Резервные копии" aria-label="Резервные копии"><i class="bx bx-archive"></i></button><button class="btn-icon" data-action="open-sync-panel" title="Синхронизация по Wi-Fi" aria-label="Синхронизация по Wi-Fi"><i class="bx bx-wifi"></i></button></div>
             <div class="goal-label"><span>Цель дня</span><span id="goal-count">0 / 0</span></div>
             <div class="goal-track"><div class="goal-fill" id="goal-fill"></div></div>
           </div>
@@ -7937,7 +7940,7 @@ class NocturneWriter {
       'open-backups': () => this.openBackups(),
       'backup-now': async () => { try { const copy = await this.backups.create(); this.toast(copy.external ? 'Копия сохранена в отдельную папку.' : 'Копия сохранена в этом браузере. Для защиты от очистки браузера подключите папку.'); } catch (error) { this.toast(`Не удалось создать копию: ${error.message}`); } },
       'choose-backup-directory': async () => { try { const result = await platformFiles.chooseBackupDirectory(this.db); if (result) this.toast(`Папка копий: ${result.path}`); } catch (error) { if (error.name !== 'AbortError') this.toast(error.message); } },
-      'toggle-card-view': () => { this.state.settings.cardView = this.state.settings.cardView === 'list' ? 'grid' : 'list'; this.applySettings(); this.persistSettings(); },
+      'toggle-card-view': () => { this.state.settings.cardView = this.state.settings.cardView === 'list' ? 'grid' : 'list'; this.applySettings(); this.persistSettings(); this.renderKb(); if (this.isMobileLayout()) this.renderMobileShell(); },
       'edit-world-rules': () => this.editWorldRules(),
       'export-html': () => this.exportPrintable(),
       'export-docx': () => this.exportDocx(),
@@ -9030,28 +9033,6 @@ class NocturneWriter {
       event.preventDefault();
       if (!this.validateForm(event.target)) return;
       const data = Object.fromEntries(new FormData(event.target));
-      const descField = event.target.elements.description;
-      if (!data.description?.trim()) {
-        descField?.classList.add('invalid');
-        descField?.classList.add('shake');
-        setTimeout(() => descField?.classList.remove('shake'), 400);
-        let errEl = event.target.querySelector('.field-error-msg');
-        if (!errEl) {
-          errEl = document.createElement('div');
-          errEl.className = 'field-error-msg';
-          errEl.textContent = 'Опишите кратко содержание главы — это помогает AI лучше понять контекст.';
-          descField?.after(errEl);
-        }
-        descField?.addEventListener('input', function clearDescErr() {
-          if (descField.value.trim()) {
-            descField.classList.remove('invalid');
-            event.target.querySelector('.field-error-msg')?.remove();
-            descField.removeEventListener('input', clearDescErr);
-          }
-        });
-        descField?.focus();
-        return;
-      }
       overlay.classList.remove('active');
       setTimeout(async () => {
         await this.createDoc(targetFolderId, data);
@@ -9635,26 +9616,23 @@ class NocturneWriter {
     const doc = this.state.docs.find((item) => item.id === id);
     if (!doc) return;
     this.deletedDocIds ||= new Set(); this.deletedDocIds.add(id);
+    try {
     await this.docSaves?.get(id);
     this.nocturneEditor.syncDocFromEditorByDocId(doc.id);
     await this.draftWrites.get(doc.id);
     const history = (await this.db.getAll('snapshots')).filter(snapshot => snapshot.docId === doc.id);
     const marks = this.state.reviewMarks.filter(mark => mark.docId === doc.id);
     const notes = this.state.floatingNotes.filter(note => note.scope === 'document' && note.linkedId === doc.id);
-    await this.db.put('trash', { id: uid('trash'), type: 'document', title: doc.title, deletedAt: Date.now(), doc: structuredClone(doc), snapshots: history, reviewMarks: structuredClone(marks), floatingNotes: structuredClone(notes) });
-    await this.db.delete('docs', doc.id);
-    await this.db.delete('drafts', doc.id);
-    await this.deleteFloatingNotesForLink('document', doc.id);
-    const docMarks = this.state.reviewMarks.filter((mark) => mark.docId === doc.id);
-    await Promise.all(docMarks.map((mark) => this.db.delete('reviewMarks', mark.id)));
+    await this.db.atomicWrite({ trash: [{ id: uid('trash'), type: 'document', title: doc.title, deletedAt: Date.now(), doc: structuredClone(doc), snapshots: history, reviewMarks: structuredClone(marks), floatingNotes: structuredClone(notes) }] }, { deletes: { docs: [doc.id], drafts: [doc.id], snapshots: history.map(item => item.id), reviewMarks: marks.map(item => item.id), floatingNotes: notes.map(item => item.id) } });
+    } catch (error) { this.deletedDocIds.delete(id); throw error; }
+    this.state.floatingNotes = this.state.floatingNotes.filter(note => !(note.scope === 'document' && note.linkedId === doc.id));
+    this.renderFloatingNotes();
     this.state.reviewMarks = this.state.reviewMarks.filter((mark) => mark.docId !== doc.id);
     this.state.docs = this.state.docs.filter((item) => item.id !== doc.id);
     
     const wasActiveDoc = this.state.activeDocId === id;
     if (this.state.suggestion?.docId === id) this.clearSuggestion();
     safeRemoveStorageItem(localStorage, `${LIVE_PREFIX}${doc.id}`);
-    const snapshots = (await this.db.getAll('snapshots')).filter((snap) => snap.docId === doc.id);
-    await Promise.all(snapshots.map((snap) => this.db.delete('snapshots', snap.id)));
     
     let openedInPane = false;
     Object.values(this.state.workspace?.panes || {}).forEach((pane) => {
@@ -16112,6 +16090,7 @@ class NocturneWriter {
       const main = document.querySelector('#kb-modal .kb-main');
       if (main) {
         main.innerHTML = detail ? this.renderLoreDetail(detail.type, detail.item, this.state.kbReadMode) : `
+          ${this.kbViewTools()}
           <div class="kb-search-wrap">
             <i class="bx bx-search"></i>
             <input class="form-control kb-search-input" id="kb-search" placeholder="Поиск в базе знаний..." value="${escapeHtml(this.state.kbSearch || '')}">
@@ -16229,6 +16208,7 @@ class NocturneWriter {
       </aside>
       <main class="kb-main">
         ${detail ? this.renderLoreDetail(detail.type, detail.item, this.state.kbReadMode) : `
+        ${this.kbViewTools()}
         <div class="kb-search-wrap">
           <i class="bx bx-search"></i>
           <input class="form-control kb-search-input" id="kb-search" placeholder="Поиск в базе знаний..." value="${escapeHtml(this.state.kbSearch || '')}">
@@ -19341,9 +19321,9 @@ class NocturneWriter {
       { tab: 'ai', label: 'Строгость хранителя лора', note: 'Насколько жёстко локальная проверка реагирует на противоречия с Базой знаний.', key: 'loreStrictness', type: 'range', min: 0, max: 100, step: 1, suffix: '%' },
       { tab: 'ai', label: 'Реакция на конфликт лора', note: 'Действие при обнаружении нестыковок с Базой Знаний.', key: 'loreReaction', type: 'select', options: [['soft', 'Подсказать'], ['warn', 'Предупредить'], ['hard', 'Блокировать сохранение абзаца']] },
       { tab: 'ai', label: 'Sentiment Timeline', note: 'Показывает локальную кривую эмоциональной напряжённости.', key: 'sentimentTimeline', type: 'toggle' },
-      { tab: 'data', label: 'Живое сохранение', note: 'Каждое изменение мгновенно попадает в localStorage, а затем в IndexedDB.', key: 'liveSave', type: 'toggle' },
+      { tab: 'data', label: 'Живое сохранение', note: 'Черновики сохраняются в локальной базе и восстанавливаются после перезапуска.', key: 'liveSave', type: 'toggle' },
       { tab: 'data', label: 'Интервал автосохранения', note: 'Как часто фоновый autosave подтверждает состояние документов.', key: 'autosaveMinutes', type: 'range', min: 1, max: 15, step: 1, suffix: ' мин' },
-      { tab: 'data', label: 'Снапшоты / Машина времени', note: 'Снапшоты теперь создаются только вручную.', key: 'timeMachine', type: 'toggle' },
+      { tab: 'data', label: 'Автоматические резервные копии', note: 'Сохраняет весь проект с ротацией последних 20 копий.', key: 'automaticBackups', type: 'toggle' },
       { tab: 'data', label: 'Невидимое Git-версионирование', note: 'Автоматическое сохранение в локальный git-репозиторий.', key: 'gitVersioning', type: 'toggle' },
       { tab: 'data', label: 'Сквозное шифрование', note: 'AES-GCM для содержимого документов перед записью.', key: 'e2e', type: 'toggle' },
       { tab: 'export', label: 'Водяной знак PDF', note: 'Добавляет полупрозрачную подпись автора и дату в печатный PDF-макет.', key: 'watermark', type: 'toggle' },
@@ -21609,7 +21589,7 @@ ${raw}`;
       typoRules: await readRecords('typoRules'),
       reviewMarks: await readRecords('reviewMarks'),
       snapshots: await readRecords('snapshots'),
-      settingsRecords: (await readRecords('settings')).map(record => record.id === 'app' ? { ...record, value: stripSecrets(record.value) } : record),
+      settingsRecords: (await readRecords('settings')).filter(record => !['sync-identity', 'sync-connection', 'backup-directory'].includes(record.id)).map(record => record.id === 'app' ? { ...record, value: stripSecrets(record.value) } : record),
       trash: await readRecords('trash'),
       syncMappings: await readRecords('syncMappings'),
       syncRevisions: await readRecords('syncRevisions'),
@@ -22781,55 +22761,51 @@ ${raw}`;
 
   async mergeProjectDumpPayload(payload, report) {
     const idMap = new Map();
-    const existingFolders = new Set(this.state.folders.map((item) => item.id));
-    const existingDocs = new Set(this.state.docs.map((item) => item.id));
-    const existingCharacters = new Set(this.state.lore.characters.map((item) => item.id));
-    const existingLocations = new Set(this.state.lore.locations.map((item) => item.id));
-    const existingTimeline = new Set(this.state.lore.timeline.map((item) => item.id));
-
-    const existingNotes = new Set((this.state.lore.notes || []).map((item) => item.id));
-
-    const folders = (payload.folders || []).map((folder, index) => {
-      const next = { ...folder, id: this.remapId(folder.id, idMap, 'folder', existingFolders, report), order: this.state.folders.length + index };
-      return next;
-    });
-    const docs = (payload.docs || []).map((doc, index) => {
+    const decode = async (store, records = []) => Promise.all(records.map(async record => {
+      const value = await this.db.decodeRecord(store, record);
+      if (value?.locked) throw new Error('Введите мастер-пароль резервной копии перед объединением.');
+      return structuredClone(value);
+    }));
+    const currentWorlds = await this.db.getAll('lore');
+    const existingWorlds = new Set(currentWorlds.map(world => world.id));
+    const worlds = await decode('lore', payload.lores?.length ? payload.lores : [{ id: 'world', ...payload.lore }]);
+    for (const world of worlds) this.remapId(world.id, idMap, 'world', existingWorlds, report);
+    const existingFolders = new Set(this.state.folders.map(item => item.id));
+    const folders = (payload.folders || []).map((folder, index) => ({ ...folder, id: this.remapId(folder.id, idMap, 'folder', existingFolders, report), order: this.state.folders.length + index }));
+    const existingDocs = new Set(this.state.docs.map(item => item.id));
+    const docs = (await decode('docs', payload.docs)).map((doc, index) => {
       const next = structuredClone(doc);
       next.id = this.remapId(doc.id, idMap, 'doc', existingDocs, report);
-      next.folderId = idMap.get(doc.folderId) || this.defaultFolderId();
+      next.folderId = idMap.get(doc.folderId) || (existingFolders.has(doc.folderId) ? doc.folderId : folders[0]?.id || this.defaultFolderId());
+      next.loreId = idMap.get(doc.loreId || payload.activeLoreId || 'world') || this.state.activeLoreId;
       next.order = this.state.docs.length + index;
-      return next.encrypted ? next : this.sanitizeDoc(next);
+      return this.sanitizeDoc(next);
     });
-    const chars = (payload.lore?.characters || []).map((item, index) => this.normalizeCharacter({ ...item, id: this.remapId(item.id, idMap, 'char', existingCharacters, report), documentIds: (item.documentIds || []).map((id) => idMap.get(id) || id) }, this.state.lore.characters.length + index));
-    const locs = (payload.lore?.locations || []).map((item, index) => this.normalizeLocation({ ...item, id: this.remapId(item.id, idMap, 'loc', existingLocations, report), documentIds: (item.documentIds || []).map((id) => idMap.get(id) || id) }, this.state.lore.locations.length + index));
-    const times = (payload.lore?.timeline || []).map((item, index) => {
-      const next = structuredClone(item);
-      next.id = this.remapId(item.id, idMap, 'time', existingTimeline, report);
-      next.documentIds = (item.documentIds || []).map((id) => idMap.get(id) || id);
-      next.subEvents = (item.subEvents || []).map((sub) => ({ ...sub, id: uid('subtime'), documentIds: (sub.documentIds || []).map((id) => idMap.get(id) || id) }));
-      return this.normalizeTimelineEvent(next, this.state.lore.timeline.length + index);
-    });
-    const notesLore = (payload.lore?.notes || []).map((item, index) => this.normalizeNote({ ...item, id: this.remapId(item.id, idMap, 'note', existingNotes, report) }, (this.state.lore.notes || []).length + index));
-
-    this.state.folders.push(...folders);
-    this.state.docs.push(...docs);
-    this.state.lore.characters.push(...chars);
-    this.state.lore.locations.push(...locs);
-    this.state.lore.timeline.push(...times);
-    if (!this.state.lore.notes) this.state.lore.notes = [];
-    this.state.lore.notes.push(...notesLore);
-
-    const notes = (payload.floatingNotes || []).map((note) => this.sanitizeFloatingNote({ ...note, id: uid('note'), linkedId: idMap.get(note.linkedId) || note.linkedId }));
-    const typoRules = (payload.typoRules || []).map((rule) => this.sanitizeTypoRule({ ...rule, id: uid('typo-rule') })).filter(Boolean);
-    const marks = (payload.reviewMarks || []).map((mark) => this.sanitizeReviewMark({ ...mark, id: uid('review'), docId: idMap.get(mark.docId) || mark.docId })).filter(Boolean);
-    this.state.floatingNotes.push(...notes);
-    this.state.typoRules.push(...typoRules);
-    this.state.reviewMarks.push(...marks);
-    await Promise.all([...folders.map((item) => this.db.put('folders', item)), ...docs.map((item) => this.db.put('docs', item))]);
-    await this.saveLore();
-    await Promise.all([...notes.map((item) => this.db.put('floatingNotes', item)), ...typoRules.map((item) => this.db.put('typoRules', item)), ...marks.map((item) => this.db.put('reviewMarks', item))]);
-    await Promise.all((payload.snapshots || []).map((snap) => this.db.put('snapshots', { ...snap, id: uid('snap'), docId: idMap.get(snap.docId) || snap.docId })));
-    Object.assign(report, { folders: folders.length, docs: docs.length, characters: chars.length, locations: locs.length, timeline: times.length, notes: notesLore.length, snapshots: payload.snapshots?.length || 0, reviewMarks: marks.length });
+    for (const world of worlds) for (const collection of ['characters', 'locations', 'timeline', 'notes', 'rules']) {
+      const existing = new Set(currentWorlds.flatMap(item => (item[collection] || []).map(entity => entity.id)));
+      for (const item of world[collection] || []) this.remapId(item.id, idMap, collection, existing, report);
+    }
+    const remapReferences = value => {
+      if (Array.isArray(value)) return value.map(remapReferences);
+      if (!value || typeof value !== 'object') return value;
+      return Object.fromEntries(Object.entries(value).map(([key, child]) => [key,
+        ['id', 'docId', 'linkedId', 'loreId', 'folderId', 'parentId'].includes(key) && typeof child === 'string' ? idMap.get(child) || child
+          : ['documentIds', 'characterIds', 'locationIds'].includes(key) && Array.isArray(child) ? child.map(id => idMap.get(id) || id) : remapReferences(child)]));
+    };
+    const importedWorlds = worlds.map(remapReferences);
+    const notes = (await decode('floatingNotes', payload.floatingNotes)).map(note => this.sanitizeFloatingNote({ ...remapReferences(note), id: uid('note') }));
+    const typoRules = (await decode('typoRules', payload.typoRules)).map(rule => this.sanitizeTypoRule({ ...rule, id: uid('typo-rule') })).filter(Boolean);
+    const marks = (await decode('reviewMarks', payload.reviewMarks)).map(mark => this.sanitizeReviewMark({ ...remapReferences(mark), id: uid('review') })).filter(Boolean);
+    const snapshots = (await decode('snapshots', payload.snapshots)).map(snap => ({ ...remapReferences(snap), id: uid('snap') }));
+    const trash = (await decode('trash', payload.trash)).map(item => ({ ...remapReferences(item), id: uid('trash') }));
+    const importedNotes = (await decode('settings', (payload.settingsRecords || []).filter(record => record.id === 'global-notes')))[0];
+    const globalNotes = [this.state.globalNotes, payload.globalNotes || importedNotes?.text].filter(Boolean).join('\n\n');
+    await this.db.atomicWrite({ folders, docs, lore: importedWorlds, floatingNotes: notes, typoRules, reviewMarks: marks, snapshots, trash, settings: [{ id: 'global-notes', text: globalNotes, updatedAt: Date.now() }] });
+    this.state.folders.push(...folders); this.state.docs.push(...docs);
+    this.state.floatingNotes.push(...notes); this.state.typoRules.push(...typoRules); this.state.reviewMarks.push(...marks);
+    this.state.globalNotes = globalNotes; this.state.lore = await this.loadLore();
+    const total = collection => importedWorlds.reduce((count, world) => count + (world[collection]?.length || 0), 0);
+    Object.assign(report, { folders: folders.length, docs: docs.length, characters: total('characters'), locations: total('locations'), timeline: total('timeline'), notes: total('notes'), snapshots: snapshots.length, reviewMarks: marks.length });
   }
 
   openImportReport(report) {
@@ -23020,6 +22996,11 @@ ${raw}`;
     overlay.classList.add('active'); overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('[data-backup-create]').onclick = async () => { try { await this.backups.create(); await this.openBackups(); } catch (error) { this.toast(error.message); } };
     overlay.querySelectorAll('[data-backup-restore]').forEach(button => button.onclick = async () => { try { const copy = copies.find(item => item.id === button.dataset.backupRestore); const dump = await this.backups.read(copy); this.validateProjectDump(dump); this.openProjectImportPreview(dump, copy.name); } catch (error) { this.toast(error.message); } });
+  }
+
+  kbViewTools() {
+    const compact = this.state.settings.cardView === 'list';
+    return `<div class="kb-view-tools"><button class="pill-btn" data-action="edit-world-rules"><i class="bx bx-book-content"></i> Правила мира</button><button class="pill-btn" data-action="toggle-card-view" aria-pressed="${compact}"><i class="bx ${compact ? 'bx-grid-alt' : 'bx-list-ul'}"></i> ${compact ? 'Карточки' : 'Компактный вид'}</button></div>`;
   }
 
   editWorldRules() {
@@ -23943,7 +23924,7 @@ ${raw}`;
   async copyLanConnectionInfo() {
     const server = await this.controlLanServer('connection-info');
     if (!server) return;
-    const address = server.ips?.[0] || server.addresses?.[0] || '127.0.0.1';
+    const address = server.lanIps?.[0] || server.ips?.[0] || server.addresses?.[0] || '127.0.0.1';
     const text = `Nocturne Writer\nАдрес: ${address}:${server.port || 8787}\nКод: ${server.token || ''}`;
     try { await navigator.clipboard.writeText(text); this.toast('Адрес и код скопированы.'); } catch { this.toast('Не удалось скопировать. Адрес и код показаны в окне.'); }
   }

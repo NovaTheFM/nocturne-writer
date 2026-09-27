@@ -62,6 +62,27 @@ try {
     });
     assert.equal(result.position, 7); assert.equal(result.rules[0].text, 'Magic cannot resurrect people');
   });
+  await test('DOCX preserves heading levels and separate quotation paragraphs', async page => {
+    const xml = await page.evaluate(async () => {
+      const a = window.nocturneApp;
+      const blob = a.exportDocById(null, { returnBlob: true, docOverride: { title: 'Formatting', ast: { blocks: [
+        { id: 'h3', type: 'heading', level: 3, html: 'Heading three' },
+        { id: 'q', type: 'quote', html: '<p>First quoted paragraph</p><p>Second quoted paragraph</p>' },
+        { id: 'divider', type: 'divider' },
+      ] } } });
+      const zip = await window.JSZip.loadAsync(await blob.arrayBuffer()); return zip.file('word/document.xml').async('string');
+    });
+    assert.match(xml, /Heading3/); assert.match(xml, /First quoted paragraph[\s\S]*<\/w:p>[\s\S]*Second quoted paragraph/); assert.match(xml, /w:pBdr/);
+  });
+  await test('failed DOCX write never reports successful export', async page => {
+    const result = await page.evaluate(async () => {
+      const a = window.nocturneApp; await a.createDoc(a.defaultFolderId(), 'Failed export', '');
+      const messages = []; a.toast = message => messages.push(message); a.downloadBlob = async () => { throw new Error('Storage unavailable'); };
+      let failed = false; try { await a.exportDocById(a.state.docs[0].id); } catch { failed = true; }
+      return { failed, messages };
+    });
+    assert.equal(result.failed, true); assert.equal(result.messages.some(message => /экспортирован/.test(message)), false);
+  });
   await test('cross-document review queue opens the selected document and mark', async page => {
     assert.equal(await page.evaluate(async () => {
       const a = window.nocturneApp; await a.createDoc(a.defaultFolderId(), 'Review chapter', ''); const doc = a.getFocusedDoc();
