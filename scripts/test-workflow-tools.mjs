@@ -60,6 +60,31 @@ try {
       return a.state.docs[0].title === 'Protected title' && a.state.docs[0].notes === 'protected-note' && a.state.globalNotes === 'protected-global' && (await a.db.get('settings', 'app')).value.aiKey === 'protected-key';
     }), true);
   });
+  await test('opaque encrypted notes survive receiving sync before the phone has a password', async page => {
+    assert.equal(await page.evaluate(async () => {
+      const a = window.nocturneApp; const { protectRecord } = await import('/src/core/record-protection.js');
+      const record = await protectRecord('settings', { id: 'global-notes', text: 'Protected remote notes' }, { enabled: true, password: 'paired-project-password' });
+      await a.db.atomicWrite({ settings: [record] }, { raw: true });
+      a.state.settings.e2e = false; a.state.sessionPassword = ''; a.state.globalNotes = '';
+      await a.flushOpenDocuments();
+      const stored = (await a.db.getAllRaw('settings')).find(record => record.id === 'global-notes');
+      return !!stored.protectedStore && !!stored.encrypted;
+    }), true);
+  });
+  await test('unlocking a protected synced manuscript activates encryption for subsequent phone edits', async page => {
+    assert.equal(await page.evaluate(async () => {
+      const a = window.nocturneApp; const { protectRecord } = await import('/src/core/record-protection.js');
+      await a.createDoc(a.defaultFolderId(), 'Protected synced chapter', ''); const doc = structuredClone(a.getFocusedDoc());
+      const record = await protectRecord('docs', doc, { enabled: true, password: 'paired-project-password' });
+      await a.db.atomicWrite({ docs: [record] }, { raw: true }); a.state.settings.e2e = false; a.state.sessionPassword = '';
+      a.state.docs = await a.loadDocs();
+      const input = document.createElement('input'); input.id = 'session-password'; input.value = 'paired-project-password'; document.body.append(input);
+      await a.setSessionPassword(); input.remove();
+      a.nocturneEditor.get('primary').commands.setContent('<p>Encrypted phone revision</p>'); await a.saveActiveDoc({ silent: true });
+      const raw = await a.db.getAllRaw('docs');
+      return a.state.settings.e2e && !!raw[0].protectedStore && !JSON.stringify(raw).includes('Encrypted phone revision');
+    }), true);
+  });
   await test('rules and manuscript caret survive world navigation', async page => {
     const result = await page.evaluate(async () => {
       const a = window.nocturneApp; await a.createDoc(a.defaultFolderId(), 'Position test', '');

@@ -14,7 +14,12 @@ function compareClocks(a = {}, b = {}) {
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical);
   if (!value || typeof value !== 'object') return value;
-  return Object.fromEntries(Object.keys(value).sort().filter(key => !key.startsWith('_') && !['updatedAt', 'renderRevision', 'locked'].includes(key)).map(key => [key, canonical(value[key])]));
+  return Object.fromEntries(Object.keys(value).sort().filter(key =>
+    !key.startsWith('_') && !['updatedAt', 'renderRevision', 'locked'].includes(key)
+    && !(value.ast && ['pmJson', 'summary'].includes(key))
+    && !(key === 'align' && value[key] === 'left')
+    && !(key === 'level' && value.type === 'heading' && value[key] === 2)
+  ).map(key => [key, canonical(value[key])]));
 }
 async function contentHash(value) {
   const bytes = new TextEncoder().encode(JSON.stringify(canonical(value)));
@@ -133,7 +138,9 @@ export class DatabaseSync {
         try {
         const comparison = local ? compareClocks(incoming.clock, local.clock) : 'newer';
         if (local && incoming.hash === local.hash && !!incoming.deleted === !!local.deleted) {
-          await this.db.atomicWrite({ syncJournal: [{ ...local, clock: mergeClocks(local.clock, incoming.clock) }] }, { origin: 'sync', expect });
+          const clock = mergeClocks(local.clock, incoming.clock);
+          await this.db.atomicWrite({ syncJournal: [{ ...local, clock }] }, { origin: 'sync', expect });
+          if (await this.clearResolvedConflicts({ ...incoming, clock })) received++;
           break;
         }
         if (comparison === 'older') break;
@@ -170,9 +177,14 @@ export class DatabaseSync {
       [record.store]: record.deleted ? [] : [record.value],
       syncJournal: [{ id: keyOf(record.store, record.id), store: record.store, recordId: record.id, clock: record.clock, hash: record.hash, members: record.members, deleted: !!record.deleted, updatedAt: Date.now() }],
     }, { origin: 'sync', expect, deletes: record.deleted ? { [record.store]: [record.id] } : {} });
+    await this.clearResolvedConflicts(record);
+  }
+  async clearResolvedConflicts(record) {
+    let removed = 0;
     for (const conflict of await this.db.getAll('syncConflicts')) {
-      if (conflict.store === record.store && conflict.recordId === record.id && compareClocks(record.clock, mergeClocks(conflict.local?.clock, conflict.remote?.clock)) === 'newer') await this.db.delete('syncConflicts', conflict.id);
+      if (conflict.store === record.store && conflict.recordId === record.id && compareClocks(record.clock, mergeClocks(conflict.local?.clock, conflict.remote?.clock)) === 'newer') { await this.db.delete('syncConflicts', conflict.id); removed++; }
     }
+    return removed;
   }
   async resolveConflict(id, choice, mergedValue = null) {
     await this.work;
