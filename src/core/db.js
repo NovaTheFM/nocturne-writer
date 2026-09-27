@@ -1,7 +1,8 @@
 import { defaultSettings, seedFolders } from './defaults.js';
+import { protectRecord, revealRecord } from './record-protection.js';
 
 const DB_NAME = 'nocturne-writer-es6-v3-clean';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 const STORES = [
   'settings',
   'folders',
@@ -18,6 +19,10 @@ const STORES = [
   'syncConflicts',
   'syncRevisions',
   'syncProfiles',
+  'drafts',
+  'trash',
+  'backups',
+  'syncJournal',
 ];
 
 function requestToPromise(request) {
@@ -67,37 +72,67 @@ export class Database {
   }
 
   async getAll(name) {
+    const records = await this.getAllRaw(name);
+    return Promise.all(records.map(record => revealRecord(name, record, this.protection?.().password)));
+  }
+
+  async getAllRaw(name) {
     await this.open();
     return requestToPromise(this.store(name).getAll());
   }
 
   async get(name, id) {
     await this.open();
-    return requestToPromise(this.store(name).get(id));
+    const record = await requestToPromise(this.store(name).get(id));
+    return revealRecord(name, record, this.protection?.().password);
   }
 
   async put(name, value) {
     await this.open();
+    value = await protectRecord(name, value, this.protection?.());
     const tx = this.db.transaction(name, 'readwrite');
+    const done = transactionDone(tx);
     const result = await requestToPromise(tx.objectStore(name).put(value));
-    await transactionDone(tx);
+    await done;
+    this.onMutation?.({ store: name, id: value.id, action: 'put' });
     return result;
   }
 
   async delete(name, id) {
     await this.open();
     const tx = this.db.transaction(name, 'readwrite');
+    const done = transactionDone(tx);
     const result = await requestToPromise(tx.objectStore(name).delete(id));
-    await transactionDone(tx);
+    await done;
+    this.onMutation?.({ store: name, id, action: 'delete' });
     return result;
   }
 
   async clear(name) {
     await this.open();
     const tx = this.db.transaction(name, 'readwrite');
+    const done = transactionDone(tx);
     const result = await requestToPromise(tx.objectStore(name).clear());
-    await transactionDone(tx);
+    await done;
     return result;
+  }
+
+  async atomicWrite(recordsByStore, { replace = false, raw = false } = {}) {
+    await this.open();
+    const entries = await Promise.all(Object.entries(recordsByStore).map(async ([name, records]) => [
+      name, await Promise.all(records.map(record => raw ? record : protectRecord(name, record, this.protection?.())))
+    ]));
+    const tx = this.db.transaction(entries.map(([name]) => name), 'readwrite');
+    const done = transactionDone(tx);
+    try {
+      for (const [name, records] of entries) {
+        const store = tx.objectStore(name);
+        if (replace) store.clear();
+        for (const record of records) store.put(record);
+      }
+    } catch (error) { tx.abort(); await done.catch(() => {}); throw error; }
+    await done;
+    for (const [store, records] of entries) for (const record of records) this.onMutation?.({ store, id: record.id, action: 'put' });
   }
 
   async seed() {

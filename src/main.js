@@ -18,6 +18,7 @@ import {
   uid,
 } from './core/utils.js';
 import { encryptJson, decryptJson } from './core/crypto.js';
+import { stripSecrets } from './core/record-protection.js';
 import { TYPO_LOOKUP, normalizeTypoToken } from './core/typos.js';
 import { getSmartSpellerMatches } from './core/smart-speller.js';
 import { platformFiles } from './platform/file-adapter.js';
@@ -190,6 +191,8 @@ class LocalSyncClient {
 class NocturneWriter {
   constructor() {
     this.db = new Database();
+    this.db.protection = () => ({ enabled: !!this.state?.settings.e2e, password: this.state?.sessionPassword || '' });
+    this.draftWrites = new Map();
     this.runtime = detectRuntime();
     this.isComposing = false;
     this.kbTransitioning = false;
@@ -426,8 +429,11 @@ class NocturneWriter {
     this.setStartupProgress(20);
     this.clearLegacyStorage();
     await this.db.open();
+    this.state.sessionPassword = safeGetStorageItem(sessionStorage, 'nocturne-master-password', '');
     const settings = await this.db.get('settings', 'app');
     this.state.settings = this.validateSettings(settings?.value || {});
+    const globalNotes = await this.db.get('settings', 'global-notes');
+    this.state.globalNotes = globalNotes?.locked ? '' : (globalNotes?.text ?? this.state.globalNotes);
     this.injectCustomFonts();
     if (!document.getElementById('reaper-recolor-filter')) {
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -470,7 +476,6 @@ class NocturneWriter {
     await this.loadFloatingNotes();
     await this.loadTypoRules();
     await this.loadReviewMarks();
-    await this.saveLore();
     this.validateLoadedState();
     this.initWorkspace();
     this.renderShell();
@@ -664,19 +669,16 @@ class NocturneWriter {
   }
 
   clearLegacyStorage() {
-    safeStorageKeys(localStorage).forEach((key) => {
-      if (key.startsWith('nocturne-live-') && !key.startsWith(LIVE_PREFIX)) safeRemoveStorageItem(localStorage, key);
-      if (key.startsWith(LIVE_PREFIX)) {
-        const value = safeGetStorageItem(localStorage, key, '');
-        if (/sentence-|senten[\p{L}-]*?(short|long)|[\p{Script=Cyrillic}a-z]{0,6}hort["»&>]/iu.test(value) || value.length > 750000) safeRemoveStorageItem(localStorage, key);
-      }
-    });
+    // Old drafts remain recoverable until their content has been committed to IndexedDB.
   }
 
   async loadDocs() {
     const docs = await this.db.getAll('docs');
+    const drafts = new Map((await this.db.getAll('drafts')).map(draft => [draft.id, draft]));
     const password = this.state.sessionPassword;
-    return Promise.all(docs.map(async (doc) => {
+    return Promise.all(docs.map(async (storedDoc) => {
+      const draft = drafts.get(storedDoc.id);
+      const doc = draft && !draft.locked && draft.updatedAt > storedDoc.updatedAt ? { ...storedDoc, ...draft } : storedDoc;
       if (!doc.encrypted) return doc;
       if (!password) return { ...doc, locked: true, ast: { type: 'doc', blocks: [{ id: uid('block'), type: 'paragraph', html: 'Документ зашифрован. Введите мастер-пароль в настройках данных.' }] } };
       try {
@@ -855,7 +857,10 @@ class NocturneWriter {
     if (!this.state.settings.liveSave || this.state.settings.e2e || doc.locked) return doc;
     const draft = safeParseJson(safeGetStorageItem(localStorage, `${LIVE_PREFIX}${doc.id}`, 'null'), null, `${LIVE_PREFIX}${doc.id}`);
     if (draft?.updatedAt && draft.updatedAt > (doc.updatedAt || 0) && isPlainObject(draft.ast)) {
-      return { ...doc, ast: draft.ast || doc.ast, notes: draft.notes ?? doc.notes, updatedAt: draft.updatedAt };
+      const recovered = { ...doc, ast: draft.ast || doc.ast, notes: draft.notes ?? doc.notes, updatedAt: draft.updatedAt };
+      if (draft.pmJson) recovered.pmJson = draft.pmJson;
+      else delete recovered.pmJson;
+      return recovered;
     }
     return doc;
   }
@@ -5895,6 +5900,7 @@ class NocturneWriter {
     }
     if (event.key === 'Shift') this.shiftKeyDown = true;
     if (event.key === 'Escape') {
+      this.pendingConfirmation?.(false);
       if (this.closeTopMobileOverlay()) {
         event.preventDefault();
         return;
@@ -5963,7 +5969,6 @@ class NocturneWriter {
     if ((event.ctrlKey || event.metaKey) && this.getLayoutIndependentKey(event).toLowerCase() === 's') {
       event.preventDefault();
       this.saveActiveDoc();
-      this.toast('Сохранено локально.');
     }
   }
 
@@ -12649,6 +12654,7 @@ class NocturneWriter {
 
     this.bumpDocRenderRevision(doc);
     doc.updatedAt = Date.now();
+    this.writeLiveDraft(doc.id);
     this.updateActiveBlock();
     this.renderGoal();
     this.saveDocByIdDebounced(doc.id);
@@ -12660,7 +12666,7 @@ class NocturneWriter {
     const lastKey = this.lastEditKey || '';
     const isDelimiter = /[\s.,!?;:()\[\]{}"'\u00ab\u00bb\u201c\u201d\u2018\u2019\u2014\u2013-]/u.test(lastKey) || lastKey === 'Enter';
     if (isDelimiter) {
-      this.updateTypoHighlights();
+      this.updateTypoHighlightsDebounced();
     } else {
       this.updateTypoHighlightsDebounced();
     }
@@ -13354,6 +13360,7 @@ class NocturneWriter {
     }
     const replacement = this.replacementWithCase(match.text, this.replaceSession.replace || '');
     block.html = this.replaceInHtmlRange(block.html, match.start, match.end, replacement);
+    this.nocturneEditor.applyDocumentContent(doc, { ast: doc.ast });
     doc.updatedAt = Date.now();
     doc.summary = doc.description || buildSummary(doc.ast);
     this.bumpDocRenderRevision(doc);
@@ -13576,17 +13583,12 @@ class NocturneWriter {
     this.nocturneEditor?.syncDocFromEditorByDocId(docId);
     const doc = this.state.docs.find((item) => item.id === docId);
     if (!doc || doc.locked || !this.state.settings.liveSave) return;
-    if (this.state.settings.e2e) {
-      return;
-    }
-    const ok = safeSetStorageItem(localStorage, `${LIVE_PREFIX}${doc.id}`, JSON.stringify({
-      ast: doc.ast,
-      notes: doc.notes || '',
-      updatedAt: doc.updatedAt || Date.now(),
-    }));
-    if (!ok) {
-      this.toast('Live-save переполнен: браузер не дал записать черновик.');
-    }
+    const copy = structuredClone(doc);
+    const previous = this.draftWrites.get(doc.id) || Promise.resolve();
+    const write = previous.catch(() => {}).then(() => this.db.put('drafts', copy));
+    this.draftWrites.set(doc.id, write);
+    write.catch(error => this.setSaveStatus('error', doc.id, error.message));
+    return write;
   }
 
   async createSnapshot(showToast = false) {
@@ -13599,6 +13601,7 @@ class NocturneWriter {
       title: doc.title,
       createdAt: Date.now(),
       ast: structuredClone(doc.ast),
+      pmJson: structuredClone(doc.pmJson),
       notes: doc.notes || '',
       globalNotes: this.state.globalNotes || '',
       summary: doc.summary || doc.description,
@@ -13650,34 +13653,24 @@ class NocturneWriter {
       if (!options.silent) this.toast('Введите мастер-пароль сессии перед сохранением.');
       return;
     }
-    if (this.state.settings.loreReaction === 'hard' && this.hasHardLoreConflict(doc)) {
-      this.setSaveStatus('error', doc.id, 'Сохранение заблокировано: конфликт с лором.');
-      this.toast('Сохранение заблокировано: найден конфликт с лором.');
-      return;
-    }
     try {
-      const stored = { ...doc };
-      if (this.state.settings.e2e && this.state.sessionPassword) {
-        stored.encrypted = await encryptJson({ ast: doc.ast, notes: doc.notes, summary: doc.summary, title: doc.title, description: doc.description }, this.state.sessionPassword);
-        delete stored.ast;
-        delete stored.notes;
-        delete stored.summary;
-        stored.title = 'Encrypted document';
-        stored.description = 'Encrypted document';
-        stored.summary = 'Encrypted document';
-      } else {
-        delete stored.encrypted;
-      }
+      const stored = structuredClone(doc);
+      delete stored.encrypted;
+      await this.draftWrites.get(doc.id);
       await this.db.put('docs', stored);
-      if (!stored.encrypted) safeRemoveStorageItem(localStorage, `${LIVE_PREFIX}${doc.id}`);
+      const draft = await this.db.get('drafts', doc.id);
+      if (!draft || draft.updatedAt <= stored.updatedAt) await this.db.delete('drafts', doc.id);
+      safeRemoveStorageItem(localStorage, `${LIVE_PREFIX}${doc.id}`);
       await this.updateTodayStats(doc.id);
       this.drawSentiment();
       this.setSaveStatus('saved', doc.id);
       if (!options.silent) this.toast('Сохранено.');
+      return true;
     } catch (error) {
       this.setSaveStatus('error', doc.id, error?.message || 'IndexedDB не принял сохранение.');
       const quota = /quota|disk|storage/i.test(error?.name || error?.message || '');
       if (!options.silent) this.toast(quota ? 'Недостаточно места для сохранения. Экспортируйте проект или удалите старые снапшоты.' : 'Ошибка сохранения.');
+      return false;
     }
   }
 
@@ -14745,9 +14738,13 @@ class NocturneWriter {
         </div>`;
       overlay.classList.add('active');
       const close = (value) => {
+        if (this.pendingConfirmation !== close) return;
+        this.pendingConfirmation = null;
         overlay.classList.remove('active');
         resolve(value);
       };
+      this.pendingConfirmation?.(false);
+      this.pendingConfirmation = close;
       overlay.querySelector('[data-close-form]').onclick = () => close(false);
       overlay.querySelector('[data-confirm-dialog]').onclick = () => close(true);
     });
@@ -18769,6 +18766,7 @@ class NocturneWriter {
   }
 
   async saveLore() {
+    if (this.state.settings.e2e && !this.state.sessionPassword) return;
     this.state.lore.characters = (this.state.lore.characters || []).map((item, index) => this.normalizeCharacter(item, index));
     this.state.lore.locations = (this.state.lore.locations || []).map((item, index) => this.normalizeLocation(item, index));
     this.state.lore.timeline = (this.state.lore.timeline || []).map((item, index) => this.normalizeTimelineEvent(item, index));
@@ -20248,7 +20246,14 @@ class NocturneWriter {
   async persistSettings() {
     this.state.settings = this.validateSettings(this.state.settings);
     await this.db.put('settings', { id: 'app', value: this.state.settings });
-    safeSetStorageItem(localStorage, 'nocturne_settings', JSON.stringify(this.state.settings));
+    await this.persistGlobalNotes();
+    safeRemoveStorageItem(localStorage, 'nocturne_settings');
+  }
+
+  async persistGlobalNotes() {
+    if (this.state.settings.e2e && !this.state.sessionPassword) return;
+    await this.db.put('settings', { id: 'global-notes', text: this.state.globalNotes || '', updatedAt: Date.now() });
+    safeRemoveStorageItem(localStorage, 'nocturne-global-notes');
   }
 
   clearAllLiveDrafts() {
@@ -21176,9 +21181,7 @@ ${raw}`;
   }
 
   hasHardLoreConflict(doc = this.activeDoc) {
-    if (Number(this.state.settings.loreStrictness) < 65) return false;
-    const text = docText(doc?.ast);
-    return /Эрион[^.?!…]{0,80}голубые глаза|голубые глаза[^.?!…]{0,80}Эрион/i.test(text);
+    return false;
   }
 
   updateAssistantPanelState() {
@@ -21341,6 +21344,7 @@ ${raw}`;
     doc.updatedAt = Date.now();
     doc.summary = doc.description || buildSummary(doc.ast);
     this.bumpDocRenderRevision(doc);
+    this.nocturneEditor.applyDocumentContent(doc, { ast: doc.ast });
     this.writeLiveDraft(doc.id);
     this.saveDocByIdDebounced(doc.id);
     this.renderWorkspacePane(suggestion.paneId || this.state.workspace?.focusedPaneId || 'primary');
@@ -21442,7 +21446,12 @@ ${raw}`;
       const snap = snapshots.find((item) => item.id === button.dataset.restore);
       if (!snap) return;
       this.activeDoc.ast = structuredClone(snap.ast);
+      this.activeDoc.notes = snap.notes || '';
+      this.state.globalNotes = snap.globalNotes ?? this.state.globalNotes;
+      this.nocturneEditor.applyDocumentContent(this.activeDoc, { ast: snap.ast, pmJson: snap.pmJson });
       this.activeDoc.summary = buildSummary(this.activeDoc.ast);
+      this.activeDoc.updatedAt = Date.now();
+      await this.persistGlobalNotes();
       await this.saveActiveDoc({ silent: true });
       overlay.classList.remove('active');
       this.renderAll();
@@ -21460,17 +21469,35 @@ ${raw}`;
 
   async buildNocturneDump(options = {}) {
     const encryptedSafe = this.state.settings.e2e && !options.plaintextE2e;
-    const docs = encryptedSafe ? await this.db.getAll('docs') : this.state.docs;
+    for (const doc of this.state.docs) {
+      if (!doc.locked && (!this.state.settings.e2e || this.state.sessionPassword)) {
+        this.nocturneEditor.syncDocFromEditorByDocId(doc.id);
+        const record = structuredClone(doc);
+        delete record.encrypted;
+        await this.db.put('docs', record);
+      }
+    }
+    await this.saveLore();
+    await this.persistGlobalNotes();
+    const readRecords = name => encryptedSafe ? this.db.getAllRaw(name) : this.db.getAll(name);
+    const docs = await readRecords('docs');
     const payload = {
-      settings: this.validateSettings(this.state.settings),
+      settings: stripSecrets(this.validateSettings(this.state.settings)),
       folders: this.validateFolders(this.state.folders),
       docs: docs.map((doc) => doc.encrypted ? structuredClone(doc) : this.sanitizeDoc(structuredClone(doc))),
-      lore: structuredClone(this.state.lore),
+      lore: encryptedSafe ? {} : structuredClone(this.state.lore),
+      lores: await readRecords('lore'),
+      activeLoreId: this.state.activeLoreId,
       globalNotes: encryptedSafe ? '' : this.state.globalNotes,
-      floatingNotes: encryptedSafe ? [] : this.state.floatingNotes.map((note) => this.sanitizeFloatingNote(note)),
-      typoRules: this.state.typoRules.map((rule) => this.sanitizeTypoRule(rule)).filter(Boolean),
-      reviewMarks: this.state.reviewMarks.map((mark) => this.sanitizeReviewMark(mark)).filter(Boolean),
-      snapshots: encryptedSafe ? [] : await this.db.getAll('snapshots'),
+      floatingNotes: await readRecords('floatingNotes'),
+      typoRules: await readRecords('typoRules'),
+      reviewMarks: await readRecords('reviewMarks'),
+      snapshots: await readRecords('snapshots'),
+      settingsRecords: (await readRecords('settings')).map(record => record.id === 'app' ? { ...record, value: stripSecrets(record.value) } : record),
+      trash: await readRecords('trash'),
+      syncMappings: await readRecords('syncMappings'),
+      syncRevisions: await readRecords('syncRevisions'),
+      syncConflicts: await readRecords('syncConflicts'),
       stats: await this.db.getAll('stats'),
       exportSettings: { exportNocturned: this.state.exportNocturned },
     };
@@ -21479,7 +21506,7 @@ ${raw}`;
       version: 1,
       appName: 'Nocturne Writer',
       appVersion: '1.2.0',
-      schemaVersion: 3,
+      schemaVersion: 4,
       exportedAt: new Date().toISOString(),
       encrypted: !!this.state.settings.e2e,
       plaintextE2e: !!options.plaintextE2e,
@@ -22402,10 +22429,24 @@ ${raw}`;
     if (raw.format !== 'nocturnedump') throw new Error('Это не .nocturnedump файл.');
     if (!raw.payload || typeof raw.payload !== 'object') throw new Error('Dump не содержит payload.');
     const payload = raw.payload;
-    ['folders', 'docs', 'typoRules', 'reviewMarks', 'snapshots'].forEach((key) => {
+    if (raw.schemaVersion !== undefined && ![1, 2, 3, 4].includes(Number(raw.schemaVersion))) throw new Error('Версия резервной копии не поддерживается.');
+    ['folders', 'docs', 'typoRules', 'reviewMarks', 'snapshots', 'lores', 'settingsRecords', 'floatingNotes', 'stats', 'trash', 'syncMappings', 'syncRevisions', 'syncConflicts'].forEach((key) => {
       if (payload[key] !== undefined && !Array.isArray(payload[key])) throw new Error(`Некорректный раздел ${key}.`);
+      for (const item of payload[key] || []) {
+        if (!isPlainObject(item) || typeof item.id !== 'string' || !item.id) throw new Error(`Повреждена запись раздела ${key}.`);
+      }
     });
     if (payload.lore && typeof payload.lore !== 'object') throw new Error('Некорректный раздел lore.');
+    const walk = (value, depth = 0) => {
+      if (depth > 100) throw new Error('Слишком глубокая структура резервной копии.');
+      if (!value || typeof value !== 'object') return;
+      for (const [key, child] of Object.entries(value)) {
+        if (['__proto__', 'constructor', 'prototype'].includes(key)) throw new Error('Опасное поле в резервной копии.');
+        if (['id', 'blockId', 'folderId', 'docId', 'linkedId'].includes(key) && child !== null && child !== undefined && child !== '' && (typeof child !== 'string' || !/^[\w.:-]{1,240}$/u.test(child))) throw new Error('Недопустимый идентификатор в резервной копии.');
+        walk(child, depth + 1);
+      }
+    };
+    walk(payload);
     return raw;
   }
 
@@ -22417,6 +22458,7 @@ ${raw}`;
     let dump;
     try {
       dump = this.validateProjectDump(JSON.parse(text));
+      if (dump.checksum && dump.checksum !== await this.checksumText(JSON.stringify(dump.payload))) throw new Error('Контрольная сумма не совпала. Файл повреждён или изменён.');
     } catch (error) {
       this.openImportErrorModal(error.message || 'Не удалось прочитать dump.', filename);
       return;
@@ -22544,11 +22586,12 @@ ${raw}`;
   }
 
   async importProjectDump(dump, { mode = 'merge' } = {}) {
+    this.validateProjectDump(dump);
+    if (dump.checksum && dump.checksum !== await this.checksumText(JSON.stringify(dump.payload))) throw new Error('Контрольная сумма резервной копии не совпала.');
+    if (!['replace', 'merge'].includes(mode)) throw new Error('Неизвестный режим импорта.');
     const payload = dump.payload || {};
     const report = { mode, docs: 0, folders: 0, characters: 0, locations: 0, timeline: 0, snapshots: 0, reviewMarks: 0, conflicts: 0 };
-    await this.animateProjectImportProgress(dump, mode);
     if (mode === 'replace') {
-      await Promise.all(['settings', 'folders', 'docs', 'lore', 'snapshots', 'stats', 'floatingNotes', 'typoRules', 'reviewMarks'].map((store) => this.db.clear(store)));
       this.state.settings = this.validateSettings(payload.settings || {});
       this.state.settings.activeLoreId = 'world';
       this.state.settings.kbProjects = [{ id: 'world', title: payload.lore?.title || 'Основное' }];
@@ -22580,15 +22623,21 @@ ${raw}`;
   }
 
   async persistImportedProject(payload = {}) {
-    await this.db.put('settings', { id: 'app', value: this.state.settings });
-    await Promise.all(this.state.folders.map((item) => this.db.put('folders', item)));
-    await Promise.all(this.state.docs.map((item) => this.db.put('docs', item)));
-    await this.db.put('lore', { id: 'world', ...this.state.lore });
-    await Promise.all(this.state.floatingNotes.map((item) => this.db.put('floatingNotes', item)));
-    await Promise.all(this.state.typoRules.map((item) => this.db.put('typoRules', item)));
-    await Promise.all(this.state.reviewMarks.map((item) => this.db.put('reviewMarks', item)));
-    await Promise.all((payload.snapshots || []).map((item) => this.db.put('snapshots', item)));
-    await Promise.all((payload.stats || []).map((item) => this.db.put('stats', item)));
+    const settingsRecords = payload.settingsRecords || [];
+    await this.db.atomicWrite({
+      settings: [{ id: 'app', value: this.state.settings }, ...settingsRecords.filter(record => record.id !== 'app' && record.id !== 'global-notes'), settingsRecords.find(record => record.id === 'global-notes') || { id: 'global-notes', text: this.state.globalNotes, updatedAt: Date.now() }],
+      folders: this.state.folders, docs: this.state.docs,
+      lore: payload.lores?.length ? payload.lores : [{ id: 'world', ...this.state.lore }],
+      floatingNotes: this.state.floatingNotes, typoRules: this.state.typoRules, reviewMarks: this.state.reviewMarks,
+      snapshots: payload.snapshots || [], stats: payload.stats || [], trash: payload.trash || [], drafts: [],
+      syncMappings: payload.syncMappings || [], syncRevisions: payload.syncRevisions || [], syncConflicts: payload.syncConflicts || [],
+    }, { replace: true });
+    this.clearAllLiveDrafts();
+    this.state.activeLoreId = payload.activeLoreId || 'world';
+    this.state.lore = await this.loadLore();
+    const globalNotes = await this.db.get('settings', 'global-notes');
+    this.state.globalNotes = globalNotes?.text || '';
+    this.state.docs = await this.loadDocs();
   }
 
   remapId(id, map, prefix, existingIds, report) {

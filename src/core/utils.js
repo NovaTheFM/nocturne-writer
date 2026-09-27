@@ -83,7 +83,7 @@ export function normalizeHtml(html = '') {
   cleaned = cleaned.replace(/<\/?span[^>]*>/gi, '');
   cleaned = cleanAnalysisResidue(cleaned);
   if (!cleaned.trim() && !/<br\s*\/?>/i.test(cleaned)) return '<br>';
-  return cleaned.length > 200000 ? escapeHtml(textFromHtml(cleaned).slice(0, 200000)) : cleaned;
+  return cleaned;
 }
 
 export function parseBlocksFromEditable(editable) {

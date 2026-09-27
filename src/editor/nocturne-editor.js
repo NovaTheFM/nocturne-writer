@@ -742,10 +742,8 @@ export class NocturneEditorBridge {
         },
         handleDOMEvents: {
           keydown: (view, event) => {
-            console.log("KEYDOWN FIRED", event.key);
             const settings = this.getSettings?.() || {};
             if (settings.typewriterSound && !event.ctrlKey && !event.altKey && !event.metaKey) {
-              console.log("PLAYING SOUND");
               this.playTypewriterSound();
             }
             this.onKeydown?.(event);
@@ -817,6 +815,20 @@ export class NocturneEditorBridge {
       return this.syncDocFromEditor(instance.paneId);
     }
     return null;
+  }
+
+  applyDocumentContent(doc, { ast = null, pmJson = null } = {}) {
+    if (ast) doc.ast = structuredClone(ast);
+    if (pmJson) doc.pmJson = ensureTiptapBlockIds(pmJson);
+    else delete doc.pmJson;
+    const instances = [...this.instances.values()].filter(instance => instance.docId === doc.id);
+    for (const instance of instances) {
+      instance.editor.commands.setContent(doc.pmJson || legacyAstToHtml(doc.ast), { emitUpdate: false });
+      this.scheduleVisualPages(instance.paneId);
+    }
+    if (instances.length) this.syncDocFromEditor(instances[0].paneId);
+    doc._needsModelSync = false;
+    return doc;
   }
 
   applyTypewriterScroll(editor, instance) {
