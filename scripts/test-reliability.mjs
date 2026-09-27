@@ -103,7 +103,41 @@ try {
   await check('Escape resolves confirmation as cancelled', async page => {
     await page.evaluate(() => { window.__confirmed = null; window.nocturneApp.confirmDialog({ title: 'Cancel test' }).then(v => { window.__confirmed = v; }); });
     await page.keyboard.press('Escape');
-    await page.waitForFunction(() => window.__confirmed === false, { timeout: 1000 });
+    await page.waitForFunction(() => window.__confirmed === false, null, { timeout: 1000 });
+  });
+  await check('enabling encryption migrates existing records immediately', async page => {
+    const result = await page.evaluate(async () => {
+      const a = window.nocturneApp;
+      await a.createDoc(a.defaultFolderId(), 'Migration secret', '');
+      a.nocturneEditor.get('primary').commands.setContent('<p>OLD SECRET TEXT</p>');
+      await a.saveActiveDoc({ silent: true }); await a.createSnapshot();
+      a.state.sessionPassword = 'migration-password'; a.state.settings.e2e = true;
+      await a.migrateEncryption();
+      return { docs: await a.db.getAllRaw('docs'), snapshots: await a.db.getAllRaw('snapshots'), lore: await a.db.getAllRaw('lore') };
+    });
+    assert.doesNotMatch(JSON.stringify(result), /OLD SECRET TEXT|Migration secret/);
+    for (const record of [...result.docs, ...result.snapshots, ...result.lore]) assert.ok(record.encrypted);
+  });
+  await check('history restores visible text and notes', async page => {
+    const result = await page.evaluate(async () => {
+      const a = window.nocturneApp;
+      await a.createDoc(a.defaultFolderId(), 'Snapshot', '');
+      a.nocturneEditor.get('primary').commands.setContent('<p>Original snapshot text</p>');
+      a.getFocusedDoc().notes = 'Original notes';
+      await a.createSnapshot();
+      a.nocturneEditor.get('primary').commands.setContent('<p>New version</p>'); a.getFocusedDoc().notes = 'New notes';
+      await a.showHistory();
+      document.querySelector('[data-restore]').click();
+      await new Promise(resolve => setTimeout(resolve, 200));
+      return { text: a.nocturneEditor.get('primary').getText(), notes: a.getFocusedDoc().notes };
+    });
+    assert.equal(result.text, 'Original snapshot text'); assert.equal(result.notes, 'Original notes');
+  });
+  await check('settings modal contains keyboard focus', async page => {
+    await page.evaluate(() => window.nocturneApp.openSettingsTab('visual'));
+    await page.waitForTimeout(100);
+    await page.keyboard.press('Tab');
+    assert.equal(await page.evaluate(() => !!document.activeElement.closest('#settings-overlay')), true);
   });
 } finally { await browser.close(); server.kill(); }
 console.log(JSON.stringify(results, null, 2));

@@ -38,4 +38,16 @@ assert.equal(plainTextFromTiptapJson(pmJson), 'Title\n\nA bold line');
 const withIds = ensureTiptapBlockIds({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Draft' }] }] });
 assert.match(withIds.content[0].attrs.blockId, /^block-/);
 
+const structured = tiptapJsonToLegacyAst({ type: 'doc', content: [
+  { type: 'heading', attrs: { blockId: 'h3', level: 3 }, content: [{ type: 'text', text: 'Subheading' }] },
+  { type: 'blockquote', attrs: { blockId: 'q' }, content: [
+    { type: 'paragraph', attrs: { blockId: 'q1' }, content: [{ type: 'text', text: 'First paragraph' }] },
+    { type: 'paragraph', attrs: { blockId: 'q2' }, content: [{ type: 'text', text: 'Second paragraph' }] },
+  ] },
+  { type: 'horizontalRule', attrs: { blockId: 'divider' } },
+] });
+assert.match(legacyAstToHtml(structured), /<h3/);
+assert.match(legacyAstToHtml(structured), /First paragraph<\/p><p[^>]*>Second paragraph/);
+assert.match(legacyAstToHtml(structured), /<hr/);
+
 console.log('editor adapter tests passed');
