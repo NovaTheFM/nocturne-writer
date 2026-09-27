@@ -69,6 +69,7 @@ scripts/build-android-apk.mjs
 scripts/build-native-vendor.mjs
 scripts/build-web.mjs
 scripts/capture-interface-review.mjs
+scripts/capture-surface-motion.mjs
 scripts/check-no-phone-pc-sync.mjs
 scripts/check-source.mjs
 scripts/desktop-smoke.mjs
@@ -91,6 +92,7 @@ scripts/test-offline-assets.mjs
 scripts/test-project-backups.mjs
 scripts/test-reliability.mjs
 scripts/test-smart-speller.mjs
+scripts/test-surface-motion.mjs
 scripts/test-sync-platform.mjs
 scripts/test-workflow-tools.mjs
 scripts/ui-qa.mjs
