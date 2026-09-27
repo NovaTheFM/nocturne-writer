@@ -71,8 +71,19 @@ button.utility-row, label.utility-row { cursor: pointer; }
 .sync-pairing-data code { font: 600 18px/1.4 var(--font-ui); letter-spacing: .06em; }
 .sync-disclosure { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 16px 0 0; margin-top: 22px; border: 0; border-top: 1px solid var(--border); background: transparent; color: var(--text-muted); text-align: left; font-size: 12px; cursor: pointer; transition: color 160ms ease; }
 .sync-disclosure:hover { color: var(--text-main); }
-.sync-disclosure i { font-size: 18px; }
-.sync-options-content { padding-top: 16px; animation: fade-in 180ms ease; }
+.sync-disclosure i { font-size: 18px; transition: transform 220ms cubic-bezier(.16, 1, .3, 1), color 160ms ease; }
+.sync-disclosure[aria-expanded="true"] i { transform: rotate(180deg); color: var(--accent-hover); }
+.sync-options-content { padding-top: 16px; }
+.sync-mobile-content { min-width: 0; }
+.surface-exit-ghost { position: fixed; z-index: 6100; pointer-events: none; overflow: hidden; user-select: none; }
+.surface-exit-ghost * { pointer-events: none !important; }
+.utility-modal > .form-actions + .utility-list { margin-top: 16px; padding-top: 8px; border-top: 1px solid var(--border-light); }
+.utility-row:has(:focus-visible) { background: var(--hover-soft); }
+.utility-row:has(:checked) .check-mark { transition: background-color 160ms ease, border-color 160ms ease; }
+.surface-busy, .surface-busy:disabled { font-size: 0 !important; opacity: 1; cursor: progress; gap: 8px; }
+.surface-busy > * { display: none !important; }
+.surface-busy::before { content: ''; position: static; display: block; flex: 0 0 14px; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent-hover); border-radius: 50%; background: transparent; animation: spin 900ms linear infinite; }
+.surface-busy::after { content: attr(data-busy-label); font: 600 12px/1.4 var(--font-ui); color: var(--text-main); }
 .sync-secondary-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .sync-secondary-actions .pill-btn { font-size: 12px; }
 .sync-extra-fields { margin-bottom: 16px; }
@@ -84,6 +95,7 @@ button.utility-row, label.utility-row { cursor: pointer; }
 .sync-feedback.error { color: #fca5a5; }
 .sync-connection-form { margin: 6px 0 0; }
 .sync-connection-form .sync-primary { justify-self: start; margin-top: 4px; }
+.utility-modal .pill-btn span, .mobile-sync-body .pill-btn span { display: inline; }
 .sync-compact .sync-device-card, .sync-compact-body .sync-device-card { padding: 10px 0; background: transparent; border: 0; border-radius: 0; }
 .sync-compact .sync-device-main span, .sync-compact-body .sync-device-main span { font-size: 11px; }
 .sync-compact .sync-device-icon, .sync-compact-body .sync-device-icon { width: 32px; height: 32px; border-radius: 8px; background: var(--surface-soft); }
@@ -133,5 +145,7 @@ button.utility-row, label.utility-row { cursor: pointer; }
   .sync-center-modal.sync-compact { padding: 20px; }
 }
 @media (prefers-reduced-motion: reduce) {
+  .surface-busy::before, .utility-modal .bx-spin, .mobile-sync-body .bx-spin { animation: none !important; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
+.reduce-mobile-animations .surface-busy::before, .reduce-mobile-animations .mobile-sync-body .bx-spin { animation: none !important; }

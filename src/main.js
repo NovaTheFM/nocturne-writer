@@ -3342,7 +3342,8 @@ class NocturneWriter {
       if (panel) {
         panel.classList.remove('mobile-panel-screen', 'mobile-panel-sheet', 'mobile-panel-fullscreen');
         panel.classList.add(`mobile-panel-${panelMode}`);
-        panel.innerHTML = this.renderMobilePanel();
+        if (this.state.mobile.panel === 'sync' && panel.querySelector('.mobile-sync-body')) this.renderMobileSyncSurface(panel);
+        else { panel.innerHTML = this.renderMobilePanel(); panel.__syncMarkup = null; }
         this.setupMobileKbSortables();
       }
     }
@@ -7962,11 +7963,11 @@ class NocturneWriter {
       'sync-connect-device': () => this.connectDiscoveredSyncDevice(event.target.closest('[data-sync-device-id]')?.dataset.syncDeviceId),
       'sync-forget-device': () => this.forgetSyncDevice(event.target.closest('[data-sync-device-id]')?.dataset.syncDeviceId),
       'sync-toggle-autoreconnect': () => this.toggleSyncAutoReconnect(event.target.closest('[data-sync-device-id]')?.dataset.syncDeviceId),
-      'sync-server-start': () => this.controlLanServer('start'),
-      'sync-server-stop': () => this.controlLanServer('stop'),
+      'sync-server-start': () => this.runSurfaceAction(event?.target?.closest('[data-action]'), 'Включаем связь…', () => this.controlLanServer('start')),
+      'sync-server-stop': () => this.runSurfaceAction(event?.target?.closest('[data-action]'), 'Останавливаем…', () => this.controlLanServer('stop')),
       'sync-server-check': () => this.controlLanServer('status'),
-      'sync-server-refresh-token': () => this.controlLanServer('refresh-token'),
-      'sync-copy-info': () => this.copyLanConnectionInfo(),
+      'sync-server-refresh-token': () => this.runSurfaceAction(event?.target?.closest('[data-action]'), 'Обновляем код…', () => this.controlLanServer('refresh-token')),
+      'sync-copy-info': () => this.runSurfaceAction(event?.target?.closest('[data-action]'), 'Копируем…', () => this.copyLanConnectionInfo()),
       'sync-clear-preview': () => { this.state.sync.mergePreview = null; this.renderSyncSurfaces(); },
       'sync-apply-merge': () => this.applySyncMergePreview(),
       'open-trash': () => this.openTrash(),
@@ -8514,7 +8515,7 @@ class NocturneWriter {
   }
 
   animateLayoutTransition(container, mutateDOM) {
-    if (!container) {
+    if (!container || this.shouldReduceSurfaceMotion()) {
       mutateDOM();
       return;
     }
@@ -9727,10 +9728,13 @@ class NocturneWriter {
   async openTrash() {
     const items = (await this.db.getAll('trash')).sort((a, b) => b.deletedAt - a.deletedAt);
     const overlay = document.getElementById('form-overlay');
-    overlay.innerHTML = `<div class="form-modal utility-modal"><div class="modal-head-row"><div><h2>Корзина</h2><p>Удалённые документы, заметки и история остаются здесь до окончательного удаления.</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div><div class="utility-list">${items.length ? items.map(item => `<div class="utility-row"><i class="bx bx-file"></i><div><strong>${escapeHtml(item.title || 'Зашифрованный документ')}</strong><small>${new Date(item.deletedAt || item.createdAt || 0).toLocaleDateString()}</small></div><button class="pill-btn" data-trash-restore="${escapeHtml(item.id)}" ${item.locked ? 'disabled' : ''}>Восстановить</button><button class="btn-icon" data-trash-delete="${escapeHtml(item.id)}" aria-label="Удалить навсегда"><i class="bx bx-trash"></i></button></div>`).join('') : '<div class="utility-empty"><i class="bx bx-trash"></i><p>Корзина пуста</p></div>'}</div></div>`;
+    this.presentFormModal(`<div class="form-modal utility-modal"><div class="modal-head-row"><div><h2>Корзина</h2><p>Удалённые документы, заметки и история остаются здесь до окончательного удаления.</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div><div class="utility-list">${items.length ? items.map(item => `<div class="utility-row" data-surface-key="openTrash-${escapeHtml(item.id)}"><i class="bx bx-file"></i><div><strong>${escapeHtml(item.title || 'Зашифрованный документ')}</strong><small>${new Date(item.deletedAt || item.createdAt || 0).toLocaleDateString()}</small></div><button class="pill-btn" data-trash-restore="${escapeHtml(item.id)}" ${item.locked ? 'disabled' : ''}>Восстановить</button><button class="btn-icon" data-trash-delete="${escapeHtml(item.id)}" aria-label="Удалить навсегда"><i class="bx bx-trash"></i></button></div>`).join('') : '<div class="utility-empty"><i class="bx bx-trash"></i><p>Корзина пуста</p></div>'}</div></div>`);
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
-    overlay.querySelectorAll('[data-trash-restore]').forEach(button => button.onclick = async () => { await this.restoreTrashItem(button.dataset.trashRestore); await this.openTrash(); });
+    overlay.querySelectorAll('[data-trash-restore]').forEach(button => button.onclick = async () => {
+      try { await this.runSurfaceAction(button, 'Восстанавливаем…', async () => { await this.restoreTrashItem(button.dataset.trashRestore); if (overlay.classList.contains('active') && button.isConnected) await this.openTrash(); }); }
+      catch (error) { this.toast(error.message); }
+    });
     overlay.querySelectorAll('[data-trash-delete]').forEach(button => button.onclick = async () => {
       if (!await this.confirmDialog({ title: 'Удалить навсегда?', message: 'Документ и его история будут удалены из корзины.', confirmText: 'Удалить навсегда' })) return this.openTrash();
       await this.db.delete('trash', button.dataset.trashDelete); await this.openTrash();
@@ -12851,62 +12855,180 @@ class NocturneWriter {
     this.repaginatePreserve(paneId, immediate);
   }
 
-  animateHeightTransition(element, updateCallback) {
-    if (!element) {
-      updateCallback();
+  shouldReduceSurfaceMotion() {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      || (this.isMobileLayout() && this.state.settings.reduceMobileAnimations);
+  }
+
+  animateHeightTransition(element, updateCallback, { width = false } = {}) {
+    if (!element) { updateCallback(); return; }
+    const previous = element.__surfaceSizeTransition;
+    const startHeight = element.offsetHeight, startWidth = element.offsetWidth;
+    element.__heightTransitionCleanup?.();
+    if (this.shouldReduceSurfaceMotion()) { updateCallback(); return; }
+    const original = { height: element.style.height, width: element.style.width, transition: element.style.transition, overflow: element.style.overflow };
+    const baseTransition = getComputedStyle(element).transition;
+    element.style.transition = 'none';
+    updateCallback();
+    const targetHeight = element.offsetHeight, targetWidth = element.offsetWidth;
+    if (Math.abs(startHeight - targetHeight) < 1 && (!width || Math.abs(startWidth - targetWidth) < 1)) {
+      element.style.transition = original.transition;
       return;
     }
-    
-    // Clean up any pending transition cleanup function
-    if (typeof element.__heightTransitionCleanup === 'function') {
-      element.__heightTransitionCleanup();
-    }
-    
-    const startHeight = element.offsetHeight;
-    
-    const origTransition = element.style.transition;
-    const origOverflow = element.style.overflow;
-    element.style.transition = 'none';
+    const sameTarget = previous?.targetHeight === targetHeight && (!width || previous.targetWidth === targetWidth);
+    const duration = sameTarget ? Math.max(80, previous.duration - (performance.now() - previous.startedAt)) : 280;
+    const state = { targetHeight, targetWidth, startedAt: performance.now(), duration };
+    element.__surfaceSizeTransition = state;
     element.style.height = `${startHeight}px`;
+    if (width) element.style.width = `${startWidth}px`;
     element.style.overflow = 'hidden';
-    
-    updateCallback();
-    
-    let isCleanedUp = false;
+    let frame, timer, cleaned = false;
     const cleanup = () => {
-      if (isCleanedUp) return;
-      isCleanedUp = true;
-      element.style.height = '';
-      element.style.transition = origTransition;
-      element.style.overflow = origOverflow;
+      if (cleaned) return;
+      cleaned = true;
+      cancelAnimationFrame(frame); clearTimeout(timer);
       element.removeEventListener('transitionend', onEnd);
+      Object.assign(element.style, original);
       element.__heightTransitionCleanup = null;
+      element.__surfaceSizeTransition = null;
     };
-    
-    const onEnd = (e) => {
-      if (e.propertyName === 'height') {
-        cleanup();
+    const onEnd = event => {
+      if (event.target === element && event.propertyName === 'height') cleanup();
+    };
+    element.__heightTransitionCleanup = cleanup;
+    element.offsetHeight;
+    frame = requestAnimationFrame(() => {
+      if (cleaned || !element.isConnected) { cleanup(); return; }
+      const curve = 'cubic-bezier(.16, 1, .3, 1)';
+      element.style.transition = `${baseTransition}, height ${duration}ms ${curve}${width ? `, width ${duration}ms ${curve}` : ''}`;
+      element.style.height = `${targetHeight}px`;
+      if (width) element.style.width = `${targetWidth}px`;
+      element.addEventListener('transitionend', onEnd);
+      timer = setTimeout(cleanup, duration + 100);
+    });
+  }
+
+  surfaceNodeKey(node) {
+    if (node.nodeType !== Node.ELEMENT_NODE) return String(node.nodeType);
+    const field = node.dataset.syncField || node.getAttribute('name');
+    const childField = node.matches('label') ? node.querySelector('input[data-sync-field]')?.dataset.syncField : '';
+    const key = node.dataset.surfaceKey || field || childField || node.dataset.action || node.dataset.value
+      || (node.id && !node.id.startsWith('modal-title-') ? node.id : '') || node.classList[0] || '';
+    return `${node.tagName}:${key}`;
+  }
+
+  animateSurfaceContent(element, exiting = false) {
+    if (!element?.isConnected || this.shouldReduceSurfaceMotion()) return;
+    let target = element;
+    if (exiting) {
+      const rect = element.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      target = element.cloneNode(true);
+      for (const node of [target, ...target.querySelectorAll('*')]) {
+        for (const attribute of [...node.attributes]) if (attribute.name === 'id' || attribute.name.startsWith('data-')) node.removeAttribute(attribute.name);
+      }
+      target.inert = true; target.setAttribute('aria-hidden', 'true');
+      target.classList.add('surface-exit-ghost');
+      Object.assign(target.style, { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px`, margin: '0' });
+      document.body.append(target);
+    }
+    const animation = target.animate(exiting
+      ? [{ opacity: 1, transform: 'translateY(0)' }, { opacity: 0, transform: 'translateY(-4px)' }]
+      : [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'translateY(0)' }],
+    { duration: exiting ? 140 : 260, easing: 'cubic-bezier(.16, 1, .3, 1)' });
+    if (exiting) animation.finished.then(() => target.remove(), () => target.remove());
+  }
+
+  patchSurface(element, next) {
+    const focus = document.activeElement;
+    const symbolChanged = element.matches('i') && element.getAttribute('class') !== next.getAttribute('class');
+    let textChanged = false;
+    const busyAttributes = ['disabled', 'aria-busy', 'aria-label', 'data-busy-label'];
+    for (const attribute of [...element.attributes]) {
+      if (element.__surfaceAction && busyAttributes.includes(attribute.name)) continue;
+      if (!next.hasAttribute(attribute.name) && !['style', 'id', 'role', 'tabindex', 'aria-modal', 'aria-labelledby', 'aria-label'].includes(attribute.name)) element.removeAttribute(attribute.name);
+    }
+    for (const attribute of [...next.attributes]) {
+      if (element.__surfaceAction && busyAttributes.includes(attribute.name)) continue;
+      if (element.getAttribute(attribute.name) !== attribute.value) element.setAttribute(attribute.name, attribute.value);
+    }
+    if (element.__surfaceAction) element.classList.add('surface-busy');
+    if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+      if (element !== focus && element.value !== next.value) element.value = next.value;
+      if (element instanceof HTMLInputElement) element.checked = next.checked;
+    }
+    const oldNodes = [...element.childNodes], nextNodes = [...next.childNodes], used = new Set();
+    const update = () => {
+      for (let index = 0; index < nextNodes.length; index++) {
+        const target = nextNodes[index], key = this.surfaceNodeKey(target);
+        const current = oldNodes.find(node => !used.has(node) && this.surfaceNodeKey(node) === key);
+        if (current) {
+          used.add(current);
+          if (element.childNodes[index] !== current) element.insertBefore(current, element.childNodes[index] || null);
+          if (current.nodeType === Node.ELEMENT_NODE) this.patchSurface(current, target);
+          else if (current.nodeValue !== target.nodeValue) { current.nodeValue = target.nodeValue; textChanged = true; }
+        } else {
+          const added = target.cloneNode(true);
+          element.insertBefore(added, element.childNodes[index] || null);
+          if (added.nodeType === Node.ELEMENT_NODE) this.animateSurfaceContent(added);
+        }
+      }
+      for (const node of oldNodes) if (!used.has(node)) {
+        if (node.nodeType === Node.ELEMENT_NODE && node.matches('.utility-row, .utility-list, .utility-empty, .form-actions, .modal-head-row, .dump-summary-grid, .sync-device-card, .sync-start, .sync-pairing, .sync-connection-form, .sync-options-content, .sync-find-computer, .sync-feedback, .conflict-versions')) this.animateSurfaceContent(node, true);
+        node.remove();
       }
     };
-    
-    element.__heightTransitionCleanup = cleanup;
-    
-    requestAnimationFrame(() => {
-      element.style.height = '';
-      const targetHeight = element.offsetHeight;
-      element.style.height = `${startHeight}px`;
-      
-      // Force reflow
-      element.offsetHeight;
-      
-      element.style.transition = 'height 0.22s cubic-bezier(0.4, 0, 0.2, 1)';
-      element.style.height = `${targetHeight}px`;
-      
-      element.addEventListener('transitionend', onEnd);
-      
-      // Safety timeout
-      setTimeout(cleanup, 350);
-    });
+    const structural = oldNodes.length !== nextNodes.length || oldNodes.some((node, index) => this.surfaceNodeKey(node) !== this.surfaceNodeKey(nextNodes[index] || next));
+    if (structural && element.matches('.sync-mobile-content')) this.animateHeightTransition(element, update);
+    else if (structural && element.matches('.utility-list, .sync-device-list')) this.animateLayoutTransition(element, update);
+    else update();
+    if (textChanged && element.matches('h2, [data-sync-status-title], [data-sync-status-detail], [data-sync-pairing-code]')) this.animateSurfaceContent(element);
+    if (symbolChanged && !this.shouldReduceSurfaceMotion()) element.animate([{ opacity: .25 }, { opacity: 1 }], { duration: 160, easing: 'ease-out' });
+  }
+
+  presentFormModal(html) {
+    const overlay = document.getElementById('form-overlay');
+    const template = document.createElement('template'); template.innerHTML = html.trim();
+    const next = template.content.firstElementChild, current = overlay?.querySelector('.form-modal');
+    if (!next || !overlay) return;
+    const focusWasInside = current?.contains(document.activeElement);
+    if (overlay.classList.contains('active') && current?.tagName === next.tagName) {
+      if (current.__surfaceMarkup !== html) this.animateHeightTransition(current, () => this.patchSurface(current, next), { width: true });
+    } else {
+      current?.__heightTransitionCleanup?.();
+      overlay.replaceChildren(next);
+      next.offsetHeight;
+    }
+    const modal = overlay.querySelector('.form-modal');
+    modal.__surfaceMarkup = html;
+    const title = modal.querySelector('h1, h2, h3');
+    if (title) { title.id ||= 'modal-title-form-overlay'; modal.setAttribute('aria-labelledby', title.id); }
+    modal.__surfaceKind = `${next.tagName}:${next.className}:${title?.textContent || ''}`;
+    overlay.classList.add('active');
+    if (focusWasInside && !modal.contains(document.activeElement)) {
+      (modal.querySelector('[autofocus], input:not([type="hidden"]):not([type="checkbox"]), textarea, .sync-primary, .nocturne-select-trigger') || modal).focus({ preventScroll: true });
+    }
+    return modal;
+  }
+
+  async runSurfaceAction(button, label, operation) {
+    if (!button) return operation();
+    if (button.disabled || button.__surfaceAction) return;
+    const original = { disabled: button.disabled, label: button.getAttribute('aria-label'), width: button.style.minWidth };
+    button.__surfaceAction = true;
+    button.style.minWidth = `${button.offsetWidth}px`;
+    button.disabled = true; button.setAttribute('aria-busy', 'true');
+    button.setAttribute('aria-label', label); button.dataset.busyLabel = label;
+    button.classList.add('surface-busy');
+    try { return await operation(); }
+    finally {
+      button.__surfaceAction = false;
+      button.disabled = original.disabled;
+      button.style.minWidth = original.width;
+      button.removeAttribute('aria-busy'); delete button.dataset.busyLabel;
+      if (original.label === null) button.removeAttribute('aria-label'); else button.setAttribute('aria-label', original.label);
+      button.classList.remove('surface-busy');
+    }
   }
 
   openSearchChooser() {
@@ -14846,7 +14968,7 @@ class NocturneWriter {
   confirmDialog({ title, message, confirmText = 'Подтвердить', icon = 'bx-help-circle', danger = true } = {}) {
     return new Promise((resolve) => {
       const overlay = document.getElementById('form-overlay');
-      overlay.innerHTML = `
+      this.presentFormModal(`
         <div class="form-modal confirm-modal">
           <div class="confirm-icon"><i class="bx ${escapeHtml(icon)}"></i></div>
           <h2>${escapeHtml(title || 'Подтвердить действие')}</h2>
@@ -14855,7 +14977,7 @@ class NocturneWriter {
             <button class="pill-btn" data-close-form>Отмена</button>
             <button class="pill-btn ${danger ? 'danger-btn' : 'ai-btn'}" data-confirm-dialog>${escapeHtml(confirmText)}</button>
           </div>
-        </div>`;
+        </div>`);
       overlay.classList.add('active');
       const close = (value) => {
         if (this.pendingConfirmation !== close) return;
@@ -19962,7 +20084,7 @@ class NocturneWriter {
 
   renderFormSelect(name, options, value, { id = '', label = '' } = {}) {
     const selected = options.find(([key]) => String(key) === String(value)) || options[0] || ['', ''];
-    const menuId = uid('select-menu');
+    const menuId = `form-select-${id || name}`;
     return `<div class="nocturne-select form-select">
       <input type="hidden" name="${escapeHtml(name)}" ${id ? `id="${escapeHtml(id)}"` : ''} value="${escapeHtml(String(selected[0]))}">
       <button type="button" class="nocturne-select-trigger" data-form-select-toggle aria-haspopup="listbox" aria-expanded="false" aria-controls="${menuId}" ${label ? `aria-label="${escapeHtml(label)}"` : ''}><span>${escapeHtml(selected[1])}</span><i class="bx bx-chevron-down"></i></button>
@@ -21664,7 +21786,7 @@ ${raw}`;
     const e2eWarning = this.state.settings.e2e
       ? '<p class="form-helper warning-text">E2E включено. Безопасный экспорт сохраняет зашифрованные данные и не добавляет открытые заметки/снапшоты. Plaintext-экспорт доступен только после явного подтверждения.</p>'
       : '<p class="form-helper">Dump сохранит документы, базу знаний, настройки, заметки, правки, словарь и снапшоты.</p>';
-    overlay.innerHTML = `
+    this.presentFormModal(`
       <div class="form-modal project-dump-modal">
         <div class="modal-head-row">
           <div><h2>Экспорт проекта</h2><p>.nocturnedump резервная копия всего проекта.</p></div>
@@ -21682,7 +21804,7 @@ ${raw}`;
           <button class="pill-btn ai-btn" data-action="confirm-export-project-dump"><i class="bx bx-archive-out"></i> Экспорт безопасного dump</button>
           ${this.state.settings.e2e ? '<button class="pill-btn danger-btn" data-action="confirm-export-project-dump-plaintext">Экспорт plaintext</button>' : ''}
         </div>
-      </div>`;
+      </div>`);
     overlay.classList.add('active');
     overlay.querySelectorAll('[data-close-form]').forEach((button) => { button.onclick = () => overlay.classList.remove('active'); });
   }
@@ -22639,7 +22761,7 @@ ${raw}`;
   openProjectImportPreview(dump, filename) {
     const stats = this.dumpPreviewStats(dump);
     const overlay = document.getElementById('form-overlay');
-    overlay.innerHTML = `
+    this.presentFormModal(`
       <div class="form-modal project-dump-modal">
         <div class="modal-head-row">
           <div><h2>Предпросмотр импорта</h2><p>${escapeHtml(filename)} · схема ${escapeHtml(dump.schemaVersion || 'неизвестно')}</p></div>
@@ -22659,7 +22781,7 @@ ${raw}`;
           <button class="pill-btn" data-action="merge-project-dump">Объединить с текущим</button>
           <button class="pill-btn danger-btn" data-action="replace-project-dump">Заменить текущий проект</button>
         </div>
-      </div>`;
+      </div>`);
     overlay.classList.add('active');
     overlay.querySelectorAll('[data-close-form]').forEach((button) => { button.onclick = () => overlay.classList.remove('active'); });
     overlay.querySelector('[data-action="merge-project-dump"]').onclick = async () => {
@@ -22857,7 +22979,7 @@ ${raw}`;
 
   openImportReport(report) {
     const overlay = document.getElementById('form-overlay');
-    overlay.innerHTML = `
+    this.presentFormModal(`
       <div class="form-modal project-dump-modal">
         <div class="confirm-icon"><i class="bx bx-check-circle"></i></div>
         <h2>Отчёт импорта</h2>
@@ -22871,7 +22993,7 @@ ${raw}`;
           <span><strong>${report.conflicts}</strong> конфликтов ID</span>
         </div>
         <div class="form-actions"><button class="pill-btn ai-btn" data-close-form>Закрыть</button></div>
-      </div>`;
+      </div>`);
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
   }
@@ -22968,18 +23090,18 @@ ${raw}`;
   openBookExport() {
     const chapters = [...this.state.docs].sort((a, b) => String(a.workTitle || '').localeCompare(String(b.workTitle || '')) || Number(a.chapterNumber || a.order) - Number(b.chapterNumber || b.order));
     const overlay = document.getElementById('form-overlay');
-    overlay.innerHTML = `<div class="form-modal utility-modal book-export-modal"><div class="modal-head-row"><div><h2>Экспорт книги</h2><p>Главы будут расположены по томам и номерам.</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div>
+    this.presentFormModal(`<div class="form-modal utility-modal book-export-modal"><div class="modal-head-row"><div><h2>Экспорт книги</h2><p>Главы будут расположены по томам и номерам.</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div>
       <div class="selection-heading"><span>Главы <small id="book-export-count"></small></span><button class="mini-text-btn" data-export-select-all>Снять выбор</button></div>
       <div class="utility-list chapter-selection">${chapters.map(doc => `<label class="utility-row nocturne-check"><input type="checkbox" data-export-chapter="${escapeHtml(doc.id)}" ${doc.locked ? 'disabled' : 'checked'}><span class="check-mark" aria-hidden="true"></span><div><strong>${escapeHtml(doc.title)}</strong><small>${escapeHtml([doc.workTitle, doc.volume && `Том ${doc.volume}`, doc.chapterNumber && `Глава ${doc.chapterNumber}`, doc.locked && 'Введите пароль'].filter(Boolean).join(' · '))}</small></div></label>`).join('') || '<p class="utility-empty">Сначала создайте или импортируйте главы.</p>'}</div>
       <label class="nocturne-check export-notes-option"><input type="checkbox" id="book-export-notes"><span class="check-mark" aria-hidden="true"></span><span>Добавить личные заметки к главам</span></label>
-      <div class="form-actions"><button class="pill-btn" data-close-form>Отмена</button><button class="pill-btn ai-btn" data-export-selected-book><i class="bx bx-export"></i> Скачать DOCX</button></div></div>`;
+      <div class="form-actions"><button class="pill-btn" data-close-form>Отмена</button><button class="pill-btn ai-btn" data-export-selected-book><i class="bx bx-export"></i> Скачать DOCX</button></div></div>`);
     overlay.classList.add('active');
     overlay.querySelectorAll('[data-close-form]').forEach(button => { button.onclick = () => overlay.classList.remove('active'); });
     const updateSelection = () => {
       const enabled = [...overlay.querySelectorAll('[data-export-chapter]:not(:disabled)')];
       const count = enabled.filter(input => input.checked).length;
       overlay.querySelector('#book-export-count').textContent = `${count} / ${chapters.length}`;
-      overlay.querySelector('[data-export-selected-book]').disabled = !count;
+      overlay.querySelector('[data-export-selected-book]').disabled = !count || !!overlay.querySelector('[data-export-selected-book]').__surfaceAction;
       overlay.querySelector('[data-export-select-all]').textContent = enabled.length && count === enabled.length ? 'Снять выбор' : 'Выбрать все';
     };
     overlay.querySelectorAll('[data-export-chapter]').forEach(input => { input.onchange = updateSelection; });
@@ -22989,13 +23111,17 @@ ${raw}`;
       enabled.forEach(input => { input.checked = checked; }); updateSelection();
     };
     updateSelection();
-    overlay.querySelector('[data-export-selected-book]').onclick = async () => {
+    const exportButton = overlay.querySelector('[data-export-selected-book]');
+    exportButton.onclick = async () => {
       try {
-        const ids = [...overlay.querySelectorAll('[data-export-chapter]:checked')].map(input => input.dataset.exportChapter);
-        const blob = await this.buildBookDocx(ids, { includeNotes: overlay.querySelector('#book-export-notes').checked });
-        const result = await this.downloadBlob(blob, `${this.safeFileName(this.state.docs.find(doc => ids.includes(doc.id))?.workTitle || 'Рукопись')}.docx`);
-        if (result) { overlay.classList.remove('active'); this.toast('Рукопись экспортирована.'); }
+        await this.runSurfaceAction(exportButton, 'Собираем DOCX…', async () => {
+          const ids = [...overlay.querySelectorAll('[data-export-chapter]:checked')].map(input => input.dataset.exportChapter);
+          const blob = await this.buildBookDocx(ids, { includeNotes: overlay.querySelector('#book-export-notes').checked });
+          const result = await this.downloadBlob(blob, `${this.safeFileName(this.state.docs.find(doc => ids.includes(doc.id))?.workTitle || 'Рукопись')}.docx`);
+          if (result) { if (exportButton.isConnected) overlay.classList.remove('active'); this.toast('Рукопись экспортирована.'); }
+        });
       } catch (error) { this.toast(error.message); }
+      finally { if (exportButton.isConnected) updateSelection(); }
     };
   }
 
@@ -23024,19 +23150,23 @@ ${raw}`;
   openReviewQueue() {
     const marks = this.state.reviewMarks.filter(mark => mark.status === 'open' && this.state.docs.some(doc => doc.id === mark.docId));
     const overlay = document.getElementById('form-overlay');
-    overlay.innerHTML = `<div class="form-modal utility-modal"><div class="modal-head-row"><div><h2>Правки всей рукописи</h2><p>${marks.length ? `${marks.length} нерешённых правок. Выберите запись, чтобы перейти к тексту.` : 'Все правки разобраны.'}</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div><div class="utility-list">${marks.map(mark => `<button class="utility-row review-queue-row" data-review-jump="${escapeHtml(mark.id)}"><i class="bx bx-message-square-edit"></i><div><strong>${escapeHtml(this.state.docs.find(doc => doc.id === mark.docId)?.title)}</strong><small>${escapeHtml(this.reviewCategoryLabel(mark.category))} · ${escapeHtml(mark.quote || mark.comment || 'Пометка без цитаты')}</small></div><i class="bx bx-chevron-right"></i></button>`).join('')}</div></div>`;
+    this.presentFormModal(`<div class="form-modal utility-modal"><div class="modal-head-row"><div><h2>Правки всей рукописи</h2><p>${marks.length ? `${marks.length} нерешённых правок. Выберите запись, чтобы перейти к тексту.` : 'Все правки разобраны.'}</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div><div class="utility-list">${marks.map(mark => `<button class="utility-row review-queue-row" data-review-jump="${escapeHtml(mark.id)}"><i class="bx bx-message-square-edit"></i><div><strong>${escapeHtml(this.state.docs.find(doc => doc.id === mark.docId)?.title)}</strong><small>${escapeHtml(this.reviewCategoryLabel(mark.category))} · ${escapeHtml(mark.quote || mark.comment || 'Пометка без цитаты')}</small></div><i class="bx bx-chevron-right"></i></button>`).join('')}</div></div>`);
     overlay.classList.add('active'); overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelectorAll('[data-review-jump]').forEach(button => button.onclick = () => {
       const mark = marks.find(item => item.id === button.dataset.reviewJump);
       overlay.classList.remove('active'); document.getElementById('kb-modal')?.classList.remove('active');
       if (this.isMobileLayout()) this.switchMobileTab('write'); this.selectDoc(mark.docId);
-      this.state.reviewMode = 'finalization'; this.applyReviewMode();
+      this.setReviewMode('finalization');
       this.state.currentReviewIndexByDoc[mark.docId] = this.reviewMarksForFocusedDoc().findIndex(item => item.id === mark.id);
       this.renderReviewNavigator(); this.resolveReviewRange(mark)?.block.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
   }
 
   async openSyncConflicts(selectedId) {
+    const revision = this.conflictSurfaceRevision = (this.conflictSurfaceRevision || 0) + 1;
+    const startingOverlay = document.getElementById('form-overlay');
+    const startingKind = startingOverlay.querySelector('.form-modal')?.__surfaceKind;
+    const wasActive = startingOverlay.classList.contains('active');
     const conflicts = (await this.db.getAll('syncConflicts')).filter(item => item.type === 'database-record');
     const conflict = conflicts.find(item => item.id === selectedId) || conflicts[0], overlay = document.getElementById('form-overlay');
     const describe = async variant => {
@@ -23045,7 +23175,9 @@ ${raw}`;
       if (value?.locked) return 'Зашифрованная версия. Примените мастер-пароль для сравнения.';
       return value?.ast ? `${value.title || ''}\n\n${docText(value.ast)}${value.notes ? `\n\nЗаметки:\n${value.notes}` : ''}` : JSON.stringify(value, null, 2);
     };
-    overlay.innerHTML = `<div class="form-modal utility-modal conflict-modal"><div class="modal-head-row"><div><h2>Разные версии</h2><p>${conflict ? 'Оба варианта сохранены. Выберите версию или оставьте оба документа.' : 'Конфликтов нет. Изменения согласованы.'}</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div>${conflict ? `<div class="form-field conflict-record-picker"><span>Запись</span>${this.renderFormSelect('conflict', conflicts.map(item => [item.id, item.local.value?.title || item.remote.value?.title || item.recordId]), conflict.id, { id: 'conflict-selection', label: 'Запись' })}</div><div class="conflict-versions"><section><h3>На этом устройстве</h3><pre>${escapeHtml(await describe(conflict.local))}</pre></section><section><h3>На другом устройстве</h3><pre>${escapeHtml(await describe(conflict.remote))}</pre></section></div><div class="form-actions"><button class="pill-btn" data-resolve-conflict="local">Оставить эту</button><button class="pill-btn" data-resolve-conflict="remote">Принять другую</button>${conflict.store === 'docs' && !conflict.local.deleted && !conflict.remote.deleted ? '<button class="pill-btn ai-btn" data-resolve-conflict="both">Сохранить обе главы</button>' : ''}</div>` : ''}</div>`;
+    const localDescription = conflict ? await describe(conflict.local) : '', remoteDescription = conflict ? await describe(conflict.remote) : '';
+    if (revision !== this.conflictSurfaceRevision || startingKind !== overlay.querySelector('.form-modal')?.__surfaceKind || (wasActive && !overlay.classList.contains('active'))) return;
+    this.presentFormModal(`<div class="form-modal utility-modal conflict-modal"><div class="modal-head-row"><div><h2>Разные версии</h2><p>${conflict ? 'Оба варианта сохранены. Выберите версию или оставьте оба документа.' : 'Конфликтов нет. Изменения согласованы.'}</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div>${conflict ? `<div class="form-field conflict-record-picker"><span>Запись</span>${this.renderFormSelect('conflict', conflicts.map(item => [item.id, item.local.value?.title || item.remote.value?.title || item.recordId]), conflict.id, { id: 'conflict-selection', label: 'Запись' })}</div><div class="conflict-versions"><section><h3>На этом устройстве</h3><pre>${escapeHtml(localDescription)}</pre></section><section><h3>На другом устройстве</h3><pre>${escapeHtml(remoteDescription)}</pre></section></div><div class="form-actions"><button class="pill-btn" data-resolve-conflict="local">Оставить эту</button><button class="pill-btn" data-resolve-conflict="remote">Принять другую</button>${conflict.store === 'docs' && !conflict.local.deleted && !conflict.remote.deleted ? '<button class="pill-btn ai-btn" data-resolve-conflict="both">Сохранить обе главы</button>' : ''}</div>` : ''}</div>`);
     overlay.classList.add('active'); overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('#conflict-selection')?.addEventListener('change', event => this.openSyncConflicts(event.target.value));
     overlay.querySelectorAll('[data-resolve-conflict]').forEach(button => button.onclick = async () => {
@@ -23064,10 +23196,17 @@ ${raw}`;
 
   async openBackups() {
     const copies = (await this.db.getAll('backups')).sort((a, b) => b.createdAt - a.createdAt), overlay = document.getElementById('form-overlay');
-    overlay.innerHTML = `<div class="form-modal utility-modal"><div class="modal-head-row"><div><h2>Резервные копии</h2><p>Храним последние 20 копий. Автоматическая копия создаётся с интервалом автосохранения.</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div><div class="form-actions"><button class="pill-btn" data-action="choose-backup-directory"><i class="bx bx-folder-open"></i> Папка копий</button><button class="pill-btn ai-btn" data-backup-create>Создать копию</button></div><div class="utility-list">${copies.map(copy => `<div class="utility-row"><i class="bx bx-archive"></i><div><strong>${new Date(copy.createdAt).toLocaleString()}</strong><small>${copy.external ? escapeHtml(copy.path) : 'В этом браузере · скачайте или подключите папку'} · ${Math.ceil((copy.bytes || 0) / 1024)} КБ</small></div><button class="pill-btn" data-backup-restore="${escapeHtml(copy.id)}" ${copy.locked ? 'disabled' : ''}>Открыть</button></div>`).join('') || '<p class="utility-empty">Копий пока нет. Создайте первую перед большой правкой.</p>'}</div></div>`;
+    this.presentFormModal(`<div class="form-modal utility-modal"><div class="modal-head-row"><div><h2>Резервные копии</h2><p>Храним последние 20 копий. Автоматическая копия создаётся с интервалом автосохранения.</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div><div class="form-actions"><button class="pill-btn" data-action="choose-backup-directory"><i class="bx bx-folder-open"></i> Папка копий</button><button class="pill-btn ai-btn" data-backup-create>Создать копию</button></div><div class="utility-list">${copies.map(copy => `<div class="utility-row" data-surface-key="openBackups-${escapeHtml(copy.id)}"><i class="bx bx-archive"></i><div><strong>${new Date(copy.createdAt).toLocaleString()}</strong><small>${copy.external ? escapeHtml(copy.path) : 'В этом браузере · скачайте или подключите папку'} · ${Math.ceil((copy.bytes || 0) / 1024)} КБ</small></div><button class="pill-btn" data-backup-restore="${escapeHtml(copy.id)}" ${copy.locked ? 'disabled' : ''}>Открыть</button></div>`).join('') || '<p class="utility-empty">Копий пока нет. Создайте первую перед большой правкой.</p>'}</div></div>`);
     overlay.classList.add('active'); overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
-    overlay.querySelector('[data-backup-create]').onclick = async () => { try { await this.backups.create(); await this.openBackups(); } catch (error) { this.toast(error.message); } };
-    overlay.querySelectorAll('[data-backup-restore]').forEach(button => button.onclick = async () => { try { const copy = copies.find(item => item.id === button.dataset.backupRestore); const dump = await this.backups.read(copy); this.validateProjectDump(dump); this.openProjectImportPreview(dump, copy.name); } catch (error) { this.toast(error.message); } });
+    const createButton = overlay.querySelector('[data-backup-create]');
+    createButton.onclick = async () => {
+      try { await this.runSurfaceAction(createButton, 'Создаём копию…', async () => { await this.backups.create(); if (overlay.classList.contains('active') && createButton.isConnected) await this.openBackups(); }); }
+      catch (error) { this.toast(error.message); }
+    };
+    overlay.querySelectorAll('[data-backup-restore]').forEach(button => button.onclick = async () => {
+      try { await this.runSurfaceAction(button, 'Читаем копию…', async () => { const copy = copies.find(item => item.id === button.dataset.backupRestore); const dump = await this.backups.read(copy); this.validateProjectDump(dump); if (overlay.classList.contains('active') && button.isConnected) this.openProjectImportPreview(dump, copy.name); }); }
+      catch (error) { this.toast(error.message); }
+    });
   }
 
   kbViewTools() {
@@ -23077,7 +23216,7 @@ ${raw}`;
 
   editWorldRules() {
     const overlay = document.getElementById('form-overlay');
-    overlay.innerHTML = `<form class="form-modal utility-modal"><div class="modal-head-row"><div><h2>Правила мира</h2><p>По одному правилу на строку. AI использует их при включённом контексте базы знаний.</p></div><button type="button" class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div><textarea class="form-control" name="rules" rows="12" aria-label="Правила мира">${escapeHtml((this.state.lore.rules || []).map(rule => rule.text || rule.body || rule).join('\n'))}</textarea><div class="form-actions"><button class="pill-btn ai-btn" type="submit">Сохранить правила</button></div></form>`;
+    this.presentFormModal(`<div class="form-modal utility-modal"><form class="utility-form"><div class="modal-head-row"><div><h2>Правила мира</h2><p>По одному правилу на строку. AI использует их при включённом контексте базы знаний.</p></div><button type="button" class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div><textarea class="form-control" name="rules" rows="12" aria-label="Правила мира">${escapeHtml((this.state.lore.rules || []).map(rule => rule.text || rule.body || rule).join('\n'))}</textarea><div class="form-actions"><button class="pill-btn ai-btn" type="submit">Сохранить правила</button></div></form></div>`);
     overlay.classList.add('active'); overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('form').onsubmit = async event => { event.preventDefault(); const old = this.state.lore.rules || []; this.state.lore.rules = event.target.elements.rules.value.split('\n').map(text => text.trim()).filter(Boolean).map(text => ({ id: old.find(rule => rule.text === text)?.id || uid('rule'), text })); await this.saveLore(); overlay.classList.remove('active'); this.toast('Правила мира сохранены.'); };
   }
@@ -23514,14 +23653,14 @@ ${raw}`;
     return `<div class="form-grid sync-connection-form">
       <label>Адрес компьютера<input class="form-control" data-sync-field="host" value="${escapeHtml(s.host || '')}" placeholder="192.168.1.10" inputmode="url" autocapitalize="off" autocomplete="off" spellcheck="false"></label>
       <label>Код подключения<input class="form-control sync-code-input" data-sync-field="token" value="${escapeHtml(s.token || '')}" placeholder="Код из приложения на ПК" autocapitalize="characters" autocomplete="off" spellcheck="false"></label>
-      <button class="pill-btn ai-btn sync-primary" data-action="sync-connect" ${s.status === 'waiting' ? 'disabled' : ''}><i class="bx bx-link"></i>${s.status === 'waiting' ? 'Подключение…' : 'Подключиться'}</button>
+      <button class="pill-btn ai-btn sync-primary" data-action="sync-connect" aria-busy="${s.status === 'waiting'}" ${s.status === 'waiting' ? 'disabled' : ''}><i class="bx ${s.status === 'waiting' ? 'bx-loader-alt bx-spin' : 'bx-link'}"></i><span>${s.status === 'waiting' ? 'Подключение…' : 'Подключиться'}</span></button>
     </div>`;
   }
 
   renderSyncOptions() {
     const s = this.state.sync, server = s.server || {};
-    return `<button class="sync-disclosure" data-action="sync-toggle-options" aria-expanded="${!!s.optionsOpen}"><span>Дополнительные параметры</span><i class="bx bx-chevron-${s.optionsOpen ? 'up' : 'down'}"></i></button>
-      ${s.optionsOpen ? `<div class="sync-options-content">
+    return `<button class="sync-disclosure" data-action="sync-toggle-options" aria-expanded="${!!s.optionsOpen}" aria-controls="sync-options-content"><span>Дополнительные параметры</span><i class="bx bx-chevron-down"></i></button>
+      ${s.optionsOpen ? `<div class="sync-options-content" id="sync-options-content">
         ${s.discovery.manualOpen || this.isMobileLayout() ? `<div class="form-grid sync-extra-fields"><label>Имя устройства<input class="form-control" data-sync-field="deviceName" value="${escapeHtml(s.deviceName || '')}"></label><label>Порт<input class="form-control" data-sync-field="port" value="${escapeHtml(s.port || '8787')}" inputmode="numeric"></label></div>` : ''}
         <div class="sync-secondary-actions">
           ${server.running ? '<button class="pill-btn" data-action="sync-server-refresh-token"><i class="bx bx-key"></i> Новый код</button><button class="pill-btn" data-action="sync-server-stop"><i class="bx bx-stop"></i> Остановить сервер</button>' : ''}
@@ -23538,15 +23677,15 @@ ${raw}`;
     const connected = this.syncClient.isOpen();
     const remembered = (s.rememberedDevices || []).filter(device => device.trusted).slice(0, 3);
     return `${this.mobilePanelHeader('Связь с компьютером', 'Телефон и ПК должны быть в одной сети Wi-Fi')}
-      <div class="mobile-panel-body mobile-sync-body sync-compact-body">
+      <div class="mobile-panel-body mobile-sync-body sync-compact-body"><div class="sync-mobile-content">
         ${connected || s.status === 'error' ? `<section class="mobile-sync-status ${escapeHtml(s.status)} compact" data-sync-status-card>${iconSvg('phonePc', 'mobile-sync-icon')}<div><strong data-sync-status-title>${this.syncStatusLabel(s.status)}</strong><span data-sync-status-detail>${escapeHtml(s.statusDetail || 'Изменения передаются автоматически.')}</span></div></section>` : ''}
-        ${connected ? '<p class="sync-intro">Можно продолжать писать. Главы и база знаний сверяются автоматически.</p>' : s.discovery.manualOpen ? this.renderSyncConnectionForm() : `<div class="sync-find-computer"><p class="sync-intro">Запустите связь по Wi-Fi в Nocturne на компьютере, затем найдите его здесь.</p><button class="pill-btn ai-btn sync-primary" data-action="${s.discovery.scanning ? 'sync-scan-cancel' : 'sync-scan'}"><i class="bx ${s.discovery.scanning ? 'bx-stop' : 'bx-search'}"></i>${s.discovery.scanning ? 'Остановить поиск' : 'Найти компьютер'}</button>
+        ${connected ? '<p class="sync-intro">Можно продолжать писать. Главы и база знаний сверяются автоматически.</p>' : s.discovery.manualOpen ? this.renderSyncConnectionForm() : `<div class="sync-find-computer"><p class="sync-intro">Запустите связь по Wi-Fi в Nocturne на компьютере, затем найдите его здесь.</p><button class="pill-btn ai-btn sync-primary" data-surface-key="sync-scan" data-action="${s.discovery.scanning ? 'sync-scan-cancel' : 'sync-scan'}"><i class="bx ${s.discovery.scanning ? 'bx-stop' : 'bx-search'}"></i>${s.discovery.scanning ? 'Остановить поиск' : 'Найти компьютер'}</button>
           ${s.discovery.scanning ? '<p class="form-helper" role="status">Ищем компьютер в сети…</p>' : s.discovery.message ? `<p class="form-helper">${escapeHtml(s.discovery.message)}</p>` : ''}
           <div class="sync-device-list">${(s.discoveredDevices || []).map(device => this.renderSyncDeviceCard(device, 'discovered')).join('')}${remembered.map(device => this.renderSyncDeviceCard(device, 'remembered')).join('')}</div></div>`}
         ${!connected ? `<button class="sync-text-action" data-action="sync-toggle-manual">${s.discovery.manualOpen ? 'Найти компьютер в сети' : 'Ввести адрес и код вручную'}</button>` : ''}
         ${s.conflicts ? '<button class="pill-btn" data-action="open-sync-conflicts"><i class="bx bx-git-compare"></i> Сравнить разные версии</button>' : ''}
         ${this.renderSyncOptions()}
-      </div>`;
+      </div></div>`;
   }
 
 // --- renderSyncDeviceCard ---
@@ -23559,11 +23698,9 @@ ${raw}`;
 
     const port = device.port || device.lastKnownPort || '8787';
 
-    const last = device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : 'нет данных';
-
     const trusted = !!device.trusted;
 
-    return `<article class="sync-device-card ${trusted ? 'trusted' : ''}">
+    return `<article class="sync-device-card ${trusted ? 'trusted' : ''}" data-surface-key="device-${mode}-${id}">
 
       <div class="sync-device-icon">${iconSvg(device.deviceType === 'phone' ? 'phonePc' : 'server', 'sync-card-svg')}</div>
 
@@ -23682,6 +23819,8 @@ ${raw}`;
   updateSyncStatusUi() {
 
     this.renderSyncStatus();
+
+    this.renderSyncSurfaces();
 
     const status = this.state.sync.status;
 
@@ -23844,17 +23983,26 @@ ${raw}`;
   renderSyncSurfaces() {
     const focused = document.activeElement?.matches('[data-sync-field]') ? { field: document.activeElement.dataset.syncField, start: document.activeElement.selectionStart, end: document.activeElement.selectionEnd } : null;
 
-    if (this.isMobileLayout()) this.renderMobileShell();
-
-    else if (document.querySelector('#form-overlay.active .sync-center-modal')) this.renderOpenSyncPanel();
+    if (this.isMobileLayout()) {
+      if (this.state.mobile.panel === 'sync') this.renderMobileSyncSurface();
+    } else if (document.querySelector('#form-overlay.active .sync-center-modal')) this.renderOpenSyncPanel();
     if (focused) {
       const input = document.querySelector(`[data-sync-field="${focused.field}"]`);
       input?.focus({ preventScroll: true });
       if (input && focused.start !== null) input.setSelectionRange(focused.start, focused.end);
+      if (!input) document.querySelector('[data-action="sync-toggle-options"]')?.focus({ preventScroll: true });
     }
 
   }
 
+  renderMobileSyncSurface(panel = document.getElementById('mobile-panel')) {
+    if (!panel || this.state.mobile.panel !== 'sync') return;
+    const html = this.renderMobileSync();
+    if (panel.__syncMarkup === html) return;
+    const next = panel.cloneNode(false); next.innerHTML = html;
+    this.patchSurface(panel, next);
+    panel.__syncMarkup = html;
+  }
 
 
 // --- disconnectLocalSync ---
@@ -23957,7 +24105,7 @@ ${raw}`;
 
     if (!overlay) return;
 
-    overlay.innerHTML = this.renderDesktopSyncCenter();
+    this.presentFormModal(this.renderDesktopSyncCenter());
 
     overlay.classList.add('active');
     this.controlLanServer('status');
@@ -23980,7 +24128,7 @@ ${raw}`;
 
     if (!overlay?.classList.contains('active') || !overlay.querySelector('.sync-center-modal')) return;
 
-    overlay.innerHTML = this.renderDesktopSyncCenter();
+    this.presentFormModal(this.renderDesktopSyncCenter());
 
     overlay.querySelectorAll('[data-close-form]').forEach((button) => {
 
@@ -24716,4 +24864,3 @@ app.init().catch((error) => {
     location.reload();
   };
 });
-
