@@ -37,10 +37,12 @@ try {
   await check('library tools share the app menu and Escape returns to its trigger', async page => {
     const trigger = page.locator('[data-action="toggle-library-menu"]');
     assert.equal(await trigger.count(), 1, 'One labelled tools menu is required');
+    assert.equal(await page.locator('#library-menu').isVisible(), false, 'Closed tools must not cover the library');
     await trigger.focus(); await page.keyboard.press('Enter');
     await page.waitForSelector('#library-menu.active');
     assert.equal(await trigger.getAttribute('aria-expanded'), 'true');
     await page.keyboard.press('Escape');
+    await page.waitForSelector('#library-menu', { state: 'hidden' });
     assert.equal(await trigger.evaluate(element => element === document.activeElement), true);
     await trigger.click();
     await page.locator('#library-menu [data-action="open-backups"]').click();
@@ -56,6 +58,7 @@ try {
     await page.locator('[data-action="sync-server-start"]').click();
     try {
       await page.waitForFunction(() => window.nocturneApp.state.sync.server.running);
+      await page.waitForSelector('[data-sync-pairing-code]');
       assert.equal(await page.locator('[data-sync-pairing-code]').count(), 1);
       await options.click();
       await page.locator('[data-action="sync-server-stop"]').click();
