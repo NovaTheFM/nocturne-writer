@@ -28,7 +28,7 @@ const types = {
 let syncProcess = null;
 let syncStartedAt = null;
 let syncPort = Number(process.env.SYNC_PORT || 8787);
-let syncToken = randomBytes(3).toString('hex').toUpperCase();
+let syncToken = randomBytes(9).toString('hex').toUpperCase();
 const syncDeviceId = process.env.NOCTURNE_SYNC_DEVICE_ID || randomBytes(16).toString('hex');
 const syncPublicDeviceId = `nd-${createHash('sha256').update(syncDeviceId).digest('hex').slice(0, 12)}`;
 let syncOutput = '';
@@ -143,7 +143,7 @@ function stopSyncServer() {
 }
 
 function refreshSyncToken() {
-  syncToken = randomBytes(3).toString('hex').toUpperCase();
+  syncToken = randomBytes(9).toString('hex').toUpperCase();
   if (syncProcess && !syncProcess.killed) {
     stopSyncServer();
     startSyncServer();

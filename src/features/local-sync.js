@@ -1,6 +1,7 @@
 import { uid } from '../core/utils.js';
+import { encryptJson, decryptJson } from '../core/crypto.js';
 
-export const SYNC_PROTOCOL_VERSION = 1;
+export const SYNC_PROTOCOL_VERSION = 2;
 
 export function createDeviceId() {
   try {
@@ -57,6 +58,9 @@ export class LocalSyncClient {
     this.connectedDevice = null;
     this.pendingPings = new Map();
     this.connectAttempt = null;
+    this.peers = new Map();
+    this.incoming = Promise.resolve();
+    this.sequence = 0;
   }
 
   setStatus(status, detail = '', stage = '') {
@@ -77,6 +81,9 @@ export class LocalSyncClient {
 
   connect({ host, port, token, trusted = false }) {
     this.disconnect(false);
+    this.connection = { host, port, token, trusted };
+    this.manuallyDisconnected = false;
+    const sequence = ++this.sequence;
     const url = buildSyncUrl(host, port);
     this.app.state.sync.host = host;
     this.app.state.sync.port = port || '8787';
@@ -89,15 +96,14 @@ export class LocalSyncClient {
       this.ws = new WebSocket(url);
 
       const timeout = window.setTimeout(() => {
-        if (!opened) {
-          this.fail('ws open', 'WebSocket не открылся. Проверьте Wi-Fi, IP, порт, firewall и Android cleartext policy.');
+        if (this.connectAttempt && sequence === this.sequence) {
+          this.fail(opened ? 'pair' : 'ws open', 'Сервер не ответил вовремя. Проверьте Wi‑Fi, адрес и код подключения.');
           this.disconnect(false);
         }
-      }, 6500);
+      }, 9000);
 
       this.ws.onopen = () => {
         opened = true;
-        window.clearTimeout(timeout);
         this.setStatus('waiting', 'Этап pair: проверяю pairing code...', 'pair');
         this.send({
           type: 'pair',
@@ -112,7 +118,11 @@ export class LocalSyncClient {
         });
       };
 
-      this.ws.onmessage = (event) => this.handleMessage(event.data);
+      this.ws.onmessage = (event) => {
+        if (sequence !== this.sequence) return;
+        if (JSON.parse(event.data).type === 'paired') window.clearTimeout(timeout);
+        this.handleMessage(event.data).catch(error => this.fail('protocol', error.message));
+      };
       this.ws.onerror = () => {
         window.clearTimeout(timeout);
         if (this.status !== 'error') {
@@ -122,20 +132,31 @@ export class LocalSyncClient {
         }
       };
       this.ws.onclose = () => {
+        if (sequence !== this.sequence) return;
         window.clearTimeout(timeout);
         for (const ping of this.pendingPings.values()) {
           window.clearTimeout(ping.timeout);
           ping.reject(new Error('Соединение закрыто до pong.'));
         }
         this.pendingPings.clear();
+        this.peers.clear();
+        this.connectAttempt?.reject(new Error('Соединение закрыто.')); this.connectAttempt = null;
         if (this.status !== 'offline' && this.status !== 'error') {
           this.setStatus('offline', 'Соединение потеряно. Очередь изменений сохранена локально.', 'close');
+        }
+        if (!this.manuallyDisconnected && this.connection?.trusted) {
+          clearTimeout(this.reconnectTimer);
+          this.reconnectTimer = setTimeout(() => this.connect(this.connection).catch(() => {}), 2500);
         }
       };
     });
   }
 
   disconnect(updateStatus = true) {
+    this.sequence++;
+    this.manuallyDisconnected = updateStatus;
+    clearTimeout(this.reconnectTimer);
+    this.connectAttempt?.reject(new Error('Подключение отменено.')); this.connectAttempt = null;
     if (this.ws) {
       try { this.ws.close(); } catch {}
     }
@@ -145,6 +166,7 @@ export class LocalSyncClient {
       ping.reject(new Error('Соединение закрыто.'));
     }
     this.pendingPings.clear();
+    this.peers.clear();
     if (updateStatus) this.setStatus('offline', 'Отключено.', 'offline');
   }
 
@@ -174,6 +196,7 @@ export class LocalSyncClient {
   }
 
   async verifyAfterPair(message) {
+    this.peers = new Map((message.peers || []).map(peer => [peer.deviceId, peer]));
     this.connectedDevice = message.peer || message.server || null;
     this.setStatus('waiting', 'Этап ping/pong: проверяю обмен сообщениями...', 'ping/pong');
     try {
@@ -186,8 +209,27 @@ export class LocalSyncClient {
     await this.app.persistSyncDevice?.({ ...(message.peer || message.server || {}), trusted: true, autoReconnect: true, pairingStatus: 'paired' });
     if (!this.app.isMobileLayout?.()) this.app.renderSyncSurfaces?.({ preserveInputs: true });
     await this.app.flushSyncQueue?.();
+    for (const queued of await this.app.db.getAll('syncQueue')) {
+      if (queued.kind === 'database-state' && this.peers.has(queued.frame?.to)) this.send(queued.frame);
+    }
     if (this.connectAttempt?.resolve) this.connectAttempt.resolve(message);
     this.connectAttempt = null;
+  }
+
+  async sendSecure(message, to) {
+    const id = uid('sync-message');
+    const frame = { type: 'relay', to, messageId: id, payload: await encryptJson(message, this.connection.token) };
+    await this.app.db.put('syncQueue', { id, kind: 'database-state', frame, createdAt: Date.now() });
+    this.send(frame);
+  }
+
+  async sendDatabaseState(state) {
+    if (!this.isOpen() || !this.peers.size) return;
+    for (const peer of this.peers.keys()) {
+      for (let start = 0; start < state.records.length; start += 50) {
+        await this.sendSecure({ type: 'database-state', state: { ...state, records: state.records.slice(start, start + 50) } }, peer);
+      }
+    }
   }
 
   async handleMessage(raw) {
@@ -212,14 +254,33 @@ export class LocalSyncClient {
       return;
     }
     if (message.type === 'peer-joined') {
+      this.peers.set(message.peer.deviceId, message.peer);
       this.connectedDevice = message.peer || null;
       await this.app.persistSyncDevice?.(message.peer || {});
       this.setStatus('connected', `${message.peer?.deviceName || 'Устройство'} подключено.`, 'connected');
       if (!this.app.isMobileLayout?.()) this.app.renderSyncSurfaces?.({ preserveInputs: true });
+      await this.app.sendSyncProjectState?.();
       return;
     }
     if (message.type === 'peer-left') {
-      this.setStatus('offline', `${message.peer?.deviceName || 'Устройство'} отключено.`, 'close');
+      this.peers.delete(message.peer?.deviceId);
+      this.setStatus('connected', 'Ожидаю второе устройство. Изменения сохраняются локально.', 'connected');
+      return;
+    }
+    if (message.type === 'relay-ack') {
+      const queued = await this.app.db.get('syncQueue', message.messageId);
+      if (queued?.frame?.to === message.from) await this.app.db.delete('syncQueue', message.messageId);
+      return;
+    }
+    if (message.type === 'relay') {
+      if (message.to !== this.app.state.sync.deviceId || !this.peers.has(message.from)) return;
+      this.incoming = this.incoming.catch(() => {}).then(async () => {
+        const decoded = await decryptJson(message.payload, this.connection.token);
+        if (decoded.type !== 'database-state' || decoded.state.deviceId !== message.from) throw new Error('Отправитель сообщения не совпадает.');
+        await this.app.databaseSync.receiveState(decoded.state);
+        this.send({ type: 'relay-ack', to: message.from, messageId: message.messageId });
+      });
+      await this.incoming;
       return;
     }
     if (message.type === 'project-state-request') {

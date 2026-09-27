@@ -1,4 +1,4 @@
-import { detectRuntime, getRuntimeInfo } from './runtime.js';
+import { detectRuntime, getRuntimeInfo, nativePlugins } from './runtime.js';
 
 function downloadBlob(blob, suggestedName = 'nocturne-file.txt') {
   const url = URL.createObjectURL(blob);
@@ -29,18 +29,19 @@ function readFileWithInput(accept = '*/*') {
         reject(error);
       }
     }, { once: true });
+    input.addEventListener('cancel', () => { input.remove(); resolve(null); }, { once: true });
     document.body.appendChild(input);
     input.click();
   });
 }
 
 async function saveWithCapacitor(data, suggestedName, mime) {
-  const fs = window.Capacitor?.Plugins?.Filesystem;
-  const share = window.Capacitor?.Plugins?.Share;
+  const fs = nativePlugins.Filesystem;
+  const share = nativePlugins.Share;
   if (!fs) return false;
   const encoded = btoa(unescape(encodeURIComponent(String(data || ''))));
   const fileName = suggestedName || `nocturne-${Date.now()}.txt`;
-  const directory = window.Capacitor?.FilesystemDirectory?.Documents || 'DOCUMENTS';
+  const directory = 'CACHE';
   const saved = await fs.writeFile({ path: fileName, data: encoded, directory });
   if (share?.share) {
     await share.share({
@@ -51,6 +52,20 @@ async function saveWithCapacitor(data, suggestedName, mime) {
     });
   }
   return { path: saved.uri || fileName, mime };
+}
+
+export async function saveBlobFile(blob, suggestedName) {
+  if (detectRuntime().isCapacitor) {
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 32768) binary += String.fromCharCode(...bytes.subarray(i, i + 32768));
+    const fileName = String(suggestedName).replace(/[\\/:*?"<>|]/g, '_');
+    const saved = await nativePlugins.Filesystem.writeFile({ path: `exports/${fileName}`, data: btoa(binary), directory: 'CACHE', recursive: true });
+    await nativePlugins.Share.share({ title: fileName, url: saved.uri, dialogTitle: 'Сохранить или отправить файл' });
+    return { path: saved.uri };
+  }
+  downloadBlob(blob, suggestedName);
+  return { path: suggestedName, fallback: 'browser-download' };
 }
 
 export async function saveTextFile(data, suggestedName = 'nocturne.txt', mime = 'text/plain;charset=utf-8') {
@@ -121,6 +136,7 @@ export async function saveGitSnapshot(data, projectName) {
 }
 
 export const platformFiles = {
+  saveBlobFile,
   exportProjectDump,
   importProjectDump,
   saveTextFile,

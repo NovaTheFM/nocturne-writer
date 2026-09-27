@@ -22,12 +22,15 @@ import { stripSecrets } from './core/record-protection.js';
 import { TYPO_LOOKUP, normalizeTypoToken } from './core/typos.js';
 import { getSmartSpellerMatches } from './core/smart-speller.js';
 import { platformFiles } from './platform/file-adapter.js';
-import { detectRuntime } from './platform/runtime.js';
+import { detectRuntime, configureNativeBars, bindNativeLifecycle, discoverNativeLan } from './platform/runtime.js';
 import { CommandPalette } from './features/command-palette.js';
 import { buildAiContext, serializeAiContextSafe } from './features/ai-context.js';
+import { LocalSyncClient, buildHttpBase, SYNC_PROTOCOL_VERSION } from './features/local-sync.js';
+import { DatabaseSync } from './features/database-sync.js';
 import { NocturneEditorBridge } from './editor/nocturne-editor.js';
 import { legacyAstToHtml } from './editor/document-adapter.js';
 import { aiIcon, iconSvg } from './ui/icons.js';
+import { manageModalFocus } from './ui/modal-focus.js';
 import Sortable from './vendor/sortablejs/sortable.complete.esm.js';
 import { fastdom } from './vendor/fastdom/fastdom.js';
 import { gsap, Flip } from './vendor/gsap/gsap-flip.bundle.js';
@@ -103,89 +106,6 @@ function defaultDeviceName(runtime) {
   if (runtime?.isElectron) return 'Nocturne Desktop';
   if (runtime?.isAndroid) return 'Nocturne Android';
   return 'Nocturne Browser';
-}
-
-class LocalSyncClient {
-  constructor(app) {
-    this.app = app;
-    this.ws = null;
-  }
-
-  isOpen() {
-    return this.ws && this.ws.readyState === 1;
-  }
-
-  async connect({ host, port, token, trusted }) {
-    if (this.isOpen()) this.ws.close();
-    return new Promise((resolve, reject) => {
-      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${host}:${port}`;
-      const ws = new WebSocket(wsUrl);
-      this.ws = ws;
-
-      let resolved = false;
-
-      ws.onopen = () => {
-        ws.send(JSON.stringify({
-          type: 'pair',
-          protocolVersion: 1,
-          token,
-          deviceId: this.app.state.sync.deviceId,
-          deviceName: this.app.state.sync.deviceName || 'Browser',
-          deviceType: 'browser',
-          runtime: 'browser',
-        }));
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          if (message.type === 'paired') {
-            resolved = true;
-            this.app.state.sync.status = 'connected';
-            this.app.state.sync.statusDetail = 'Подключено.';
-            this.app.renderSyncStatus?.();
-            resolve();
-          } else if (message.type === 'error') {
-            this.app.toast(message.message || 'Ошибка синхронизации.');
-            if (!resolved) reject(new Error(message.message));
-          } else {
-            this.handleMessage(message);
-          }
-        } catch (e) {
-          console.error('[sync client] error handling message:', e);
-        }
-      };
-
-      ws.onerror = (err) => {
-        if (!resolved) reject(err);
-      };
-
-      ws.onclose = () => {
-        this.app.state.sync.status = 'disconnected';
-        this.app.state.sync.statusDetail = 'Соединение закрыто.';
-        this.app.renderSyncStatus?.();
-      };
-    });
-  }
-
-  send(message) {
-    if (this.isOpen()) {
-      this.ws.send(JSON.stringify(message));
-    }
-  }
-
-  handleMessage(message) {
-    if (message.type === 'project-state-request') {
-      this.app.sendSyncProjectState();
-    } else if (message.type === 'project-state') {
-      this.app.receiveSyncProjectState(message);
-    } else if (message.type === 'merge-accepted') {
-      this.app.receiveSyncMergeAccepted(message);
-    } else if (message.type === 'doc-patch') {
-      this.app.receiveSyncPatch(message.patch);
-    }
-  }
 }
 
 class NocturneWriter {
@@ -434,6 +354,9 @@ class NocturneWriter {
     this.state.settings = this.validateSettings(settings?.value || {});
     const globalNotes = await this.db.get('settings', 'global-notes');
     this.state.globalNotes = globalNotes?.locked ? '' : (globalNotes?.text ?? this.state.globalNotes);
+    const identity = await this.db.get('settings', 'sync-identity');
+    if (identity?.deviceId) this.state.sync.deviceId = identity.deviceId;
+    else await this.db.put('settings', { id: 'sync-identity', deviceId: this.state.sync.deviceId });
     this.injectCustomFonts();
     if (!document.getElementById('reaper-recolor-filter')) {
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -486,6 +409,12 @@ class NocturneWriter {
     this.renderAll();
     this.startPreloader();
     this.bindGlobalEvents();
+    this.disposeModalFocus = manageModalFocus();
+    this.databaseSync = new DatabaseSync({ db: this.db, deviceId: this.state.sync.deviceId,
+      onChange: result => this.refreshAfterDatabaseSync(result),
+      onPending: () => this.scheduleDatabaseSync(),
+    });
+    await this.databaseSync.start();
     this.startMobileSystemBar();
     this.applyAndroidSystemBars();
     this.startGitAutosave();
@@ -715,7 +644,7 @@ class NocturneWriter {
     doc.ast.blocks = doc.ast.blocks.map((block) => {
       let h = String(block.html || '');
       h = normalizeHtml(cleanAnalysisResidue(h));
-      const type = ['paragraph', 'heading', 'quote'].includes(block.type) ? block.type : 'paragraph';
+      const type = ['paragraph', 'heading', 'quote', 'divider', 'code'].includes(block.type) ? block.type : 'paragraph';
       const align = ['left', 'center', 'right', 'justify'].includes(block.align) ? block.align : 'left';
       return { ...block, id: String(block.id || uid('block')), type, align, html: h.trim() || '<br>' };
     });
@@ -2532,17 +2461,7 @@ class NocturneWriter {
   }
 
   async applyAndroidSystemBars() {
-    if (!this.runtime?.isCapacitor && !this.runtime?.isAndroid) return;
-    try {
-      await window.Capacitor?.Plugins?.StatusBar?.setOverlaysWebView?.({ overlay: true });
-      await window.Capacitor?.Plugins?.StatusBar?.hide?.();
-      await window.Capacitor?.Plugins?.StatusBar?.setBackgroundColor?.({ color: '#00000000' });
-      await window.Capacitor?.Plugins?.StatusBar?.setStyle?.({ style: 'LIGHT' });
-    } catch {}
-    try {
-      await window.Capacitor?.Plugins?.NavigationBar?.setColor?.({ color: '#07070a', darkButtons: false });
-      await window.Capacitor?.Plugins?.NavigationBar?.hide?.();
-    } catch {}
+    return configureNativeBars();
   }
 
   startMobileSystemBar() {
@@ -2684,24 +2603,51 @@ class NocturneWriter {
       this.toast('Сначала подключитесь к локальному серверу.');
       return;
     }
-    this.state.sync.status = 'syncing';
+    this.state.sync.status = 'connected';
     this.renderMobileShell();
     await this.sendSyncProjectState();
     this.syncClient.send({ type: 'project-state-request', from: this.state.sync.deviceId });
   }
 
   async sendSyncProjectState() {
-    const dump = await this.buildNocturneDump({ plaintextE2e: false });
-    this.syncClient.send({
-      type: 'project-state',
-      from: this.state.sync.deviceId,
-      deviceName: this.state.sync.deviceName,
-      dump,
-      sentAt: Date.now(),
-    });
+    if (!this.databaseSync || !this.syncClient.isOpen()) return;
+    return this.syncClient.sendDatabaseState(await this.databaseSync.buildState());
+  }
+
+  scheduleDatabaseSync() {
+    clearTimeout(this.databaseSyncTimer);
+    this.databaseSyncTimer = setTimeout(() => this.sendSyncProjectState().catch(error => {
+      this.state.sync.statusDetail = error.message;
+      this.updateSyncStatusUi();
+    }), 300);
+  }
+
+  async refreshAfterDatabaseSync(result = {}) {
+    if (result.error) { this.state.sync.statusDetail = result.error.message; this.updateSyncStatusUi(); return; }
+    const focused = this.getFocusedDoc()?.id;
+    this.state.folders = this.validateFolders(await this.db.getAll('folders'));
+    const docs = await this.loadDocs();
+    for (const incoming of docs) {
+      const local = this.state.docs.find(doc => doc.id === incoming.id);
+      if (local) {
+        const changed = JSON.stringify(local.pmJson || local.ast) !== JSON.stringify(incoming.pmJson || incoming.ast);
+        Object.assign(local, incoming);
+        if (changed && !local.locked) this.nocturneEditor.applyDocumentContent(local, { ast: local.ast, pmJson: local.pmJson });
+      } else this.state.docs.push(incoming);
+    }
+    this.state.docs = this.state.docs.filter(doc => docs.some(incoming => incoming.id === doc.id));
+    this.state.lore = await this.loadLore();
+    await this.loadFloatingNotes(); await this.loadReviewMarks(); await this.loadTypoRules();
+    const notes = await this.db.get('settings', 'global-notes');
+    if (notes && !notes.locked) this.state.globalNotes = notes.text || '';
+    this.state.sync.conflicts = (await this.db.getAll('syncConflicts')).length;
+    this.state.sync.statusDetail = this.state.sync.conflicts ? `Есть ${this.state.sync.conflicts} конфликтов. Обе версии сохранены.` : 'Базы сверены. Все изменения сохранены на обоих устройствах.';
+    this.renderDocs(); this.renderKb(); this.renderNotes(); this.updateSyncStatusUi();
+    if (focused && !this.state.docs.some(doc => doc.id === focused)) { this.initWorkspace(); this.renderWorkspace(); }
   }
 
   async receiveSyncProjectState(message) {
+    if (message?.state) return this.databaseSync.receiveState(message.state);
     if (!message?.dump?.payload || message.from === this.state.sync.deviceId) return;
     await this.persistSyncDevice({ deviceId: message.from, deviceName: message.deviceName });
     const preview = this.buildSyncMergePreview(message);
@@ -2897,6 +2843,7 @@ class NocturneWriter {
   }
 
   scheduleSyncForDoc(docId, inputEvent = null) {
+    if (this.databaseSync) return;
     if (!docId) return;
     const type = inputEvent?.inputType || 'typing';
     const data = inputEvent?.data || '';
@@ -2905,6 +2852,7 @@ class NocturneWriter {
   }
 
   async queueLiveSyncPatch(docId, reason = 'typing') {
+    if (this.databaseSync) return this.sendSyncProjectState();
     const mapping = await this.findSyncMappingByLocalDoc(docId);
     if (!mapping) return;
     const doc = this.state.docs.find((item) => item.id === docId);
@@ -2947,6 +2895,7 @@ class NocturneWriter {
   }
 
   async flushSyncQueue() {
+    if (this.databaseSync) return this.sendSyncProjectState();
     if (!this.syncClient.isOpen()) return;
     const queue = await this.db.getAll('syncQueue');
     for (const item of queue) {
@@ -2986,6 +2935,7 @@ class NocturneWriter {
     }
     const doc = this.state.docs.find((item) => item.id === mapping.localDocId);
     if (!doc) return;
+    if (Number(patch.revision) <= Number(mapping.lastSyncedRevision || 0)) return;
     const activeBlock = this.currentBlockElement();
     const activeBlockId = activeBlock?.dataset.sourceBlockId || activeBlock?.dataset.blockId;
     const sameDocFocused = doc.id === this.getFocusedDoc()?.id && !!document.activeElement?.closest?.('.page-content');
@@ -3006,6 +2956,7 @@ class NocturneWriter {
     };
     doc.summary = doc.description || buildSummary(doc.ast);
     doc.updatedAt = Date.now();
+    this.nocturneEditor.applyDocumentContent(doc, { ast: doc.ast });
     await this.db.put('docs', doc);
     await this.updateSyncMappingRevision(mapping, patch.revision);
     this.state.sync.status = 'connected';
@@ -3667,14 +3618,22 @@ class NocturneWriter {
   }
 
   bindCapacitorBackButton() {
-    const appPlugin = window.Capacitor?.Plugins?.App;
-    if (!appPlugin?.addListener || this.capacitorBackBound) return;
+    if (!this.runtime.isCapacitor || this.capacitorBackBound) return;
     this.capacitorBackBound = true;
-    appPlugin.addListener('backButton', ({ canGoBack } = {}) => {
-      if (this.closeTopMobileOverlay()) return;
-      if (canGoBack) window.history.back();
-      else this.openExitSheet();
+    bindNativeLifecycle({
+      onBack: ({ canGoBack } = {}) => {
+        this.pendingConfirmation?.(false);
+        if (this.closeTopMobileOverlay()) return;
+        if (canGoBack) window.history.back(); else this.openExitSheet();
+      },
+      onSuspend: () => this.flushOpenDocuments(),
+      onResume: () => { this.trySyncAutoReconnect(); this.sendSyncProjectState(); },
     });
+  }
+
+  async flushOpenDocuments() {
+    await Promise.all(Object.values(this.state.workspace?.panes || {}).filter(pane => pane.type === 'document' && pane.docId).map(pane => this.saveDocById(pane.docId, { silent: true })));
+    await this.persistGlobalNotes();
   }
 
   blurMobileEditorFocus() {
@@ -19958,6 +19917,8 @@ class NocturneWriter {
         safeRemoveStorageItem(localStorage, 'nocturne-global-notes');
         if (!this.state.sessionPassword) {
           this.promptForMasterPassword();
+        } else {
+          this.migrateEncryption().catch(error => this.toast(error.message));
         }
       } else {
         this.disableE2eAndDecryptAll();
@@ -23024,14 +22985,8 @@ ${raw}`;
       await new Promise(r => setTimeout(r, 100));
     }
 
-    await this.animateGenericExport(filename);
-
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1200);
+    try { return await platformFiles.saveBlobFile(blob, filename); }
+    catch (error) { this.toast(`Не удалось сохранить файл: ${error.message}`); return false; }
   }
 
   async setSessionPassword() {
@@ -23039,9 +22994,33 @@ ${raw}`;
     this.state.sessionPassword = value;
     safeSetStorageItem(sessionStorage, 'nocturne-master-password', value);
     this.state.docs = await this.loadDocs();
+    this.state.lore = await this.loadLore();
+    await this.loadFloatingNotes(); await this.loadReviewMarks(); await this.loadTypoRules();
+    const notes = await this.db.get('settings', 'global-notes');
+    if (notes && !notes.locked) this.state.globalNotes = notes.text || '';
     this.initWorkspace();
     this.renderAll();
     this.toast('Пароль сессии применен, документы перечитаны.');
+  }
+
+  async migrateEncryption() {
+    if (!this.state.sessionPassword) throw new Error('Введите мастер-пароль перед сменой режима шифрования.');
+    const records = {};
+    for (const store of ['docs', 'drafts', 'lore', 'snapshots', 'floatingNotes', 'reviewMarks', 'typoRules', 'trash', 'backups', 'syncQueue', 'syncConflicts', 'settings']) {
+      records[store] = await this.db.getAll(store);
+      if (records[store].some(record => record.locked)) throw new Error('Пароль не открывает все записи. Шифрование не изменено.');
+    }
+    records.docs = await this.loadDocs();
+    for (const doc of records.docs) delete doc.encrypted;
+    records.settings = records.settings.filter(record => !['app', 'global-notes'].includes(record.id));
+    records.settings.push({ id: 'app', value: this.state.settings }, { id: 'global-notes', text: this.state.globalNotes, updatedAt: Date.now() });
+    await this.db.atomicWrite(records, { replace: true });
+    this.clearAllLiveDrafts();
+    safeRemoveStorageItem(localStorage, 'nocturne-global-notes');
+    safeRemoveStorageItem(localStorage, 'nocturne_settings');
+    this.state.docs = await this.loadDocs();
+    this.state.lore = await this.loadLore();
+    this.renderAll();
   }
 
   promptForMasterPassword() {
@@ -23085,12 +23064,7 @@ ${raw}`;
       safeSetStorageItem(sessionStorage, 'nocturne-master-password', pass);
       overlay.classList.remove('active');
       this.state.docs = await this.loadDocs();
-      // Encrypt all current plaintext documents immediately
-      for (const doc of this.state.docs) {
-        if (!doc.encrypted && !doc.locked) {
-          await this.saveDocById(doc.id, { silent: true });
-        }
-      }
+      await this.migrateEncryption();
       this.initWorkspace();
       this.renderAll();
       this.toast('Шифрование включено. Все документы зашифрованы.');
@@ -23117,12 +23091,7 @@ ${raw}`;
       }
     }
     
-    // Decrypt and save all documents as plaintext
-    for (const doc of this.state.docs) {
-      if (doc.encrypted && !doc.locked) {
-        await this.saveDocById(doc.id, { silent: true });
-      }
-    }
+    await this.migrateEncryption();
     this.state.docs = await this.loadDocs();
     this.initWorkspace();
     this.renderAll();
@@ -24087,6 +24056,18 @@ async scanForSyncServers() {
 
 
     const found = new Map();
+    if (this.runtime.isCapacitor) {
+      try {
+        await discoverNativeLan(async nativeDevice => {
+          const device = await this.probeSyncDiscoveryHost(nativeDevice.host, nativeDevice.port, 'mdns');
+          if (device) {
+            found.set(device.id, device);
+            this.state.sync.discoveredDevices = [...found.values()];
+            this.renderSyncSurfaces();
+          }
+        });
+      } catch (error) { discovery.error = error.message; }
+    }
 
     const startedAt = Date.now();
 

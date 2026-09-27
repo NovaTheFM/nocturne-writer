@@ -5,9 +5,9 @@ import { randomBytes, createHash } from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import Bonjour from 'bonjour-service';
 
-const PROTOCOL_VERSION = 1;
+const PROTOCOL_VERSION = 2;
 const port = Number(process.env.SYNC_PORT || 8787);
-const token = String(process.env.SYNC_TOKEN || randomBytes(3).toString('hex')).toUpperCase();
+const token = String(process.env.SYNC_TOKEN || randomBytes(9).toString('hex')).toUpperCase();
 const deviceName = String(process.env.NOCTURNE_SYNC_DEVICE_NAME || hostname() || 'Nocturne Desktop').slice(0, 80);
 const deviceType = String(process.env.NOCTURNE_SYNC_DEVICE_TYPE || 'computer').slice(0, 40);
 const privateDeviceId = process.env.NOCTURNE_SYNC_DEVICE_ID || randomBytes(16).toString('hex');
@@ -73,6 +73,7 @@ function sendJson(res, status, payload) {
 function broadcast(sender, message) {
   for (const client of clients.values()) {
     if (client.ws !== sender && client.ws.readyState === 1) {
+      if (message.to && message.to !== client.deviceId) continue;
       send(client.ws, { ...message, from: message.from || clients.get(sender)?.deviceId });
     }
   }
@@ -104,10 +105,11 @@ const server = createServer((req, res) => {
   res.end('Nocturne Writer LAN Sync broker. Use WebSocket with the pairing code shown in the terminal.');
 });
 
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({ server, maxPayload: 32 * 1024 * 1024 });
 
 wss.on('connection', (ws, req) => {
   let paired = false;
+  let attempts = 0;
   ws.on('message', (raw) => {
     let message;
     try {
@@ -117,6 +119,7 @@ wss.on('connection', (ws, req) => {
       return;
     }
     if (!paired) {
+      if (++attempts > 3) { ws.close(1008, 'Too many pairing attempts'); return; }
       const version = Number(message.protocolVersion || 0);
       if (version !== PROTOCOL_VERSION) {
         send(ws, { type: 'error', message: 'Версия протокола локальной связи не совпадает.' });
@@ -152,7 +155,7 @@ wss.on('connection', (ws, req) => {
       send(ws, { type: 'pong', id: message.id, at: Date.now() });
       return;
     }
-    const allowed = new Set(['project-state-request', 'project-state', 'merge-accepted', 'doc-patch', 'presence']);
+    const allowed = new Set(['relay', 'relay-ack', 'project-state-request', 'presence']);
     if (!allowed.has(message.type)) {
       send(ws, { type: 'error', message: `Неподдерживаемый тип сообщения: ${message.type}` });
       return;

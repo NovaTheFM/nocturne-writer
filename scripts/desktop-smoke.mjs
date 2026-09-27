@@ -71,10 +71,11 @@ async function runAppSmoke(page) {
     };
 
     setEditorContent('<p>alpha beta gamma</p>');
-    const liveKey = Object.keys(localStorage).find((key) => key.includes(doc.id) && key.startsWith('nocturne-live-v'));
-    assertInPage(liveKey, 'live draft was not written to localStorage');
+    await app.draftWrites.get(doc.id);
+    const liveDraft = await app.db.get('drafts', doc.id);
+    assertInPage(liveDraft && JSON.stringify(liveDraft).includes('alpha beta gamma'), 'live draft was not written to IndexedDB');
     await app.saveDocById(doc.id, { silent: true });
-    assertInPage(!localStorage.getItem(liveKey), 'live draft was not cleared after IndexedDB save');
+    assertInPage(!await app.db.get('drafts', doc.id), 'live draft was not cleared after IndexedDB save');
     const stored = await app.db.get('docs', doc.id);
     assertInPage(stored && JSON.stringify(stored.ast).includes('alpha beta gamma'), 'IndexedDB save did not persist editor text');
 

@@ -16,8 +16,13 @@ export function legacyAstToHtml(ast = { blocks: [] }) {
       block.align && block.align !== 'left' ? `style="text-align:${escapeHtml(block.align)}"` : '',
     ].filter(Boolean).join(' ');
     const html = String(block.html || '<br>');
-    if (block.type === 'heading') return `<h2 ${attrs}>${html}</h2>`;
+    if (block.type === 'heading') {
+      const level = Math.max(1, Math.min(3, Number(block.level || 2)));
+      return `<h${level} ${attrs}>${html}</h${level}>`;
+    }
     if (block.type === 'quote') return `<blockquote ${attrs}>${html}</blockquote>`;
+    if (block.type === 'divider') return `<hr ${attrs}>`;
+    if (block.type === 'code') return `<pre ${attrs}><code>${html}</code></pre>`;
     return `<p ${attrs}>${html}</p>`;
   }).join('');
 }
@@ -38,7 +43,7 @@ export function ensureTiptapBlockIds(pmJson = null) {
   const seenIds = new Set();
   const visit = (node) => {
     if (!node || typeof node !== 'object') return;
-    if (['paragraph', 'heading', 'blockquote'].includes(node.type)) {
+    if (['paragraph', 'heading', 'blockquote', 'horizontalRule', 'codeBlock'].includes(node.type)) {
       node.attrs = { ...(node.attrs || {}) };
       if (!node.attrs.blockId || seenIds.has(node.attrs.blockId)) {
         node.attrs.blockId = uid('block');
@@ -66,10 +71,14 @@ export function plainTextFromTiptapJson(pmJson = null) {
 function jsonNodeToLegacyBlocks(node) {
   if (!node || typeof node !== 'object') return [];
   if (node.type === 'blockquote') {
-    const quoteText = inlineHtmlFromChildren(node.content || []);
-    if (quoteText) return [legacyBlock('quote', node, quoteText)];
-    return (node.content || []).flatMap((child) => jsonNodeToLegacyBlocks({ ...child, type: 'blockquote' }));
+    const quoteHtml = (node.content || []).map(child => {
+      const id = child.attrs?.blockId || uid('block');
+      return `<p data-block-id="${escapeHtml(id)}">${inlineHtmlFromChildren(child.content || [])}</p>`;
+    }).join('');
+    return [legacyBlock('quote', node, quoteHtml)];
   }
+  if (node.type === 'horizontalRule') return [legacyBlock('divider', node, '<br>')];
+  if (node.type === 'codeBlock') return [legacyBlock('code', node, inlineHtmlFromChildren(node.content || []))];
   if (node.type === 'heading') return [legacyBlock('heading', node, inlineHtmlFromChildren(node.content || []))];
   if (node.type === 'paragraph') return [legacyBlock('paragraph', node, inlineHtmlFromChildren(node.content || []))];
   if (isBlockNode(node)) return [legacyBlock('paragraph', node, inlineHtmlFromChildren(node.content || []))];
@@ -82,6 +91,7 @@ function legacyBlock(type, node, html) {
     type,
     align: node.attrs?.textAlign || node.attrs?.align || 'left',
     html: html || '<br>',
+    ...(type === 'heading' && node.attrs?.level !== 2 ? { level: node.attrs?.level || 2 } : {}),
   };
 }
 

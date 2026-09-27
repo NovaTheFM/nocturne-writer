@@ -47,10 +47,13 @@ export function rankLoreItemsByRelevance(items = [], query = '') {
 export function collectRelevantLore({ state, doc, query = '', limits = {} } = {}) {
   const lore = state?.lore || {};
   const docId = doc?.id;
-  const characters = rankLoreItemsByRelevance(lore.characters || [], query)
-    .filter((item) => !docId || !item.documentIds?.length || item.documentIds.includes(docId) || rankLoreItemsByRelevance([item], query).length)
+  const relevant = items => [...new Map([
+    ...(items || []).filter(item => item.documentIds?.includes(docId)),
+    ...rankLoreItemsByRelevance(items || [], query),
+  ].map(item => [item.id, item])).values()];
+  const characters = relevant(lore.characters)
     .slice(0, limits.characters || 8);
-  const locations = rankLoreItemsByRelevance(lore.locations || [], query).slice(0, limits.locations || 6);
+  const locations = relevant(lore.locations).slice(0, limits.locations || 6);
   const timelineCandidates = (lore.timeline || []).filter((event) => (
     event.documentIds?.includes(docId)
     || rankLoreItemsByRelevance([event], query).length
@@ -70,7 +73,7 @@ export function estimateContextSize(context) {
 
 export function trimContextToBudget(context, budget = 7000) {
   const clone = structuredClone(context);
-  const groups = ['notes', 'subtimelines', 'timeline', 'locations', 'characters'];
+  const groups = ['notes', 'subtimelines', 'timeline', 'locations', 'characters', 'rules'];
   while (estimateContextSize(clone) > budget && groups.length) {
     const group = groups[0];
     if (Array.isArray(clone[group]) && clone[group].length) clone[group].pop();
@@ -79,6 +82,17 @@ export function trimContextToBudget(context, budget = 7000) {
   if (estimateContextSize(clone) > budget && clone.surroundingText) {
     clone.surroundingText.before = clone.surroundingText.before.slice(-900);
     clone.surroundingText.after = clone.surroundingText.after.slice(0, 900);
+  }
+  while (estimateContextSize(clone) > budget) {
+    const candidates = [
+      [clone, 'currentSelection'], [clone, 'notice'],
+      ...Object.keys(clone.document || {}).map(key => [clone.document, key]),
+      ...Object.keys(clone.surroundingText || {}).map(key => [clone.surroundingText, key]),
+    ].filter(([object, key]) => typeof object[key] === 'string' && object[key].length);
+    candidates.sort((a, b) => b[0][b[1]].length - a[0][a[1]].length);
+    if (!candidates.length) break;
+    const [object, key] = candidates[0];
+    object[key] = object[key].slice(0, Math.max(0, object[key].length - Math.max(100, estimateContextSize(clone) - budget)));
   }
   return clone;
 }
@@ -148,13 +162,13 @@ export function buildAiContext({
       title: String(item.title || ''),
       notes: plain(item.body || '', 500),
     })) : [],
-    rules: enabled.rules ? [] : [],
+    rules: enabled.rules ? (state?.lore?.rules || []).map(rule => ({ title: plain(rule.title || rule.name, 160), text: plain(rule.body || rule.text, 700) })) : [],
     notes: enabled.notes ? [
       doc?.notes ? { scope: 'document', text: plain(doc.notes, 1200) } : null,
       state?.globalNotes ? { scope: 'global', text: plain(state.globalNotes, 1200) } : null,
     ].filter(Boolean) : [],
   };
-  const trimmed = trimContextToBudget(context, budget);
+  const trimmed = trimContextToBudget(context, Math.max(0, budget - 240));
   return {
     ...trimmed,
     stats: {

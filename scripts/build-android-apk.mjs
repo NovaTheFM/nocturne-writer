@@ -33,6 +33,7 @@ function run(label, command, options = {}) {
 
 const sdkDir = sdkFromLocalProperties();
 const env = { ...process.env };
+if (process.platform === 'win32' && !env.JAVA_HOME && existsSync('C:/Program Files/Java/jdk-21')) env.JAVA_HOME = 'C:/Program Files/Java/jdk-21';
 if (sdkDir) {
   env.ANDROID_HOME = sdkDir;
   env.ANDROID_SDK_ROOT = sdkDir;

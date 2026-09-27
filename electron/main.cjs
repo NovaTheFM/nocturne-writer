@@ -49,12 +49,12 @@ ipcMain.handle('nocturne:git-commit', async (_event, dataStr, projectName) => {
     return false;
   }
 });
-const SYNC_PROTOCOL_VERSION = 1;
+const SYNC_PROTOCOL_VERSION = 2;
 let syncHttpServer = null;
 let syncWss = null;
 let syncStartedAt = null;
 let syncPort = Number(process.env.SYNC_PORT || 8787);
-let syncToken = randomBytes(3).toString('hex').toUpperCase();
+let syncToken = randomBytes(9).toString('hex').toUpperCase();
 const syncDeviceId = process.env.NOCTURNE_SYNC_DEVICE_ID || randomBytes(16).toString('hex');
 const syncPublicDeviceId = `nd-${createHash('sha256').update(syncDeviceId).digest('hex').slice(0, 12)}`;
 const syncClients = new Map();
@@ -117,6 +117,7 @@ function sendWs(ws, message) {
 function broadcastWs(sender, message) {
   for (const client of syncClients.values()) {
     if (client.ws !== sender && client.ws.readyState === 1) {
+      if (message.to && message.to !== client.deviceId) continue;
       sendWs(client.ws, { ...message, from: message.from || syncClients.get(sender)?.deviceId });
     }
   }
@@ -173,7 +174,7 @@ async function startSyncServer() {
     console.error('[Nocturne sync] server error:', error);
   });
 
-  syncWss = new WebSocketServer({ server: syncHttpServer });
+  syncWss = new WebSocketServer({ server: syncHttpServer, maxPayload: 32 * 1024 * 1024 });
   syncWss.on('connection', (ws, req) => {
     let paired = false;
     ws.on('message', (raw) => {
@@ -220,7 +221,7 @@ async function startSyncServer() {
         sendWs(ws, { type: 'pong', id: message.id, at: Date.now() });
         return;
       }
-      const allowed = new Set(['project-state-request', 'project-state', 'merge-accepted', 'doc-patch', 'presence']);
+      const allowed = new Set(['relay', 'relay-ack', 'project-state-request', 'presence']);
       if (!allowed.has(message.type)) {
         sendWs(ws, { type: 'error', message: `Неподдерживаемый тип сообщения: ${message.type}` });
         return;
@@ -268,7 +269,7 @@ function stopSyncServer() {
 }
 
 function refreshSyncToken() {
-  syncToken = randomBytes(3).toString('hex').toUpperCase();
+  syncToken = randomBytes(9).toString('hex').toUpperCase();
   return syncStatusPayload();
 }
 

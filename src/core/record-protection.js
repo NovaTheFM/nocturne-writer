@@ -24,10 +24,7 @@ export async function revealRecord(store, record, password) {
 export async function protectRecord(store, record, { enabled = false, password = '' } = {}) {
   if (!record || typeof record !== 'object') throw new Error('Некорректная запись базы.');
   if (record.protectedStore) {
-    if (enabled) return record;
-    const decoded = await revealRecord(store, record, password);
-    if (decoded.locked) throw new Error('Введите мастер-пароль перед изменением защищённых данных.');
-    return decoded;
+    return record;
   }
   if (!enabled) return record;
   if (store === 'settings' && record.id === 'app') {
