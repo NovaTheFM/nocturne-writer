@@ -42,7 +42,7 @@ export function stripAnalysisMarkup(root) {
   });
 }
 
-const ALLOWED_EDITOR_TAGS = new Set(['P', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'BLOCKQUOTE', 'H1', 'H2', 'H3', 'SPAN']);
+const ALLOWED_EDITOR_TAGS = new Set(['P', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'BLOCKQUOTE', 'H1', 'H2', 'H3', 'SPAN', 'PRE', 'CODE', 'HR']);
 const DROP_WITH_CONTENT_TAGS = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'BASE', 'FORM', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT', 'OPTION']);
 
 export function sanitizeHtmlTree(root) {
@@ -57,6 +57,7 @@ export function sanitizeHtmlTree(root) {
     }
     [...node.attributes].forEach((attr) => {
       const name = attr.name.toLowerCase();
+      if (name === 'data-block-id' && /^[\w.:-]{1,240}$/u.test(attr.value)) return;
       if (name === 'class') {
         if (/(?:sentence-|syntax-|weak-word|entity-link|ai-suggestion|search-hit|mention-hit)/iu.test(attr.value)) node.removeAttribute(attr.name);
         return;
@@ -170,4 +171,7 @@ export function sentenceParts(text = '') {
 export function parseTimelineRank(date = '') {
   const match = String(date).match(/(?:год|г\.?)\s*(-?\d+)/i);
   return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+}
+export function localDateKey(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }

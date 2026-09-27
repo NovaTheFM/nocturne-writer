@@ -7,9 +7,43 @@ const { networkInterfaces, hostname } = require('node:os');
 const { createHash, randomBytes } = require('node:crypto');
 const { WebSocketServer } = require('ws');
 const { simpleGit } = require('simple-git');
+const { Bonjour } = require('bonjour-service');
 
 const root = path.resolve(__dirname, '..');
 const devUrl = process.env.NOCTURNE_DEV_URL || process.env.ELECTRON_DEV_URL || '';
+if (process.env.NOCTURNE_TEST_PROFILE) app.setPath('userData', path.resolve(process.env.NOCTURNE_TEST_PROFILE));
+let chosenBackupDirectory = null;
+const validBackupName = name => typeof name === 'string' && /^nocturne-[\dTZ.-]+\.nocturnedump$/.test(name);
+async function backupDirectory() {
+  if (!chosenBackupDirectory) {
+    try { chosenBackupDirectory = (JSON.parse(await fs.readFile(path.join(app.getPath('userData'), 'backup-directory.json'), 'utf8'))).path; } catch {}
+  }
+  const directory = chosenBackupDirectory || path.join(app.getPath('documents'), 'Nocturne Backups');
+  await fs.mkdir(directory, { recursive: true });
+  return directory;
+}
+ipcMain.handle('nocturne:backup-directory', async () => {
+  const result = await dialog.showOpenDialog({ title: 'Папка резервных копий', properties: ['openDirectory', 'createDirectory'] });
+  if (result.canceled) return null;
+  chosenBackupDirectory = result.filePaths[0];
+  await fs.writeFile(path.join(app.getPath('userData'), 'backup-directory.json'), JSON.stringify({ path: chosenBackupDirectory }));
+  return { path: chosenBackupDirectory };
+});
+ipcMain.handle('nocturne:backup-write', async (_event, data, name) => {
+  if (!validBackupName(name) || typeof data !== 'string' || data.length > 80 * 1024 * 1024) throw new Error('Invalid backup.');
+  const directory = await backupDirectory(), target = path.join(directory, name), temporary = `${target}.pending`;
+  await fs.writeFile(temporary, data, { encoding: 'utf8', flag: 'wx' });
+  await fs.rename(temporary, target);
+  const files = (await fs.readdir(directory, { withFileTypes: true })).filter(file => file.isFile() && validBackupName(file.name)).map(file => file.name).sort().reverse();
+  for (const file of files.slice(20)) await fs.unlink(path.join(directory, file));
+  return { external: true, path: target };
+});
+ipcMain.handle('nocturne:backup-read', async (_event, name) => {
+  if (!validBackupName(name)) throw new Error('Invalid backup name.');
+  const target = path.join(await backupDirectory(), name);
+  if ((await fs.stat(target)).size > 80 * 1024 * 1024) throw new Error('Backup is too large.');
+  return fs.readFile(target, 'utf8');
+});
 
 ipcMain.handle('nocturne:git-commit', async (_event, dataStr, projectName) => {
   if (typeof dataStr !== 'string') return false;
@@ -53,6 +87,7 @@ const SYNC_PROTOCOL_VERSION = 2;
 let syncHttpServer = null;
 let syncWss = null;
 let syncStartedAt = null;
+let syncBonjour = null;
 let syncPort = Number(process.env.SYNC_PORT || 8787);
 let syncToken = randomBytes(9).toString('hex').toUpperCase();
 const syncDeviceId = process.env.NOCTURNE_SYNC_DEVICE_ID || randomBytes(16).toString('hex');
@@ -252,10 +287,16 @@ async function startSyncServer() {
     syncStartedAt = null;
     return syncStatusPayload({ running: false, message: `Не удалось запустить сервер: ${listenError.message}` });
   }
+  try {
+    syncBonjour = new Bonjour();
+    syncBonjour.publish({ name: `Nocturne Sync - ${hostname()}`, type: 'nocturne-sync', protocol: 'tcp', port: syncPort, txt: { protocol: '2', app: 'Nocturne Writer' } });
+  } catch (error) { console.warn('LAN advertisement:', error.message); }
   return syncStatusPayload();
 }
 
 function stopSyncServer() {
+  try { syncBonjour?.destroy(); } catch {}
+  syncBonjour = null;
   for (const client of syncClients.values()) {
     try { client.ws.close(); } catch {}
   }
@@ -284,6 +325,7 @@ function createWindow() {
     minWidth: 960,
     minHeight: 620,
     title: 'Nocturne Writer',
+    show: !process.env.NOCTURNE_TEST_PROFILE,
     icon: iconPath,
     backgroundColor: '#08080a',
     frame: false,
@@ -298,7 +340,7 @@ function createWindow() {
     },
   });
   win.setMenuBarVisibility(false);
-  win.maximize();
+  if (!process.env.NOCTURNE_TEST_PROFILE) win.maximize();
   if (typeof win.removeMenu === 'function') win.removeMenu();
 
   // Send window maximize states to the renderer

@@ -6,6 +6,9 @@ function safeSuggestedName(value) {
 
 contextBridge.exposeInMainWorld('nocturneElectron', {
   isNocturneElectron: true,
+  chooseBackupDirectory: () => ipcRenderer.invoke('nocturne:backup-directory'),
+  writeBackup: (data, name) => ipcRenderer.invoke('nocturne:backup-write', data, name),
+  readBackup: name => ipcRenderer.invoke('nocturne:backup-read', name),
   openDumpFile: () => ipcRenderer.invoke('nocturne:open-dump-file'),
   saveDumpFile: (data, suggestedName) => {
     if (typeof data !== 'string') return Promise.reject(new Error('Dump data must be a string.'));

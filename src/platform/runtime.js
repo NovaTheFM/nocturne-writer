@@ -10,16 +10,16 @@ export function detectRuntime() {
   const isElectron = !!electronApi?.isNocturneElectron;
   const isCapacitor = !!capacitor?.isNativePlatform?.();
   const isAndroid = platform === 'android' || /Android/i.test(userAgent);
-  const supportsNativeShare = !!navigator.share || !!capacitor?.Plugins?.Share;
+  const supportsNativeShare = !!navigator.share || isCapacitor;
   return {
     isElectron,
     isCapacitor,
     isAndroid,
     isBrowser: !isElectron && !isCapacitor,
     platform: isElectron ? 'electron' : isCapacitor ? platform || 'capacitor' : 'browser',
-    supportsNativeFileDialogs: isElectron || !!capacitor?.Plugins?.Filesystem,
+    supportsNativeFileDialogs: isElectron || isCapacitor,
     supportsNativeShare,
-    supportsFilesystem: isElectron || !!capacitor?.Plugins?.Filesystem,
+    supportsFilesystem: isElectron || isCapacitor,
     hasWebShare: !!navigator.share,
   };
 }

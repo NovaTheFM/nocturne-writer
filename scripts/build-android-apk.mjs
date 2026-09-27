@@ -27,6 +27,7 @@ function run(label, command, options = {}) {
     cwd: options.cwd || root,
     stdio: 'inherit',
     shell: true,
+    windowsHide: true,
     env: options.env || process.env,
   });
 }

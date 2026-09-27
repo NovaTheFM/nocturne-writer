@@ -1,4 +1,7 @@
 export const defaultSettings = {
+  automaticBackups: true,
+  exportIncludeNotes: false,
+  cardView: 'grid',
   theme: 'nocturne',
   accent: '#8B5CF6',
   windowMaterial: false,

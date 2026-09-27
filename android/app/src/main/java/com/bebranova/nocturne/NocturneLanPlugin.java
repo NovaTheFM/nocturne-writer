@@ -6,6 +6,10 @@ import android.net.nsd.NsdServiceInfo;
 import android.net.wifi.WifiManager;
 import android.os.Handler;
 import android.os.Looper;
+import android.print.PrintAttributes;
+import android.print.PrintManager;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -17,6 +21,27 @@ public class NocturneLanPlugin extends Plugin {
     private NsdManager manager;
     private NsdManager.DiscoveryListener listener;
     private WifiManager.MulticastLock multicast;
+    private WebView printView;
+
+    @PluginMethod
+    public void printHtml(PluginCall call) {
+        String html = call.getString("html");
+        if (html == null || html.length() > 40 * 1024 * 1024) { call.reject("Invalid print document."); return; }
+        getActivity().runOnUiThread(() -> {
+            if (printView != null) printView.destroy();
+            printView = new WebView(getActivity());
+            printView.setWebViewClient(new WebViewClient() {
+                @Override
+                public void onPageFinished(WebView view, String url) {
+                    PrintManager printer = (PrintManager) getActivity().getSystemService(Context.PRINT_SERVICE);
+                    String title = call.getString("title", "Nocturne Writer");
+                    printer.print(title, view.createPrintDocumentAdapter(title), new PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).build());
+                    call.resolve();
+                }
+            });
+            printView.loadDataWithBaseURL("http://localhost/", html, "text/html", "UTF-8", null);
+        });
+    }
 
     @PluginMethod
     public void discover(PluginCall call) {
@@ -62,5 +87,5 @@ public class NocturneLanPlugin extends Plugin {
     }
 
     @Override
-    protected void handleOnDestroy() { stopDiscovery(); }
+    protected void handleOnDestroy() { stopDiscovery(); if (printView != null) printView.destroy(); }
 }

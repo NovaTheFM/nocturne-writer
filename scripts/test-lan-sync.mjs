@@ -14,9 +14,14 @@ try {
       const a = window.nocturneApp; await a.createDoc(a.defaultFolderId(), title, '');
       a.nocturneEditor.get('primary').commands.setContent(`<p>${title} manuscript</p>`);
       await a.saveActiveDoc({ silent: true });
-      await a.syncClient.connect({ host: '127.0.0.1', port: '8880', token: 'REGRESSION1234567890', trusted: true });
+      if (a.isMobileLayout()) { a.state.sync.discovery.manualOpen = true; a.openMobilePanel('sync', 'more'); } else a.openSyncPanel();
+      Object.assign(a.state.sync, { host: '127.0.0.1', port: '8880', token: 'REGRESSION1234567890' });
+      const button = document.querySelector('[data-action="sync-connect"]');
+      if (!button) throw new Error('Sync connection UI is missing');
+      button.click();
     }, name);
   }
+  for (const page of [p, m]) await page.waitForFunction(() => window.nocturneApp.syncClient.isOpen(), null, { timeout: 10000 });
   for (const page of [p, m]) {
     await page.waitForFunction(() => window.nocturneApp.state.docs.some(doc => doc.title === 'PC chapter') && window.nocturneApp.state.docs.some(doc => doc.title === 'Phone chapter'), null, { timeout: 8000 });
     assert.equal(await page.evaluate(() => window.nocturneApp.state.docs.length), 2);

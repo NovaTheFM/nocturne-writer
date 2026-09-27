@@ -5,7 +5,7 @@ import subprocess
 import urllib.request
 import zipfile
 
-sdk = Path(os.environ.get('ANDROID_HOME') or Path.home() / 'AppData/Local/Android/Sdk')
+sdk = Path(os.environ.get('ANDROID_HOME') or ('D:/Android/Sdk' if os.name == 'nt' else Path.home() / 'Android/Sdk'))
 tools = sdk / 'cmdline-tools/latest/bin/sdkmanager.bat'
 if not tools.exists():
     archive = Path(__file__).resolve().parents[1] / '.android-sdk-download/commandlinetools.zip'
@@ -27,8 +27,8 @@ if not tools.exists():
 env = dict(os.environ)
 env['JAVA_HOME'] = env.get('JAVA_HOME') or 'C:/Program Files/Java/jdk-21'
 print(f'Installing Android build packages into {sdk}', flush=True)
-subprocess.run([str(tools), f'--sdk_root={sdk}', '--licenses'], input='y\n' * 40, text=True, env=env, check=True)
-subprocess.run([str(tools), f'--sdk_root={sdk}', 'platform-tools', 'platforms;android-36', 'build-tools;36.0.0'], input='y\n' * 40, text=True, env=env, check=True)
+subprocess.run([str(tools), f'--sdk_root={sdk}', '--licenses'], input='y\n' * 40, text=True, env=env, check=True, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+subprocess.run([str(tools), f'--sdk_root={sdk}', 'platform-tools', 'platforms;android-36', 'build-tools;36.0.0'], input='y\n' * 40, text=True, env=env, check=True, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
 android = Path(__file__).resolve().parents[1] / 'android'
 android.mkdir(exist_ok=True)
 (android / 'local.properties').write_text(f'sdk.dir={sdk.as_posix()}\n', encoding='utf-8')

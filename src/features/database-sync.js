@@ -14,7 +14,7 @@ function compareClocks(a = {}, b = {}) {
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical);
   if (!value || typeof value !== 'object') return value;
-  return Object.fromEntries(Object.keys(value).sort().filter(key => !key.startsWith('_') && !['updatedAt', 'renderRevision', 'encrypted', 'locked'].includes(key)).map(key => [key, canonical(value[key])]));
+  return Object.fromEntries(Object.keys(value).sort().filter(key => !key.startsWith('_') && !['updatedAt', 'renderRevision', 'locked'].includes(key)).map(key => [key, canonical(value[key])]));
 }
 async function contentHash(value) {
   const bytes = new TextEncoder().encode(JSON.stringify(canonical(value)));
@@ -35,16 +35,56 @@ function validateRecord(record) {
     }
   };
   walk(record.value);
+  walk(record.members);
+}
+
+const COLLECTIONS = ['characters', 'locations', 'timeline', 'notes', 'rules'];
+function worldEntries(world) {
+  const entries = new Map([['metadata', Object.fromEntries(Object.entries(world).filter(([key]) => !COLLECTIONS.includes(key)))]]);
+  for (const collection of COLLECTIONS) for (const item of world[collection] || []) {
+    if (item?.id) entries.set(`${collection}:${item.id}`, item);
+  }
+  return entries;
+}
+async function memberVersions(world, previous = {}, deviceId) {
+  const members = {}, entries = worldEntries(world);
+  for (const key of new Set([...entries.keys(), ...Object.keys(previous)])) {
+    const value = entries.get(key), deleted = !entries.has(key), hash = await contentHash(value || null), old = previous[key];
+    if (old?.hash === hash && !!old.deleted === deleted) members[key] = old;
+    else members[key] = { hash, deleted, clock: { ...old?.clock, [deviceId]: (old?.clock?.[deviceId] || 0) + 1 } };
+  }
+  return members;
+}
+function reconcileWorld(local, incoming, localValue, remoteValue) {
+  if (!local.members || !incoming.members || localValue?.locked || remoteValue?.locked || !localValue || !remoteValue) return null;
+  const left = worldEntries(localValue), right = worldEntries(remoteValue), members = {}, entries = new Map();
+  for (const key of new Set([...Object.keys(local.members), ...Object.keys(incoming.members)])) {
+    const a = local.members[key], b = incoming.members[key];
+    let chosen, source;
+    if (!a) { chosen = b; source = right; }
+    else if (!b) { chosen = a; source = left; }
+    else if (a.hash === b.hash && !!a.deleted === !!b.deleted) { chosen = { ...a, clock: mergeClocks(a.clock, b.clock) }; source = left; }
+    else {
+      const order = compareClocks(b.clock, a.clock);
+      if (order === 'concurrent' || order === 'equal') return null;
+      chosen = order === 'newer' ? b : a; source = order === 'newer' ? right : left;
+    }
+    members[key] = chosen;
+    if (!chosen.deleted) entries.set(key, source.get(key));
+  }
+  const value = { ...entries.get('metadata') };
+  for (const collection of COLLECTIONS) value[collection] = [...entries].filter(([key]) => key.startsWith(`${collection}:`)).sort(([a], [b]) => a.localeCompare(b)).map(([, item]) => item);
+  return { value, members };
 }
 
 export class DatabaseSync {
   constructor({ db, deviceId, onChange = () => {}, onPending = () => {} }) {
     this.db = db; this.deviceId = deviceId; this.onChange = onChange; this.onPending = onPending;
-    this.work = Promise.resolve(); this.receiving = false;
+    this.work = Promise.resolve(); this.incomingWork = Promise.resolve();
   }
   async start() {
     this.db.onMutation = event => {
-      if (!allowed(event.store, event.id) || this.receiving) return;
+      if (!allowed(event.store, event.id) || event.origin === 'sync') return;
       this.work = this.work.catch(() => {}).then(() => this.recordLocalChange(event));
       this.work.then(() => this.onPending()).catch(error => this.onChange({ error }));
     };
@@ -55,28 +95,33 @@ export class DatabaseSync {
   async recordLocalChange({ store, id, action }) {
     const previous = await this.db.get('syncJournal', keyOf(store, id));
     const decoded = action === 'delete' ? null : await this.db.get(store, id);
+    if (decoded?.locked && previous && !previous.deleted) return;
     const deleted = !decoded;
     const hash = await contentHash(decoded?.locked ? (await this.db.getAllRaw(store)).find(row => row.id === id) : decoded);
     if (previous?.hash === hash && previous.deleted === deleted) return;
     const clock = { ...(previous?.clock || {}) };
     clock[this.deviceId] = (clock[this.deviceId] || 0) + 1;
-    await this.db.put('syncJournal', { id: keyOf(store, id), store, recordId: id, clock, hash, deleted, updatedAt: Date.now() });
+    const members = store === 'lore' && decoded && !decoded.locked ? await memberVersions(decoded, previous?.members, this.deviceId) : undefined;
+    await this.db.put('syncJournal', { id: keyOf(store, id), store, recordId: id, clock, hash, deleted, members, updatedAt: Date.now() });
   }
   async buildState() {
     await this.work;
     const raw = new Map();
     for (const store of STORES) for (const record of await this.db.getAllRaw(store)) raw.set(keyOf(store, record.id), record);
-    const records = (await this.db.getAll('syncJournal')).map(meta => ({ store: meta.store, id: meta.recordId, clock: meta.clock, hash: meta.hash, deleted: meta.deleted, value: meta.deleted ? null : raw.get(meta.id) })).filter(record => record.deleted || record.value);
+    const records = (await this.db.getAll('syncJournal')).map(meta => ({ store: meta.store, id: meta.recordId, clock: meta.clock, hash: meta.hash, members: meta.members, deleted: meta.deleted, value: meta.deleted ? null : raw.get(meta.id) })).filter(record => record.deleted || record.value);
     return { protocol: 2, deviceId: this.deviceId, records };
   }
-  async receiveState(state) {
+  receiveState(state) {
+    this.incomingWork = this.incomingWork.catch(() => {}).then(() => this.reconcileState(state));
+    return this.incomingWork;
+  }
+  async reconcileState(state) {
     if (state?.protocol !== 2 || !safeId(state.deviceId) || !Array.isArray(state.records)) throw new Error('Неподдерживаемое состояние базы.');
     state.records.forEach(validateRecord);
     await this.work;
-    this.receiving = true;
     let received = 0, conflicts = 0;
-    try {
       for (const incoming of state.records) {
+        await this.work;
         const key = keyOf(incoming.store, incoming.id);
         const local = await this.db.get('syncJournal', key);
         const comparison = local ? compareClocks(incoming.clock, local.clock) : 'newer';
@@ -86,6 +131,14 @@ export class DatabaseSync {
         }
         if (comparison === 'older') continue;
         if (comparison === 'concurrent' || (comparison === 'equal' && local)) {
+          if (incoming.store === 'lore' && !incoming.deleted && !local.deleted) {
+            const remoteValue = await this.db.decodeRecord?.('lore', incoming.value) || incoming.value;
+            const merged = reconcileWorld(local, incoming, await this.db.get('lore', incoming.id), remoteValue);
+            if (merged) {
+              await this.applyIncoming({ ...incoming, ...merged, clock: mergeClocks(local.clock, incoming.clock), hash: await contentHash(merged.value) });
+              received++; this.onPending(); continue;
+            }
+          }
           const id = `conflict:${key}:${[local.hash, incoming.hash].sort().map(hash => hash.slice(0, 16)).join(':')}`;
           if (!await this.db.get('syncConflicts', id)) {
             const raw = (await this.db.getAllRaw(incoming.store)).find(record => record.id === incoming.id);
@@ -97,14 +150,18 @@ export class DatabaseSync {
         await this.applyIncoming(incoming);
         received++;
       }
-    } finally { this.receiving = false; }
+    await this.work;
     if (received || conflicts) await this.onChange({ received, conflicts });
     return { received, conflicts };
   }
   async applyIncoming(record) {
-    if (record.deleted) await this.db.delete(record.store, record.id);
-    else await this.db.put(record.store, record.value);
-    await this.db.put('syncJournal', { id: keyOf(record.store, record.id), store: record.store, recordId: record.id, clock: record.clock, hash: record.hash, deleted: !!record.deleted, updatedAt: Date.now() });
+    await this.db.atomicWrite({
+      [record.store]: record.deleted ? [] : [record.value],
+      syncJournal: [{ id: keyOf(record.store, record.id), store: record.store, recordId: record.id, clock: record.clock, hash: record.hash, members: record.members, deleted: !!record.deleted, updatedAt: Date.now() }],
+    }, { origin: 'sync', deletes: record.deleted ? { [record.store]: [record.id] } : {} });
+    for (const conflict of await this.db.getAll('syncConflicts')) {
+      if (conflict.store === record.store && conflict.recordId === record.id && compareClocks(record.clock, mergeClocks(conflict.local?.clock, conflict.remote?.clock)) === 'newer') await this.db.delete('syncConflicts', conflict.id);
+    }
   }
   async resolveConflict(id, choice, mergedValue = null) {
     await this.work;
@@ -114,10 +171,10 @@ export class DatabaseSync {
     const clock = mergeClocks(conflict.local.clock, conflict.remote.clock);
     clock[this.deviceId] = (clock[this.deviceId] || 0) + 1;
     const value = mergedValue || variant.value;
-    const record = { store: conflict.store, id: conflict.recordId, clock, hash: await contentHash(value), deleted: !!variant.deleted, value };
-    this.receiving = true;
-    try { await this.applyIncoming(record); await this.db.delete('syncConflicts', id); }
-    finally { this.receiving = false; }
+    const decoded = await this.db.decodeRecord?.(conflict.store, value) || value;
+    const record = { store: conflict.store, id: conflict.recordId, clock, hash: mergedValue ? await contentHash(value) : variant.hash, deleted: mergedValue ? false : !!variant.deleted, value,
+      members: conflict.store === 'lore' && decoded && !decoded.locked ? await memberVersions(decoded, { ...conflict.local.members, ...conflict.remote.members }, this.deviceId) : undefined };
+    await this.applyIncoming(record); await this.db.delete('syncConflicts', id);
     await this.onChange({ received: 1, conflicts: 0 });
     this.onPending();
   }

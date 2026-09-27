@@ -160,10 +160,6 @@ export class CommandPalette {
       this.runSelected();
       return true;
     }
-    if (event.key === 'Tab') {
-      event.preventDefault();
-      return true;
-    }
     return false;
   }
 
@@ -185,6 +181,17 @@ export class CommandPalette {
     const doc = app.getFocusedDoc?.();
     const timeline = app.state.lore.timeline || [];
     const base = [
+      ...[
+        ['export-book', 'Экспорт книги', 'Выбранные главы в одном DOCX', 'bx-book-open', () => app.openBookExport()],
+        ['open-trash', 'Корзина', 'Восстановить удалённые главы', 'bx-trash', () => app.openTrash()],
+        ['open-backups', 'Резервные копии', 'Копии и восстановление проекта', 'bx-archive', () => app.openBackups()],
+        ['show-history', 'История текста', 'Снимки текущей главы', 'bx-history', () => app.showHistory()],
+        ['open-review-queue', 'Правки всей рукописи', 'Нерешённые пометки во всех главах', 'bx-message-square-edit', () => app.openReviewQueue()],
+        ['open-sync-conflicts', 'Разные версии', 'Сравнить конфликты синхронизации', 'bx-git-compare', () => app.openSyncConflicts()],
+        ['return-to-manuscript', 'Вернуться к рукописи', 'Продолжить с прежней позиции', 'bx-arrow-back', () => app.returnToManuscript()],
+        ['edit-world-rules', 'Правила мира', 'Ограничения для проверки лора', 'bx-list-check', () => app.editWorldRules()],
+        ['toggle-card-view', 'Вид карточек', 'Переключить карточки и компактный список', 'bx-list-ul', () => app.runAction('toggle-card-view')],
+      ].map(([id, title, subtitle, icon, run]) => ({ id, title, subtitle, icon, run, category: 'Работа с проектом', aliases: [title, id] })),
       { id: 'new-doc', title: 'Новая глава', subtitle: 'Создать документ', icon: 'bx-file-plus', category: 'Команды', aliases: ['chapter', 'глава', 'document'], run: () => app.openDocForm(app.defaultFolderId()) },
       { id: 'new-character', title: 'Новый персонаж', subtitle: 'Создать карточку персонажа', icon: 'bx-user-plus', category: 'Команды', aliases: ['character', 'персонаж'], run: () => app.editLore('characters') },
       { id: 'new-location', title: 'Новая локация', subtitle: 'Создать место', icon: 'bx-map-pin', category: 'Команды', aliases: ['location', 'локация'], run: () => app.editLore('locations') },

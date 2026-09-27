@@ -277,6 +277,7 @@ export class LocalSyncClient {
       this.incoming = this.incoming.catch(() => {}).then(async () => {
         const decoded = await decryptJson(message.payload, this.connection.token);
         if (decoded.type !== 'database-state' || decoded.state.deviceId !== message.from) throw new Error('Отправитель сообщения не совпадает.');
+        await this.app.flushOpenDocuments();
         await this.app.databaseSync.receiveState(decoded.state);
         this.send({ type: 'relay-ack', to: message.from, messageId: message.messageId });
       });

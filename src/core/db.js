@@ -76,6 +76,10 @@ export class Database {
     return Promise.all(records.map(record => revealRecord(name, record, this.protection?.().password)));
   }
 
+  decodeRecord(name, record) {
+    return revealRecord(name, record, this.protection?.().password);
+  }
+
   async getAllRaw(name) {
     await this.open();
     return requestToPromise(this.store(name).getAll());
@@ -87,24 +91,24 @@ export class Database {
     return revealRecord(name, record, this.protection?.().password);
   }
 
-  async put(name, value) {
+  async put(name, value, { origin } = {}) {
     await this.open();
     value = await protectRecord(name, value, this.protection?.());
     const tx = this.db.transaction(name, 'readwrite');
     const done = transactionDone(tx);
     const result = await requestToPromise(tx.objectStore(name).put(value));
     await done;
-    this.onMutation?.({ store: name, id: value.id, action: 'put' });
+    this.onMutation?.({ store: name, id: value.id, action: 'put', origin });
     return result;
   }
 
-  async delete(name, id) {
+  async delete(name, id, { origin } = {}) {
     await this.open();
     const tx = this.db.transaction(name, 'readwrite');
     const done = transactionDone(tx);
     const result = await requestToPromise(tx.objectStore(name).delete(id));
     await done;
-    this.onMutation?.({ store: name, id, action: 'delete' });
+    this.onMutation?.({ store: name, id, action: 'delete', origin });
     return result;
   }
 
@@ -117,12 +121,12 @@ export class Database {
     return result;
   }
 
-  async atomicWrite(recordsByStore, { replace = false, raw = false } = {}) {
+  async atomicWrite(recordsByStore, { replace = false, raw = false, origin, deletes = {} } = {}) {
     await this.open();
     const entries = await Promise.all(Object.entries(recordsByStore).map(async ([name, records]) => [
       name, await Promise.all(records.map(record => raw ? record : protectRecord(name, record, this.protection?.())))
     ]));
-    const tx = this.db.transaction(entries.map(([name]) => name), 'readwrite');
+    const tx = this.db.transaction([...new Set([...entries.map(([name]) => name), ...Object.keys(deletes)])], 'readwrite');
     const done = transactionDone(tx);
     try {
       for (const [name, records] of entries) {
@@ -130,9 +134,11 @@ export class Database {
         if (replace) store.clear();
         for (const record of records) store.put(record);
       }
+      for (const [name, ids] of Object.entries(deletes)) for (const id of ids) tx.objectStore(name).delete(id);
     } catch (error) { tx.abort(); await done.catch(() => {}); throw error; }
     await done;
-    for (const [store, records] of entries) for (const record of records) this.onMutation?.({ store, id: record.id, action: 'put' });
+    for (const [store, records] of entries) for (const record of records) this.onMutation?.({ store, id: record.id, action: 'put', origin });
+    for (const [store, ids] of Object.entries(deletes)) for (const id of ids) this.onMutation?.({ store, id, action: 'delete', origin });
   }
 
   async seed() {

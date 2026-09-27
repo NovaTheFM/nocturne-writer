@@ -16,6 +16,7 @@ import {
   stripAnalysisMarkup,
   textFromHtml,
   uid,
+  localDateKey,
 } from './core/utils.js';
 import { encryptJson, decryptJson } from './core/crypto.js';
 import { stripSecrets } from './core/record-protection.js';
@@ -27,6 +28,7 @@ import { CommandPalette } from './features/command-palette.js';
 import { buildAiContext, serializeAiContextSafe } from './features/ai-context.js';
 import { LocalSyncClient, buildHttpBase, SYNC_PROTOCOL_VERSION } from './features/local-sync.js';
 import { DatabaseSync } from './features/database-sync.js';
+import { ProjectBackups } from './features/backups.js';
 import { NocturneEditorBridge } from './editor/nocturne-editor.js';
 import { legacyAstToHtml } from './editor/document-adapter.js';
 import { aiIcon, iconSvg } from './ui/icons.js';
@@ -355,6 +357,8 @@ class NocturneWriter {
     const globalNotes = await this.db.get('settings', 'global-notes');
     this.state.globalNotes = globalNotes?.locked ? '' : (globalNotes?.text ?? this.state.globalNotes);
     const identity = await this.db.get('settings', 'sync-identity');
+    const connection = await this.db.get('settings', 'sync-connection');
+    if (connection?.value) Object.assign(this.state.sync, connection.value);
     if (identity?.deviceId) this.state.sync.deviceId = identity.deviceId;
     else await this.db.put('settings', { id: 'sync-identity', deviceId: this.state.sync.deviceId });
     this.injectCustomFonts();
@@ -388,7 +392,7 @@ class NocturneWriter {
     }
     
     // Load today's stats from DB to prevent resetting to 0 on reload
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = localDateKey();
     this.todayStatsCache = (await this.db.get('stats', todayStr)) || { id: todayStr, words: 0, completed: false };
     
     // Check daily goal streak on startup
@@ -415,6 +419,10 @@ class NocturneWriter {
       onPending: () => this.scheduleDatabaseSync(),
     });
     await this.databaseSync.start();
+    await this.loadRememberedSyncDevices();
+    this.attemptTrustedAutoReconnect().catch(error => console.warn('LAN reconnect:', error.message));
+    await platformFiles.initializeBackupDirectory(this.db);
+    this.backups = new ProjectBackups({ db: this.db, files: platformFiles, buildDump: () => this.buildNocturneDump(), enabled: () => this.state.settings.automaticBackups !== false && (!this.state.settings.e2e || !!this.state.sessionPassword) });
     this.startMobileSystemBar();
     this.applyAndroidSystemBars();
     this.startGitAutosave();
@@ -441,8 +449,11 @@ class NocturneWriter {
     }
     const minutes = Math.max(1, this.state.settings.autosaveMinutes || 3);
     this.gitAutosaveInterval = setInterval(async () => {
-      if (!this.state.settings.gitVersioning) return;
       try {
+        await this.flushOpenDocuments();
+        await this.persistGlobalNotes();
+        await this.backups?.create({ automatic: true });
+        if (!this.state.settings.gitVersioning || !this.runtime.isElectron) return;
         const dump = await this.buildNocturneDump();
         const data = JSON.stringify(dump, null, 2);
         const projectName = dump.projectTitle || 'nocturne-project';
@@ -588,6 +599,9 @@ class NocturneWriter {
     this.state.collapsedFolders = Array.isArray(this.state.collapsedFolders) ? this.state.collapsedFolders.filter((id) => this.state.folders.some((folder) => folder.id === id)) : [];
     this.state.docs = (Array.isArray(this.state.docs) ? this.state.docs : []).filter((doc) => doc?.id);
     this.state.lore = {
+      title: this.state.lore?.title || 'Основное произведение',
+      locked: !!this.state.lore?.locked,
+      rules: Array.isArray(this.state.lore?.rules) ? this.state.lore.rules : [],
       characters: Array.isArray(this.state.lore?.characters) ? this.state.lore.characters : [],
       locations: Array.isArray(this.state.lore?.locations) ? this.state.lore.locations : [],
       timeline: Array.isArray(this.state.lore?.timeline) ? this.state.lore.timeline : [],
@@ -796,6 +810,7 @@ class NocturneWriter {
 
   async loadLore() {
     const lores = await this.db.getAll('lore');
+    this.loreById = new Map(lores.map(world => [world.id, world]));
     if (!lores.some(p => p.id === 'world')) {
       const defaultLore = { id: 'world', title: 'Основное произведение', characters: [], locations: [], timeline: [], notes: [] };
       await this.db.put('lore', defaultLore);
@@ -812,11 +827,13 @@ class NocturneWriter {
       lore = { id: activeId, title: 'Произведение', characters: [], locations: [], timeline: [], notes: [] };
     }
     return {
+      locked: !!lore.locked,
       title: lore.title || (activeId === 'world' ? 'Основное произведение' : 'Произведение'),
       characters: (lore?.characters || []).map((item, index) => this.normalizeCharacter(item, index)),
       locations: (lore?.locations || []).map((item, index) => this.normalizeLocation(item, index)),
       timeline: (lore?.timeline || []).map((item, index) => this.normalizeTimelineEvent(item, index)),
       notes: (lore?.notes || []).map((item, index) => this.normalizeNote(item, index)),
+      rules: (lore?.rules || []).map(rule => typeof rule === 'string' ? { id: uid('rule'), text: rule } : rule),
     };
   }
 
@@ -1790,6 +1807,7 @@ class NocturneWriter {
       <h3>${escapeHtml(title)}</h3>
       <p>${escapeHtml(text)}</p>
       ${action ? `<button class="pill-btn ai-btn" data-action="${action}" ${extraAttrs}>${escapeHtml(actionLabel)}</button>` : ''}
+      ${action === 'new-doc' ? '<div class="empty-project-actions"><button class="pill-btn" data-action="import-doc"><i class="bx bx-import"></i> Импорт текста</button><button class="pill-btn" data-action="import-project-dump"><i class="bx bx-archive-in"></i> Восстановить проект</button></div>' : ''}
     </div>`;
   }
 
@@ -2141,6 +2159,7 @@ class NocturneWriter {
     if (panel === 'ai') return this.renderMobileAi();
     if (panel === 'notes') return this.renderMobileNotes();
     if (panel === 'export') return this.renderMobileExport();
+    if (panel === 'sync') return this.renderMobileSync();
     return '';
   }
 
@@ -2236,6 +2255,11 @@ class NocturneWriter {
 
   renderMobileMorePanel(options = {}) {
     const rows = [
+      ['nocturne-sync', 'Связь с компьютером', 'Сверить главы, заметки и базу по Wi-Fi', 'open-sync-panel'],
+      ['bx-book-open', 'Собрать книгу', 'Выбранные главы в одном DOCX', 'export-book'],
+      ['bx-message-square-edit', 'Все правки', 'Нерешённые пометки во всех главах', 'open-review-queue'],
+      ['bx-archive', 'Резервные копии', 'Копии и восстановление', 'open-backups'],
+      ['bx-trash', 'Корзина', 'Восстановить удалённые главы', 'open-trash'],
       ['bx-cog', 'Настройки', 'Визуал, редактор, AI, данные', 'mobile-open-settings'],
       ['bx-export', 'Экспорт / импорт', '.nocturnedump, PDF, DOCX', 'mobile-open-export'],
       ['bx-search-alt', 'Поиск / замена', 'Найти или заменить текст', 'open-search-chooser'],
@@ -2426,6 +2450,7 @@ class NocturneWriter {
           <button class="pill-btn" data-action="mobile-open-ai-settings"><i class="bx bx-cog"></i> Настройки AI</button>
         </section>
         <div class="ai-output mobile-ai-output">${escapeHtml(this.assistantPanelMessage || 'Готов к работе.')}</div>
+        <button class="pill-btn ai-stop-button" data-action="cancel-ai" ${this.activeAiRequest ? '' : 'hidden'}><i class="bx bx-stop-circle"></i> Остановить запрос</button>
       </div>`;
   }
 
@@ -3018,6 +3043,7 @@ class NocturneWriter {
           </div>
           <div class="docs-container" id="docs-container"></div>
           <div class="sidebar-footer">
+            <div class="library-tools"><button class="btn-icon" data-action="export-book" title="Экспорт книги" aria-label="Экспорт книги"><i class="bx bx-book-open"></i></button><button class="btn-icon" data-action="open-review-queue" title="Все правки" aria-label="Все правки"><i class="bx bx-message-square-edit"></i></button><button class="btn-icon" data-action="open-trash" title="Корзина" aria-label="Корзина"><i class="bx bx-trash"></i></button><button class="btn-icon" data-action="open-backups" title="Резервные копии" aria-label="Резервные копии"><i class="bx bx-archive"></i></button></div>
             <div class="goal-label"><span>Цель дня</span><span id="goal-count">0 / 0</span></div>
             <div class="goal-track"><div class="goal-fill" id="goal-fill"></div></div>
           </div>
@@ -3104,6 +3130,7 @@ class NocturneWriter {
                 <button class="pill-btn" data-action="preview-ai-context"><i class="bx bx-show"></i> Предпросмотр контекста</button>
               </section>
               <div class="ai-output" id="ai-output">Готов к работе.</div>
+              <button class="pill-btn ai-stop-button" data-action="cancel-ai" hidden><i class="bx bx-stop-circle"></i> Остановить запрос</button>
               <canvas class="sentiment-graph" id="sentiment-graph" width="320" height="52"></canvas>
             </div>
           </aside>
@@ -3358,6 +3385,7 @@ class NocturneWriter {
   switchMobileTab(tab = 'write', options = {}) {
     const valid = ['write', 'docs', 'lore', 'ai', 'more'];
     if (!valid.includes(tab)) return;
+    if (tab === 'lore') this.captureManuscriptPosition();
     const current = this.state.mobile.activeTab || 'write';
     const order = new Map(valid.map((item, index) => [item, index]));
     this.state.mobile.previousTab = current;
@@ -3627,8 +3655,13 @@ class NocturneWriter {
         if (canGoBack) window.history.back(); else this.openExitSheet();
       },
       onSuspend: () => this.flushOpenDocuments(),
-      onResume: () => { this.trySyncAutoReconnect(); this.sendSyncProjectState(); },
+      onResume: () => { this.attemptTrustedAutoReconnect(); this.sendSyncProjectState(); },
     });
+  }
+
+  persistSyncConnection() {
+    const { host, port, token, deviceName } = this.state.sync;
+    return this.db.put('settings', { id: 'sync-connection', value: { host, port, token, deviceName } });
   }
 
   async flushOpenDocuments() {
@@ -4336,7 +4369,7 @@ class NocturneWriter {
     if ((this.state.mobile.notesMode || this.state.noteMode) === 'global') {
       this.state.globalNotes = result;
       if (this.state.settings.e2e) safeRemoveStorageItem(localStorage, 'nocturne-global-notes');
-      else safeSetStorageItem(localStorage, 'nocturne-global-notes', result);
+      else this.persistGlobalNotes();
     } else {
       const doc = this.getFocusedDoc();
       if (!doc) {
@@ -5475,7 +5508,7 @@ class NocturneWriter {
       const mode = this.state.mobile.notesMode || this.state.noteMode;
       if (mode === 'global') {
         this.state.globalNotes = event.target.value;
-        if (!this.state.settings.e2e) safeSetStorageItem(localStorage, 'nocturne-global-notes', this.state.globalNotes);
+        this.persistGlobalNotes();
       } else {
         const doc = this.getFocusedDoc();
         if (doc) {
@@ -5489,10 +5522,7 @@ class NocturneWriter {
     if (event.target.matches('[data-sync-field]')) {
       const key = event.target.dataset.syncField;
       this.state.sync[key] = event.target.value;
-      if (key === 'deviceName') safeSetStorageItem(localStorage, 'nocturne-sync-device-name', event.target.value);
-      if (key === 'host') safeSetStorageItem(localStorage, 'nocturne-sync-host', event.target.value);
-      if (key === 'port') safeSetStorageItem(localStorage, 'nocturne-sync-port', event.target.value);
-      if (key === 'token') safeSetStorageItem(localStorage, 'nocturne-sync-token', event.target.value);
+      this.persistSyncConnection();
     }
     const floatingEditable = event.target.closest?.('[data-floating-field]');
     if (floatingEditable) this.handleFloatingNoteInput(floatingEditable);
@@ -7722,6 +7752,7 @@ class NocturneWriter {
         this.state.activeLoreDetail = null;
         this.state.kbReadMode = false;
         document.getElementById('kb-modal').classList.remove('active');
+        this.returnToManuscript();
       },
       'new-kb-project': () => {
         const overlay = document.getElementById('form-overlay');
@@ -7879,6 +7910,35 @@ class NocturneWriter {
         document.getElementById('cleaner-overlay')?.classList.remove('active');
       },
       'manual-snapshot': () => this.createSnapshot(true),
+      'open-sync-panel': () => this.isMobileLayout() ? this.openMobilePanel('sync', 'more') : this.openSyncPanel(),
+      'sync-connect': () => this.connectLocalSyncFromUi(),
+      'sync-disconnect': () => this.disconnectLocalSync(),
+      'sync-request-merge': () => this.requestSyncMerge(),
+      'sync-scan': () => this.scanForSyncServers(),
+      'sync-cancel-scan': () => this.cancelSyncDiscoveryScan(),
+      'sync-scan-cancel': () => this.cancelSyncDiscoveryScan(),
+      'sync-toggle-manual': () => { this.state.sync.discovery.manualOpen = !this.state.sync.discovery.manualOpen; this.renderSyncSurfaces(); },
+      'sync-connect-device': () => this.connectDiscoveredSyncDevice(event.target.closest('[data-sync-device-id]')?.dataset.syncDeviceId),
+      'sync-forget-device': () => this.forgetSyncDevice(event.target.closest('[data-sync-device-id]')?.dataset.syncDeviceId),
+      'sync-toggle-autoreconnect': () => this.toggleSyncAutoReconnect(event.target.closest('[data-sync-device-id]')?.dataset.syncDeviceId),
+      'sync-server-start': () => this.controlLanServer('start'),
+      'sync-server-stop': () => this.controlLanServer('stop'),
+      'sync-server-check': () => this.controlLanServer('status'),
+      'sync-server-refresh-token': () => this.controlLanServer('refresh-token'),
+      'sync-copy-info': () => this.copyLanConnectionInfo(),
+      'sync-clear-preview': () => { this.state.sync.mergePreview = null; this.renderSyncSurfaces(); },
+      'sync-apply-merge': () => this.applySyncMergePreview(),
+      'open-trash': () => this.openTrash(),
+      'export-book': () => this.openBookExport(),
+      'open-review-queue': () => this.openReviewQueue(),
+      'return-to-manuscript': () => this.returnToManuscript(),
+      'cancel-ai': () => { if (this.activeAiRequest) { this.activeAiRequest.userCancelled = true; this.activeAiRequest.controller.abort(); } },
+      'open-sync-conflicts': () => this.openSyncConflicts(),
+      'open-backups': () => this.openBackups(),
+      'backup-now': async () => { try { const copy = await this.backups.create(); this.toast(copy.external ? 'Копия сохранена в отдельную папку.' : 'Копия сохранена в этом браузере. Для защиты от очистки браузера подключите папку.'); } catch (error) { this.toast(`Не удалось создать копию: ${error.message}`); } },
+      'choose-backup-directory': async () => { try { const result = await platformFiles.chooseBackupDirectory(this.db); if (result) this.toast(`Папка копий: ${result.path}`); } catch (error) { if (error.name !== 'AbortError') this.toast(error.message); } },
+      'toggle-card-view': () => { this.state.settings.cardView = this.state.settings.cardView === 'list' ? 'grid' : 'list'; this.applySettings(); this.persistSettings(); },
+      'edit-world-rules': () => this.editWorldRules(),
       'export-html': () => this.exportPrintable(),
       'export-docx': () => this.exportDocx(),
       'export-project-dump': () => this.openProjectExportModal(),
@@ -8869,6 +8929,7 @@ class NocturneWriter {
         <div class="form-grid">
           <label><span class="doc-title-label">Название</span> <input class="form-control" name="title" value="Новый документ" required></label>
           <label>Описание документа <textarea class="form-control" name="description" placeholder="Кратко: что происходит в этой главе, зачем она нужна, какой тон сцены."></textarea></label>
+          <label>База знаний произведения<select class="form-control" name="loreId">${this.state.kbProjects.map(project => `<option value="${escapeHtml(project.id)}" ${project.id === this.state.activeLoreId ? 'selected' : ''}>${escapeHtml(project.title)}</option>`).join('')}</select></label>
         </div>
 
         <div class="book-chapter-fields-wrapper">
@@ -9035,7 +9096,8 @@ class NocturneWriter {
       createdAt: Date.now(),
       updatedAt: Date.now(),
       ast: { type: 'doc', blocks: [{ id: uid('block'), type: 'heading', html: escapeHtml(title) }, { id: uid('block'), type: 'paragraph', html: '<br>' }] },
-      docType
+      docType,
+      loreId: payload?.loreId || this.state.activeLoreId || 'world',
     };
 
     if (doc.docType === 'book-chapter') {
@@ -9265,10 +9327,10 @@ class NocturneWriter {
 
   async extractTextFromPdf(file) {
     try {
-      const pdfjsLib = await import('https://unpkg.com/pdfjs-dist@4.3.136/build/pdf.min.mjs');
-      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@4.3.136/build/pdf.worker.min.mjs';
+      const pdfjsLib = await import('./vendor/pdfjs/pdf.min.mjs');
+      pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.min.mjs', import.meta.url).href;
       const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer, cMapUrl: new URL('./vendor/pdfjs/cmaps/', import.meta.url).href, cMapPacked: true, standardFontDataUrl: new URL('./vendor/pdfjs/standard_fonts/', import.meta.url).href, wasmUrl: new URL('./vendor/pdfjs/wasm/', import.meta.url).href }).promise;
       const pages = [];
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
@@ -9351,17 +9413,26 @@ class NocturneWriter {
       if (!docXmlFile) throw new Error('Не найден файл word/document.xml внутри DOCX архива.');
       const xml = await docXmlFile.async('string');
       const doc = new DOMParser().parseFromString(xml, 'application/xml');
+      if (doc.querySelector('parsererror')) throw new Error('Повреждена XML-структура DOCX.');
       const paragraphs = [...doc.getElementsByTagName('w:p')];
       const blocks = paragraphs.map((p) => {
         const style = p.getElementsByTagName('w:pStyle')[0]?.getAttribute('w:val') || '';
-        const text = [...p.getElementsByTagName('w:t')].map((node) => node.textContent || '').join('');
+        const html = [...p.getElementsByTagName('w:r')].map(run => {
+          let value = [...run.childNodes].map(node => node.nodeName === 'w:t' ? escapeHtml(node.textContent || '') : node.nodeName === 'w:br' || node.nodeName === 'w:cr' ? '<br>' : node.nodeName === 'w:tab' ? '&emsp;' : '').join('');
+          const props = run.getElementsByTagName('w:rPr')[0];
+          if (props) for (const [key, tag] of [['b', 'strong'], ['i', 'em'], ['u', 'u'], ['strike', 's']]) {
+            const mark = props.getElementsByTagName(`w:${key}`)[0];
+            if (mark && !['0', 'false', 'none'].includes(mark.getAttribute('w:val'))) value = `<${tag}>${value}</${tag}>`;
+          }
+          return value;
+        }).join('');
         const type = /^Heading[123]$/i.test(style) || style === 'Subtitle' ? 'heading' : style === 'Quote' ? 'quote' : 'paragraph';
-        return { id: uid('block'), type, align: 'left', html: escapeHtml(text.trim()) || '<br>' };
+        const alignment = p.getElementsByTagName('w:jc')[0]?.getAttribute('w:val') || 'left';
+        return { id: uid('block'), type, level: Number(style.match(/[123]$/)?.[0] || 2), align: alignment === 'both' ? 'justify' : ['left', 'center', 'right'].includes(alignment) ? alignment : 'left', html: html || '<br>' };
       }).filter((block) => block && (block.html !== '<br>' || block.type !== 'heading'));
       return blocks.length ? blocks : [{ id: uid('block'), type: 'paragraph', align: 'left', html: '<br>' }];
     } catch (error) {
-      this.toast(`DOCX импорт не удался: ${error.message}`);
-      return [{ id: uid('block'), type: 'paragraph', align: 'left', html: '<br>' }];
+      throw new Error(`DOCX импорт не удался: ${error.message}`);
     }
   }
 
@@ -9563,7 +9634,16 @@ class NocturneWriter {
   async deleteDoc(id, localOnly = false) {
     const doc = this.state.docs.find((item) => item.id === id);
     if (!doc) return;
+    this.deletedDocIds ||= new Set(); this.deletedDocIds.add(id);
+    await this.docSaves?.get(id);
+    this.nocturneEditor.syncDocFromEditorByDocId(doc.id);
+    await this.draftWrites.get(doc.id);
+    const history = (await this.db.getAll('snapshots')).filter(snapshot => snapshot.docId === doc.id);
+    const marks = this.state.reviewMarks.filter(mark => mark.docId === doc.id);
+    const notes = this.state.floatingNotes.filter(note => note.scope === 'document' && note.linkedId === doc.id);
+    await this.db.put('trash', { id: uid('trash'), type: 'document', title: doc.title, deletedAt: Date.now(), doc: structuredClone(doc), snapshots: history, reviewMarks: structuredClone(marks), floatingNotes: structuredClone(notes) });
     await this.db.delete('docs', doc.id);
+    await this.db.delete('drafts', doc.id);
     await this.deleteFloatingNotesForLink('document', doc.id);
     const docMarks = this.state.reviewMarks.filter((mark) => mark.docId === doc.id);
     await Promise.all(docMarks.map((mark) => this.db.delete('reviewMarks', mark.id)));
@@ -9609,6 +9689,38 @@ class NocturneWriter {
     this.renderFloatingNotesModal();
   }
 
+  async restoreTrashItem(id) {
+    const item = await this.db.get('trash', id);
+    if (!item || item.locked) throw new Error('Введите мастер-пароль для восстановления.');
+    if (item.type === 'document') {
+      const doc = structuredClone(item.doc);
+      if (this.state.docs.some(existing => existing.id === doc.id)) doc.id = uid('doc');
+      doc.folderId = this.state.folders.some(folder => folder.id === doc.folderId) ? doc.folderId : this.defaultFolderId();
+      doc.updatedAt = Date.now();
+      this.deletedDocIds?.delete(doc.id);
+      await this.db.atomicWrite({ docs: [doc], snapshots: (item.snapshots || []).map(snapshot => ({ ...snapshot, docId: doc.id })), reviewMarks: (item.reviewMarks || []).map(mark => ({ ...mark, docId: doc.id })), floatingNotes: (item.floatingNotes || []).map(note => ({ ...note, linkedId: doc.id })) });
+      this.state.docs.push(doc);
+      await this.loadReviewMarks(); await this.loadFloatingNotes();
+      this.selectDoc(doc.id);
+    }
+    await this.db.delete('trash', id);
+    this.renderDocs();
+    this.toast('Документ восстановлен вместе с заметками и историей.');
+  }
+
+  async openTrash() {
+    const items = (await this.db.getAll('trash')).sort((a, b) => b.deletedAt - a.deletedAt);
+    const overlay = document.getElementById('form-overlay');
+    overlay.innerHTML = `<div class="form-modal utility-modal"><div class="modal-head-row"><div><h2>Корзина</h2><p>Удалённые документы, заметки и история остаются здесь до окончательного удаления.</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div><div class="utility-list">${items.length ? items.map(item => `<div class="utility-row"><i class="bx bx-file"></i><div><strong>${escapeHtml(item.title || 'Зашифрованный документ')}</strong><small>${new Date(item.deletedAt || item.createdAt || 0).toLocaleDateString()}</small></div><button class="pill-btn" data-trash-restore="${escapeHtml(item.id)}" ${item.locked ? 'disabled' : ''}>Восстановить</button><button class="btn-icon" data-trash-delete="${escapeHtml(item.id)}" aria-label="Удалить навсегда"><i class="bx bx-trash"></i></button></div>`).join('') : '<div class="utility-empty"><i class="bx bx-trash"></i><p>Корзина пуста</p></div>'}</div></div>`;
+    overlay.classList.add('active');
+    overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
+    overlay.querySelectorAll('[data-trash-restore]').forEach(button => button.onclick = async () => { await this.restoreTrashItem(button.dataset.trashRestore); await this.openTrash(); });
+    overlay.querySelectorAll('[data-trash-delete]').forEach(button => button.onclick = async () => {
+      if (!await this.confirmDialog({ title: 'Удалить навсегда?', message: 'Документ и его история будут удалены из корзины.', confirmText: 'Удалить навсегда' })) return this.openTrash();
+      await this.db.delete('trash', button.dataset.trashDelete); await this.openTrash();
+    });
+  }
+
   pinDoc(id) {
     const doc = this.state.docs.find((d) => d.id === id);
     if (!doc) return;
@@ -9635,6 +9747,7 @@ class NocturneWriter {
         <div class="form-grid">
           <label><span class="doc-title-label">${isBook ? 'Название главы' : 'Название'}</span> <input class="form-control" name="title" value="${escapeHtml(doc.title)}" required></label>
           <label>Описание <textarea class="form-control" name="description">${escapeHtml(doc.description || '')}</textarea></label>
+          <label>База знаний произведения<select class="form-control" name="loreId">${this.state.kbProjects.map(project => `<option value="${escapeHtml(project.id)}" ${project.id === (doc.loreId || 'world') ? 'selected' : ''}>${escapeHtml(project.title)}</option>`).join('')}</select></label>
         </div>
 
         <div class="book-chapter-fields-wrapper ${isBook ? 'open' : ''}">
@@ -9714,6 +9827,7 @@ class NocturneWriter {
       doc.docType = data.docType || 'document';
       doc.title = data.title.trim() || doc.title;
       doc.description = data.description.trim();
+      doc.loreId = data.loreId || doc.loreId || 'world';
       
       if (doc.docType === 'book-chapter') {
         doc.workTitle = data.workTitle?.trim() || '';
@@ -10813,10 +10927,25 @@ class NocturneWriter {
     const active = this.getCaretSnapshot();
     const tokenLookup = this.getEffectiveTypoLookup();
     const phraseRules = this.getEffectiveTypoPhraseRules();
+    const signature = JSON.stringify([tokenLookup, phraseRules, [...protectedLexicon], this.state.settings.smartDictionary, this.state.settings.smartDictionaryMode, [...(this.spellerCache || new Map())]]);
+    this.typoBlockCache ||= new WeakMap();
     const typoRanges = [];
     const smartRanges = [];
 
     document.querySelectorAll('.page-content p, .page-content blockquote, .page-content h2').forEach((block) => {
+      const isActive = active?.blockId === (block.dataset.sourceBlockId || block.dataset.blockId);
+      const markup = block.innerHTML, cached = this.typoBlockCache.get(block);
+      if (!isActive && !cached?.wasActive && cached?.signature === signature && cached.markup === markup && cached.ranges.every(([, item]) => item.range.startContainer.isConnected && block.contains(item.range.startContainer))) {
+        typoRanges.push(...cached.typoRanges); smartRanges.push(...cached.smartRanges);
+        for (const item of cached.matches) {
+          this.typoMatchIndex.push(item);
+          if (!this.typoMatchByBlock.has(item.blockId)) this.typoMatchByBlock.set(item.blockId, []);
+          this.typoMatchByBlock.get(item.blockId).push(item);
+        }
+        for (const [key, range] of cached.ranges) this._typoHighlightRangesMap.set(key, range);
+        return;
+      }
+      const previousTypos = typoRanges.length, previousSmart = smartRanges.length, previousMatches = this.typoMatchIndex.length;
       const { textNodes, fullText } = this.textNodesForHighlightBlock(block);
       if (!fullText.trim()) return;
       const occupied = [];
@@ -10883,6 +11012,7 @@ class NocturneWriter {
       if (this.state.settings.smartDictionary) {
         this.collectSmartTypoMatches({ block, textNodes, fullText, occupied, protectedLexicon, tokenLookup, active, docId, paneId, fragmentBase, smartRanges });
       }
+      this.typoBlockCache.set(block, { signature, markup, wasActive: isActive, typoRanges: typoRanges.slice(previousTypos), smartRanges: smartRanges.slice(previousSmart), matches: this.typoMatchIndex.slice(previousMatches), ranges: [...this._typoHighlightRangesMap].filter(([, item]) => item.range.startContainer.isConnected && block.contains(item.range.startContainer)) });
     });
 
     if (typoRanges.length) {
@@ -13539,6 +13669,7 @@ class NocturneWriter {
   }
 
   writeLiveDraft(docId = this.getFocusedDoc()?.id || this.state.activeDocId) {
+    if (this.deletedDocIds?.has(docId)) return;
     this.nocturneEditor?.syncDocFromEditorByDocId(docId);
     const doc = this.state.docs.find((item) => item.id === docId);
     if (!doc || doc.locked || !this.state.settings.liveSave) return;
@@ -13601,7 +13732,18 @@ class NocturneWriter {
     this.saveDocDebouncers.get(docId)();
   }
 
-  async saveDocById(docId, options = {}) {
+  saveDocById(docId, options = {}) {
+    if (this.deletedDocIds?.has(docId)) return Promise.resolve(false);
+    this.nocturneEditor.syncDocFromEditorByDocId(docId);
+    this.docSaves ||= new Map();
+    const previous = this.docSaves.get(docId) || Promise.resolve();
+    const save = previous.catch(() => {}).then(() => this.commitDocById(docId, options));
+    this.docSaves.set(docId, save);
+    return save;
+  }
+
+  async commitDocById(docId, options = {}) {
+    if (this.deletedDocIds?.has(docId)) return false;
     this.nocturneEditor?.syncDocFromEditorByDocId(docId);
     const doc = this.state.docs.find((item) => item.id === docId);
     if (!doc || doc.locked) return;
@@ -14291,7 +14433,7 @@ class NocturneWriter {
     if (this.state.noteMode === 'global') {
       this.state.globalNotes = result;
       if (this.state.settings.e2e) safeRemoveStorageItem(localStorage, 'nocturne-global-notes');
-      else safeSetStorageItem(localStorage, 'nocturne-global-notes', result);
+      else this.persistGlobalNotes();
     } else {
       const doc = this.activeDoc;
       if (!doc) return;
@@ -14353,8 +14495,8 @@ class NocturneWriter {
                   <div class="smart-dictionary-field" style="flex:1.2; min-width:230px;">
                     <span class="smart-dictionary-label">Режим:</span>
                     ${this.renderSettingsSelect('smartDictionaryMode', [
-                      ['local', 'Только Оффлайн (Hunspell)'],
-                      ['hybrid', 'Гибридный (Hunspell + API)'],
+                      ['local', 'Офлайн: словарь и правила'],
+                      ['hybrid', 'Словарь и LanguageTool'],
                       ['api', 'Только Онлайн (LanguageTool API)']
                     ])}
                   </div>
@@ -14374,7 +14516,7 @@ class NocturneWriter {
                   <div class="smart-dictionary-notice notice-success ${this.state.settings.smartDictionaryMode === 'local' ? 'active' : ''}">
                     <i class="bx bx-shield-check"></i>
                     <div>
-                      <strong>100% Локальный режим:</strong> Проверки выполняются прямо на устройстве через Hunspell. Данные не передаются в сеть.
+                      <strong>100% Локальный режим:</strong> Применяет встроенные правила и ваш словарь на устройстве. Данные не передаются в сеть.
                     </div>
                   </div>
                   <div class="smart-dictionary-notice notice-info ${this.state.settings.smartDictionaryMode !== 'local' ? 'active' : ''}">
@@ -15152,9 +15294,8 @@ class NocturneWriter {
   }
 
   renderGoal() {
-    const today = new Date().toISOString().slice(0, 10);
-    const cached = this.todayStatsCache?.id === today ? this.todayStatsCache.words : 0;
-    const words = cached || Number(this.todayStatsCache?.words || 0);
+    const today = localDateKey();
+    const words = this.todayStatsCache?.id === today ? Number(this.todayStatsCache.words || 0) : 0;
     const goal = Number(this.state.settings.dailyGoal) || 1;
     const countEl = document.getElementById('goal-count');
     const fillEl = document.getElementById('goal-fill');
@@ -15176,7 +15317,7 @@ class NocturneWriter {
 
   async updateTodayStatsForDoc(docId) {
     if (!docId) return;
-    const id = new Date().toISOString().slice(0, 10);
+    const id = localDateKey();
     const doc = this.state.docs.find((item) => item.id === docId);
     if (!doc) return;
     
@@ -18073,6 +18214,7 @@ class NocturneWriter {
   }
 
   openKb(tab) {
+    this.captureManuscriptPosition();
     this.state.activeKbTab = tab;
     this.state.activeLoreDetail = null;
     if (tab !== 'timeline') this.state.activeSubtimelineId = null;
@@ -18725,7 +18867,7 @@ class NocturneWriter {
   }
 
   async saveLore() {
-    if (this.state.settings.e2e && !this.state.sessionPassword) return;
+    if (this.state.lore.locked || (this.state.settings.e2e && !this.state.sessionPassword)) return;
     this.state.lore.characters = (this.state.lore.characters || []).map((item, index) => this.normalizeCharacter(item, index));
     this.state.lore.locations = (this.state.lore.locations || []).map((item, index) => this.normalizeLocation(item, index));
     this.state.lore.timeline = (this.state.lore.timeline || []).map((item, index) => this.normalizeTimelineEvent(item, index));
@@ -18743,6 +18885,7 @@ class NocturneWriter {
 
     if (this.state.activeSubtimelineId && !this.timelineEvent(this.state.activeSubtimelineId)) this.state.activeSubtimelineId = null;
     const activeId = this.state.activeLoreId || 'world';
+    this.loreById?.set(activeId, structuredClone(this.state.lore));
     await this.db.put('lore', { id: activeId, title: this.state.lore.title || 'Основное произведение', ...this.state.lore });
     this.updateTypoHighlightsDebounced();
   }
@@ -19107,10 +19250,14 @@ class NocturneWriter {
         </div>`,
       data: `
         <div class="tab-content active">
-          ${row('Живое сохранение', 'Каждое изменение мгновенно попадает в localStorage, а затем в IndexedDB. Это защищает последнюю фразу при сбое питания.', toggle('liveSave'))}
+          ${row('Живое сохранение', 'Сохраняет черновик после каждого изменения в локальную базу. При перезапуске восстанавливает последнюю сохранённую фразу.', toggle('liveSave'))}
           ${row('Интервал автосохранения', 'Как часто фоновый autosave подтверждает состояние документов в локальной базе.', range('autosaveMinutes', 1, 15, 1, ' мин'))}
-          ${row('Снапшоты / Машина времени', 'Снапшоты теперь создаются только вручную кнопкой камеры или кнопкой ниже.', `${toggle('timeMachine')}<button class="pill-btn ai-btn" data-action="manual-snapshot"><i class="bx bx-camera"></i> Снапшот</button><button class="pill-btn" data-action="show-history">История</button>`)}
-          ${row('Невидимое Git-версионирование', 'В веб-сборке работает как адаптер-состояние; в Tauri/Electron подключается simple-git.', toggle('gitVersioning'))}
+          ${row('История текста', 'Создайте снимок перед большой правкой. Восстановление возвращает текст и заметки.', `<button class="pill-btn ai-btn" data-action="manual-snapshot"><i class="bx bx-camera"></i> Создать снимок</button><button class="pill-btn" data-action="show-history">История</button>`)}
+          ${row('Резервные копии', 'Последние 20 копий. В приложении сохраняются в отдельную папку; в браузере папку нужно подключить.', `<button class="pill-btn" data-action="open-backups">Копии и восстановление</button>`)}
+          ${row('Автоматические копии', 'Создаёт копию проекта с интервалом автосохранения.', toggle('automaticBackups'))}
+          ${row('Корзина', 'Удалённые главы можно восстановить вместе с их заметками и историей.', `<button class="pill-btn" data-action="open-trash">Открыть корзину</button>`)}
+          ${row('Конфликты синхронизации', 'Сравните версии после одновременной работы на ПК и телефоне.', `<button class="pill-btn" data-action="open-sync-conflicts">Сравнить версии</button>`)}
+          ${this.runtime.isElectron ? row('История в Git', 'Дополнительно сохраняет версии проекта на этом компьютере.', toggle('gitVersioning')) : ''}
           ${row('Сквозное шифрование', 'AES-GCM для содержимого документов перед записью в IndexedDB.', toggle('e2e'))}
           ${row('Мастер-пароль сессии', 'Используется для расшифровки в текущей сессии и не отправляется наружу.', `<input class="form-control" type="password" id="session-password" value="${escapeHtml(this.state.sessionPassword)}"><button class="pill-btn" data-action="save-password">Применить</button>`)}
           ${row('Сбросить настройки', 'Возвращает все настройки интерфейса, текста, ИИ и экспорта к базовым значениям. Документы не удаляются.', `<button class="pill-btn" data-action="reset-settings">Сбросить настройки</button>`)}
@@ -19422,6 +19569,7 @@ class NocturneWriter {
       <div class="tab-content active export-settings">
         <p class="settings-tab-desc" style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px; line-height: 1.5;">Соберите рукопись для чтения, печати или обмена с редактором (поддерживаются форматы PDF, DOCX, .NOCTURNED).</p>
         <section class="export-format-grid">
+          <article class="export-format-card"><i class="bx bx-book-open"></i><h4>Книга целиком</h4><p>Выберите главы и соберите один DOCX в порядке томов и глав.</p><div class="export-card-action"><button class="pill-btn ai-btn" data-action="export-book">Выбрать главы</button></div></article>
           <article class="export-format-card">
             <i class="bx bxs-file-pdf"></i>
             <h4>PDF для чтения и печати</h4>
@@ -19454,6 +19602,7 @@ class NocturneWriter {
           <div class="setting-group-title">Метаданные</div>
           ${row('Имя автора', 'Попадает в метаданные DOCX и используется в водяном знаке PDF.', input('authorName'))}
           ${row('Водяной знак PDF', 'Добавляет полупрозрачную подпись автора и дату в печатный PDF-макет.', toggle('watermark'))}
+          ${row('Заметки в DOCX', 'По умолчанию личные заметки остаются в проекте. Включите, чтобы добавить их к экспорту текущей главы.', toggle('exportIncludeNotes'))}
         </section>
       </div>`;
   }
@@ -19918,11 +20067,12 @@ class NocturneWriter {
         if (!this.state.sessionPassword) {
           this.promptForMasterPassword();
         } else {
-          this.migrateEncryption().catch(error => this.toast(error.message));
+          this.migrateEncryption().then(() => this.persistSettings()).catch(error => { this.state.settings.e2e = false; this.renderSettings(); this.toast(error.message); });
         }
       } else {
-        this.disableE2eAndDecryptAll();
+        this.disableE2eAndDecryptAll().catch(error => { this.state.settings.e2e = true; this.renderSettings(); this.toast(error.message); });
       }
+      return;
     }
     if (key === 'aiProvider') this.applyProviderPreset();
     if (key === 'gitVersioning' || key === 'autosaveMinutes') this.startGitAutosave();
@@ -20131,6 +20281,7 @@ class NocturneWriter {
   applySettings() {
     const s = this.state.settings;
     const root = document.documentElement;
+    root.dataset.cardView = s.cardView === 'list' ? 'list' : 'grid';
     const rgb = hexToRgb(s.accent);
     root.style.setProperty('--accent', s.accent);
     root.style.setProperty('--accent-hover', `rgb(${Math.min(255, rgb.r + 28)}, ${Math.min(255, rgb.g + 28)}, ${Math.min(255, rgb.b + 28)})`);
@@ -20264,7 +20415,7 @@ class NocturneWriter {
     if (!doc || !this.state.settings.aiKnowledgeContext) return null;
     const folder = this.state.folders.find((item) => item.id === doc.folderId);
     const context = buildAiContext({
-      state: this.state,
+      state: { ...this.state, lore: doc.loreId && doc.loreId !== this.state.activeLoreId ? (this.loreById?.get(doc.loreId) || {}) : this.state.lore },
       doc,
       target,
       folder,
@@ -20399,8 +20550,9 @@ class NocturneWriter {
       if (!parsed.writing?.text && !Array.isArray(parsed.review) && !parsed.thinking) throw new Error('Модель вернула ответ в неожиданном формате.');
     } catch (error) {
       this.clearSuggestion();
-      const message = error.name === 'AbortError' ? 'Запрос к ИИ слишком долго не отвечал.' : error.message || 'Ассистент не смог выполнить запрос.';
-      this.setAssistantOutput(message, 'error');
+      const cancelled = this.activeAiRequest?.userCancelled;
+      const message = error.name === 'AbortError' ? cancelled ? 'Запрос остановлен. Текст сохранён без изменений.' : 'Запрос к ИИ слишком долго не отвечал.' : error.message || 'Ассистент не смог выполнить запрос.';
+      this.setAssistantOutput(message, cancelled ? 'idle' : 'error');
       this.toast(message);
     } finally {
       if (this.activeAiRequest?.timeoutId) window.clearTimeout(this.activeAiRequest.timeoutId);
@@ -21149,6 +21301,9 @@ ${raw}`;
     const docMessage = this.assistantDocumentProblem();
     const providerMessage = this.assistantProviderProblem();
     const busy = !!this.activeAiRequest;
+    for (const button of document.querySelectorAll('[data-action="cancel-ai"]')) button.hidden = !busy;
+    const mobileOutput = document.querySelector('.mobile-ai-output');
+    if (mobileOutput) { mobileOutput.dataset.tone = busy ? 'busy' : this.assistantState; mobileOutput.textContent = this.assistantPanelMessage || this.assistantBusyMessage(); }
     document.querySelectorAll('.ai-card').forEach((card) => {
       const disabled = !!docMessage || busy;
       card.toggleAttribute('disabled', disabled);
@@ -22368,7 +22523,7 @@ ${raw}`;
   async exportProjectDump(options = {}) {
     const dump = await this.buildNocturneDump(options);
     const data = JSON.stringify(dump, null, 2);
-    const name = `nocturne-${new Date().toISOString().slice(0, 10)}.nocturnedump`;
+    const name = `nocturne-${localDateKey()}.nocturnedump`;
     await this.animateProjectExport(dump);
     await platformFiles.exportProjectDump(data, { suggestedName: name });
     this.toast('Dump проекта экспортирован.');
@@ -22551,7 +22706,9 @@ ${raw}`;
     if (dump.checksum && dump.checksum !== await this.checksumText(JSON.stringify(dump.payload))) throw new Error('Контрольная сумма резервной копии не совпала.');
     if (!['replace', 'merge'].includes(mode)) throw new Error('Неизвестный режим импорта.');
     const payload = dump.payload || {};
+    const original = Object.fromEntries(['settings', 'folders', 'docs', 'lore', 'globalNotes', 'floatingNotes', 'typoRules', 'reviewMarks', 'activeLoreId', 'kbProjects', 'activeDocId'].map(key => [key, structuredClone(this.state[key])]));
     const report = { mode, docs: 0, folders: 0, characters: 0, locations: 0, timeline: 0, snapshots: 0, reviewMarks: 0, conflicts: 0 };
+    try {
     if (mode === 'replace') {
       this.state.settings = this.validateSettings(payload.settings || {});
       this.state.settings.activeLoreId = 'world';
@@ -22559,7 +22716,7 @@ ${raw}`;
       this.state.kbProjects = structuredClone(this.state.settings.kbProjects);
       this.state.activeLoreId = 'world';
       this.state.folders = this.validateFolders(payload.folders || []);
-      this.state.docs = (payload.docs || []).map((doc) => this.sanitizeDoc(structuredClone(doc)));
+      this.state.docs = (payload.docs || []).map((doc) => doc.encrypted ? structuredClone(doc) : this.sanitizeDoc(structuredClone(doc)));
       this.state.lore = {
         characters: (payload.lore?.characters || []).map((item, index) => this.normalizeCharacter(item, index)),
         locations: (payload.lore?.locations || []).map((item, index) => this.normalizeLocation(item, index)),
@@ -22567,13 +22724,18 @@ ${raw}`;
         notes: (payload.lore?.notes || []).map((item, index) => this.normalizeNote(item, index)),
       };
       this.state.globalNotes = String(payload.globalNotes || '');
-      this.state.floatingNotes = (payload.floatingNotes || []).map((note) => this.sanitizeFloatingNote(note));
-      this.state.typoRules = (payload.typoRules || []).map((rule) => this.sanitizeTypoRule(rule)).filter(Boolean);
-      this.state.reviewMarks = (payload.reviewMarks || []).map((mark) => this.sanitizeReviewMark(mark)).filter(Boolean);
+      this.state.floatingNotes = (payload.floatingNotes || []).map((note) => note.protectedStore ? note : this.sanitizeFloatingNote(note));
+      this.state.typoRules = (payload.typoRules || []).map((rule) => rule.protectedStore ? rule : this.sanitizeTypoRule(rule)).filter(Boolean);
+      this.state.reviewMarks = (payload.reviewMarks || []).map((mark) => mark.protectedStore ? mark : this.sanitizeReviewMark(mark)).filter(Boolean);
       await this.persistImportedProject(payload);
       Object.assign(report, this.dumpPreviewStats(dump), { folders: this.state.folders.length, reviewMarks: this.state.reviewMarks.length });
     } else {
       await this.mergeProjectDumpPayload(payload, report);
+    }
+    } catch (error) {
+      Object.assign(this.state, original);
+      this.initWorkspace(); this.applySettings(); this.renderAll();
+      throw error;
     }
     this.validateLoadedState();
     this.initWorkspace();
@@ -22585,8 +22747,10 @@ ${raw}`;
 
   async persistImportedProject(payload = {}) {
     const settingsRecords = payload.settingsRecords || [];
+    const protectedPreferences = settingsRecords.find(record => record.id === 'app' && record.protectedStore);
+    const localSettings = (await this.db.getAllRaw('settings')).filter(record => ['sync-identity', 'sync-connection', 'backup-directory'].includes(record.id));
     await this.db.atomicWrite({
-      settings: [{ id: 'app', value: this.state.settings }, ...settingsRecords.filter(record => record.id !== 'app' && record.id !== 'global-notes'), settingsRecords.find(record => record.id === 'global-notes') || { id: 'global-notes', text: this.state.globalNotes, updatedAt: Date.now() }],
+      settings: [protectedPreferences || { id: 'app', value: this.state.settings }, ...settingsRecords.filter(record => !['app', 'global-notes', 'sync-identity', 'sync-connection', 'backup-directory'].includes(record.id)), ...localSettings, settingsRecords.find(record => record.id === 'global-notes') || { id: 'global-notes', text: this.state.globalNotes, updatedAt: Date.now() }],
       folders: this.state.folders, docs: this.state.docs,
       lore: payload.lores?.length ? payload.lores : [{ id: 'world', ...this.state.lore }],
       floatingNotes: this.state.floatingNotes, typoRules: this.state.typoRules, reviewMarks: this.state.reviewMarks,
@@ -22599,6 +22763,10 @@ ${raw}`;
     const globalNotes = await this.db.get('settings', 'global-notes');
     this.state.globalNotes = globalNotes?.text || '';
     this.state.docs = await this.loadDocs();
+    const preferences = await this.db.get('settings', 'app');
+    if (preferences && !preferences.locked) this.state.settings = this.validateSettings(preferences.value);
+    this.state.settings.activeLoreId = this.state.activeLoreId;
+    await this.loadFloatingNotes(); await this.loadTypoRules(); await this.loadReviewMarks();
   }
 
   remapId(id, map, prefix, existingIds, report) {
@@ -22630,7 +22798,7 @@ ${raw}`;
       next.id = this.remapId(doc.id, idMap, 'doc', existingDocs, report);
       next.folderId = idMap.get(doc.folderId) || this.defaultFolderId();
       next.order = this.state.docs.length + index;
-      return this.sanitizeDoc(next);
+      return next.encrypted ? next : this.sanitizeDoc(next);
     });
     const chars = (payload.lore?.characters || []).map((item, index) => this.normalizeCharacter({ ...item, id: this.remapId(item.id, idMap, 'char', existingCharacters, report), documentIds: (item.documentIds || []).map((id) => idMap.get(id) || id) }, this.state.lore.characters.length + index));
     const locs = (payload.lore?.locations || []).map((item, index) => this.normalizeLocation({ ...item, id: this.remapId(item.id, idMap, 'loc', existingLocations, report), documentIds: (item.documentIds || []).map((id) => idMap.get(id) || id) }, this.state.lore.locations.length + index));
@@ -22685,23 +22853,19 @@ ${raw}`;
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
   }
 
-  exportPrintable() {
+  async exportPrintable() {
     const doc = this.activeDoc;
     if (!doc) {
       this.toast('Откройте документ для экспорта.');
       return;
     }
+    if (doc.locked) { this.toast('Введите мастер-пароль перед экспортом.'); return; }
+    this.nocturneEditor.syncDocFromEditorByDocId(doc.id);
     const watermark = this.state.settings.watermark ? `${escapeHtml(this.state.settings.authorName)} · ${new Date().toLocaleDateString()}` : '';
-    const pages = this.paginate(doc.ast).map((page, index) => `<section class="print-page">${watermark ? `<div class="watermark"><span>${watermark}</span></div>` : ''}${this.renderBlocks(page.blocks)}<footer>${index + 1}</footer></section>`).join('');
-    const win = window.open('', '_blank');
-    if (!win) {
-      this.toast('Браузер заблокировал окно экспорта. Разрешите всплывающие окна и повторите.');
-      return;
-    }
-    win.document.write(`<!doctype html><html><head><title>${escapeHtml(doc.title)}</title><style>
-      body{margin:0;background:#ddd;font:18px/1.75 Georgia,serif;color:#111}.print-page{position:relative;width:794px;min-height:1123px;margin:24px auto;background:white;padding:96px;box-sizing:border-box;page-break-after:always}.print-page h2{font-size:28px}.print-page footer{position:absolute;bottom:36px;left:0;right:0;text-align:center;color:#777}.watermark{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:1000;pointer-events:none;overflow:hidden}.watermark span{transform:rotate(-45deg);font:700 56px sans-serif;color:rgba(0,0,0,0.05);white-space:nowrap;user-select:none;-webkit-print-color-adjust:exact;print-color-adjust:exact}@media print{body{background:white}.print-page{margin:0;box-shadow:none}}
-    </style></head><body>${pages}<script>setTimeout(()=>print(),300)</script></body></html>`);
-    win.document.close();
+    const html = `<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>${escapeHtml(doc.title)}</title><style>
+      @page{size:A4;margin:20mm}body{margin:0;background:white;font:12pt/1.75 Georgia,serif;color:#111}p{orphans:3;widows:3}h1,h2,h3{break-after:avoid;line-height:1.3}blockquote{border-left:2px solid #aaa;padding-left:18px;margin-left:0}pre{white-space:pre-wrap;overflow-wrap:anywhere}.watermark{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}.watermark span{transform:rotate(-45deg);font:700 40pt sans-serif;color:rgba(0,0,0,.055);white-space:nowrap;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    </style></head><body>${watermark ? `<div class="watermark"><span>${watermark}</span></div>` : ''}${legacyAstToHtml(doc.ast)}</body></html>`;
+    try { await platformFiles.printHtmlDocument(html, doc.title); } catch (error) { this.toast(error.message); }
   }
 
   exportDocx() {
@@ -22712,12 +22876,14 @@ ${raw}`;
     this.exportDocById(this.activeDoc.id);
   }
 
-  exportDocById(docId) {
-    const doc = this.state.docs.find(d => d.id === docId);
+  exportDocById(docId, { includeNotes = !!this.state.settings.exportIncludeNotes, returnBlob = false, docOverride = null } = {}) {
+    const doc = docOverride || this.state.docs.find(d => d.id === docId);
     if (!doc) {
       this.toast('Документ не найден.');
       return;
     }
+    if (doc.locked) throw new Error('Введите мастер-пароль перед экспортом.');
+    if (!docOverride) this.nocturneEditor.syncDocFromEditorByDocId(doc.id);
     const paragraphs = (doc.ast.blocks || []).map((block) => {
       const runs = this.docxRunsFromHtml(block.html || '');
       const align = block.align && block.align !== 'left' ? `<w:jc w:val="${block.align === 'center' ? 'center' : block.align === 'right' ? 'right' : 'both'}"/>` : '';
@@ -22727,7 +22893,7 @@ ${raw}`;
       const style = block.type === 'quote' ? '<w:pStyle w:val="Quote"/>' : '';
       return `<w:p><w:pPr>${style}<w:spacing w:after="180" w:line="360" w:lineRule="auto"/>${align}</w:pPr>${runs}</w:p>`;
     }).join('');
-    const notes = [doc.description, doc.notes, this.state.globalNotes].filter(Boolean).map((note, index) => (
+    const notes = (includeNotes ? [doc.description, doc.notes, this.state.globalNotes] : []).filter(Boolean).map((note, index) => (
       `<w:p><w:pPr><w:pStyle w:val="${index === 0 ? 'Subtitle' : 'Quote'}"/></w:pPr><w:r><w:t>${this.xmlEscape(note)}</w:t></w:r></w:p>`
     )).join('');
     const files = {
@@ -22739,6 +22905,7 @@ ${raw}`;
       'word/document.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${notes}${paragraphs}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>`,
     };
     const blob = new Blob([this.createZip(files)], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+    if (returnBlob) return blob;
     this.downloadBlob(blob, `${this.safeFileName(doc.title)}.docx`);
     const marks = this.state.reviewMarks.filter((mark) => mark.docId === doc.id);
     if (marks.length && this.state.exportNocturned) {
@@ -22750,6 +22917,116 @@ ${raw}`;
     } else {
       this.toast('DOCX экспортирован.');
     }
+  }
+
+  buildBookDocx(docIds, { includeNotes = false, title = '' } = {}) {
+    const chapters = this.state.docs.filter(doc => docIds.includes(doc.id));
+    if (!chapters.length) throw new Error('Выберите хотя бы одну главу.');
+    if (chapters.some(doc => doc.locked)) throw new Error('Расшифруйте выбранные главы перед экспортом.');
+    const collator = new Intl.Collator('ru', { numeric: true });
+    chapters.sort((a, b) => collator.compare(String(a.volume || ''), String(b.volume || '')) || collator.compare(String(a.chapterNumber || ''), String(b.chapterNumber || '')) || (a.order || 0) - (b.order || 0));
+    chapters.forEach(doc => this.nocturneEditor.syncDocFromEditorByDocId(doc.id));
+    const blocks = chapters.flatMap(doc => [
+      { id: uid('block'), type: 'heading', level: 1, html: escapeHtml(doc.title) },
+      ...structuredClone(doc.ast.blocks),
+      ...(includeNotes && doc.notes ? [{ id: uid('block'), type: 'quote', html: `Заметки к главе: ${escapeHtml(doc.notes).replace(/\n/g, '<br>')}` }] : []),
+    ]);
+    return this.exportDocById(null, { returnBlob: true, includeNotes: false, docOverride: { title: title || chapters[0].workTitle || 'Рукопись', ast: { type: 'doc', blocks } } });
+  }
+
+  openBookExport() {
+    const chapters = [...this.state.docs].sort((a, b) => String(a.workTitle || '').localeCompare(String(b.workTitle || '')) || Number(a.chapterNumber || a.order) - Number(b.chapterNumber || b.order));
+    const overlay = document.getElementById('form-overlay');
+    overlay.innerHTML = `<div class="form-modal utility-modal"><div class="modal-head-row"><div><h2>Собрать рукопись</h2><p>Выберите главы. Порядок учитывает том и номер главы.</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div><div class="utility-list chapter-selection">${chapters.map(doc => `<label class="utility-row"><input type="checkbox" data-export-chapter="${escapeHtml(doc.id)}" ${doc.locked ? 'disabled' : 'checked'}><div><strong>${escapeHtml(doc.title)}</strong><small>${escapeHtml([doc.workTitle, doc.volume && `Том ${doc.volume}`, doc.chapterNumber && `Глава ${doc.chapterNumber}`].filter(Boolean).join(' · ') || 'Документ')}</small></div></label>`).join('') || '<p>Сначала создайте или импортируйте главы.</p>'}</div><label class="utility-option"><input type="checkbox" id="book-export-notes"> Добавить заметки к главам</label><div class="form-actions"><button class="pill-btn" data-export-select-all>Выбрать все</button><button class="pill-btn ai-btn" data-export-selected-book ${chapters.length ? '' : 'disabled'}><i class="bx bx-export"></i> Скачать DOCX</button></div></div>`;
+    overlay.classList.add('active');
+    overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
+    overlay.querySelector('[data-export-select-all]').onclick = () => overlay.querySelectorAll('[data-export-chapter]:not(:disabled)').forEach(input => { input.checked = true; });
+    overlay.querySelector('[data-export-selected-book]').onclick = async () => {
+      try {
+        const ids = [...overlay.querySelectorAll('[data-export-chapter]:checked')].map(input => input.dataset.exportChapter);
+        const blob = await this.buildBookDocx(ids, { includeNotes: overlay.querySelector('#book-export-notes').checked });
+        const result = await this.downloadBlob(blob, `${this.safeFileName(this.state.docs.find(doc => ids.includes(doc.id))?.workTitle || 'Рукопись')}.docx`);
+        if (result) { overlay.classList.remove('active'); this.toast('Рукопись экспортирована.'); }
+      } catch (error) { this.toast(error.message); }
+    };
+  }
+
+  captureManuscriptPosition() {
+    if (document.getElementById('kb-modal')?.classList.contains('active') || this.state.mobile.activeTab === 'lore') return;
+    const doc = this.getFocusedDoc(), editor = this.nocturneEditor.getByDocId(doc?.id);
+    this.manuscriptPosition = { docId: doc?.id, selection: editor ? { from: editor.state.selection.from, to: editor.state.selection.to } : null,
+      scroll: document.querySelector('.active-pane .editor-scroll-area')?.scrollTop || 0 };
+  }
+
+  returnToManuscript() {
+    const position = this.manuscriptPosition;
+    document.getElementById('kb-modal')?.classList.remove('active');
+    document.getElementById('form-overlay')?.classList.remove('active');
+    if (this.isMobileLayout()) this.switchMobileTab('write');
+    if (position?.docId && this.state.docs.some(doc => doc.id === position.docId) && this.state.activeDocId !== position.docId) this.selectDoc(position.docId);
+    requestAnimationFrame(() => {
+      const editor = this.nocturneEditor.getByDocId(position?.docId || this.state.activeDocId);
+      if (editor && position?.selection) editor.commands.setTextSelection({ from: Math.min(position.selection.from, editor.state.doc.content.size), to: Math.min(position.selection.to, editor.state.doc.content.size) });
+      editor?.commands.focus();
+      const scroll = document.querySelector('.active-pane .editor-scroll-area');
+      if (scroll && position) scroll.scrollTop = position.scroll;
+    });
+  }
+
+  openReviewQueue() {
+    const marks = this.state.reviewMarks.filter(mark => mark.status === 'open' && this.state.docs.some(doc => doc.id === mark.docId));
+    const overlay = document.getElementById('form-overlay');
+    overlay.innerHTML = `<div class="form-modal utility-modal"><div class="modal-head-row"><div><h2>Правки всей рукописи</h2><p>${marks.length ? `${marks.length} нерешённых правок. Выберите запись, чтобы перейти к тексту.` : 'Все правки разобраны.'}</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div><div class="utility-list">${marks.map(mark => `<button class="utility-row review-queue-row" data-review-jump="${escapeHtml(mark.id)}"><i class="bx bx-message-square-edit"></i><div><strong>${escapeHtml(this.state.docs.find(doc => doc.id === mark.docId)?.title)}</strong><small>${escapeHtml(this.reviewCategoryLabel(mark.category))} · ${escapeHtml(mark.quote || mark.comment || 'Пометка без цитаты')}</small></div><i class="bx bx-chevron-right"></i></button>`).join('')}</div></div>`;
+    overlay.classList.add('active'); overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
+    overlay.querySelectorAll('[data-review-jump]').forEach(button => button.onclick = () => {
+      const mark = marks.find(item => item.id === button.dataset.reviewJump);
+      overlay.classList.remove('active'); document.getElementById('kb-modal')?.classList.remove('active');
+      if (this.isMobileLayout()) this.switchMobileTab('write'); this.selectDoc(mark.docId);
+      this.state.reviewMode = 'finalization'; this.applyReviewMode();
+      this.state.currentReviewIndexByDoc[mark.docId] = this.reviewMarksForFocusedDoc().findIndex(item => item.id === mark.id);
+      this.renderReviewNavigator(); this.resolveReviewRange(mark)?.block.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }
+
+  async openSyncConflicts(selectedId) {
+    const conflicts = (await this.db.getAll('syncConflicts')).filter(item => item.type === 'database-record');
+    const conflict = conflicts.find(item => item.id === selectedId) || conflicts[0], overlay = document.getElementById('form-overlay');
+    const describe = async variant => {
+      if (variant.deleted) return 'Удалено на этом устройстве.';
+      const value = await this.db.decodeRecord(conflict.store, variant.value);
+      if (value?.locked) return 'Зашифрованная версия. Примените мастер-пароль для сравнения.';
+      return value?.ast ? `${value.title || ''}\n\n${docText(value.ast)}${value.notes ? `\n\nЗаметки:\n${value.notes}` : ''}` : JSON.stringify(value, null, 2);
+    };
+    overlay.innerHTML = `<div class="form-modal utility-modal conflict-modal"><div class="modal-head-row"><div><h2>Разные версии</h2><p>${conflict ? 'Оба варианта сохранены. Выберите версию или оставьте оба документа.' : 'Конфликтов нет. Изменения согласованы.'}</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div>${conflict ? `<label class="utility-option">Запись<select class="form-control" id="conflict-selection">${conflicts.map(item => `<option value="${escapeHtml(item.id)}" ${item.id === conflict.id ? 'selected' : ''}>${escapeHtml(item.local.value?.title || item.remote.value?.title || item.recordId)}</option>`).join('')}</select></label><div class="conflict-versions"><section><h3>На этом устройстве</h3><pre>${escapeHtml(await describe(conflict.local))}</pre></section><section><h3>На другом устройстве</h3><pre>${escapeHtml(await describe(conflict.remote))}</pre></section></div><div class="form-actions"><button class="pill-btn" data-resolve-conflict="local">Оставить эту</button><button class="pill-btn" data-resolve-conflict="remote">Принять другую</button>${conflict.store === 'docs' && !conflict.local.deleted && !conflict.remote.deleted ? '<button class="pill-btn ai-btn" data-resolve-conflict="both">Сохранить обе главы</button>' : ''}</div>` : ''}</div>`;
+    overlay.classList.add('active'); overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
+    overlay.querySelector('#conflict-selection')?.addEventListener('change', event => this.openSyncConflicts(event.target.value));
+    overlay.querySelectorAll('[data-resolve-conflict]').forEach(button => button.onclick = async () => {
+      try {
+        button.disabled = true;
+        if (button.dataset.resolveConflict === 'both') {
+          const copy = await this.db.decodeRecord('docs', conflict.remote.value);
+          if (copy.locked) throw new Error('Сначала примените мастер-пароль.');
+          await this.db.put('docs', { ...copy, id: uid('doc'), title: `${copy.title} — другая версия`, updatedAt: Date.now() });
+        }
+        await this.databaseSync.resolveConflict(conflict.id, button.dataset.resolveConflict === 'both' ? 'local' : button.dataset.resolveConflict);
+        await this.openSyncConflicts();
+      } catch (error) { button.disabled = false; this.toast(error.message); }
+    });
+  }
+
+  async openBackups() {
+    const copies = (await this.db.getAll('backups')).sort((a, b) => b.createdAt - a.createdAt), overlay = document.getElementById('form-overlay');
+    overlay.innerHTML = `<div class="form-modal utility-modal"><div class="modal-head-row"><div><h2>Резервные копии</h2><p>Храним последние 20 копий. Автоматическая копия создаётся с интервалом автосохранения.</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div><div class="form-actions"><button class="pill-btn" data-action="choose-backup-directory"><i class="bx bx-folder-open"></i> Папка копий</button><button class="pill-btn ai-btn" data-backup-create>Создать копию</button></div><div class="utility-list">${copies.map(copy => `<div class="utility-row"><i class="bx bx-archive"></i><div><strong>${new Date(copy.createdAt).toLocaleString()}</strong><small>${copy.external ? escapeHtml(copy.path) : 'В этом браузере · скачайте или подключите папку'} · ${Math.ceil((copy.bytes || 0) / 1024)} КБ</small></div><button class="pill-btn" data-backup-restore="${escapeHtml(copy.id)}" ${copy.locked ? 'disabled' : ''}>Открыть</button></div>`).join('') || '<p class="utility-empty">Копий пока нет. Создайте первую перед большой правкой.</p>'}</div></div>`;
+    overlay.classList.add('active'); overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
+    overlay.querySelector('[data-backup-create]').onclick = async () => { try { await this.backups.create(); await this.openBackups(); } catch (error) { this.toast(error.message); } };
+    overlay.querySelectorAll('[data-backup-restore]').forEach(button => button.onclick = async () => { try { const copy = copies.find(item => item.id === button.dataset.backupRestore); const dump = await this.backups.read(copy); this.validateProjectDump(dump); this.openProjectImportPreview(dump, copy.name); } catch (error) { this.toast(error.message); } });
+  }
+
+  editWorldRules() {
+    const overlay = document.getElementById('form-overlay');
+    overlay.innerHTML = `<form class="form-modal utility-modal"><div class="modal-head-row"><div><h2>Правила мира</h2><p>По одному правилу на строку. AI использует их при включённом контексте базы знаний.</p></div><button type="button" class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div><textarea class="form-control" name="rules" rows="12" aria-label="Правила мира">${escapeHtml((this.state.lore.rules || []).map(rule => rule.text || rule.body || rule).join('\n'))}</textarea><div class="form-actions"><button class="pill-btn ai-btn" type="submit">Сохранить правила</button></div></form>`;
+    overlay.classList.add('active'); overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
+    overlay.querySelector('form').onsubmit = async event => { event.preventDefault(); const old = this.state.lore.rules || []; this.state.lore.rules = event.target.elements.rules.value.split('\n').map(text => text.trim()).filter(Boolean).map(text => ({ id: old.find(rule => rule.text === text)?.id || uid('rule'), text })); await this.saveLore(); overlay.classList.remove('active'); this.toast('Правила мира сохранены.'); };
   }
 
   buildNocturnedPayload(doc, marks) {
@@ -22827,7 +23104,7 @@ ${raw}`;
       if (node.nodeType === Node.TEXT_NODE) {
         const text = node.textContent || '';
         if (!text) return;
-        const props = `${style.bold ? '<w:b/>' : ''}${style.italic ? '<w:i/>' : ''}`;
+        const props = `${style.bold ? '<w:b/>' : ''}${style.italic ? '<w:i/>' : ''}${style.underline ? '<w:u w:val="single"/>' : ''}${style.strike ? '<w:strike/>' : ''}`;
         runs.push(`<w:r>${props ? `<w:rPr>${props}</w:rPr>` : ''}<w:t xml:space="preserve">${this.xmlEscape(text)}</w:t></w:r>`);
         return;
       }
@@ -22839,6 +23116,8 @@ ${raw}`;
       const next = {
         bold: style.bold || ['B', 'STRONG'].includes(node.tagName),
         italic: style.italic || ['I', 'EM'].includes(node.tagName),
+        underline: style.underline || node.tagName === 'U',
+        strike: style.strike || ['S', 'DEL', 'STRIKE'].includes(node.tagName),
       };
       [...node.childNodes].forEach((child) => walk(child, next));
     };
@@ -22998,6 +23277,8 @@ ${raw}`;
     await this.loadFloatingNotes(); await this.loadReviewMarks(); await this.loadTypoRules();
     const notes = await this.db.get('settings', 'global-notes');
     if (notes && !notes.locked) this.state.globalNotes = notes.text || '';
+    const preferences = await this.db.get('settings', 'app');
+    if (preferences && !preferences.locked) this.state.settings = this.validateSettings(preferences.value);
     this.initWorkspace();
     this.renderAll();
     this.toast('Пароль сессии применен, документы перечитаны.');
@@ -23011,6 +23292,12 @@ ${raw}`;
       if (records[store].some(record => record.locked)) throw new Error('Пароль не открывает все записи. Шифрование не изменено.');
     }
     records.docs = await this.loadDocs();
+    records.docs = records.docs.map(doc => {
+      const current = this.state.docs.find(item => item.id === doc.id);
+      if (!current || current.locked) return doc;
+      this.nocturneEditor.syncDocFromEditorByDocId(current.id);
+      return structuredClone(current);
+    });
     for (const doc of records.docs) delete doc.encrypted;
     records.settings = records.settings.filter(record => !['app', 'global-notes'].includes(record.id));
     records.settings.push({ id: 'app', value: this.state.settings }, { id: 'global-notes', text: this.state.globalNotes, updatedAt: Date.now() });
@@ -23475,11 +23762,11 @@ ${raw}`;
 
       this.state.sync.host = this.preferredLanIps(server.lanIps)[0] || this.state.sync.host || '127.0.0.1';
 
-      safeSetStorageItem(localStorage, 'nocturne-sync-host', this.state.sync.host);
+      this.persistSyncConnection();
 
       safeSetStorageItem(localStorage, 'nocturne-sync-port', this.state.sync.port);
 
-      safeSetStorageItem(localStorage, 'nocturne-sync-token', this.state.sync.token);
+      this.persistSyncConnection();
 
     }
 
@@ -23561,7 +23848,7 @@ ${raw}`;
 
     if (this.isMobileLayout()) this.renderMobileShell();
 
-    else if (document.getElementById('form-overlay')?.classList.contains('active')) this.renderOpenSyncPanel();
+    else if (document.querySelector('#form-overlay.active .sync-center-modal')) this.renderOpenSyncPanel();
 
   }
 
@@ -23633,6 +23920,34 @@ ${raw}`;
 
 // --- openSyncPanel ---
 
+  async controlLanServer(action) {
+    try {
+      const payload = await platformFiles.controlSyncServer(action);
+      this.applySyncServerStatus(payload);
+      if (action === 'start' && payload.running && !this.syncClient.isOpen()) {
+        Object.assign(this.state.sync, { host: '127.0.0.1', port: String(payload.port || 8787), token: payload.token || this.state.sync.token });
+        await this.persistSyncConnection();
+        await this.syncClient.connect({ host: '127.0.0.1', port: this.state.sync.port, token: this.state.sync.token, trusted: true });
+      }
+      if (action === 'stop') this.disconnectLocalSync();
+      this.renderSyncSurfaces();
+      return payload;
+    } catch (error) {
+      this.state.sync.server = { ...this.state.sync.server, canControl: false, message: error.message };
+      if (action !== 'status') this.toast(error.message);
+      this.renderSyncSurfaces();
+      return null;
+    }
+  }
+
+  async copyLanConnectionInfo() {
+    const server = await this.controlLanServer('connection-info');
+    if (!server) return;
+    const address = server.ips?.[0] || server.addresses?.[0] || '127.0.0.1';
+    const text = `Nocturne Writer\nАдрес: ${address}:${server.port || 8787}\nКод: ${server.token || ''}`;
+    try { await navigator.clipboard.writeText(text); this.toast('Адрес и код скопированы.'); } catch { this.toast('Не удалось скопировать. Адрес и код показаны в окне.'); }
+  }
+
   openSyncPanel() {
 
     const overlay = document.getElementById('form-overlay');
@@ -23642,6 +23957,7 @@ ${raw}`;
     overlay.innerHTML = this.renderDesktopSyncCenter();
 
     overlay.classList.add('active');
+    this.controlLanServer('status');
 
     overlay.querySelectorAll('[data-close-form]').forEach((button) => {
 
@@ -23659,7 +23975,7 @@ ${raw}`;
 
     const overlay = document.getElementById('form-overlay');
 
-    if (!overlay?.classList.contains('active')) return;
+    if (!overlay?.classList.contains('active') || !overlay.querySelector('.sync-center-modal')) return;
 
     overlay.innerHTML = this.renderDesktopSyncCenter();
 
@@ -23905,11 +24221,11 @@ async connectLocalSyncFromUi() {
 
     safeSetStorageItem(localStorage, 'nocturne-sync-device-name', deviceName || defaultDeviceName(this.runtime));
 
-    safeSetStorageItem(localStorage, 'nocturne-sync-host', host);
+    this.persistSyncConnection();
 
     safeSetStorageItem(localStorage, 'nocturne-sync-port', port || '8787');
 
-    safeSetStorageItem(localStorage, 'nocturne-sync-token', token);
+    this.persistSyncConnection();
 
     this.state.sync.status = 'waiting';
 
@@ -24194,7 +24510,7 @@ async httpGetJson(url, timeoutMs = 650) {
 
 
   async checkStreakOnStartup() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateKey();
     const d = new Date(today + 'T00:00:00Z');
     d.setUTCDate(d.getUTCDate() - 1);
     const yesterday = d.toISOString().slice(0, 10);
@@ -24223,7 +24539,7 @@ async httpGetJson(url, timeoutMs = 650) {
 
   async checkAndShowSadMoonModal() {
     if (!this.needToShowSadMoon) return;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateKey();
     let streakStats = await this.db.get('settings', 'streak_stats');
     if (streakStats && streakStats.streakBrokenModalShownDate !== today) {
       this.showLunaStreakModal('cry', 0);
@@ -24234,9 +24550,8 @@ async httpGetJson(url, timeoutMs = 650) {
   }
 
   async checkCaretIdleStreakTrigger() {
-    const today = new Date().toISOString().slice(0, 10);
-    const cached = this.todayStatsCache?.id === today ? this.todayStatsCache.words : 0;
-    const words = cached || Number(this.todayStatsCache?.words || 0);
+    const today = localDateKey();
+    const words = this.todayStatsCache?.id === today ? Number(this.todayStatsCache.words || 0) : 0;
     const goal = Number(this.state.settings.dailyGoal) || 1;
     const pct = Math.min(100, Math.round((words / goal) * 100));
 

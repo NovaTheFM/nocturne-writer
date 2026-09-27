@@ -103,8 +103,8 @@ export async function importProjectDump(options = {}) {
 
 export async function shareFileOrText(data, options = {}) {
   const runtime = detectRuntime();
-  if (runtime.isCapacitor && window.Capacitor?.Plugins?.Share?.share) {
-    return window.Capacitor.Plugins.Share.share({
+  if (runtime.isCapacitor) {
+    return nativePlugins.Share.share({
       title: options.title || 'Nocturne Writer',
       text: String(data || ''),
       dialogTitle: options.dialogTitle || 'Share',
@@ -114,6 +114,67 @@ export async function shareFileOrText(data, options = {}) {
     return navigator.share({ title: options.title || 'Nocturne Writer', text: String(data || '') });
   }
   return saveTextFile(data, options.suggestedName || 'nocturne-share.txt', options.mime || 'text/plain;charset=utf-8');
+}
+
+let backupDirectoryHandle = null;
+export async function controlSyncServer(action = 'status') {
+  const methods = { status: 'syncServerStatus', start: 'syncServerStart', stop: 'syncServerStop', 'refresh-token': 'syncServerRefreshToken', 'connection-info': 'syncServerConnectionInfo' };
+  if (!methods[action]) throw new Error('Unknown server action.');
+  if (detectRuntime().isElectron) return window.nocturneElectron[methods[action]]();
+  if (detectRuntime().isCapacitor || !['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)) throw new Error('Сервер запускается в приложении на компьютере.');
+  const capability = await (await fetch('/sync/control-token', { signal: AbortSignal.timeout(5000) })).json();
+  if (!capability.token) throw new Error('Управление сервером недоступно.');
+  const response = await fetch(`/sync/server/${action}`, { method: ['status', 'connection-info'].includes(action) ? 'GET' : 'POST', headers: { 'x-nocturne-control-token': capability.token }, signal: AbortSignal.timeout(5000) });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || 'Не удалось управлять сервером.');
+  return result;
+}
+export async function printHtmlDocument(html, title) {
+  if (detectRuntime().isCapacitor) return nativePlugins.NocturneLan.printHtml({ html, title });
+  const win = window.open('', '_blank');
+  if (!win) throw new Error('Разрешите открытие окна печати в браузере.');
+  win.document.write(html); win.document.close();
+  await win.document.fonts.ready;
+  win.focus(); win.print();
+  return true;
+}
+const backupName = name => /^nocturne-[\dTZ.-]+\.nocturnedump$/.test(name);
+export async function chooseBackupDirectory(db) {
+  if (detectRuntime().isElectron) return window.nocturneElectron.chooseBackupDirectory();
+  if (detectRuntime().isCapacitor) return { path: 'Documents/Nocturne Backups' };
+  if (!window.showDirectoryPicker) throw new Error('Автоматические внешние копии доступны в Chrome, Edge и приложениях для ПК и Android. Здесь можно скачать копию проекта.');
+  backupDirectoryHandle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'nocturne-backups' });
+  await db.put('settings', { id: 'backup-directory', handle: backupDirectoryHandle });
+  return { path: backupDirectoryHandle.name };
+}
+export async function initializeBackupDirectory(db) {
+  backupDirectoryHandle = (await db.get('settings', 'backup-directory'))?.handle || null;
+}
+export async function writeBackup(data, name) {
+  if (!backupName(name)) throw new Error('Invalid backup name.');
+  if (detectRuntime().isElectron) return window.nocturneElectron.writeBackup(data, name);
+  if (detectRuntime().isCapacitor) {
+    const fs = nativePlugins.Filesystem, path = 'Nocturne Backups';
+    const result = await fs.writeFile({ path: `${path}/${name}`, data, encoding: 'utf8', directory: 'DOCUMENTS', recursive: true });
+    const files = (await fs.readdir({ path, directory: 'DOCUMENTS' })).files.filter(file => backupName(file.name)).sort((a, b) => b.name.localeCompare(a.name));
+    for (const file of files.slice(20)) await fs.deleteFile({ path: `${path}/${file.name}`, directory: 'DOCUMENTS' });
+    return { external: true, path: result.uri };
+  }
+  if (!backupDirectoryHandle || await backupDirectoryHandle.queryPermission({ mode: 'readwrite' }) !== 'granted') return { external: false };
+  const handle = await backupDirectoryHandle.getFileHandle(name, { create: true });
+  const writable = await handle.createWritable();
+  await writable.write(data); await writable.close();
+  const names = [];
+  for await (const [fileName, entry] of backupDirectoryHandle.entries()) if (entry.kind === 'file' && backupName(fileName)) names.push(fileName);
+  for (const fileName of names.sort().reverse().slice(20)) await backupDirectoryHandle.removeEntry(fileName);
+  return { external: true, path: `${backupDirectoryHandle.name}/${name}` };
+}
+export async function readBackup(name) {
+  if (!backupName(name)) throw new Error('Invalid backup name.');
+  if (detectRuntime().isElectron) return window.nocturneElectron.readBackup(name);
+  if (detectRuntime().isCapacitor) return (await nativePlugins.Filesystem.readFile({ path: `Nocturne Backups/${name}`, directory: 'DOCUMENTS', encoding: 'utf8' })).data;
+  if (!backupDirectoryHandle) throw new Error('Подключите папку, в которой хранится копия.');
+  return (await (await backupDirectoryHandle.getFileHandle(name)).getFile()).text();
 }
 
 export async function getPlatformInfo() {
@@ -136,6 +197,9 @@ export async function saveGitSnapshot(data, projectName) {
 }
 
 export const platformFiles = {
+  controlSyncServer,
+  printHtmlDocument,
+  initializeBackupDirectory, chooseBackupDirectory, writeBackup, readBackup,
   saveBlobFile,
   exportProjectDump,
   importProjectDump,
