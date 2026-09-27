@@ -39,7 +39,7 @@ try {
   const copy = await pc.evaluate(async () => { const a = window.nocturneApp; const copy = await a.backups.create(); const dump = await a.backups.read(copy); return { copy, chapters: dump.payload.docs.length }; });
   assert.equal(copy.copy.external, true); assert.equal(copy.chapters, 2);
   assert.match(await readFile(copy.copy.path, 'utf8'), /Electron document persisted externally/);
-  await pc.evaluate(async () => { const a = window.nocturneApp; a.openSyncPanel(); document.querySelector('[data-action="sync-server-stop"]').click(); });
+  await pc.evaluate(async () => { const a = window.nocturneApp; a.openSyncPanel(); a.state.sync.optionsOpen = true; a.renderSyncSurfaces(); document.querySelector('[data-action="sync-server-stop"]').click(); });
   await pc.waitForFunction(() => !window.nocturneApp.state.sync.server.running);
   console.log(`Hidden Electron (${packaged ? 'packaged file origin' : 'development'}): real IPC broker start/stop, desktop-phone DB exchange and external backup/read passed.`);
 } finally { if (browser) await browser.close(); if (desktop) await desktop.close(); server.kill(); }

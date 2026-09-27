@@ -19,6 +19,7 @@ export function manageModalFocus() {
     if (active) {
       for (const element of document.querySelectorAll('[data-modal-inert]')) { element.inert = false; delete element.dataset.modalInert; }
     }
+    const focusWithinModal = modal?.contains(document.activeElement);
     active = overlay || null;
     activeModal = modal || null;
     if (!active) { previousFocus?.focus?.({ preventScroll: true }); previousFocus = null; return; }
@@ -36,7 +37,8 @@ export function manageModalFocus() {
       if (!element.contains(active) && !active.contains(element)) { element.inert = true; element.dataset.modalInert = 'true'; }
     }
     modal.tabIndex = -1;
-    (focusables(modal)[0] || modal).focus({ preventScroll: true });
+    const initial = modal.querySelector('[autofocus], input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), textarea, .nocturne-select-trigger');
+    (focusWithinModal ? document.activeElement : initial || modal).focus({ preventScroll: true });
   };
   const observer = new MutationObserver(update);
   observer.observe(document.body, { attributes: true, attributeFilter: ['class'], childList: true, subtree: true });

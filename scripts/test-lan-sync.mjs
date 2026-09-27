@@ -19,7 +19,8 @@ try {
       const a = window.nocturneApp; await a.createDoc(a.defaultFolderId(), title, '');
       a.nocturneEditor.get('primary').commands.setContent(`<p>${title} manuscript</p>`);
       await a.saveActiveDoc({ silent: true });
-      if (a.isMobileLayout()) { a.state.sync.discovery.manualOpen = true; a.openMobilePanel('sync', 'more'); } else a.openSyncPanel();
+      a.state.sync.discovery.manualOpen = true;
+      if (a.isMobileLayout()) a.openMobilePanel('sync', 'more'); else a.openSyncPanel();
       Object.assign(a.state.sync, { host: '127.0.0.1', port: '8880', token: 'REGRESSION1234567890' });
       const button = document.querySelector('[data-action="sync-connect"]');
       if (!button) throw new Error('Sync connection UI is missing');

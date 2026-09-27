@@ -1361,6 +1361,7 @@ class NocturneWriter {
 
   floatingMenuElement(key) {
     return {
+      library: document.getElementById('library-menu'),
       kb: document.getElementById('kb-menu'),
       format: document.getElementById('format-menu'),
       split: document.getElementById('split-menu'),
@@ -1386,6 +1387,7 @@ class NocturneWriter {
 
   floatingMenuAnchor(key) {
     return {
+      library: document.querySelector('[data-action="toggle-library-menu"]'),
       kb: document.querySelector('#kb-dropdown [data-action="toggle-kb-menu"]'),
       format: document.querySelector('#format-dropdown [data-action="toggle-format-menu"]'),
       split: document.querySelector('#split-menu-wrap [data-action="toggle-split-menu"]'),
@@ -1397,6 +1399,7 @@ class NocturneWriter {
 
   floatingMenuAnchorWrapper(key) {
     return {
+      library: document.querySelector('.library-tools'),
       kb: document.getElementById('kb-dropdown'),
       format: document.getElementById('format-dropdown'),
       split: document.getElementById('split-menu-wrap'),
@@ -1408,12 +1411,12 @@ class NocturneWriter {
 
   positionFloatingToolbarMenu(key, anchor = this.floatingMenuAnchor(key)) {
     const surface = this.floatingMenuSurface(key);
-    if (!surface || !anchor || !['kb', 'format', 'split', 'notes', 'search', 'review'].includes(key)) return;
+    if (!surface || !anchor || !['library', 'kb', 'format', 'split', 'notes', 'search', 'review'].includes(key)) return;
     const anchorRect = anchor.getBoundingClientRect();
     const menuRect = surface.getBoundingClientRect();
     const margin = 10;
     const gap = 10;
-    const alignLeft = ['kb', 'format', 'review'].includes(key);
+    const alignLeft = ['library', 'kb', 'format', 'review'].includes(key);
     let left = alignLeft ? anchorRect.left : anchorRect.right - menuRect.width;
     left = Math.max(margin, Math.min(left, window.innerWidth - menuRect.width - margin));
     const below = anchorRect.bottom + gap;
@@ -1432,7 +1435,7 @@ class NocturneWriter {
   syncFloatingMenuPortalState() {
     const portal = document.getElementById('floating-menu-portal');
     if (!portal) return;
-    const hasOpenMenu = ['kb', 'format', 'split', 'notes', 'search', 'review']
+    const hasOpenMenu = ['library', 'kb', 'format', 'split', 'notes', 'search', 'review']
       .some((key) => this.isFloatingMenuOpen(key));
     portal.setAttribute('aria-hidden', hasOpenMenu ? 'false' : 'true');
   }
@@ -1458,6 +1461,8 @@ class NocturneWriter {
     el.style.pointerEvents = '';
     if (surface && surface !== el) surface.style.pointerEvents = '';
     this.activeFloatingMenuKey = key;
+    this.floatingMenuAnchor(key)?.setAttribute('aria-expanded', 'true');
+    if (key === 'library') el.querySelector('button')?.focus({ preventScroll: true });
     if (key === 'split') this.splitMenuOpen = true;
     this.syncFloatingMenuPortalState();
     requestAnimationFrame(() => this.positionFloatingToolbarMenu(key));
@@ -1476,6 +1481,7 @@ class NocturneWriter {
     this.floatingMenuCloseTimers.delete(key);
     el.classList.remove(this.menuOpenClass(key));
     this.floatingMenuAnchorWrapper(key)?.classList.remove('active');
+    this.floatingMenuAnchor(key)?.setAttribute('aria-expanded', 'false');
     if (surface && surface !== el) {
       el.removeAttribute('aria-hidden');
       surface.setAttribute('aria-hidden', 'true');
@@ -1502,7 +1508,7 @@ class NocturneWriter {
 
   closeAllFloatingMenus(options = '') {
     const except = typeof options === 'string' ? options : (options?.except || '');
-    ['kb', 'format', 'split', 'notes', 'search', 'review', 'doc', 'context'].forEach((key) => {
+    ['library', 'kb', 'format', 'split', 'notes', 'search', 'review', 'doc', 'context'].forEach((key) => {
       if (key !== except) this.closeFloatingMenu(key, { animate: key !== 'doc' && key !== 'context' });
     });
   }
@@ -3047,7 +3053,7 @@ class NocturneWriter {
           </div>
           <div class="docs-container" id="docs-container"></div>
           <div class="sidebar-footer">
-            <div class="library-tools"><button class="btn-icon" data-action="export-book" title="Экспорт книги" aria-label="Экспорт книги"><i class="bx bx-book-open"></i></button><button class="btn-icon" data-action="open-review-queue" title="Все правки" aria-label="Все правки"><i class="bx bx-message-square-edit"></i></button><button class="btn-icon" data-action="open-trash" title="Корзина" aria-label="Корзина"><i class="bx bx-trash"></i></button><button class="btn-icon" data-action="open-backups" title="Резервные копии" aria-label="Резервные копии"><i class="bx bx-archive"></i></button><button class="btn-icon" data-action="open-sync-panel" title="Синхронизация по Wi-Fi" aria-label="Синхронизация по Wi-Fi"><i class="bx bx-wifi"></i></button></div>
+            <div class="library-tools"><button class="pill-btn library-tools-trigger" data-action="toggle-library-menu" aria-haspopup="menu" aria-controls="library-menu" aria-expanded="false"><i class="bx bx-dots-horizontal-rounded"></i><span>Инструменты</span><i class="bx bx-chevron-up"></i></button><button class="btn-icon" data-action="open-sync-panel" title="Связь по Wi-Fi" aria-label="Связь по Wi-Fi"><i class="bx bx-wifi"></i></button></div>
             <div class="goal-label"><span>Цель дня</span><span id="goal-count">0 / 0</span></div>
             <div class="goal-track"><div class="goal-fill" id="goal-fill"></div></div>
           </div>
@@ -3061,7 +3067,6 @@ class NocturneWriter {
               <div class="tool-divider"></div>
               <button class="tool-btn" data-command="undo" title="Отменить"><i class="bx bx-undo"></i></button>
               <button class="tool-btn" data-command="redo" title="Повторить"><i class="bx bx-redo"></i></button>
-              <button class="tool-btn" data-action="manual-snapshot" title="Сделать снапшот"><i class="bx bx-camera"></i></button>
               <div class="review-mode-switch" role="group" aria-label="Режим работы">
                 <button type="button" data-review-mode="write">Письмо</button>
                 <button type="button" data-review-mode="editor">Редактор</button>
@@ -3084,7 +3089,6 @@ class NocturneWriter {
               <div class="search-menu-wrap" id="search-menu-wrap">
                 <button class="tool-btn" data-action="toggle-search-menu" title="Поиск и замена"><i class="bx bx-search-alt"></i></button>
               </div>
-              <button class="tool-btn" data-action="open-command-palette" title="Палитра команд — Ctrl+K" aria-label="Палитра команд"><i class="bx bx-command"></i></button>
             </div>
             <div class="toolbar-right">
               <div class="split-menu-wrap" id="split-menu-wrap">
@@ -3094,9 +3098,9 @@ class NocturneWriter {
                 <button class="tool-btn" data-action="toggle-floating-note-menu" data-floating-note-menu-anchor title="Плавающие заметки"><i class="bx bx-note"></i></button>
               </div>
               ${this.state.settings.showZenButton ? '<button class="tool-btn zen-toggle-btn" data-action="toggle-zen" aria-pressed="false" title="Режим Дзен"><i class="bx bx-target-lock"></i></button>' : ''}
-              <button class="pill-btn" data-action="import-doc"><i class="bx bx-import"></i> <span>Импорт</span></button>
-              <button class="pill-btn" data-action="toggle-notes"><i class="bx bx-notepad"></i> <span>Заметки</span></button>
-              <button class="pill-btn ai-btn" data-action="toggle-ai">${aiIcon('toolbar-ai-svg')} <span>Ассистент</span></button>
+              <button class="pill-btn" data-action="import-doc" aria-label="Импорт" title="Импорт"><i class="bx bx-import"></i> <span>Импорт</span></button>
+              <button class="pill-btn" data-action="toggle-notes" aria-label="Заметки" title="Заметки"><i class="bx bx-notepad"></i> <span>Заметки</span></button>
+              <button class="pill-btn ai-btn" data-action="toggle-ai" aria-label="Ассистент" title="Ассистент">${aiIcon('toolbar-ai-svg')} <span>Ассистент</span></button>
               <input id="import-input" type="file" accept=".txt,.md,.html,.htm,.docx,.pdf,.nocturned,.nocturnedump,application/json" multiple hidden>
             </div>
           </header>
@@ -3165,6 +3169,9 @@ class NocturneWriter {
       <div class="floating-notes-layer" id="floating-notes-layer"></div>
       <div class="floating-notes-modal" id="floating-notes-modal"></div>
       <div class="floating-menu-portal" id="floating-menu-portal" aria-hidden="true">
+        <div class="dropdown-menu popover-surface portal-floating-menu library-menu" id="library-menu" data-floating-menu="library" role="menu" aria-label="Инструменты рукописи" aria-hidden="true">
+          ${[['export-book', 'bx-book-open', 'Экспорт книги'], ['open-review-queue', 'bx-message-square-edit', 'Все правки'], ['open-backups', 'bx-archive', 'Резервные копии'], ['open-trash', 'bx-trash', 'Корзина'], ['manual-snapshot', 'bx-camera', 'Сохранить версию'], ['open-command-palette', 'bx-command', 'Палитра команд']].map(([action, icon, label]) => `<button class="floating-menu-item" role="menuitem" data-action="${action}"><i class="bx ${icon}"></i><span>${label}</span></button>`).join('')}
+        </div>
         <div class="dropdown-menu popover-surface portal-floating-menu" id="kb-menu" data-floating-menu="kb" aria-hidden="true">
           <div class="drop-item kb-drop-row" data-kb-open="characters"><i class="bx bx-user-pin"></i><span>Персонажи</span><button type="button" data-action="open-kb-right" data-kb-tab="characters" title="Открыть справа"><i class="bx bx-columns"></i></button></div>
           <div class="drop-item kb-drop-row" data-kb-open="locations"><i class="bx bx-map-alt"></i><span>Локации</span><button type="button" data-action="open-kb-right" data-kb-tab="locations" title="Открыть справа"><i class="bx bx-columns"></i></button></div>
@@ -3822,11 +3829,14 @@ class NocturneWriter {
       select.querySelectorAll('[data-form-option]').forEach(opt => {
         const selected = opt === formSelectOption;
         opt.classList.toggle('selected', selected);
+        opt.setAttribute('aria-selected', String(selected));
       });
       this.closeSettingsSelects();
+      select.querySelector('[data-form-select-toggle]')?.focus({ preventScroll: true });
+      input?.dispatchEvent(new Event('change', { bubbles: true }));
       return;
     }
-    const insideFloatingMenu = event.target.closest?.('#floating-menu-portal, #floating-note-menu-wrap, #split-menu-wrap, #kb-dropdown, #format-dropdown, #search-menu-wrap, .review-issue-dropdown, #app-context-menu, #doc-search-panel, #search-navigator, .doc-context-menu, .doc-menu-btn');
+    const insideFloatingMenu = event.target.closest?.('#floating-menu-portal, .library-tools, #floating-note-menu-wrap, #split-menu-wrap, #kb-dropdown, #format-dropdown, #search-menu-wrap, .review-issue-dropdown, #app-context-menu, #doc-search-panel, #search-navigator, .doc-context-menu, .doc-menu-btn');
     if (!insideFloatingMenu) {
       this.closeAllFloatingMenus();
     }
@@ -5785,6 +5795,30 @@ class NocturneWriter {
   }
 
   handleKeydown(event) {
+    if (event.key === 'Tab' && this.isFloatingMenuOpen('library')) { this.closeFloatingMenu('library'); this.floatingMenuAnchor('library')?.focus(); return; }
+    const select = event.target.closest?.('.nocturne-select');
+    if (select && ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Escape'].includes(event.key)) {
+      const trigger = select.querySelector('[data-form-select-toggle], [data-setting-select-toggle]');
+      const options = [...select.querySelectorAll('[role="option"], [data-form-option]')].filter(option => !option.disabled);
+      if (event.key === 'Escape' && select.classList.contains('open')) {
+        event.preventDefault(); this.closeSettingsSelects(); trigger?.focus(); return;
+      }
+      if (event.key !== 'Escape' && options.length) {
+        event.preventDefault();
+        if (!select.classList.contains('open')) this.toggleSettingsSelect(select);
+        const index = options.indexOf(document.activeElement);
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? options.length - 1 : event.key === 'ArrowDown' ? (index + 1) % options.length : (index - 1 + options.length) % options.length;
+        options[next].focus(); return;
+      }
+    }
+    if (this.isFloatingMenuOpen('library') && ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Escape'].includes(event.key)) {
+      event.preventDefault();
+      if (event.key === 'Escape') { this.closeFloatingMenu('library'); this.floatingMenuAnchor('library')?.focus(); return; }
+      const options = [...this.floatingMenuElement('library').querySelectorAll('button')];
+      const index = options.indexOf(document.activeElement);
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? options.length - 1 : event.key === 'ArrowDown' ? (index + 1) % options.length : (index - 1 + options.length) % options.length;
+      options[next]?.focus(); return;
+    }
     // Detect typing the word "luna" while settings misc panel is active
     const settingsOverlay = document.getElementById('settings-overlay');
     if (settingsOverlay && settingsOverlay.classList.contains('active') && this.state.activeSettingsTab === 'misc') {
@@ -7343,6 +7377,7 @@ class NocturneWriter {
   }
 
   runAction(action, event = { target: document.body }) {
+    if (action !== 'toggle-library-menu') this.closeFloatingMenu('library');
     const map = {
       'macro-record-toggle': () => {
         this.macroRecordingState = !this.macroRecordingState;
@@ -7915,6 +7950,8 @@ class NocturneWriter {
       },
       'manual-snapshot': () => this.createSnapshot(true),
       'open-sync-panel': () => this.isMobileLayout() ? this.openMobilePanel('sync', 'more') : this.openSyncPanel(),
+      'toggle-library-menu': () => this.isFloatingMenuOpen('library') ? this.closeFloatingMenu('library') : this.openFloatingMenu('library'),
+      'sync-toggle-options': () => { this.state.sync.optionsOpen = !this.state.sync.optionsOpen; this.renderSyncSurfaces(); },
       'sync-connect': () => this.connectLocalSyncFromUi(),
       'sync-disconnect': () => this.disconnectLocalSync(),
       'sync-request-merge': () => this.requestSyncMerge(),
@@ -8934,7 +8971,7 @@ class NocturneWriter {
         <div class="form-grid">
           <label><span class="doc-title-label">Название</span> <input class="form-control" name="title" value="Новый документ" required></label>
           <label>Описание документа <textarea class="form-control" name="description" placeholder="Кратко: что происходит в этой главе, зачем она нужна, какой тон сцены."></textarea></label>
-          <label>База знаний произведения<select class="form-control" name="loreId">${this.state.kbProjects.map(project => `<option value="${escapeHtml(project.id)}" ${project.id === this.state.activeLoreId ? 'selected' : ''}>${escapeHtml(project.title)}</option>`).join('')}</select></label>
+          <div class="form-field"><span>База знаний произведения</span>${this.renderFormSelect('loreId', this.state.kbProjects.map(project => [project.id, project.title]), this.state.activeLoreId, { label: 'База знаний произведения' })}</div>
         </div>
 
         <div class="book-chapter-fields-wrapper">
@@ -9479,12 +9516,11 @@ class NocturneWriter {
     const expectedHash = payload.document?.normalizedTextHash;
     const hasExactMatch = this.state.docs.some((doc) => this.documentPortableHash(doc) === expectedHash);
     const matchStatus = hasExactMatch ? 'Совпадает' : 'Не найдено точного совпадения';
-    const options = this.state.docs.map((doc) => `<option value="${doc.id}" ${this.documentPortableHash(doc) === payload.document?.normalizedTextHash ? 'selected' : ''}>${escapeHtml(doc.title)}</option>`).join('');
     overlay.innerHTML = `<div class="form-modal nocturned-import-modal">
       <h2>Импорт редакторских правок</h2>
       <p class="form-helper">${escapeHtml(filename)} относится к «${escapeHtml(payload.document?.title || 'документу')}».</p>
       <p class="form-helper">Совпадение текста: ${escapeHtml(matchStatus)}</p>
-      <label>Целевой документ<select class="modal-select" id="nocturned-target-doc">${options}</select></label>
+      <div class="form-field"><span>Целевой документ</span>${this.renderFormSelect('targetDoc', this.state.docs.map(doc => [doc.id, doc.title]), this.state.docs.find(doc => this.documentPortableHash(doc) === expectedHash)?.id, { id: 'nocturned-target-doc', label: 'Целевой документ' })}</div>
       <div class="form-actions"><button class="pill-btn" data-close-form>Отмена</button><button class="pill-btn ai-btn" id="apply-nocturned">Импортировать правки</button></div>
     </div>`;
     overlay.classList.add('active');
@@ -9727,7 +9763,7 @@ class NocturneWriter {
         <div class="form-grid">
           <label><span class="doc-title-label">${isBook ? 'Название главы' : 'Название'}</span> <input class="form-control" name="title" value="${escapeHtml(doc.title)}" required></label>
           <label>Описание <textarea class="form-control" name="description">${escapeHtml(doc.description || '')}</textarea></label>
-          <label>База знаний произведения<select class="form-control" name="loreId">${this.state.kbProjects.map(project => `<option value="${escapeHtml(project.id)}" ${project.id === (doc.loreId || 'world') ? 'selected' : ''}>${escapeHtml(project.title)}</option>`).join('')}</select></label>
+          <div class="form-field"><span>База знаний произведения</span>${this.renderFormSelect('loreId', this.state.kbProjects.map(project => [project.id, project.title]), doc.loreId || 'world', { label: 'База знаний произведения' })}</div>
         </div>
 
         <div class="book-chapter-fields-wrapper ${isBook ? 'open' : ''}">
@@ -15026,13 +15062,8 @@ class NocturneWriter {
         <div class="form-grid">
           <label>Неверное написание<input class="form-control" id="typo-wrong" value="${escapeHtml(wrong)}"></label>
           <label>Правильный вариант<input class="form-control" id="typo-correct" value="${escapeHtml(existing?.correct || builtin?.correct || '')}"></label>
-          <label>Метка<select class="modal-select" id="typo-label">
-            ${['Мой словарь', 'Частая ошибка', 'Опечатка', 'Раздельно / слитно'].map((label) => `<option ${label === (existing?.label || 'Мой словарь') ? 'selected' : ''}>${label}</option>`).join('')}
-          </select></label>
-          <label>Режим<select class="modal-select" id="typo-mode">
-            <option value="token" ${!/\s/u.test(wrong) ? 'selected' : ''}>token</option>
-            <option value="phrase" ${/\s/u.test(wrong) ? 'selected' : ''}>phrase</option>
-          </select></label>
+          <div class="form-field"><span>Метка</span>${this.renderFormSelect('label', ['Мой словарь', 'Частая ошибка', 'Опечатка', 'Раздельно / слитно'].map(label => [label, label]), existing?.label || 'Мой словарь', { id: 'typo-label', label: 'Метка' })}</div>
+          <div class="form-field"><span>Режим</span>${this.renderFormSelect('mode', [['token', 'Слово'], ['phrase', 'Фраза']], /\s/u.test(wrong) ? 'phrase' : 'token', { id: 'typo-mode', label: 'Режим' })}</div>
         </div>
         ${builtin && !existing ? '<p class="form-helper">Для встроенного правила будет создано пользовательское переопределение.</p>' : ''}
         <div class="form-actions">
@@ -18227,7 +18258,7 @@ class NocturneWriter {
   }
 
   renderLoreEntityFields(type, item, iconOptions) {
-    const iconSelect = `<select class="form-control" name="icon">${iconOptions.map(([value, label]) => `<option value="${value}" ${item.icon === value ? 'selected' : ''}>${label}</option>`).join('')}</select>`;
+    const iconSelect = this.renderFormSelect('icon', iconOptions, item.icon, { label: 'Значок' });
     const fileName = item.image ? 'Текущая картинка сохранена' : 'Файл не выбран';
     const imagePreview = item.image ? `<span class="lore-file-preview"><img src="${escapeHtml(item.image)}" alt=""></span>` : '';
     const common = `
@@ -19929,6 +19960,16 @@ class NocturneWriter {
     else this.settingsTooltipHideTimer = setTimeout(hide, 80);
   }
 
+  renderFormSelect(name, options, value, { id = '', label = '' } = {}) {
+    const selected = options.find(([key]) => String(key) === String(value)) || options[0] || ['', ''];
+    const menuId = uid('select-menu');
+    return `<div class="nocturne-select form-select">
+      <input type="hidden" name="${escapeHtml(name)}" ${id ? `id="${escapeHtml(id)}"` : ''} value="${escapeHtml(String(selected[0]))}">
+      <button type="button" class="nocturne-select-trigger" data-form-select-toggle aria-haspopup="listbox" aria-expanded="false" aria-controls="${menuId}" ${label ? `aria-label="${escapeHtml(label)}"` : ''}><span>${escapeHtml(selected[1])}</span><i class="bx bx-chevron-down"></i></button>
+      <div class="nocturne-select-menu popover-surface" id="${menuId}" role="listbox" aria-label="${escapeHtml(label || name)}" aria-hidden="true">${options.map(([key, text]) => `<button type="button" class="nocturne-select-option ${String(key) === String(selected[0]) ? 'selected' : ''}" role="option" aria-selected="${String(key) === String(selected[0])}" data-form-option data-value="${escapeHtml(String(key))}"><span>${escapeHtml(text)}</span><i class="bx bx-check"></i></button>`).join('')}</div>
+    </div>`;
+  }
+
   renderSettingsSelect(key, options) {
     const current = String(this.state.settings[key] ?? '');
     const selected = options.find(([value]) => String(value) === current) || options[0] || ['', ''];
@@ -19953,7 +19994,7 @@ class NocturneWriter {
     document.querySelectorAll('.nocturne-select.open').forEach((select) => {
       if (except && select === except) return;
       select.classList.remove('open');
-      select.querySelector('[data-setting-select-toggle]')?.setAttribute('aria-expanded', 'false');
+      select.querySelector('[data-setting-select-toggle], [data-form-select-toggle]')?.setAttribute('aria-expanded', 'false');
       select.querySelector('.nocturne-select-menu')?.setAttribute('aria-hidden', 'true');
     });
   }
@@ -19963,7 +20004,7 @@ class NocturneWriter {
     const willOpen = !select.classList.contains('open');
     this.closeSettingsSelects(select);
     select.classList.toggle('open', willOpen);
-    select.querySelector('[data-setting-select-toggle]')?.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    select.querySelector('[data-setting-select-toggle], [data-form-select-toggle]')?.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
     select.querySelector('.nocturne-select-menu')?.setAttribute('aria-hidden', willOpen ? 'false' : 'true');
   }
 
@@ -22927,10 +22968,27 @@ ${raw}`;
   openBookExport() {
     const chapters = [...this.state.docs].sort((a, b) => String(a.workTitle || '').localeCompare(String(b.workTitle || '')) || Number(a.chapterNumber || a.order) - Number(b.chapterNumber || b.order));
     const overlay = document.getElementById('form-overlay');
-    overlay.innerHTML = `<div class="form-modal utility-modal"><div class="modal-head-row"><div><h2>Собрать рукопись</h2><p>Выберите главы. Порядок учитывает том и номер главы.</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div><div class="utility-list chapter-selection">${chapters.map(doc => `<label class="utility-row"><input type="checkbox" data-export-chapter="${escapeHtml(doc.id)}" ${doc.locked ? 'disabled' : 'checked'}><div><strong>${escapeHtml(doc.title)}</strong><small>${escapeHtml([doc.workTitle, doc.volume && `Том ${doc.volume}`, doc.chapterNumber && `Глава ${doc.chapterNumber}`].filter(Boolean).join(' · ') || 'Документ')}</small></div></label>`).join('') || '<p>Сначала создайте или импортируйте главы.</p>'}</div><label class="utility-option"><input type="checkbox" id="book-export-notes"> Добавить заметки к главам</label><div class="form-actions"><button class="pill-btn" data-export-select-all>Выбрать все</button><button class="pill-btn ai-btn" data-export-selected-book ${chapters.length ? '' : 'disabled'}><i class="bx bx-export"></i> Скачать DOCX</button></div></div>`;
+    overlay.innerHTML = `<div class="form-modal utility-modal book-export-modal"><div class="modal-head-row"><div><h2>Экспорт книги</h2><p>Главы будут расположены по томам и номерам.</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div>
+      <div class="selection-heading"><span>Главы <small id="book-export-count"></small></span><button class="mini-text-btn" data-export-select-all>Снять выбор</button></div>
+      <div class="utility-list chapter-selection">${chapters.map(doc => `<label class="utility-row nocturne-check"><input type="checkbox" data-export-chapter="${escapeHtml(doc.id)}" ${doc.locked ? 'disabled' : 'checked'}><span class="check-mark" aria-hidden="true"></span><div><strong>${escapeHtml(doc.title)}</strong><small>${escapeHtml([doc.workTitle, doc.volume && `Том ${doc.volume}`, doc.chapterNumber && `Глава ${doc.chapterNumber}`, doc.locked && 'Введите пароль'].filter(Boolean).join(' · '))}</small></div></label>`).join('') || '<p class="utility-empty">Сначала создайте или импортируйте главы.</p>'}</div>
+      <label class="nocturne-check export-notes-option"><input type="checkbox" id="book-export-notes"><span class="check-mark" aria-hidden="true"></span><span>Добавить личные заметки к главам</span></label>
+      <div class="form-actions"><button class="pill-btn" data-close-form>Отмена</button><button class="pill-btn ai-btn" data-export-selected-book><i class="bx bx-export"></i> Скачать DOCX</button></div></div>`;
     overlay.classList.add('active');
-    overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
-    overlay.querySelector('[data-export-select-all]').onclick = () => overlay.querySelectorAll('[data-export-chapter]:not(:disabled)').forEach(input => { input.checked = true; });
+    overlay.querySelectorAll('[data-close-form]').forEach(button => { button.onclick = () => overlay.classList.remove('active'); });
+    const updateSelection = () => {
+      const enabled = [...overlay.querySelectorAll('[data-export-chapter]:not(:disabled)')];
+      const count = enabled.filter(input => input.checked).length;
+      overlay.querySelector('#book-export-count').textContent = `${count} / ${chapters.length}`;
+      overlay.querySelector('[data-export-selected-book]').disabled = !count;
+      overlay.querySelector('[data-export-select-all]').textContent = enabled.length && count === enabled.length ? 'Снять выбор' : 'Выбрать все';
+    };
+    overlay.querySelectorAll('[data-export-chapter]').forEach(input => { input.onchange = updateSelection; });
+    overlay.querySelector('[data-export-select-all]').onclick = () => {
+      const enabled = [...overlay.querySelectorAll('[data-export-chapter]:not(:disabled)')];
+      const checked = !enabled.every(input => input.checked);
+      enabled.forEach(input => { input.checked = checked; }); updateSelection();
+    };
+    updateSelection();
     overlay.querySelector('[data-export-selected-book]').onclick = async () => {
       try {
         const ids = [...overlay.querySelectorAll('[data-export-chapter]:checked')].map(input => input.dataset.exportChapter);
@@ -22987,7 +23045,7 @@ ${raw}`;
       if (value?.locked) return 'Зашифрованная версия. Примените мастер-пароль для сравнения.';
       return value?.ast ? `${value.title || ''}\n\n${docText(value.ast)}${value.notes ? `\n\nЗаметки:\n${value.notes}` : ''}` : JSON.stringify(value, null, 2);
     };
-    overlay.innerHTML = `<div class="form-modal utility-modal conflict-modal"><div class="modal-head-row"><div><h2>Разные версии</h2><p>${conflict ? 'Оба варианта сохранены. Выберите версию или оставьте оба документа.' : 'Конфликтов нет. Изменения согласованы.'}</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div>${conflict ? `<label class="utility-option">Запись<select class="form-control" id="conflict-selection">${conflicts.map(item => `<option value="${escapeHtml(item.id)}" ${item.id === conflict.id ? 'selected' : ''}>${escapeHtml(item.local.value?.title || item.remote.value?.title || item.recordId)}</option>`).join('')}</select></label><div class="conflict-versions"><section><h3>На этом устройстве</h3><pre>${escapeHtml(await describe(conflict.local))}</pre></section><section><h3>На другом устройстве</h3><pre>${escapeHtml(await describe(conflict.remote))}</pre></section></div><div class="form-actions"><button class="pill-btn" data-resolve-conflict="local">Оставить эту</button><button class="pill-btn" data-resolve-conflict="remote">Принять другую</button>${conflict.store === 'docs' && !conflict.local.deleted && !conflict.remote.deleted ? '<button class="pill-btn ai-btn" data-resolve-conflict="both">Сохранить обе главы</button>' : ''}</div>` : ''}</div>`;
+    overlay.innerHTML = `<div class="form-modal utility-modal conflict-modal"><div class="modal-head-row"><div><h2>Разные версии</h2><p>${conflict ? 'Оба варианта сохранены. Выберите версию или оставьте оба документа.' : 'Конфликтов нет. Изменения согласованы.'}</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div>${conflict ? `<div class="form-field conflict-record-picker"><span>Запись</span>${this.renderFormSelect('conflict', conflicts.map(item => [item.id, item.local.value?.title || item.remote.value?.title || item.recordId]), conflict.id, { id: 'conflict-selection', label: 'Запись' })}</div><div class="conflict-versions"><section><h3>На этом устройстве</h3><pre>${escapeHtml(await describe(conflict.local))}</pre></section><section><h3>На другом устройстве</h3><pre>${escapeHtml(await describe(conflict.remote))}</pre></section></div><div class="form-actions"><button class="pill-btn" data-resolve-conflict="local">Оставить эту</button><button class="pill-btn" data-resolve-conflict="remote">Принять другую</button>${conflict.store === 'docs' && !conflict.local.deleted && !conflict.remote.deleted ? '<button class="pill-btn ai-btn" data-resolve-conflict="both">Сохранить обе главы</button>' : ''}</div>` : ''}</div>`;
     overlay.classList.add('active'); overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('#conflict-selection')?.addEventListener('change', event => this.openSyncConflicts(event.target.value));
     overlay.querySelectorAll('[data-resolve-conflict]').forEach(button => button.onclick = async () => {
@@ -23439,7 +23497,7 @@ ${raw}`;
 
     if (!portal) return;
 
-    const hasOpenMenu = ['kb', 'format', 'split', 'notes', 'search', 'review']
+    const hasOpenMenu = ['library', 'kb', 'format', 'split', 'notes', 'search', 'review']
 
       .some((key) => this.isFloatingMenuOpen(key));
 
@@ -23451,105 +23509,45 @@ ${raw}`;
 
 // --- renderMobileSync ---
 
-  renderMobileSync() {
-
+  renderSyncConnectionForm() {
     const s = this.state.sync;
-
-    const preview = s.mergePreview;
-
-    const remembered = (s.rememberedDevices || []).filter((item) => item.trusted).slice(0, 3);
-
-    const discovered = s.discoveredDevices || [];
-
-    const scanProgress = s.discovery.total ? Math.round((s.discovery.checked / s.discovery.total) * 100) : 0;
-
-    return `
-
-      ${this.mobilePanelHeader('Связь с компьютером', 'Локальная синхронизация по Wi‑Fi')}
-
-      <div class="mobile-panel-body mobile-sync-body">
-
-        <section class="mobile-sync-status ${escapeHtml(s.status)} compact" data-sync-status-card>
-
-          ${iconSvg('phonePc', 'mobile-sync-icon')}
-
-          <div>
-
-            <strong data-sync-status-title>${this.syncStatusLabel(s.status)}</strong>
-
-            <span data-sync-status-detail>${escapeHtml(s.statusDetail || 'Найдите компьютер в Wi‑Fi или введите адрес вручную.')}</span>
-
-          </div>
-
-        </section>
-
-
-
-        ${remembered.length ? `<section class="sync-mobile-section"><div class="mobile-section-title">Быстрое подключение</div>${remembered.map((device) => this.renderSyncDeviceCard(device, 'remembered')).join('')}</section>` : ''}
-
-
-
-        <section class="sync-mobile-section">
-
-          <div class="mobile-section-title">Найденные компьютеры</div>
-
-          <div class="sync-scan-row">
-
-            <button class="pill-btn ai-btn" data-action="sync-scan">${iconSvg('scan', 'btn-svg')} Искать в Wi‑Fi</button>
-
-            ${s.discovery.scanning ? `<button class="pill-btn" data-action="sync-scan-cancel"><i class="bx bx-stop"></i> Стоп</button>` : ''}
-
-          </div>
-
-          ${s.discovery.scanning ? `<div class="sync-progress"><span style="width:${scanProgress}%"></span></div><small>${s.discovery.checked}/${s.discovery.total} адресов</small>` : `<small>${escapeHtml(s.discovery.message || 'Поиск запускается только вручную и не работает в фоне.')}</small>`}
-
-          ${discovered.length ? `<div class="sync-device-list">${discovered.map((device) => this.renderSyncDeviceCard(device, 'discovered')).join('')}</div>` : '<p class="form-helper">Если компьютер не найден, используйте ручной ввод ниже.</p>'}
-
-        </section>
-
-
-
-        <section class="sync-mobile-section">
-
-          <button class="mobile-collapser" data-action="sync-toggle-manual">${iconSvg('server', 'mobile-action-svg')} <span>Ввести вручную</span><i class="bx bx-chevron-down"></i></button>
-
-          ${s.discovery.manualOpen ? `<div class="mobile-sync-form compact">
-
-            <label>Имя устройства<input class="form-control" data-sync-field="deviceName" value="${escapeHtml(s.deviceName || '')}" placeholder="Android телефон"></label>
-
-            <label>IP компьютера<input class="form-control" data-sync-field="host" value="${escapeHtml(s.host || '')}" placeholder="192.168.1.10"></label>
-
-            <div class="sync-two-cols">
-
-              <label>Порт<input class="form-control" data-sync-field="port" value="${escapeHtml(s.port || '8787')}" inputmode="numeric"></label>
-
-              <label>Код подключения<input class="form-control" data-sync-field="token" value="${escapeHtml(s.token || '')}" placeholder="код"></label>
-
-            </div>
-
-          </div>` : ''}
-
-          <div class="mobile-panel-actions">
-
-            <button class="pill-btn ai-btn" data-action="sync-connect">${iconSvg('sync', 'btn-svg')} Подключиться</button>
-
-            <button class="pill-btn" data-action="sync-disconnect"><i class="bx bx-link-break"></i> Отключить</button>
-
-            <button class="pill-btn" data-action="sync-request-merge"><i class="bx bx-transfer"></i> Сравнить базы</button>
-
-          </div>
-
-        </section>
-
-
-
-        ${preview ? this.renderSyncMergePreview(preview) : '<p class="form-helper">Сервер только передаёт сообщения. Очереди, связи, конфликты и ревизии хранятся на этом устройстве в IndexedDB.</p>'}
-
-      </div>`;
-
+    return `<div class="form-grid sync-connection-form">
+      <label>Адрес компьютера<input class="form-control" data-sync-field="host" value="${escapeHtml(s.host || '')}" placeholder="192.168.1.10" inputmode="url" autocapitalize="off" autocomplete="off" spellcheck="false"></label>
+      <label>Код подключения<input class="form-control sync-code-input" data-sync-field="token" value="${escapeHtml(s.token || '')}" placeholder="Код из приложения на ПК" autocapitalize="characters" autocomplete="off" spellcheck="false"></label>
+      <button class="pill-btn ai-btn sync-primary" data-action="sync-connect" ${s.status === 'waiting' ? 'disabled' : ''}><i class="bx bx-link"></i>${s.status === 'waiting' ? 'Подключение…' : 'Подключиться'}</button>
+    </div>`;
   }
 
+  renderSyncOptions() {
+    const s = this.state.sync, server = s.server || {};
+    return `<button class="sync-disclosure" data-action="sync-toggle-options" aria-expanded="${!!s.optionsOpen}"><span>Дополнительные параметры</span><i class="bx bx-chevron-${s.optionsOpen ? 'up' : 'down'}"></i></button>
+      ${s.optionsOpen ? `<div class="sync-options-content">
+        ${s.discovery.manualOpen || this.isMobileLayout() ? `<div class="form-grid sync-extra-fields"><label>Имя устройства<input class="form-control" data-sync-field="deviceName" value="${escapeHtml(s.deviceName || '')}"></label><label>Порт<input class="form-control" data-sync-field="port" value="${escapeHtml(s.port || '8787')}" inputmode="numeric"></label></div>` : ''}
+        <div class="sync-secondary-actions">
+          ${server.running ? '<button class="pill-btn" data-action="sync-server-refresh-token"><i class="bx bx-key"></i> Новый код</button><button class="pill-btn" data-action="sync-server-stop"><i class="bx bx-stop"></i> Остановить сервер</button>' : ''}
+          ${this.syncClient.isOpen() ? '<button class="pill-btn" data-action="sync-request-merge"><i class="bx bx-refresh"></i> Сверить сейчас</button><button class="pill-btn" data-action="sync-disconnect"><i class="bx bx-link-break"></i> Отключиться</button>' : ''}
+          ${!this.isMobileLayout() ? `<button class="pill-btn" data-action="sync-toggle-manual"><i class="bx bx-link"></i>${s.discovery.manualOpen ? 'Вернуться к серверу' : 'Подключиться к другому ПК'}</button>` : ''}
+        </div>
+        ${(s.rememberedDevices || []).length ? `<div class="sync-saved-devices"><h3>Сохранённые устройства</h3>${s.rememberedDevices.map(device => this.renderSyncDeviceCard(device, 'remembered')).join('')}</div>` : ''}
+        ${s.mergePreview ? this.renderSyncMergePreview(s.mergePreview) : ''}
+      </div>` : ''}`;
+  }
 
+  renderMobileSync() {
+    const s = this.state.sync;
+    const connected = this.syncClient.isOpen();
+    const remembered = (s.rememberedDevices || []).filter(device => device.trusted).slice(0, 3);
+    return `${this.mobilePanelHeader('Связь с компьютером', 'Телефон и ПК должны быть в одной сети Wi-Fi')}
+      <div class="mobile-panel-body mobile-sync-body sync-compact-body">
+        ${connected || s.status === 'error' ? `<section class="mobile-sync-status ${escapeHtml(s.status)} compact" data-sync-status-card>${iconSvg('phonePc', 'mobile-sync-icon')}<div><strong data-sync-status-title>${this.syncStatusLabel(s.status)}</strong><span data-sync-status-detail>${escapeHtml(s.statusDetail || 'Изменения передаются автоматически.')}</span></div></section>` : ''}
+        ${connected ? '<p class="sync-intro">Можно продолжать писать. Главы и база знаний сверяются автоматически.</p>' : s.discovery.manualOpen ? this.renderSyncConnectionForm() : `<div class="sync-find-computer"><p class="sync-intro">Запустите связь по Wi-Fi в Nocturne на компьютере, затем найдите его здесь.</p><button class="pill-btn ai-btn sync-primary" data-action="${s.discovery.scanning ? 'sync-scan-cancel' : 'sync-scan'}"><i class="bx ${s.discovery.scanning ? 'bx-stop' : 'bx-search'}"></i>${s.discovery.scanning ? 'Остановить поиск' : 'Найти компьютер'}</button>
+          ${s.discovery.scanning ? '<p class="form-helper" role="status">Ищем компьютер в сети…</p>' : s.discovery.message ? `<p class="form-helper">${escapeHtml(s.discovery.message)}</p>` : ''}
+          <div class="sync-device-list">${(s.discoveredDevices || []).map(device => this.renderSyncDeviceCard(device, 'discovered')).join('')}${remembered.map(device => this.renderSyncDeviceCard(device, 'remembered')).join('')}</div></div>`}
+        ${!connected ? `<button class="sync-text-action" data-action="sync-toggle-manual">${s.discovery.manualOpen ? 'Найти компьютер в сети' : 'Ввести адрес и код вручную'}</button>` : ''}
+        ${s.conflicts ? '<button class="pill-btn" data-action="open-sync-conflicts"><i class="bx bx-git-compare"></i> Сравнить разные версии</button>' : ''}
+        ${this.renderSyncOptions()}
+      </div>`;
+  }
 
 // --- renderSyncDeviceCard ---
 
@@ -23573,7 +23571,7 @@ ${raw}`;
 
         <strong>${escapeHtml(device.deviceName || 'Nocturne Sync')}</strong>
 
-        <span>${escapeHtml(host || 'адрес неизвестен')}:${escapeHtml(String(port))} · ${mode === 'remembered' ? 'доверенное' : 'найдено'} · ${escapeHtml(last)}</span>
+        <span>${escapeHtml(host || 'адрес неизвестен')}:${escapeHtml(String(port))}</span>
 
       </div>
 
@@ -23581,7 +23579,7 @@ ${raw}`;
 
         <button class="pill-btn mini" data-action="sync-connect-device" data-sync-device-id="${id}">${trusted ? 'Снова' : 'Подключить'}</button>
 
-        ${mode === 'remembered' ? `<button class="btn-icon" title="Автоподключение" data-action="sync-toggle-autoreconnect" data-sync-device-id="${id}">${iconSvg(device.autoReconnect ? 'trust' : 'sync', 'icon-btn-svg')}</button><button class="btn-icon" title="Забыть" data-action="sync-forget-device" data-sync-device-id="${id}"><i class="bx bx-trash"></i></button>` : ''}
+        ${mode === 'remembered' && this.state.sync.optionsOpen ? `<button class="btn-icon" title="Автоподключение" aria-label="Автоподключение" aria-pressed="${!!device.autoReconnect}" data-action="sync-toggle-autoreconnect" data-sync-device-id="${id}">${iconSvg(device.autoReconnect ? 'trust' : 'sync', 'icon-btn-svg')}</button><button class="btn-icon" title="Забыть устройство" aria-label="Забыть устройство" data-action="sync-forget-device" data-sync-device-id="${id}"><i class="bx bx-trash"></i></button>` : ''}
 
       </div>
 
@@ -23844,10 +23842,16 @@ ${raw}`;
 // --- renderSyncSurfaces ---
 
   renderSyncSurfaces() {
+    const focused = document.activeElement?.matches('[data-sync-field]') ? { field: document.activeElement.dataset.syncField, start: document.activeElement.selectionStart, end: document.activeElement.selectionEnd } : null;
 
     if (this.isMobileLayout()) this.renderMobileShell();
 
     else if (document.querySelector('#form-overlay.active .sync-center-modal')) this.renderOpenSyncPanel();
+    if (focused) {
+      const input = document.querySelector(`[data-sync-field="${focused.field}"]`);
+      input?.focus({ preventScroll: true });
+      if (input && focused.start !== null) input.setSelectionRange(focused.start, focused.end);
+    }
 
   }
 
@@ -23991,206 +23995,21 @@ ${raw}`;
 // --- renderDesktopSyncCenter ---
 
   renderDesktopSyncCenter() {
-
-    const s = this.state.sync;
-
-    const server = s.server || {};
-
-    const discovered = s.discoveredDevices || [];
-
-    const remembered = s.rememberedDevices || [];
-
-    const scanProgress = s.discovery.total ? Math.round((s.discovery.checked / s.discovery.total) * 100) : 0;
-
-    const preferredIps = this.preferredLanIps(server.lanIps || []);
-
-    const infoRows = [
-
-      ['Адрес в сети', preferredIps.join(', ') || s.host || 'не найден'],
-
-      ['Порт', server.port || s.port || '8787'],
-
-      ['Код подключения', server.token || s.token || 'запустите сервер'],
-
-    ];
-
-    return `
-
-      <div class="form-modal sync-center-modal">
-
-        <div class="sync-center-head">
-
-          <div class="sync-center-title">
-
-            <span class="sync-center-logo">${iconSvg('phonePc', 'sync-center-logo-svg')}</span>
-
-            <div><h2>Локальная связь</h2><p>Синхронизация телефона и компьютера по Wi‑Fi</p></div>
-
-          </div>
-
-          <div class="sync-center-head-actions">
-
-            <span class="sync-status-pill ${escapeHtml(s.status)}" data-sync-status>${escapeHtml(this.syncStatusLabel(s.status))}</span>
-
-            <button class="btn-icon" data-close-form><i class="bx bx-x"></i></button>
-
-          </div>
-
-        </div>
-
-
-
-        <section class="sync-center-hero">
-
-          <div class="sync-hero-icon">${iconSvg('phonePc', 'sync-center-logo-svg')}</div>
-
-          <div>
-
-            <span>${server.running ? 'Компьютер готов к подключению' : 'Сервер ещё не запущен'}</span>
-
-            <strong>${server.running ? 'Телефон может подключиться по Wi‑Fi' : (server.canControl || this.runtime?.isElectron ? 'Запустите сервер одной кнопкой' : 'Проверьте внешний sync server')}</strong>
-
-            <p>${escapeHtml(server.message || 'Сервер работает только как локальный брокер. Данные проекта остаются на устройствах.')}</p>
-
-          </div>
-
-          <button class="pill-btn ai-btn sync-hero-action" data-action="${server.running ? 'sync-copy-info' : 'sync-server-start'}">${server.running ? iconSvg('copy', 'btn-svg') : iconSvg('server', 'btn-svg')} ${server.running ? 'Скопировать данные' : 'Запустить сервер'}</button>
-
-        </section>
-
-
-
-        <div class="sync-center-grid">
-
-          <section class="sync-center-card sync-server-card">
-
-            <div class="sync-card-head">${iconSvg('server', 'sync-card-head-icon')}<div><strong>Сервер на компьютере</strong><span>${server.canControl ? 'Управление доступно из приложения' : 'Браузерный режим: запуск сервера снаружи'}</span></div></div>
-
-            <div class="sync-server-status ${server.running ? 'online' : 'offline'}">
-
-              <span>${server.running ? 'Сервер запущен' : 'Сервер не запущен'}</span>
-
-              <small>${escapeHtml(server.message || (server.canControl ? 'Запуск доступен только по явному нажатию.' : 'Проверьте уже запущенный сервер или скопируйте команду запуска.'))}</small>
-
-            </div>
-
-            <div class="sync-info-grid">${infoRows.map(([label, value]) => `<span><small>${label}</small><strong>${escapeHtml(value)}</strong></span>`).join('')}</div>
-
-            <div class="sync-card-actions">
-
-              <button class="pill-btn ai-btn" data-action="sync-server-start">${iconSvg('server', 'btn-svg')} Запустить сервер</button>
-
-              <button class="pill-btn" data-action="sync-server-stop"><i class="bx bx-stop"></i> Остановить</button>
-
-              <button class="pill-btn" data-action="sync-server-check"><i class="bx bx-refresh"></i> Проверить</button>
-
-              <button class="pill-btn" data-action="sync-server-refresh-token"><i class="bx bx-key"></i> Новый код</button>
-
-              <button class="pill-btn" data-action="sync-copy-info">${iconSvg('copy', 'btn-svg')} Скопировать</button>
-
-            </div>
-
-          </section>
-
-
-
-          <section class="sync-center-card">
-
-            <div class="sync-card-head">${iconSvg('scan', 'sync-card-head-icon')}<div><strong>Обнаружение в сети</strong><span>Поиск по Wi‑Fi ограничен по времени; ручной ввод остаётся запасным путём.</span></div></div>
-
-            <div class="sync-card-actions">
-
-              <button class="pill-btn ai-btn" data-action="sync-scan">${iconSvg('scan', 'btn-svg')} Искать устройства</button>
-
-              ${s.discovery.scanning ? `<button class="pill-btn" data-action="sync-scan-cancel"><i class="bx bx-stop"></i> Остановить</button>` : ''}
-
-            </div>
-
-            ${s.discovery.scanning ? `<div class="sync-progress"><span style="width:${scanProgress}%"></span></div><small>${s.discovery.checked}/${s.discovery.total} адресов проверено</small>` : `<p class="form-helper">${escapeHtml(s.discovery.message || 'Поиск запускается только пользователем, ограничен по времени и не работает в фоне.')}</p>`}
-
-            <div class="sync-device-list">${discovered.length ? discovered.map((device) => this.renderSyncDeviceCard(device, 'discovered')).join('') : '<p class="form-helper">Пока ничего не найдено.</p>'}</div>
-
-          </section>
-
-
-
-          <section class="sync-center-card">
-
-            <div class="sync-card-head">${iconSvg('trust', 'sync-card-head-icon')}<div><strong>Доверенные устройства</strong><span>Автоподключение включается только после успешной привязки.</span></div></div>
-
-            <div class="sync-device-list">${remembered.length ? remembered.map((device) => this.renderSyncDeviceCard(device, 'remembered')).join('') : '<p class="form-helper">Доверенных устройств пока нет.</p>'}</div>
-
-          </section>
-
-
-
-          <section class="sync-center-card">
-
-            <div class="sync-card-head">${iconSvg('sync', 'sync-card-head-icon')}<div><strong>Подключение и merge</strong><span>Сервер не хранит историю. Очереди, связи и конфликты остаются в IndexedDB клиентов.</span></div></div>
-
-            <div class="form-grid compact">
-
-              <label>Имя устройства <input class="form-control" data-sync-field="deviceName" value="${escapeHtml(s.deviceName || '')}"></label>
-
-              <label>IP компьютера <input class="form-control" data-sync-field="host" value="${escapeHtml(s.host || '127.0.0.1')}" placeholder="192.168.1.10"></label>
-
-              <label>Порт <input class="form-control" data-sync-field="port" value="${escapeHtml(s.port || '8787')}" inputmode="numeric"></label>
-
-              <label>Код подключения <input class="form-control" data-sync-field="token" value="${escapeHtml(s.token || '')}"></label>
-
-            </div>
-
-            <div class="sync-card-actions">
-
-              <button class="pill-btn ai-btn" data-action="sync-connect">${iconSvg('sync', 'btn-svg')} Подключиться</button>
-
-              <button class="pill-btn" data-action="sync-disconnect"><i class="bx bx-link-break"></i> Отключить</button>
-
-              <button class="pill-btn" data-action="sync-request-merge"><i class="bx bx-transfer"></i> Сравнить базы</button>
-
-            </div>
-
-            ${s.mergePreview ? this.renderSyncMergePreview(s.mergePreview) : ''}
-
-          </section>
-
-
-
-          <section class="sync-center-card sync-diagnostics-card">
-
-            <div class="sync-card-head">${iconSvg('trust', 'sync-card-head-icon')}<div><strong>Диагностика</strong><span>Что сейчас известно приложению.</span></div></div>
-
-            <div class="sync-diagnostics-list">
-
-              <span><i class="bx ${this.runtime?.isElectron ? 'bx-check-circle' : 'bx-info-circle'}"></i> Runtime: ${escapeHtml(this.runtime?.platform || 'browser')}</span>
-
-              <span><i class="bx ${server.canControl ? 'bx-check-circle' : 'bx-error-circle'}"></i> Управление сервером: ${server.canControl ? 'доступно' : 'недоступно'}</span>
-
-              <span><i class="bx ${server.running ? 'bx-check-circle' : 'bx-radio-circle'}"></i> LAN IP: ${escapeHtml(preferredIps.join(', ') || 'не найден')}</span>
-
-              <span><i class="bx bx-shield-quarter"></i> Discovery не отдаёт код подключения или данные проекта.</span>
-
-            </div>
-
-          </section>
-
-        </div>
-
-
-
-        <details class="sync-help">
-
-          <summary>Как подключить?</summary>
-
-          <p>На ПК запустите сервер кнопкой выше или командой <code>npm run sync:server</code>. На телефоне откройте “Связь с компьютером”, найдите ПК в Wi‑Fi или введите IP, порт и код вручную. Поиск не публикует код подключения и не отдаёт данные проекта.</p>
-
-        </details>
-
-      </div>`;
-
+    const s = this.state.sync, server = s.server || {};
+    const address = this.preferredLanIps(server.lanIps || [])[0] || s.host || 'Адрес не найден';
+    return `<div class="form-modal utility-modal sync-center-modal sync-compact">
+      <div class="modal-head-row"><div><h2>Связь по Wi-Fi</h2><p>Сверяйте рукопись и базу знаний с телефоном.</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div>
+      ${s.discovery.manualOpen ? this.renderSyncConnectionForm() : server.running ? `<div class="sync-pairing">
+        <div class="sync-ready-label"><i class="bx bx-check-circle"></i> Компьютер готов к подключению</div>
+        <p class="sync-instruction">На телефоне откройте «Ещё → Связь с компьютером» и введите этот код.</p>
+        <dl class="sync-pairing-data"><div><dt>Адрес компьютера</dt><dd>${escapeHtml(address)}:${escapeHtml(String(server.port || '8787'))}</dd></div><div><dt>Код подключения</dt><dd><code data-sync-pairing-code>${escapeHtml(server.token || s.token || '')}</code></dd></div></dl>
+        <button class="pill-btn ai-btn sync-primary" data-action="sync-copy-info"><i class="bx bx-copy"></i> Скопировать адрес и код</button>
+      </div>` : `<div class="sync-start"><div class="sync-start-icon">${iconSvg('phonePc', 'sync-center-logo-svg')}</div><p class="sync-intro">Подключите телефон и компьютер к одной сети Wi-Fi. Затем включите связь на компьютере.</p><button class="pill-btn ai-btn sync-primary" data-action="sync-server-start"><i class="bx bx-wifi"></i> Включить связь</button></div>`}
+      ${s.status === 'error' ? `<p class="sync-feedback error" role="alert">${escapeHtml(s.statusDetail || 'Не удалось подключиться. Проверьте адрес и код.')}</p>` : ''}
+      ${s.conflicts ? '<button class="pill-btn sync-conflict-action" data-action="open-sync-conflicts"><i class="bx bx-git-compare"></i> Сравнить разные версии</button>' : ''}
+      ${this.renderSyncOptions()}
+    </div>`;
   }
-
-
 
 // --- connectLocalSyncFromUi ---
 
