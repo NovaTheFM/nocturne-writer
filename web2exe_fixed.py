@@ -14,7 +14,7 @@ RELEASE_DIR = ROOT / "release" / "electron"
 
 def run(command, cwd=ROOT):
     print(f"\n==> {command}")
-    subprocess.run(command, cwd=cwd, shell=True, check=True)
+    subprocess.run(command, cwd=cwd, shell=True, check=True, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
 
 
 def safe_package_name(name):
@@ -23,6 +23,8 @@ def safe_package_name(name):
 
 
 def clean_build_dir():
+    if BUILD_DIR.resolve().parent != ROOT.resolve():
+        raise ValueError('Build directory must stay inside the project.')
     if BUILD_DIR.exists():
       shutil.rmtree(BUILD_DIR)
     BUILD_DIR.mkdir(parents=True, exist_ok=True)

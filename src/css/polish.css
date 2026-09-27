@@ -14,6 +14,8 @@ button:focus-visible, [role="button"]:focus-visible, a:focus-visible {
 .sidebar .doc-item { border-radius: 12px; }
 .sidebar .section-title { letter-spacing: .08em; }
 .sidebar .folder-empty-state { flex-direction: column; align-items: flex-start; gap: 10px; padding: 16px; }
+.sidebar .doc-folder-empty { display: flex; flex-direction: column; gap: 10px; padding: 16px; text-align: center; }
+.sidebar .doc-folder-empty .mini-text-btn { align-self: center; padding: 8px 12px; }
 .utility-modal { width: min(720px, calc(100vw - 48px)); padding: 28px; }
 .utility-modal h2 { font-size: 24px; letter-spacing: -.035em; line-height: 1.2; margin: 0 0 8px; }
 .utility-modal .modal-head-row { align-items: flex-start; gap: 20px; margin-bottom: 24px; }
@@ -82,6 +84,8 @@ button.utility-row, label.utility-row { cursor: pointer; }
   .toolbar-left .kb-main-btn span { max-width: 108px; overflow: hidden; text-overflow: ellipsis; }
 }
 @media (max-width: 900px) {
+  .mobile-segmented.mobile-lore-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+  .mobile-lore-tabs button { min-width: 0; font-size: 12px; padding-inline: 4px; }
   .mobile-tab-surface.active { background: var(--bg-deep); background-image: radial-gradient(ellipse at 15% 0, rgba(var(--accent-rgb), .09), transparent 55%); }
   .mobile-tab-header { background: var(--bg-deep); padding: 20px 18px 16px; }
   .mobile-tab-header h2 { font-size: 24px; letter-spacing: -.035em; margin-top: 5px; }

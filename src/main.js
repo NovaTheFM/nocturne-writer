@@ -2358,7 +2358,7 @@ class NocturneWriter {
             </div>
           </div>
         </div>
-        <div class="mobile-segmented">
+        <div class="mobile-segmented mobile-lore-tabs">
           ${[['characters', 'Персонажи'], ['locations', 'Локации'], ['timeline', 'Таймлайн'], ['notes', 'Записи']].map(([id, label]) => `<button class="${active === id ? 'active' : ''}" data-mobile-kb-tab="${id}">${label}</button>`).join('')}
         </div>
         ${this.kbViewTools()}
@@ -7341,7 +7341,7 @@ class NocturneWriter {
     node.closest('.page-content')?.focus();
   }
 
-  runAction(action, event) {
+  runAction(action, event = { target: document.body }) {
     const map = {
       'macro-record-toggle': () => {
         this.macroRecordingState = !this.macroRecordingState;
@@ -8093,7 +8093,8 @@ class NocturneWriter {
       'note-toggle-check': () => this.toggleNoteChecklist(),
       'note-heading': () => this.insertNoteSnippet('\n\n## '),
     };
-    map[action]?.();
+    try { map[action]?.()?.catch?.(error => this.toast(error.message || 'Не удалось выполнить действие.')); }
+    catch (error) { this.toast(error.message || 'Не удалось выполнить действие.'); }
     const notesMode = event.target.closest('[data-notes-mode]')?.dataset.notesMode;
     if (notesMode) {
       this.state.noteMode = notesMode;
@@ -10910,7 +10911,8 @@ class NocturneWriter {
     const typoRanges = [];
     const smartRanges = [];
 
-    document.querySelectorAll('.page-content p, .page-content blockquote, .page-content h2').forEach((block) => {
+    document.querySelectorAll('.page-content [data-block-id]').forEach((block) => {
+      if (!block.matches('p, blockquote, h1, h2, h3') || block.parentElement.closest('[data-block-id]')) return;
       const isActive = active?.blockId === (block.dataset.sourceBlockId || block.dataset.blockId);
       const markup = block.innerHTML, cached = this.typoBlockCache.get(block);
       if (!isActive && !cached?.wasActive && cached?.signature === signature && cached.markup === markup && cached.ranges.every(([, item]) => item.range.startContainer.isConnected && block.contains(item.range.startContainer))) {
@@ -11023,10 +11025,12 @@ class NocturneWriter {
           mode: this.state.settings.smartDictionaryMode || 'local',
           provider: this.state.settings.smartDictionaryProvider || 'languagetool',
           lang: this.state.settings.smartDictionaryLang || 'auto',
+          contextText: (this.getFocusedDoc()?.ast.blocks || []).filter(block => words.some(word => normalizeTypoToken(stripHtml(block.html || '')).includes(word))).map(block => stripHtml(block.html || '')).join('\n').slice(0, 4000),
         });
         
         words.forEach((w) => {
           this.spellerPending.delete(w);
+          if (matches.checkedWords && !matches.checkedWords.has(w)) return;
           if (matches.has(w)) {
             const matchData = matches.get(w);
             if (matchData?.correct && normalizeTypoToken(matchData.correct) !== normalizeTypoToken(w)) {
@@ -22849,7 +22853,7 @@ ${raw}`;
       this.toast('Откройте документ для экспорта.');
       return;
     }
-    this.exportDocById(this.activeDoc.id);
+    return this.exportDocById(this.activeDoc.id);
   }
 
   exportDocById(docId, { includeNotes = !!this.state.settings.exportIncludeNotes, returnBlob = false, docOverride = null } = {}) {
@@ -22860,14 +22864,17 @@ ${raw}`;
     }
     if (doc.locked) throw new Error('Введите мастер-пароль перед экспортом.');
     if (!docOverride) this.nocturneEditor.syncDocFromEditorByDocId(doc.id);
-    const paragraphs = (doc.ast.blocks || []).map((block) => {
-      const runs = this.docxRunsFromHtml(block.html || '');
+    const paragraphs = (doc.ast.blocks || []).flatMap((block) => {
       const align = block.align && block.align !== 'left' ? `<w:jc w:val="${block.align === 'center' ? 'center' : block.align === 'right' ? 'right' : 'both'}"/>` : '';
+      if (block.type === 'divider') return '<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="4" w:color="999999"/></w:pBdr></w:pPr></w:p>';
       if (block.type === 'heading') {
-        return `<w:p><w:pPr><w:pStyle w:val="Heading1"/>${align}</w:pPr>${runs}</w:p>`;
+        const level = Math.max(1, Math.min(3, Number(block.level) || 2));
+        return `<w:p><w:pPr><w:pStyle w:val="Heading${level}"/>${align}</w:pPr>${this.docxRunsFromHtml(block.html || '')}</w:p>`;
       }
       const style = block.type === 'quote' ? '<w:pStyle w:val="Quote"/>' : '';
-      return `<w:p><w:pPr>${style}<w:spacing w:after="180" w:line="360" w:lineRule="auto"/>${align}</w:pPr>${runs}</w:p>`;
+      const fragment = document.createElement('template'); fragment.innerHTML = block.html || '';
+      const parts = block.type === 'quote' && fragment.content.querySelector('p') ? [...fragment.content.children].map(part => part.innerHTML) : [block.html || ''];
+      return parts.map(html => `<w:p><w:pPr>${style}<w:spacing w:after="180" w:line="360" w:lineRule="auto"/>${align}</w:pPr>${this.docxRunsFromHtml(html)}</w:p>`);
     }).join('');
     const notes = (includeNotes ? [doc.description, doc.notes, this.state.globalNotes] : []).filter(Boolean).map((note, index) => (
       `<w:p><w:pPr><w:pStyle w:val="${index === 0 ? 'Subtitle' : 'Quote'}"/></w:pPr><w:r><w:t>${this.xmlEscape(note)}</w:t></w:r></w:p>`
@@ -22877,22 +22884,27 @@ ${raw}`;
       '_rels/.rels': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>`,
       'docProps/core.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/cp:coreProperties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${this.xmlEscape(doc.title)}</dc:title><dc:creator>${this.xmlEscape(this.state.settings.authorName || 'Nocturne')}</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:created></cp:coreProperties>`,
       'word/_rels/document.xml.rels': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`,
-      'word/styles.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"/><w:sz w:val="24"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:rPr><w:b/><w:sz w:val="36"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Subtitle"><w:name w:val="Subtitle"/><w:rPr><w:i/><w:color w:val="666666"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:pPr><w:ind w:left="720"/></w:pPr><w:rPr><w:i/></w:rPr></w:style></w:styles>`,
+      'word/styles.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"/><w:sz w:val="24"/></w:rPr></w:style>${[1, 2, 3].map(level => `<w:style w:type="paragraph" w:styleId="Heading${level}"><w:name w:val="heading ${level}"/><w:basedOn w:val="Normal"/><w:pPr><w:keepNext/><w:outlineLvl w:val="${level - 1}"/></w:pPr><w:rPr><w:b/><w:sz w:val="${40 - level * 4}"/></w:rPr></w:style>`).join('')}<w:style w:type="paragraph" w:styleId="Subtitle"><w:name w:val="Subtitle"/><w:rPr><w:i/><w:color w:val="666666"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:pPr><w:ind w:left="720"/></w:pPr><w:rPr><w:i/></w:rPr></w:style></w:styles>`,
       'word/document.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${notes}${paragraphs}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>`,
     };
     const blob = new Blob([this.createZip(files)], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
     if (returnBlob) return blob;
-    this.downloadBlob(blob, `${this.safeFileName(doc.title)}.docx`);
+    return this.completeDocxExport(doc, blob);
+  }
+
+  async completeDocxExport(doc, blob) {
+    if (!await this.downloadBlob(blob, `${this.safeFileName(doc.title)}.docx`)) return false;
     const marks = this.state.reviewMarks.filter((mark) => mark.docId === doc.id);
     if (marks.length && this.state.exportNocturned) {
       const reviewBlob = new Blob([JSON.stringify(this.buildNocturnedPayload(doc, marks), null, 2)], { type: 'application/json' });
-      setTimeout(() => this.downloadBlob(reviewBlob, `${this.safeFileName(doc.title)}.nocturned`), 120);
+      if (!await this.downloadBlob(reviewBlob, `${this.safeFileName(doc.title)}.nocturned`)) return false;
       this.toast('DOCX и файл редакторских правок экспортированы.');
     } else if (this.state.exportNocturned) {
       this.toast('DOCX экспортирован. Файл правок .nocturned не скачан, так как в документе нет правок.');
     } else {
       this.toast('DOCX экспортирован.');
     }
+    return true;
   }
 
   buildBookDocx(docIds, { includeNotes = false, title = '' } = {}) {

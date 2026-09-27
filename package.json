@@ -13,7 +13,7 @@
     "electron:dev": "cross-env ELECTRON_DEV_URL=http://localhost:5173 electron electron/main.cjs",
     "electron:start": "electron electron/main.cjs",
     "android:sync": "npm run build && npx cap sync android",
-    "android:build:debug": "npm run build && npx cap sync android && cd android && gradlew.bat assembleDebug",
+    "android:build:debug": "node scripts/build-android-apk.mjs",
     "android:apk": "node scripts/build-android-apk.mjs",
     "android:open": "npx cap open android",
     "sync:server": "node scripts/sync-server.mjs"

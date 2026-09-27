@@ -63,6 +63,21 @@ test('offline edits reconcile and stale repeated states never overwrite newer ed
   assert.equal((await left.get('docs', 'chapter')).title, 'Offline phone edit');
   assert.equal((await right.get('docs', 'chapter')).title, 'Offline phone edit');
 });
+test('editor normalization never creates a new manuscript revision', async () => {
+  const { a, left } = await pair();
+  const doc = { id: 'normalized', title: 'Chapter', ast: { type: 'doc', blocks: [{ id: 'paragraph', type: 'paragraph', html: 'Text' }] } };
+  await left.put('docs', doc); const before = (await a.buildState()).records[0];
+  await left.put('docs', { ...doc, pmJson: { type: 'doc', content: [] }, summary: 'Text', ast: { type: 'doc', blocks: [{ ...doc.ast.blocks[0], align: 'left' }] } });
+  const after = (await a.buildState()).records[0];
+  assert.equal(after.hash, before.hash); assert.deepEqual(after.clock, before.clock);
+});
+test('a resolved conflict disappears on the device already keeping the chosen variant', async () => {
+  const { a, b, left, right } = await pair();
+  await left.put('docs', { id: 'same-variant', title: 'Original' }); await reconcile(a, b);
+  await left.put('docs', { id: 'same-variant', title: 'PC variant' }); await right.put('docs', { id: 'same-variant', title: 'Phone variant' }); await reconcile(a, b);
+  await a.resolveConflict((await left.getAll('syncConflicts'))[0].id, 'remote'); await reconcile(a, b);
+  assert.equal((await right.getAll('syncConflicts')).length, 0);
+});
 test('concurrent edits preserve two variants until explicit resolution', async () => {
   const { a, b, left, right } = await pair();
   await left.put('docs', { id: 'chapter', title: 'Original' }); await reconcile(a, b);

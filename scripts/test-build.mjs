@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile, access } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
-const result = spawnSync(process.execPath, ['scripts/build-web.mjs'], { encoding: 'utf8' });
+const result = spawnSync(process.execPath, ['scripts/build-web.mjs'], { encoding: 'utf8', windowsHide: true });
 assert.equal(result.status, 0, result.stderr);
 const html = await readFile('dist/index.html', 'utf8');
 for (const match of html.matchAll(/(?:href|src)="((?:\.\/)?src\/[^"?]+)(?:\?[^" ]*)?"/g)) {

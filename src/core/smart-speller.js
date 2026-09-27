@@ -1,161 +1,51 @@
-/**
- * Smart Speller Engine for Nocturne Writer
- * Dual-engine support: LanguageTool (Online/Self-host) & Hunspell (100% Offline)
- * Supports Ukrainian (uk), Russian (ru), and English (en)
- */
+﻿import { normalizeTypoToken, TYPO_LOOKUP } from './typos.js';
 
-import { normalizeTypoToken } from './typos.js';
+const cache = new Map();
+const languageCodes = { uk: 'uk-UA', ru: 'ru-RU', en: 'en-US' };
 
-// Cache for checked words in memory
-const spellerCache = new Map();
-const pendingRequests = new Set();
+function localMatches(words) {
+  return new Map(words.filter(word => TYPO_LOOKUP[word]).map(word => [word, {
+    ...TYPO_LOOKUP[word], suggestions: [TYPO_LOOKUP[word].correct], source: 'local',
+  }]));
+}
 
-/**
- * Levenshtein distance for offline Hunspell-style edit-distance suggestions
- */
-function levenshteinDistance(a, b) {
-  const m = a.length;
-  const n = b.length;
-  if (m === 0) return n;
-  if (n === 0) return m;
-  const matrix = Array.from({ length: m + 1 }, () => new Int32Array(n + 1));
-  for (let i = 0; i <= m; i++) matrix[i][0] = i;
-  for (let j = 0; j <= n; j++) matrix[0][j] = j;
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      matrix[i][j] = Math.min(
-        matrix[i - 1][j] + 1,
-        matrix[i][j - 1] + 1,
-        matrix[i - 1][j - 1] + cost
-      );
-    }
+async function onlineMatches(words, { lang, contextText, signal }) {
+  const text = contextText || words.join(' ');
+  const response = await fetch('https://api.languagetool.org/v2/check', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+    body: new URLSearchParams({ text, language: languageCodes[lang] || 'auto', enabledOnly: 'false' }).toString(),
+    signal: signal || AbortSignal.timeout(12_000),
+  });
+  if (!response.ok) throw new Error(`Проверка словаря недоступна (${response.status}). Можно повторить позже.`);
+  const data = await response.json(), matches = new Map(), requested = new Set(words);
+  for (const match of data.matches || []) {
+    const word = normalizeTypoToken(text.slice(match.offset, match.offset + match.length).trim());
+    if (!requested.has(word) || !match.replacements?.length) continue;
+    const suggestions = match.replacements.slice(0, 5).map(replacement => replacement.value);
+    matches.set(word, { correct: suggestions[0], suggestions, label: match.rule?.category?.name || 'Опечатка', source: 'online' });
   }
-  return matrix[m][n];
+  return matches;
 }
 
-/**
- * Common Ukrainian, Russian, and English dictionary stems for offline Hunspell fallback
- */
-const COMMON_UK_RU_EN_LEXICON = new Set([
-  'привіт', 'доброго', 'дня', 'ранок', 'вечір', 'дякую', 'будь', 'ласка',
-  'привет', 'здравствуйте', 'спасибо', 'пожалуйста', 'хорошо', 'отлично',
-  'hello', 'welcome', 'thank', 'please', 'great', 'awesome', 'project',
-  'персонаж', 'локация', 'рукопись', 'документ', 'глава', 'эпизод', 'событие'
-]);
-
-/**
- * Offline Hunspell Engine
- */
-function checkHunspellOffline(words, lang = 'auto') {
-  const resultMap = new Map();
-  // Offline speller delegates to local user lexicon and built-in rules
-  // No false-positive dummy matches on arbitrary valid words
-  return resultMap;
-}
-
-/**
- * LanguageTool API Engine (https://api.languagetool.org/v2/check)
- */
-async function checkLanguageTool(words, lang = 'auto') {
-  const resultMap = new Map();
-  if (!words || !words.length) return resultMap;
-
-  // Language mapping
-  let langCode = 'auto';
-  if (lang === 'uk') langCode = 'uk-UA';
-  else if (lang === 'ru') langCode = 'ru-RU';
-  else if (lang === 'en') langCode = 'en-US';
-
-  const textToScan = words.join('. ');
-
-  try {
-    const params = new URLSearchParams({
-      text: textToScan,
-      language: langCode,
-      enabledOnly: 'false',
-    });
-
-    const res = await fetch('https://api.languagetool.org/v2/check', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json',
-      },
-      body: params.toString(),
-    });
-
-    if (!res.ok) return resultMap;
-
-    const data = await res.json();
-    if (Array.isArray(data.matches)) {
-      data.matches.forEach((match) => {
-        const errorFragment = textToScan.slice(match.offset, match.offset + match.length).trim();
-        const norm = normalizeTypoToken(errorFragment);
-        if (norm && match.replacements && match.replacements.length > 0) {
-          const suggestions = match.replacements.map((r) => r.value).slice(0, 5);
-          resultMap.set(norm, {
-            correct: suggestions[0],
-            suggestions,
-            label: match.rule?.category?.name || 'LanguageTool: опечатка',
-            source: 'smart'
-          });
-        }
-      });
-    }
-  } catch (err) {
-    console.warn('LanguageTool API offline or unreachable:', err);
-  }
-
-  return resultMap;
-}
-
-/**
- * Main Smart Speller entry point
- */
 export async function getSmartSpellerMatches(words, options = {}) {
-  const { mode = 'local', provider = 'languagetool', lang = 'auto' } = options;
-  const uncachedWords = [];
+  const mode = options.mode || 'local', lang = options.lang || 'auto';
+  const normalized = [...new Set(words.map(normalizeTypoToken).filter(Boolean))];
+  const contextText = String(options.contextText || '').slice(0, 4000);
+  const contextualWords = new Set((contextText.match(/\p{L}+(?:[’'\-]\p{L}+)*/gu) || []).map(normalizeTypoToken));
+  const checked = normalized.filter(word => mode === 'local' || !contextText || contextualWords.has(word));
+  const keyOf = word => `${mode}:${lang}:${mode === 'local' ? '' : contextText}:${word}`;
   const results = new Map();
-
-  words.forEach((w) => {
-    const norm = normalizeTypoToken(w);
-    if (!norm) return;
-    const cacheKey = `${mode}:${provider}:${lang}:${norm}`;
-    if (spellerCache.has(cacheKey)) {
-      const match = spellerCache.get(cacheKey);
-      if (match) results.set(norm, match);
-    } else if (!pendingRequests.has(cacheKey)) {
-      uncachedWords.push(norm);
+  const fresh = checked.filter(word => !cache.has(keyOf(word)));
+  if (fresh.length) {
+    const matches = mode === 'api' ? new Map() : localMatches(fresh);
+    if (mode !== 'local') {
+      const remaining = fresh.filter(word => !matches.has(word));
+      if (remaining.length) for (const [word, match] of await onlineMatches(remaining, { ...options, lang, contextText })) matches.set(word, match);
     }
-  });
-
-  if (!uncachedWords.length) return results;
-
-  uncachedWords.forEach((norm) => pendingRequests.add(`${mode}:${provider}:${lang}:${norm}`));
-
-  let fetchedMatches = new Map();
-  if (mode === 'local') {
-    fetchedMatches = checkHunspellOffline(uncachedWords, lang);
-  } else if (mode === 'api') {
-    fetchedMatches = await checkLanguageTool(uncachedWords, lang);
-  } else {
-    // Hybrid mode: First try local Hunspell
-    fetchedMatches = checkHunspellOffline(uncachedWords, lang);
-    const remainingForApi = uncachedWords.filter((w) => !fetchedMatches.has(w));
-    if (remainingForApi.length) {
-      const apiMatches = await checkLanguageTool(remainingForApi, lang);
-      apiMatches.forEach((match, word) => fetchedMatches.set(word, match));
-    }
+    for (const word of fresh) cache.set(keyOf(word), matches.get(word) || null);
+    while (cache.size > 2000) cache.delete(cache.keys().next().value);
   }
-
-  uncachedWords.forEach((norm) => {
-    const cacheKey = `${mode}:${provider}:${lang}:${norm}`;
-    pendingRequests.delete(cacheKey);
-    const match = fetchedMatches.get(norm) || null;
-    spellerCache.set(cacheKey, match);
-    if (match) results.set(norm, match);
-  });
-
+  for (const word of checked) if (cache.get(keyOf(word))) results.set(word, cache.get(keyOf(word)));
+  results.checkedWords = new Set(checked);
   return results;
 }

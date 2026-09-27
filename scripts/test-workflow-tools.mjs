@@ -23,6 +23,15 @@ try {
     });
     assert.equal(result.failed, true); assert.equal(result.ui, 'Original survives'); assert.equal(result.db, 'Original survives');
   });
+  await test('IndexedDB rejects a stale guarded write without replacing the current record', async page => {
+    const result = await page.evaluate(async () => {
+      const a = window.nocturneApp;
+      await a.db.put('docs', { id: 'guard-test', title: 'Current record' });
+      let code = ''; try { await a.db.atomicWrite({ docs: [{ id: 'guard-test', title: 'Stale incoming record' }] }, { expect: { docs: [{ id: 'guard-test', value: { id: 'guard-test', title: 'Old record' } }] } }); } catch (error) { code = error.code; }
+      return { code, title: (await a.db.get('docs', 'guard-test')).title };
+    });
+    assert.equal(result.code, 'SYNC_RETRY'); assert.equal(result.title, 'Current record');
+  });
   await test('merge import is atomic and includes every world and global notes', async page => {
     const result = await page.evaluate(async () => {
       const a = window.nocturneApp; await a.createDoc(a.defaultFolderId(), 'Existing chapter', '');
@@ -91,6 +100,22 @@ try {
       a.openReviewQueue(); document.querySelector('[data-review-jump]').click();
       return a.state.activeDocId === doc.id && a.state.activeReviewMarkId === 'review-tool-test';
     }), true);
+  });
+  await test('AI stop aborts the request and leaves the manuscript unchanged', async page => {
+    const result = await page.evaluate(async () => {
+      const a = window.nocturneApp; await a.createDoc(a.defaultFolderId(), 'Cancel AI', '');
+      const editor = a.nocturneEditor.get('primary'); editor.commands.setContent('<p>Original manuscript</p>'); editor.commands.setTextSelection(5);
+      editor.commands.focus(); await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      a.state.settings.aiProvider = 'openai'; a.state.settings.aiEndpoint = 'https://example.invalid'; a.state.settings.aiKey = 'test-key'; a.state.settings.aiModel = 'test-model';
+      a.streamAi = async (_prompt, _chunks, signal) => new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(new DOMException('Stopped', 'AbortError')), { once: true }));
+      const messages = []; a.toast = message => messages.push(message);
+      const pending = a.runAi('continue');
+      for (let i = 0; i < 30 && !a.activeAiRequest; i++) await new Promise(resolve => setTimeout(resolve, 20));
+      if (!a.activeAiRequest) throw new Error(`AI request did not start: ${messages.join('; ')}; ${a.assistantPanelMessage}`);
+      document.querySelector('[data-action="cancel-ai"]').click(); await pending;
+      return { text: editor.getText(), active: !!a.activeAiRequest, messages };
+    });
+    assert.equal(result.text, 'Original manuscript'); assert.equal(result.active, false); assert.ok(result.messages.some(message => /Запрос остановлен/.test(message)));
   });
   await test('conflict comparison preserves both manuscripts on explicit keep-both', async page => {
     assert.equal(await page.evaluate(async () => {
