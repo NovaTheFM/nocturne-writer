@@ -102,11 +102,13 @@ try {
     const result = await page.evaluate(async () => {
       const a = window.nocturneApp, overlay = document.getElementById('form-overlay');
       a.presentFormModal('<div class="form-modal cleaner-modal"><div id="motion-cleaner-content"><div style="height:90px"></div></div></div>'); await new Promise(resolve => setTimeout(resolve, 400));
-      const body = document.getElementById('motion-cleaner-content'), modal = body.closest('.form-modal'); a.updateModalContent(body, '<div style="height:330px"></div>');
-      await new Promise(resolve => setTimeout(resolve, 60)); const before = modal.getBoundingClientRect().height; a.updateModalContent(body, '<div style="height:160px"></div>'); const after = modal.getBoundingClientRect().height;
-      await new Promise(resolve => setTimeout(resolve, 480)); return { before, after, height: modal.style.height, transition: modal.style.transition };
+      const body = document.getElementById('motion-cleaner-content'), modal = body.closest('.form-modal'), start = modal.getBoundingClientRect().height; a.updateModalContent(body, '<div style="height:330px"></div>');
+      const deadline = performance.now() + 800;
+      while (modal.getBoundingClientRect().height < start + 8 && performance.now() < deadline) await new Promise(resolve => requestAnimationFrame(resolve));
+      const before = modal.getBoundingClientRect().height; a.updateModalContent(body, '<div style="height:160px"></div>'); const after = modal.getBoundingClientRect().height;
+      await new Promise(resolve => setTimeout(resolve, 480)); return { start, before, after, end: modal.getBoundingClientRect().height, height: modal.style.height, transition: modal.style.transition };
     });
-    assert.ok(Math.abs(result.before - result.after) < 3, JSON.stringify(result)); assert.equal(result.height, ''); assert.equal(result.transition, ''); return result;
+    assert.ok(result.before > result.start + 8, JSON.stringify(result)); assert.ok(Math.abs(result.before - result.after) < 3, JSON.stringify(result)); assert.ok(result.end > result.start + 20, JSON.stringify(result)); assert.equal(result.height, ''); assert.equal(result.transition, ''); return result;
   });
   await check('split workspace interpolates pane width and survives quick close and reopen', async page => {
     await page.evaluate(async () => { const a = window.nocturneApp; await a.createDoc(a.defaultFolderId(), 'Split motion chapter', ''); }); await page.waitForTimeout(500);
@@ -119,6 +121,66 @@ try {
     });
     assert.ok(result.start > result.end + 20); assert.ok(result.frames.some(value => value > result.end + 2 && value < result.start - 2), JSON.stringify(result)); assert.equal(result.mode, 'split'); assert.equal(result.secondary, true); return result;
   });
+  await check('chapter menu can reopen after finishing its exit and cancel a pending exit', async page => {
+    await page.evaluate(async () => { const a = window.nocturneApp; await a.createDoc(a.defaultFolderId(), 'Menu reopening chapter', ''); });
+    const result = await page.evaluate(async () => {
+      const a = window.nocturneApp, button = document.querySelector('[data-doc-menu]');
+      const open = () => a.toggleDocContextMenu(button.dataset.docMenu, button);
+      open(); await new Promise(resolve => setTimeout(resolve, 250)); a.closeDocContextMenu(); await new Promise(resolve => setTimeout(resolve, 250));
+      open(); await new Promise(resolve => setTimeout(resolve, 250)); const afterExit = !!document.querySelector('#doc-menu-portal .doc-context-menu.open');
+      a.closeDocContextMenu(); await new Promise(resolve => setTimeout(resolve, 60)); open(); await new Promise(resolve => setTimeout(resolve, 320));
+      return { afterExit, afterCancel: !!document.querySelector('#doc-menu-portal .doc-context-menu.open') };
+    });
+    assert.equal(result.afterExit, true); assert.equal(result.afterCancel, true); return result;
+  });
+  await check('reversing a moving document filter resumes its visible position and cleans transforms', async page => {
+    await page.evaluate(async () => { const a = window.nocturneApp; await a.createDoc(a.defaultFolderId(), 'First hidden chapter', ''); await a.createDoc(a.defaultFolderId(), 'Kept chapter', ''); }); await page.waitForTimeout(650);
+    const result = await page.evaluate(async () => {
+      const a = window.nocturneApp, card = [...document.querySelectorAll('#docs-container .doc-item')].find(node => node.textContent.includes('Kept chapter')), start = card.getBoundingClientRect().top;
+      a.applyDocSearch('Kept'); const deadline = performance.now() + 600;
+      while (Math.abs(start - card.getBoundingClientRect().top) < 5 && performance.now() < deadline) await new Promise(resolve => requestAnimationFrame(resolve));
+      const before = card.getBoundingClientRect().top; a.applyDocSearch(''); const after = card.getBoundingClientRect().top;
+      await new Promise(resolve => setTimeout(resolve, 650));
+      return { start, before, after, end: card.getBoundingClientRect().top, transform: card.style.transform, flipping: card.classList.contains('is-flipping') };
+    });
+    assert.ok(Math.abs(result.start - result.before) > 5, JSON.stringify(result)); assert.ok(Math.abs(result.before - result.after) < 3, JSON.stringify(result)); assert.ok(Math.abs(result.start - result.end) < 2, JSON.stringify(result)); assert.equal(result.flipping, false); return result;
+  });
+  await check('resolving the last review mark retains the navigator during exit and permits reopening', async page => {
+    await page.evaluate(async () => { const a = window.nocturneApp; await a.createDoc(a.defaultFolderId(), 'Review exit chapter', ''); });
+    const result = await page.evaluate(async () => {
+      const a = window.nocturneApp, doc = a.getFocusedDoc(); a.state.reviewMode = 'finalization';
+      const mark = { id: 'motion-review', docId: doc.id, status: 'open', category: 'style', kind: 'comment', quote: 'Review', comment: 'Motion review comment', start: { blockId: doc.ast.blocks[0].id, offset: 0 }, end: { blockId: doc.ast.blocks[0].id, offset: 0 } };
+      a.state.reviewMarks.push(mark); a.renderReviewNavigator(); await new Promise(resolve => setTimeout(resolve, 350));
+      const nav = document.getElementById('review-navigator'); mark.status = 'resolved'; a.hideReviewNavigatorIfNoMarks();
+      const retained = getComputedStyle(nav).display !== 'none' && !!nav.firstElementChild;
+      await new Promise(resolve => setTimeout(resolve, 60)); mark.status = 'open'; a.renderReviewNavigator(); await new Promise(resolve => setTimeout(resolve, 350));
+      return { retained, reopened: nav.classList.contains('active') && getComputedStyle(nav).display !== 'none' && !!nav.firstElementChild };
+    });
+    assert.equal(result.retained, true); assert.equal(result.reopened, true); return result;
+  });
+  await check('pagination retains existing paper sheets across growth and interrupted shrink', async page => {
+    await page.evaluate(async () => {
+      const a = window.nocturneApp; a.state.settings.autoPaginate = true; await a.createDoc(a.defaultFolderId(), 'Paper animation chapter', '');
+      a.nocturneEditor.get('primary').commands.setContent('<p>Long manuscript paragraph for pagination.</p>'.repeat(80)); a.nocturneEditor.scheduleVisualPages('primary');
+    }); await page.waitForFunction(() => document.querySelectorAll('.primary-pane .page-sheet-bg').length >= 2); await page.waitForTimeout(550);
+    const result = await page.evaluate(async () => {
+      const a = window.nocturneApp, editor = a.nocturneEditor.get('primary'), first = document.querySelector('.primary-pane .page-sheet-bg');
+      editor.commands.setContent('<p>Long manuscript paragraph for pagination.</p>'.repeat(140)); a.nocturneEditor.scheduleVisualPages('primary');
+      await new Promise(resolve => setTimeout(resolve, 550)); const retained = first === document.querySelector('.primary-pane .page-sheet-bg');
+      editor.commands.setContent('<p>Short manuscript.</p>'); a.nocturneEditor.scheduleVisualPages('primary'); await new Promise(resolve => setTimeout(resolve, 45));
+      editor.commands.setContent('<p>Long manuscript paragraph for pagination.</p>'.repeat(80)); a.nocturneEditor.scheduleVisualPages('primary'); await new Promise(resolve => setTimeout(resolve, 650));
+      return { retained, afterReverse: first === document.querySelector('.primary-pane .page-sheet-bg'), count: document.querySelectorAll('.primary-pane .page-sheet-bg:not(.motion-sheet-exiting)').length, exiting: document.querySelectorAll('.primary-pane .motion-sheet-exiting').length, text: editor.getText().includes('Long manuscript') };
+    });
+    assert.equal(result.retained, true); assert.equal(result.afterReverse, true); assert.ok(result.count >= 2); assert.equal(result.exiting, 0); assert.equal(result.text, true); return result;
+  });
+  await check('reduced motion navigation applies the final state without ghosts or retained size', async page => {
+    const result = await page.evaluate(() => {
+      const a = window.nocturneApp; a.openFolderForm(); a.openDocForm(a.defaultFolderId()); a.openSettingsTab('visual'); a.openSettingsTab('editor');
+      const modal = document.querySelector('.settings-modal'), body = modal.querySelector('.settings-body');
+      return { ghosts: document.querySelectorAll('.surface-exit-ghost').length, height: modal.style.height, motions: body.__nocturneMotions?.size || 0, text: body.textContent.includes('Микро') || !!body.querySelector('[data-setting]') };
+    });
+    assert.equal(result.ghosts, 0); assert.equal(result.height, ''); assert.equal(result.motions, 0); assert.equal(result.text, true); return result;
+  }, { reducedMotion: 'reduce' });
   await mkdir('release/qa', { recursive: true }); await writeFile('release/qa/app-motion.json', JSON.stringify(results, null, 2));
   console.log(JSON.stringify(results, null, 2)); if (results.some(result => !result.passed)) process.exitCode = 1;
 } finally { await browser.close(); server.kill(); }
