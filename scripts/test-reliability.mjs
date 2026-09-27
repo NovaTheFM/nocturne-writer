@@ -139,6 +139,43 @@ try {
     await page.keyboard.press('Tab');
     assert.equal(await page.evaluate(() => !!document.activeElement.closest('#settings-overlay')), true);
   });
+  await check('trash restores manuscript together with its private notes and history', async page => {
+    const result = await page.evaluate(async () => {
+      const a = window.nocturneApp;
+      await a.createDoc(a.defaultFolderId(), 'Recover me', '');
+      a.nocturneEditor.get('primary').commands.setContent('<p>Recovered manuscript</p>');
+      a.getFocusedDoc().notes = 'Recovered notes'; await a.createSnapshot();
+      const id = a.getFocusedDoc().id;
+      await a.deleteDoc(id);
+      const trash = await a.db.getAll('trash');
+      await a.restoreTrashItem(trash[0].id);
+      return { doc: await a.db.get('docs', id), snapshots: await a.db.getAll('snapshots'), trash: await a.db.getAll('trash') };
+    });
+    assert.match(JSON.stringify(result.doc), /Recovered manuscript/); assert.equal(result.doc.notes, 'Recovered notes');
+    assert.equal(result.snapshots.length, 1); assert.equal(result.trash.length, 0);
+  });
+  await check('book export selects chapters in order and excludes private notes by default', async page => {
+    const result = await page.evaluate(async () => {
+      const a = window.nocturneApp;
+      for (const [number, text] of [[2, 'Second chapter text'], [1, 'First chapter text'], [3, 'Excluded chapter text']]) {
+        await a.createDoc(a.defaultFolderId(), `Chapter ${number}`, '');
+        const d = a.getFocusedDoc(); d.docType = 'book-chapter'; d.workTitle = 'Export book'; d.chapterNumber = String(number); d.notes = 'PRIVATE EXPORT NOTE';
+        a.nocturneEditor.get('primary').commands.setContent(`<p>${text}</p>`); await a.saveActiveDoc({ silent: true });
+      }
+      a.state.globalNotes = 'PRIVATE GLOBAL EXPORT NOTE';
+      const ids = a.state.docs.filter(d => d.chapterNumber !== '3').map(d => d.id);
+      const blob = a.buildBookDocx(ids, { includeNotes: false });
+      const zip = await window.JSZip.loadAsync(await blob.arrayBuffer());
+      return (await zip.file('word/document.xml').async('string'));
+    });
+    assert.ok(result.indexOf('First chapter text') < result.indexOf('Second chapter text'));
+    assert.doesNotMatch(result, /PRIVATE|Excluded chapter/);
+  });
+  await check('malformed DOCX import rejects instead of creating empty successful document', async page => {
+    assert.equal(await page.evaluate(async () => {
+      try { await window.nocturneApp.blocksFromDocxFile(new File(['broken zip'], 'broken.docx')); return false; } catch { return true; }
+    }), true);
+  });
 } finally { await browser.close(); server.kill(); }
 console.log(JSON.stringify(results, null, 2));
 if (results.some(r => !r.ok)) process.exitCode = 1;
