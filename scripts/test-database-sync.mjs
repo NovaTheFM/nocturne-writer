@@ -8,9 +8,12 @@ class MemoryDb {
   async getAllRaw(name) { return structuredClone([...this.store(name).values()]); }
   async getAll(name) { return this.getAllRaw(name); }
   async get(name, id) { return structuredClone(this.store(name).get(id)); }
-  async put(name, value) { this.store(name).set(value.id, structuredClone(value)); this.onMutation?.({ store: name, id: value.id, action: 'put' }); }
-  async delete(name, id) { this.store(name).delete(id); this.onMutation?.({ store: name, id, action: 'delete' }); }
-  async atomicWrite(entries) { for (const [name, records] of Object.entries(entries)) for (const record of records) await this.put(name, record); }
+  async put(name, value, options = {}) { this.store(name).set(value.id, structuredClone(value)); this.onMutation?.({ store: name, id: value.id, action: 'put', origin: options.origin }); }
+  async delete(name, id, options = {}) { this.store(name).delete(id); this.onMutation?.({ store: name, id, action: 'delete', origin: options.origin }); }
+  async atomicWrite(entries, options = {}) {
+    for (const [name, records] of Object.entries(entries)) for (const record of records) await this.put(name, record, options);
+    for (const [name, ids] of Object.entries(options.deletes || {})) for (const id of ids) await this.delete(name, id, options);
+  }
 }
 async function pair() {
   const left = new MemoryDb(), right = new MemoryDb();
@@ -66,4 +69,33 @@ test('sync validates identifiers and never imports executable IDs or unknown sto
   const { a, left } = await pair();
   await assert.rejects(a.receiveState({ protocol: 2, deviceId: 'phone', records: [{ store: 'docs', id: 'x\"><img>', value: { id: 'x\"><img>' }, clock: { phone: 1 }, hash: 'x' }] }));
   assert.equal((await left.getAll('docs')).length, 0);
+});
+
+test('independent offline character additions in the same world reconcile without conflicts', async () => {
+  const { a, b, left, right } = await pair();
+  await left.put('lore', { id: 'world', characters: [{ id: 'shared', name: 'Shared' }], locations: [], timeline: [], notes: [] }); await reconcile(a, b);
+  const local = await left.get('lore', 'world'), remote = await right.get('lore', 'world');
+  local.characters.push({ id: 'pc-character', name: 'PC' }); remote.characters.push({ id: 'phone-character', name: 'Phone' });
+  await left.put('lore', local); await right.put('lore', remote); await reconcile(a, b); await reconcile(a, b);
+  assert.deepEqual((await left.get('lore', 'world')).characters.map(c => c.id).sort(), ['pc-character', 'phone-character', 'shared']);
+  assert.deepEqual(await right.get('lore', 'world'), await left.get('lore', 'world'));
+  assert.equal((await left.getAll('syncConflicts')).length, 0);
+});
+
+test('world member deletions survive another device adding a different character offline', async () => {
+  const { a, b, left, right } = await pair();
+  await left.put('lore', { id: 'world', characters: [{ id: 'remove', name: 'Remove' }], locations: [], timeline: [], notes: [] }); await reconcile(a, b);
+  await left.put('lore', { id: 'world', characters: [], locations: [], timeline: [], notes: [] });
+  const remote = await right.get('lore', 'world'); remote.characters.push({ id: 'new', name: 'New' }); await right.put('lore', remote);
+  await reconcile(a, b); await reconcile(a, b);
+  assert.deepEqual((await right.get('lore', 'world')).characters.map(c => c.id), ['new']);
+});
+
+test('local edits made while receiving another record still enter the outgoing journal', async () => {
+  const { a, b, left, right } = await pair();
+  await right.put('docs', { id: 'remote', title: 'Remote' });
+  const original = left.atomicWrite.bind(left); let inserted = false;
+  left.atomicWrite = async (...args) => { if (!inserted) { inserted = true; await left.put('docs', { id: 'local-during-sync', title: 'Local' }); } return original(...args); };
+  await a.receiveState(await b.buildState());
+  assert.ok((await a.buildState()).records.find(r => r.id === 'local-during-sync'));
 });
