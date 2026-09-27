@@ -18,6 +18,7 @@ const checks = [
   ['mobile-behavior', ['scripts/test-mobile-behavior.mjs']],
   ['interface-revision', ['scripts/test-interface-revision.mjs']],
   ['surface-motion', ['scripts/test-surface-motion.mjs']],
+  ['app-motion', ['scripts/test-app-motion.mjs']],
 ];
 if (process.argv.includes('--artifacts')) checks.push(
   ['packaged-desktop', ['scripts/test-native-desktop.mjs', '--packaged']],

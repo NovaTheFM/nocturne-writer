@@ -4,6 +4,32 @@ import { paginationPluginKey } from './nocturne-editor.js';
 const DEFAULT_PAGE_HEIGHT = 1123;
 const DEFAULT_VERTICAL_PADDING = 96;
 
+function updatePaperSheets(container, count, { pageHeight, gap, pageStyle, motion } = {}) {
+  const sheets = [...container.querySelectorAll('.page-sheet-bg')];
+  for (let index = 0; index < Math.max(sheets.length, count); index++) {
+    let sheet = sheets[index];
+    if (index >= count) {
+      if (sheet.classList.contains('motion-sheet-exiting')) continue;
+      sheet.classList.add('motion-sheet-exiting');
+      const generation = sheet.__paperGeneration = (sheet.__paperGeneration || 0) + 1;
+      const finish = () => { if (generation === sheet.__paperGeneration && sheet.classList.contains('motion-sheet-exiting')) sheet.remove(); };
+      if (motion?.run && !motion.reduce()) motion.run(sheet, [{ opacity: getComputedStyle(sheet).opacity }, { opacity: 0 }], { channel: 'paper', duration: 180 }).finished.then(completed => { if (completed) finish(); });
+      else finish();
+      continue;
+    }
+    const appearing = !sheet || sheet.classList.contains('motion-sheet-exiting');
+    if (!sheet) {
+      sheet = document.createElement('div'); sheet.className = 'page-sheet-bg';
+      const number = document.createElement('div'); number.className = 'page-number-bg'; number.textContent = String(index + 1);
+      sheet.append(number); container.append(sheet);
+    }
+    sheet.__paperGeneration = (sheet.__paperGeneration || 0) + 1;
+    sheet.classList.remove('motion-sheet-exiting');
+    Object.assign(sheet.style, { top: `${index * (pageHeight + gap)}px`, height: `${pageHeight}px`, width: pageStyle.width, borderRadius: pageStyle.borderRadius || '4px', boxShadow: pageStyle.boxShadow || 'var(--shadow-float)' });
+    if (appearing && motion?.run) motion.run(sheet, [{ opacity: 0 }, { opacity: 1 }], { channel: 'paper', duration: 240 });
+  }
+}
+
 export function updateActivePageHighlight(editor, pageShell) {
   let view;
   try { view = editor?.view; } catch (e) { return; }
@@ -33,7 +59,7 @@ export function updateActivePageHighlight(editor, pageShell) {
   const pageIndex = Math.floor(blockTop / (pageHeight + gap));
 
   const currentActive = bgContainer.querySelector('.page-sheet-bg.active');
-  const sheets = bgContainer.children;
+  const sheets = bgContainer.querySelectorAll('.page-sheet-bg:not(.motion-sheet-exiting)');
   const targetSheet = sheets[pageIndex];
   if (currentActive !== targetSheet) {
     if (currentActive) currentActive.classList.remove('active');
@@ -41,7 +67,7 @@ export function updateActivePageHighlight(editor, pageShell) {
   }
 }
 
-export function calculateVisualPages({ editor, pageShell, overlay, flexible = false }) {
+export function calculateVisualPages({ editor, pageShell, overlay, flexible = false, motion }) {
   let view;
   try { view = editor?.view; } catch (e) { return []; }
   if (!view?.dom || !pageShell) return [];
@@ -77,7 +103,7 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
     pageShell.style.minHeight = '';
     const bgContainer = pageShell.querySelector('.page-sheets-bg');
     if (bgContainer) {
-      bgContainer.innerHTML = '';
+      updatePaperSheets(bgContainer, 0, { motion });
     }
 
     const pageNumEl = pageShell.querySelector('.page-number');
@@ -393,34 +419,7 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
   const shellHeight = (pageCount * pageHeight) + ((pageCount - 1) * gap);
   pageShell.style.minHeight = `${Math.ceil(shellHeight)}px`;
 
-  let existingSheets = bgContainer.querySelectorAll('.page-sheet-bg');
-  if (existingSheets.length !== pageCount) {
-    bgContainer.replaceChildren();
-    for (let i = 0; i < pageCount; i++) {
-      const sheet = document.createElement('div');
-      sheet.className = 'page-sheet-bg';
-      sheet.style.top = `${i * (pageHeight + gap)}px`;
-      sheet.style.height = `${pageHeight}px`;
-      sheet.style.width = pageStyle.width;
-      sheet.style.borderRadius = pageStyle.borderRadius || '4px';
-      sheet.style.boxShadow = pageStyle.boxShadow || 'var(--shadow-float)';
-
-      const num = document.createElement('div');
-      num.className = 'page-number-bg';
-      num.textContent = String(i + 1);
-      sheet.appendChild(num);
-
-      bgContainer.appendChild(sheet);
-    }
-  } else {
-    existingSheets.forEach((sheet, i) => {
-      sheet.style.top = `${i * (pageHeight + gap)}px`;
-      sheet.style.height = `${pageHeight}px`;
-      sheet.style.width = pageStyle.width;
-      const num = sheet.querySelector('.page-number-bg');
-      if (num) num.textContent = String(i + 1);
-    });
-  }
+  updatePaperSheets(bgContainer, pageCount, { pageHeight, gap, pageStyle, motion });
 
   // Highlight active page
   updateActivePageHighlight(editor, pageShell);
@@ -433,11 +432,6 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
   if (overlay) {
     overlay.style.height = '0px';
   }
-
-  try {
-    options.bridge?.updateReadabilityHighlights?.();
-    options.bridge?.updateActiveBlock?.();
-  } catch (e) {}
 
   const pages = [];
   for (let i = 0; i < pageCount; i++) {

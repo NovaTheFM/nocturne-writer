@@ -48,9 +48,7 @@ export class CommandPalette {
   close({ restoreFocus = true } = {}) {
     this.opened = false;
     const overlay = document.getElementById('command-palette-overlay');
-    overlay?.classList.remove('active');
-    overlay?.setAttribute('aria-hidden', 'true');
-    if (overlay) overlay.innerHTML = '';
+    this.app.closeOverlay(overlay, { clear: true, duration: 220 });
     document.body.classList.remove('command-palette-open');
     if (restoreFocus) this.lastFocus?.focus?.();
   }
@@ -90,7 +88,7 @@ export class CommandPalette {
     const overlay = document.getElementById('command-palette-overlay');
     if (!overlay) return;
     const mobile = !!this.app.isMobileLayout?.();
-    overlay.innerHTML = `
+    this.app.presentOverlay(overlay, `
       <section class="command-palette-panel" role="dialog" aria-modal="true" aria-label="Палитра команд">
         <div class="command-palette-mobile-head">
           <button class="mobile-icon-btn" data-action="close-command-palette" aria-label="Назад"><i class="bx bx-left-arrow-alt"></i></button>
@@ -103,7 +101,7 @@ export class CommandPalette {
           ${mobile ? '' : '<span class="command-hotkey-hint">Ctrl K</span>'}
         </div>
         <div class="command-palette-results" data-command-palette-results></div>
-      </section>`;
+      </section>`);
     overlay.classList.add('active');
     overlay.setAttribute('aria-hidden', 'false');
     document.body.classList.add('command-palette-open');
@@ -118,12 +116,12 @@ export class CommandPalette {
     const flat = [...groups.values()].flat();
     this.selected = Math.min(this.selected, Math.max(0, flat.length - 1));
     if (!flat.length) {
-      box.innerHTML = '<div class="command-empty"><i class="bx bx-search-alt"></i><strong>Ничего не найдено</strong><span>Попробуйте: настройки, экспорт, персонаж, глава или таймлайн.</span></div>';
+      this.app.updateSurfaceHTML(box, '<div class="command-empty"><i class="bx bx-search-alt"></i><strong>Ничего не найдено</strong><span>Попробуйте: настройки, экспорт, персонаж, глава или таймлайн.</span></div>', { resize: true });
       return;
     }
     let index = 0;
-    box.innerHTML = [...groups.entries()].map(([group, commands]) => `
-      <div class="command-group">
+    this.app.updateSurfaceHTML(box, [...groups.entries()].map(([group, commands]) => `
+      <div class="command-group" data-surface-key="${escapeHtml(group)}">
         <div class="command-group-title">${escapeHtml(group)}</div>
         ${commands.map((command) => {
           const active = index === this.selected;
@@ -136,7 +134,7 @@ export class CommandPalette {
             ${mobile ? '' : '<kbd class="command-key-hint">Enter</kbd>'}
           </button>`;
         }).join('')}
-      </div>`).join('');
+      </div>`).join(''), { resize: true });
   }
 
   handleKeydown(event) {

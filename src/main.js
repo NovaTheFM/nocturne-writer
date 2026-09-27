@@ -269,6 +269,7 @@ class NocturneWriter {
     this.commandPalette = new CommandPalette(this);
     this.nocturneEditor = new NocturneEditorBridge({
       getSettings: () => this.state.settings,
+      motion: { run: (...args) => this.runMotion(...args), reduce: () => this.shouldReduceSurfaceMotion() },
       getMentionIndex: () => this.buildEntityMentionIndex(),
       getActiveBookmarkId: (paneId) => {
         const pane = this.getPane(paneId);
@@ -1050,7 +1051,7 @@ class NocturneWriter {
 
     const kbBadge = titlebar.querySelector('.titlebar-kb-project-badge');
     if (kbBadge) {
-      kbBadge.innerHTML = `<span class="project-label">Произведение:</span><span class="project-name-badge">${escapeHtml(projectTitle)}</span>`;
+      this.updateSurfaceHTML(kbBadge, `<span class="project-label">Произведение:</span><span class="project-name-badge">${escapeHtml(projectTitle)}</span>`, {});
       kbBadge.style.display = 'flex';
     }
 
@@ -1225,7 +1226,7 @@ class NocturneWriter {
     const output = document.getElementById('ai-output');
     if (!output) return;
     output.dataset.tone = tone;
-    output.textContent = message || '';
+    this.updateSurfaceHTML(output, escapeHtml(message || ''), { resize: true });
   }
 
   assistantBusyMessage(kind = this.assistantBusyKind) {
@@ -1563,20 +1564,17 @@ class NocturneWriter {
       const pane = this.getPane(paneId);
       const isVisible = ws.mode === 'split' || paneId === 'primary';
       if (!isVisible) {
-        if (paneEl.innerHTML !== '') {
-          this.nocturneEditor?.destroy(paneId);
-          paneEl.innerHTML = '';
-          paneEl.__paneConfig = null;
-        }
+        this.hideWorkspacePane(paneEl, paneId);
         return;
       }
+      clearTimeout(paneEl.__paneCloseTimer); paneEl.__paneCloseTimer = null; paneEl.inert = false;
       const paneConfigStr = `${ws.mode}:${ws.focusedPaneId}:${JSON.stringify(pane)}`;
       const isDocumentOrKb = pane?.type === 'document' || pane?.type === 'kb-tab';
       if (isDocumentOrKb && paneEl.__paneConfig === paneConfigStr) {
         return;
       }
       this.nocturneEditor?.destroy(paneId);
-      paneEl.innerHTML = this.renderPane(paneId);
+      this.updateSurfaceHTML(paneEl, this.renderPane(paneId), { preserve: false, key: `${pane?.type}:${pane?.docId}:${pane?.entityId}:${pane?.kbTab}:${pane?.readMode}` });
       paneEl.__paneConfig = paneConfigStr;
       if (pane?.type === 'document') {
         this.renderEditor(paneId);
@@ -1602,13 +1600,10 @@ class NocturneWriter {
     const ws = this.state.workspace;
     const isVisible = ws?.mode === 'split' || paneId === 'primary';
     if (!isVisible) {
-      if (paneEl.innerHTML !== '') {
-        this.nocturneEditor?.destroy(paneId);
-        paneEl.innerHTML = '';
-        paneEl.__paneConfig = null;
-      }
+      this.hideWorkspacePane(paneEl, paneId);
       return;
     }
+    clearTimeout(paneEl.__paneCloseTimer); paneEl.__paneCloseTimer = null; paneEl.inert = false;
     const docForPane = pane?.docId ? this.state.docs.find(d => d.id === pane.docId) : null;
     const rev = docForPane ? this.ensureDocRenderRevision(docForPane) : 0;
     const paneConfigStr = `${ws.mode}:${ws.focusedPaneId}:${JSON.stringify(pane)}:rev-${rev}`;
@@ -1617,7 +1612,7 @@ class NocturneWriter {
       return;
     }
     this.nocturneEditor?.destroy(paneId);
-    paneEl.innerHTML = this.renderPane(paneId);
+    this.updateSurfaceHTML(paneEl, this.renderPane(paneId), { preserve: false, key: `${pane?.type}:${pane?.docId}:${pane?.entityId}:${pane?.kbTab}:${pane?.readMode}` });
     paneEl.__paneConfig = paneConfigStr;
     if (pane?.type === 'document') {
       this.renderEditor(paneId);
@@ -1632,6 +1627,19 @@ class NocturneWriter {
     this.updateElectronTitlebarTitle();
     this.updateTypoHighlightsDebounced();
     this.updateReadabilityHighlights();
+  }
+
+  hideWorkspacePane(element, paneId) {
+    element.inert = true;
+    if (!element.firstElementChild || element.__paneCloseTimer) return;
+    const finish = () => {
+      element.__paneCloseTimer = null;
+      if (this.state.workspace.mode === 'split') return;
+      this.nocturneEditor?.destroy(paneId); element.replaceChildren();
+      element.__paneConfig = null; element.__motionMarkup = null;
+    };
+    if (this.shouldReduceSurfaceMotion()) finish();
+    else element.__paneCloseTimer = setTimeout(finish, 280);
   }
 
   renderPane(paneId) {
@@ -1894,7 +1902,7 @@ class NocturneWriter {
       const newHtml = `<i class="bx bx-check-circle"></i><span>Сохранено</span>`;
       if (el.className !== newClass) el.className = newClass;
       if (el.title !== newTitle) el.title = newTitle;
-      if (el.innerHTML !== newHtml) el.innerHTML = newHtml;
+      this.updateSurfaceHTML(el, newHtml);
       return;
     }
     const status = this.state.saveStatusByDoc[doc.id] || { state: 'saved', updatedAt: doc.updatedAt || Date.now(), message: '' };
@@ -1910,7 +1918,7 @@ class NocturneWriter {
     const newHtml = `<i class="bx ${meta[0]}"></i><span>${meta[1]}</span>`;
     if (el.className !== newClass) el.className = newClass;
     if (el.title !== newTitle) el.title = newTitle;
-    if (el.innerHTML !== newHtml) el.innerHTML = newHtml;
+    this.updateSurfaceHTML(el, newHtml);
     this.renderMobileTopbarStatus();
   }
 
@@ -2035,7 +2043,7 @@ class NocturneWriter {
     const newClass = `mobile-save-dot ${status}`;
     const newHtml = `<i class="bx ${icon}"></i>`;
     if (el.className !== newClass) el.className = newClass;
-    if (el.innerHTML !== newHtml) el.innerHTML = newHtml;
+    this.updateSurfaceHTML(el, newHtml);
   }
 
   renderMobileTopbar() {
@@ -2186,7 +2194,7 @@ class NocturneWriter {
               .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || a.order - b.order);
             if (q) docs = docs.filter((doc) => `${doc.title} ${doc.description || ''} ${doc.summary || ''}`.toLowerCase().includes(q));
             return `
-              <section class="mobile-folder">
+              <section class="mobile-folder" data-folder-id="${escapeHtml(folder.id)}">
                 <button class="mobile-folder-head" data-action="toggle-folder" data-folder="${escapeHtml(folder.id)}">
                   <span><i class="bx bx-chevron-${collapsed ? 'right' : 'down'}"></i>${escapeHtml(folder.title)}</span>
                   <small>${docs.length}</small>
@@ -2380,7 +2388,7 @@ class NocturneWriter {
     const surface = document.querySelector('#mobile-tab-surface[data-mobile-tab="lore"] .mobile-tab-content, #mobile-panel .mobile-tab-content, #mobile-panel');
     if (!surface) return false;
     surface.classList.add('mobile-kb-switching');
-    surface.innerHTML = this.renderMobileKb({ asTab: !!document.querySelector('#mobile-tab-surface[data-mobile-tab="lore"]') });
+    this.updateSurfaceHTML(surface, this.renderMobileKb({ asTab: !!document.querySelector('#mobile-tab-surface[data-mobile-tab="lore"]') }), { key: this.state.activeLoreId });
     requestAnimationFrame(() => surface.classList.remove('mobile-kb-switching'));
     this.setupMobileKbSortables();
     return true;
@@ -2826,7 +2834,7 @@ class NocturneWriter {
     const overlay = document.getElementById('form-overlay');
     if (!overlay) return;
     const runtime = this.runtime || detectRuntime();
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="form-modal about-modal">
         <div class="form-header">
           <div>
@@ -2844,7 +2852,7 @@ class NocturneWriter {
                     <span><small>Устройство</small><strong>${escapeHtml(this.state.sync.deviceName || defaultDeviceName(runtime))}</strong></span>
         </div>
         <p class="form-helper">Electron-версия может запускать локальный sync server из приложения. Android подключается к компьютеру по LAN IP и коду подключения.</p>
-      </div>`;
+      </div>`);
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
   }
@@ -3318,17 +3326,17 @@ class NocturneWriter {
       : null;
     const topbar = document.querySelector('.mobile-topbar');
     const nextTopbar = this.renderMobileTopbar();
-    if (topbar && topbar.outerHTML !== nextTopbar) topbar.outerHTML = nextTopbar;
+    this.updateSurfaceRoot(topbar, nextTopbar);
     const systemBar = document.querySelector('.mobile-system-bar');
     const nextSystemBar = this.renderMobileSystemBar();
-    if (systemBar && systemBar.outerHTML !== nextSystemBar) systemBar.outerHTML = nextSystemBar;
+    this.updateSurfaceRoot(systemBar, nextSystemBar);
     const nav = document.querySelector('.mobile-bottom-nav');
     const nextNav = this.renderMobileBottomNav();
-    if (nav && nav.outerHTML !== nextNav) nav.outerHTML = nextNav;
+    this.updateSurfaceRoot(nav, nextNav);
     const tabSurface = document.getElementById('mobile-tab-surface');
     const nextTabSurface = this.renderMobileTabSurface();
     if (tabSurface && tabSurface.outerHTML !== nextTabSurface) {
-      tabSurface.outerHTML = nextTabSurface;
+      this.updateSurfaceRoot(tabSurface, nextTabSurface);
       this.setupMobileKbSortables();
     }
     const overlay = document.getElementById('mobile-overlay');
@@ -3343,7 +3351,7 @@ class NocturneWriter {
         panel.classList.remove('mobile-panel-screen', 'mobile-panel-sheet', 'mobile-panel-fullscreen');
         panel.classList.add(`mobile-panel-${panelMode}`);
         if (this.state.mobile.panel === 'sync' && panel.querySelector('.mobile-sync-body')) this.renderMobileSyncSurface(panel);
-        else { panel.innerHTML = this.renderMobilePanel(); panel.__syncMarkup = null; }
+        else if (this.state.mobile.panel) { this.updateSurfaceHTML(panel, this.renderMobilePanel(), { key: `${this.state.mobile.panel}:${this.state.mobile.settingsTab || ''}:${this.state.activeLoreDetail?.id || ''}:${this.state.activeSubtimelineId || ''}` }); panel.__syncMarkup = null; }
         this.setupMobileKbSortables();
       }
     }
@@ -3352,7 +3360,8 @@ class NocturneWriter {
     if (activeMobileField) {
       requestAnimationFrame(() => {
         const field = document.querySelector(activeMobileField.selector);
-        field?.focus();
+        if (!field || !this.isSurfaceVisible(field)) return;
+        field.focus({ preventScroll: true });
         if (Number.isFinite(activeMobileField.start)) field?.setSelectionRange(activeMobileField.start, activeMobileField.end);
       });
     }
@@ -3741,7 +3750,7 @@ class NocturneWriter {
   openExitSheet() {
     const overlay = document.getElementById('form-overlay');
     if (!overlay) return;
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="form-modal confirm-modal mobile-exit-sheet">
         <div class="confirm-icon"><i class="bx bx-log-out"></i></div>
         <h2>Выйти из Nocturne?</h2>
@@ -3750,7 +3759,7 @@ class NocturneWriter {
           <button class="pill-btn ai-btn" data-close-form>Остаться</button>
           <button class="pill-btn" data-action="mobile-background-app">Свернуть</button>
         </div>
-      </div>`;
+      </div>`);
     overlay.classList.add('active');
   }
 
@@ -4404,7 +4413,8 @@ class NocturneWriter {
     const portal = document.getElementById('doc-menu-portal');
     const doc = this.state.docs.find((item) => item.id === docId);
     if (!portal || !doc || !anchor) return;
-    if (portal.classList.contains('open') && portal.dataset.docId === docId) {
+    clearTimeout(portal.__docCloseTimer); portal.__docMenuGeneration = (portal.__docMenuGeneration || 0) + 1;
+    if (portal.querySelector('.doc-context-menu.open') && portal.dataset.docId === docId) {
       this.closeDocContextMenu();
       return;
     }
@@ -4413,7 +4423,7 @@ class NocturneWriter {
     portal.dataset.docId = docId;
     portal.setAttribute('aria-hidden', 'false');
     portal.style.pointerEvents = '';
-    portal.innerHTML = `
+    this.updateSurfaceHTML(portal, `
       <div class="doc-context-menu popover-surface" data-ctx-doc="${escapeHtml(doc.id)}">
         <button class="ctx-btn" data-action="open-doc-right" data-ctx-doc="${escapeHtml(doc.id)}"><i class="bx bx-sidebar"></i><span>Открыть справа</span></button>
         <button class="ctx-btn" data-action="duplicate-doc" data-ctx-doc="${escapeHtml(doc.id)}"><i class="bx bx-copy"></i><span>Дублировать</span></button>
@@ -4421,11 +4431,13 @@ class NocturneWriter {
         <button class="ctx-btn" data-action="edit-doc" data-ctx-doc="${escapeHtml(doc.id)}"><i class="bx bx-edit"></i><span>Редактировать</span></button>
         <button class="ctx-btn" data-action="export-doc-menu" data-ctx-doc="${escapeHtml(doc.id)}"><i class="bx bx-export"></i><span>Экспорт DOCX / .nocturned</span></button>
         <button class="ctx-btn danger" data-action="delete-doc" data-ctx-doc="${escapeHtml(doc.id)}"><i class="bx bx-trash"></i><span>Удалить</span></button>
-      </div>`;
+      </div>`, { resize: true });
     portal.classList.add('open');
+    const generation = portal.__docMenuGeneration;
     requestAnimationFrame(() => {
+      if (generation !== portal.__docMenuGeneration) return;
       this.positionDocContextMenu(anchor);
-      requestAnimationFrame(() => portal.querySelector('.doc-context-menu')?.classList.add('open'));
+      requestAnimationFrame(() => { if (generation === portal.__docMenuGeneration) portal.querySelector('.doc-context-menu')?.classList.add('open'); });
     });
   }
 
@@ -4449,23 +4461,28 @@ class NocturneWriter {
   closeDocContextMenu() {
     const portal = document.getElementById('doc-menu-portal');
     if (!portal) return;
+    clearTimeout(portal.__docCloseTimer);
+    const generation = portal.__docMenuGeneration = (portal.__docMenuGeneration || 0) + 1;
     if (this.activeFloatingMenuKey === 'doc') this.activeFloatingMenuKey = '';
     const menu = portal.querySelector('.doc-context-menu');
     if (menu) {
       menu.classList.remove('open');
       portal.style.pointerEvents = 'none';
-      window.setTimeout(() => {
+      portal.__docCloseTimer = window.setTimeout(() => {
+        if (generation !== portal.__docMenuGeneration) return;
         portal.classList.remove('open');
         portal.setAttribute('aria-hidden', 'true');
         portal.innerHTML = '';
+        portal.__motionMarkup = null;
         portal.style.pointerEvents = '';
         delete portal.dataset.docId;
-      }, 150);
+      }, this.shouldReduceSurfaceMotion() ? 0 : 180);
       return;
     }
     portal.classList.remove('open');
     portal.setAttribute('aria-hidden', 'true');
     portal.innerHTML = '';
+    portal.__motionMarkup = null;
     delete portal.dataset.docId;
   }
 
@@ -6029,7 +6046,7 @@ class NocturneWriter {
     this.closeContextMenu();
     const overlay = document.getElementById('shortcuts-overlay');
     if (!overlay) return;
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="form-modal shortcuts-modal">
         <div class="shortcuts-header">
           <div>
@@ -6058,7 +6075,7 @@ class NocturneWriter {
             ['Escape', '', 'Закрыть всплывающие окна'],
           ])}
         </div>
-      </div>`;
+      </div>`);
     overlay.classList.add('active');
   }
 
@@ -6075,8 +6092,7 @@ class NocturneWriter {
   closeShortcutsModal() {
     const overlay = document.getElementById('shortcuts-overlay');
     if (!overlay) return;
-    overlay.classList.remove('active');
-    overlay.innerHTML = '';
+    this.closeOverlay(overlay, { clear: true });
   }
 
   handleContextMenu(event) {
@@ -6429,7 +6445,7 @@ class NocturneWriter {
       ${item('context-add-word-to-lexicon', 'bx-plus-circle', `Добавить «${escapeHtml(ctx.typoMatch.rawText)}» в словарь`)}
       <div class="context-separator"></div>
     ` : '';
-    menu.innerHTML = `
+    this.updateSurfaceHTML(menu, `
       ${selectedPreview}
       ${entityBlock}
       ${typoBlock}
@@ -6439,8 +6455,10 @@ class NocturneWriter {
       ${(ctx.docId || ctx.noteId) ? item('context-add-bookmark', 'bx-bookmark', 'Поставить закладку') : ''}
       ${hasSelection ? item('context-add-typo-rule', 'bx-book-add', 'Добавить в словарь ошибок') : ''}
       ${editorBlock}
-    `;
+    `, { resize: true });
 
+    clearTimeout(menu.__motionCloseTimer); menu.__motionGeneration = (menu.__motionGeneration || 0) + 1;
+    menu.classList.remove('motion-exiting');
     menu.style.display = 'block';
     menu.style.left = `${ctx.x}px`;
     menu.style.top = `${ctx.y}px`;
@@ -6462,7 +6480,7 @@ class NocturneWriter {
       menu.classList.remove('active');
       menu.setAttribute('aria-hidden', 'true');
       menu.style.pointerEvents = 'none';
-      menu.style.display = 'none';
+      this.closeOverlay(menu);
     }
     if (this.activeFloatingMenuKey === 'context') this.activeFloatingMenuKey = '';
     this.state.contextMenu = null;
@@ -6731,9 +6749,9 @@ class NocturneWriter {
     if (!payload) return;
     const hoverKey = payload.kind === 'family' ? `family:${payload.familyName}` : `${payload.kind}:${payload.entity.id}`;
     if (this.activeEntityHoverKey !== hoverKey) {
-      card.innerHTML = payload.kind === 'family'
+      this.updateSurfaceHTML(card, payload.kind === 'family'
         ? this.renderFamilyHoverCard(payload.familyName, payload.members)
-        : this.renderEntityHoverCard(payload.entity, payload.kind);
+        : this.renderEntityHoverCard(payload.entity, payload.kind), { resize: true });
       this.activeEntityHoverKey = hoverKey;
     }
     card.dataset.kind = payload.kind;
@@ -6746,7 +6764,7 @@ class NocturneWriter {
     const card = document.getElementById('entity-preview-card');
     const entity = this.state.lore.characters.find((item) => item.id === row.dataset.familyMemberId);
     if (!card || !entity) return;
-    card.innerHTML = this.renderEntityPreview(entity);
+    this.updateSurfaceHTML(card, this.renderEntityPreview(entity), { resize: true });
     card.classList.add('active');
     card.setAttribute('aria-hidden', 'false');
     this.positionFloatingCard(card, row.getBoundingClientRect(), { compact: true });
@@ -7528,7 +7546,7 @@ class NocturneWriter {
       'test-ai-connection': () => this.testAiConnection(),
       'new-custom-provider': () => {
         const overlay = document.getElementById('form-overlay');
-        overlay.innerHTML = `
+        this.presentOverlay(overlay, `
           <form class="form-modal" id="new-custom-provider-form" novalidate>
             <h2>Новый провайдер ИИ</h2>
             <div class="form-grid">
@@ -7565,7 +7583,7 @@ class NocturneWriter {
               <button type="submit" class="pill-btn ai-btn"><i class="bx bx-plus"></i> Добавить</button>
             </div>
           </form>
-        `;
+        `);
         overlay.classList.add('active');
         overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
         overlay.querySelector('form').onsubmit = async (e) => {
@@ -7594,7 +7612,7 @@ class NocturneWriter {
         const provider = this.state.settings.customAiProviders?.find(p => p.id === pid);
         if (!provider) return;
         const overlay = document.getElementById('form-overlay');
-        overlay.innerHTML = `
+        this.presentOverlay(overlay, `
           <form class="form-modal" id="edit-custom-provider-form" novalidate>
             <h2>Редактировать провайдера ИИ</h2>
             <div class="form-grid">
@@ -7636,7 +7654,7 @@ class NocturneWriter {
               <button type="submit" class="pill-btn ai-btn"><i class="bx bx-save"></i> Сохранить</button>
             </div>
           </form>
-        `;
+        `);
         overlay.classList.add('active');
         overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
         overlay.querySelector('form').onsubmit = async (e) => {
@@ -7660,7 +7678,7 @@ class NocturneWriter {
         const provider = this.state.settings.customAiProviders?.find(p => p.id === pid);
         if (!provider) return;
         const overlay = document.getElementById('form-overlay');
-        overlay.innerHTML = `
+        this.presentOverlay(overlay, `
           <div class="form-modal confirm-modal">
             <div class="confirm-icon"><i class="bx bx-trash"></i></div>
             <h2>Удалить провайдера?</h2>
@@ -7670,7 +7688,7 @@ class NocturneWriter {
               <button class="pill-btn danger-btn" data-confirm-delete>Удалить</button>
             </div>
           </div>
-        `;
+        `);
         overlay.classList.add('active');
         overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
         overlay.querySelector('[data-confirm-delete]').onclick = async () => {
@@ -7686,7 +7704,7 @@ class NocturneWriter {
       },
       'new-custom-persona': () => {
         const overlay = document.getElementById('form-overlay');
-        overlay.innerHTML = `
+        this.presentOverlay(overlay, `
           <form class="form-modal" id="new-custom-persona-form">
             <h2>Новый ИИ-соавтор</h2>
             <div class="form-group">
@@ -7702,7 +7720,7 @@ class NocturneWriter {
               <button type="submit" class="pill-btn ai-btn">Создать</button>
             </div>
           </form>
-        `;
+        `);
         overlay.classList.add('active');
         overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
         overlay.querySelector('form').onsubmit = async (e) => {
@@ -7725,7 +7743,7 @@ class NocturneWriter {
         const persona = this.state.settings.customAiPersonas?.find(p => p.id === pid);
         if (!persona) return;
         const overlay = document.getElementById('form-overlay');
-        overlay.innerHTML = `
+        this.presentOverlay(overlay, `
           <form class="form-modal" id="edit-custom-persona-form">
             <h2>Редактировать ИИ-соавтора</h2>
             <div class="form-group">
@@ -7741,7 +7759,7 @@ class NocturneWriter {
               <button type="submit" class="pill-btn ai-btn">Сохранить</button>
             </div>
           </form>
-        `;
+        `);
         overlay.classList.add('active');
         overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
         overlay.querySelector('form').onsubmit = async (e) => {
@@ -7763,7 +7781,7 @@ class NocturneWriter {
         const persona = this.state.settings.customAiPersonas?.find(p => p.id === pid);
         if (!persona) return;
         const overlay = document.getElementById('form-overlay');
-        overlay.innerHTML = `
+        this.presentOverlay(overlay, `
           <div class="form-modal confirm-modal">
             <div class="confirm-icon"><i class="bx bx-trash"></i></div>
             <h2>Удалить персону?</h2>
@@ -7773,7 +7791,7 @@ class NocturneWriter {
               <button class="pill-btn danger-btn" data-confirm-delete>Удалить</button>
             </div>
           </div>
-        `;
+        `);
         overlay.classList.add('active');
         overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
         overlay.querySelector('[data-confirm-delete]').onclick = async () => {
@@ -7796,7 +7814,7 @@ class NocturneWriter {
       },
       'new-kb-project': () => {
         const overlay = document.getElementById('form-overlay');
-        overlay.innerHTML = `
+        this.presentOverlay(overlay, `
           <form class="form-modal" id="new-kb-project-form" novalidate>
             <h2>Новое произведение</h2>
             <div class="form-grid">
@@ -7809,7 +7827,7 @@ class NocturneWriter {
               <button type="submit" class="pill-btn ai-btn"><i class="bx bx-plus"></i> Создать</button>
             </div>
           </form>
-        `;
+        `);
         overlay.classList.add('active');
         overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
         overlay.querySelector('form').onsubmit = async (e) => {
@@ -7847,7 +7865,7 @@ class NocturneWriter {
         const project = this.state.kbProjects?.find(p => p.id === activeId);
         if (!project) return;
         const overlay = document.getElementById('form-overlay');
-        overlay.innerHTML = `
+        this.presentOverlay(overlay, `
           <form class="form-modal" id="rename-kb-project-form" novalidate>
             <h2>Редактировать произведение</h2>
             <div class="form-grid">
@@ -7863,7 +7881,7 @@ class NocturneWriter {
               <button type="submit" class="pill-btn ai-btn"><i class="bx bx-save"></i> Сохранить</button>
             </div>
           </form>
-        `;
+        `);
         overlay.classList.add('active');
         overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
         if (activeId !== 'world') {
@@ -7901,7 +7919,7 @@ class NocturneWriter {
         const project = this.state.kbProjects?.find(p => p.id === activeId);
         if (!project) return;
         const overlay = document.getElementById('form-overlay');
-        overlay.innerHTML = `
+        this.presentOverlay(overlay, `
           <div class="form-modal confirm-modal">
             <div class="confirm-icon"><i class="bx bx-trash"></i></div>
             <h2>Удалить произведение?</h2>
@@ -7911,7 +7929,7 @@ class NocturneWriter {
               <button class="pill-btn danger-btn" data-confirm-delete>Удалить</button>
             </div>
           </div>
-        `;
+        `);
         overlay.classList.add('active');
         overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
         overlay.querySelector('[data-confirm-delete]').onclick = async () => {
@@ -8178,10 +8196,14 @@ class NocturneWriter {
     });
   }
 
-  applyDocSearch(query = this.state.docSearch) {
+  applyDocSearch(query = this.state.docSearch, animate = true) {
     const q = (query || '').toLowerCase().trim();
     const container = document.getElementById('docs-container');
     if (!container) return;
+    if (animate && this.isSurfaceVisible(container)) {
+      this.animateLayoutTransition(container.querySelector('.docs-list-scroll') || container, () => this.applyDocSearch(query, false));
+      return;
+    }
 
     container.querySelectorAll('.global-doc-search-empty').forEach((el) => el.remove());
     
@@ -8284,7 +8306,7 @@ class NocturneWriter {
     const savedScrollTop = scrollEl ? scrollEl.scrollTop : 0;
     const q = this.state.docSearch.toLowerCase().trim();
 
-    scrollEl.innerHTML = this.state.folders.map((folder) => {
+    this.updateSurfaceHTML(scrollEl, this.state.folders.map((folder) => {
       const collapsed = this.state.collapsedFolders.includes(folder.id);
       let docs = this.state.docs
         .filter((doc) => doc.folderId === folder.id)
@@ -8301,7 +8323,7 @@ class NocturneWriter {
             <button class="btn-icon" data-action="delete-folder" data-folder-id="${escapeHtml(folder.id)}" title="Удалить папку"><i class="bx bx-trash"></i></button>
           </div>
         </div>
-        <div class="folder-docs ${collapsed ? 'collapsed' : ''}">
+        <div data-folder-id="${escapeHtml(folder.id)}" class="folder-docs ${collapsed ? 'collapsed' : ''}">
         ${docs.length ? docs.map((doc) => {
           const isBook = doc.docType === 'book-chapter';
           const isNew = this.state.newlyCreatedId === doc.id;
@@ -8328,7 +8350,7 @@ class NocturneWriter {
         `}).join('') : this.folderEmptyState(folder.id, q)}
         </div>
       `;
-    }).join('');
+    }).join(''), { key: 'documents' });
 
     if (scrollEl) {
       scrollEl.scrollTop = savedScrollTop;
@@ -8479,12 +8501,12 @@ class NocturneWriter {
       } catch (err) {}
     }
     if (typeof Flip !== 'undefined') {
-      try { Flip.killTweensOf(el); } catch (err) {}
+      try { Flip.killFlipsOf(el); } catch (err) {}
     }
     el.classList.remove('new-card-entrance', 'new-doc-entrance', 'kb-card-stagger-in', 'is-flipping');
     el._isFlippingGrid = false;
 
-    if (smooth && hasActiveMotion && (Math.abs(vis.x) > 0.5 || Math.abs(vis.y) > 0.5)) {
+    if (smooth && !this.shouldReduceSurfaceMotion() && hasActiveMotion && (Math.abs(vis.x) > 0.5 || Math.abs(vis.y) > 0.5)) {
       const cancelAnim = el.animate([
         { transform: `translate3d(${vis.x}px, ${vis.y}px, 0)` },
         { transform: 'translate3d(0px, 0px, 0)' }
@@ -8524,10 +8546,28 @@ class NocturneWriter {
     const targets = Array.from(container.querySelectorAll('.doc-item, .section-title, .char-card, .loc-card, .timeline-item, .note-card'));
     const rawCandidates = targets.length ? targets : Array.from(container.children);
     const candidateList = rawCandidates.filter(el => !el.matches('h1, h2, h3, h4, header, .kb-header, .kb-pane-breadcrumb, .pane-back-btn'));
+    const visibility = new Map(candidateList.map(element => [element, element.getClientRects().length ? { rect: element.getBoundingClientRect(), font: getComputedStyle(element).font, color: getComputedStyle(element).color } : null]));
+    const animatePresence = () => {
+      for (const [element, before] of visibility) {
+        if (!element.isConnected) continue;
+        const visible = element.getClientRects().length > 0;
+        if (before && !visible) this.animateSurfaceContent(element, true, before);
+        else if (!before && visible) this.runMotion(element, [{ opacity: 0 }, { opacity: 1 }], { channel: 'presence', duration: 220 });
+      }
+    };
     
     if (typeof Flip !== 'undefined' && candidateList.length) {
-      const state = Flip.getState(candidateList);
+      const state = Flip.getState(candidateList, { kill: false });
+      Flip.killFlipsOf(candidateList);
+      for (const element of candidateList) {
+        for (const motion of element.__nocturneMotions?.values() || []) {
+          if (motion.animation.effect?.getKeyframes().some(frame => frame.transform)) motion.animation.cancel();
+        }
+      }
       mutateDOM();
+      animatePresence();
+      const transitions = new Map(candidateList.map(element => [element, element.style.transition]));
+      candidateList.forEach(element => { element.style.transition = 'none'; element.classList.add('is-flipping'); });
       Flip.from(state, {
         duration: 0.46,
         ease: 'power3.out',
@@ -8538,6 +8578,8 @@ class NocturneWriter {
         },
         onComplete: () => {
           candidateList.forEach(el => {
+            el.style.transition = transitions.get(el);
+            el.classList.remove('is-flipping');
             el._isFlippingGrid = false;
             const zone = el.closest('[data-dnd-zone]');
             if (zone && zone._prevPosMap) {
@@ -8577,6 +8619,7 @@ class NocturneWriter {
 
     // 2. Perform DOM mutation
     mutateDOM();
+    animatePresence();
 
     // 3. Measure new layout positions synchronously
     const newRects = oldRects.map((item) => {
@@ -8835,7 +8878,7 @@ class NocturneWriter {
     if (folderId && !folder) return;
     this.closeAllFloatingMenus();
     const overlay = document.getElementById('form-overlay');
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <form class="form-modal folder-form" id="folder-form" novalidate>
         <h2>${folder ? 'Переименовать папку' : 'Новая папка'}</h2>
         <div class="form-grid">
@@ -8846,7 +8889,7 @@ class NocturneWriter {
           <button class="pill-btn ai-btn" type="submit">${folder ? 'Сохранить' : 'Создать'}</button>
         </div>
       </form>
-    `;
+    `);
     overlay.classList.add('active');
     const input = overlay.querySelector('[name="title"]');
     requestAnimationFrame(() => {
@@ -8903,7 +8946,7 @@ class NocturneWriter {
     }
     this.closeAllFloatingMenus();
     const overlay = document.getElementById('form-overlay');
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="form-modal confirm-modal">
         <div class="confirm-icon"><i class="bx bx-folder-minus"></i></div>
         <h2>Удалить папку?</h2>
@@ -8913,7 +8956,7 @@ class NocturneWriter {
           <button class="pill-btn danger-btn" data-confirm-folder-delete="${escapeHtml(folder.id)}">Удалить</button>
         </div>
       </div>
-    `;
+    `);
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('[data-confirm-folder-delete]').onclick = async () => {
@@ -8960,7 +9003,7 @@ class NocturneWriter {
     const targetFolderId = this.state.folders.some((folder) => folder.id === folderId) ? folderId : this.defaultFolderId();
     this.closeAllFloatingMenus();
     const overlay = document.getElementById('form-overlay');
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <form class="form-modal doc-form" id="doc-form" novalidate>
         <h2>Новый документ</h2>
         
@@ -9019,7 +9062,7 @@ class NocturneWriter {
           <button class="pill-btn ai-btn" type="submit"><i class="bx bx-plus"></i> Создать</button>
         </div>
       </form>
-    `;
+    `);
     overlay.classList.add('active');
     
     const typeRadios = overlay.querySelectorAll('input[name="docType"]');
@@ -9256,7 +9299,7 @@ class NocturneWriter {
       overlay.className = 'kb-import-overlay';
       document.body.appendChild(overlay);
     }
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="kb-import-card">
         <div class="kb-import-spinner">
           <div class="spinner-ring"></div>
@@ -9265,7 +9308,7 @@ class NocturneWriter {
         <h3>Импортируем документы...</h3>
         <div class="kb-import-progress-list"></div>
       </div>
-    `;
+    `);
     overlay.classList.add('active');
     
     const dumpFiles = files.filter((file) => /\.nocturnedump$/i.test(file.name));
@@ -9517,13 +9560,13 @@ class NocturneWriter {
     const expectedHash = payload.document?.normalizedTextHash;
     const hasExactMatch = this.state.docs.some((doc) => this.documentPortableHash(doc) === expectedHash);
     const matchStatus = hasExactMatch ? 'Совпадает' : 'Не найдено точного совпадения';
-    overlay.innerHTML = `<div class="form-modal nocturned-import-modal">
+    this.presentOverlay(overlay, `<div class="form-modal nocturned-import-modal">
       <h2>Импорт редакторских правок</h2>
       <p class="form-helper">${escapeHtml(filename)} относится к «${escapeHtml(payload.document?.title || 'документу')}».</p>
       <p class="form-helper">Совпадение текста: ${escapeHtml(matchStatus)}</p>
       <div class="form-field"><span>Целевой документ</span>${this.renderFormSelect('targetDoc', this.state.docs.map(doc => [doc.id, doc.title]), this.state.docs.find(doc => this.documentPortableHash(doc) === expectedHash)?.id, { id: 'nocturned-target-doc', label: 'Целевой документ' })}</div>
       <div class="form-actions"><button class="pill-btn" data-close-form>Отмена</button><button class="pill-btn ai-btn" id="apply-nocturned">Импортировать правки</button></div>
-    </div>`;
+    </div>`);
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => {
       overlay.classList.remove('active');
@@ -9618,7 +9661,7 @@ class NocturneWriter {
     if (!doc) return;
     this.closeAllFloatingMenus();
     const overlay = document.getElementById('form-overlay');
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="form-modal confirm-modal">
         <div class="confirm-icon"><i class="bx bx-trash"></i></div>
         <h2>Удалить документ?</h2>
@@ -9628,7 +9671,7 @@ class NocturneWriter {
           <button class="pill-btn danger-btn" data-confirm-delete="${doc.id}">Удалить</button>
         </div>
       </div>
-    `;
+    `);
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('[data-confirm-delete]').onclick = async () => {
@@ -9755,7 +9798,7 @@ class NocturneWriter {
     this.closeAllFloatingMenus();
     const overlay = document.getElementById('form-overlay');
     const isBook = doc.docType === 'book-chapter';
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <form class="form-modal doc-form" id="edit-doc-form" novalidate>
         <h2>Редактировать документ</h2>
         
@@ -9800,7 +9843,7 @@ class NocturneWriter {
           <button class="pill-btn ai-btn" type="submit">Сохранить</button>
         </div>
       </form>
-    `;
+    `);
     overlay.classList.add('active');
     
     const typeRadios = overlay.querySelectorAll('input[name="docType"]');
@@ -9889,7 +9932,7 @@ class NocturneWriter {
       }
       const folderDocs = folderTitle.nextElementSibling;
       if (folderDocs && folderDocs.classList.contains('folder-docs')) {
-        folderDocs.classList.toggle('collapsed', collapsed);
+        this.animateHeightTransition(folderDocs, () => folderDocs.classList.toggle('collapsed', collapsed));
       }
     } else {
       this.renderDocs();
@@ -11747,7 +11790,7 @@ class NocturneWriter {
     const overlay = document.getElementById('form-overlay');
     if (!overlay) return;
     
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="form-modal confirm-modal">
         <div class="confirm-icon"><i class="bx bx-trash"></i></div>
         <h2>Удалить закладку?</h2>
@@ -11757,7 +11800,7 @@ class NocturneWriter {
           <button class="pill-btn danger-btn" data-confirm-delete>Удалить</button>
         </div>
       </div>
-    `;
+    `);
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('[data-confirm-delete]').onclick = async () => {
@@ -12052,7 +12095,7 @@ class NocturneWriter {
     const button = document.createElement('button');
     button.className = 'pane-bookmarks-btn btn-icon';
     button.title = 'Список закладок';
-    button.innerHTML = `<i class="bx bxs-bookmark"></i><span class="bookmarks-count">${sortedBookmarks.length}</span>`;
+    this.updateSurfaceHTML(button, `<i class="bx bxs-bookmark"></i><span class="bookmarks-count">${sortedBookmarks.length}</span>`, {});
     
     // Next Button
     const nextBtn = document.createElement('button');
@@ -12080,7 +12123,7 @@ class NocturneWriter {
     // Header
     const header = document.createElement('div');
     header.className = 'pane-bookmarks-header';
-    header.innerHTML = `<strong>Закладки (${sortedBookmarks.length})</strong>`;
+    this.updateSurfaceHTML(header, `<strong>Закладки (${sortedBookmarks.length})</strong>`, {});
     dropdown.appendChild(header);
     
     // List
@@ -12264,7 +12307,7 @@ class NocturneWriter {
   openReviewCommentForm() {
     this.closeContextMenu();
     const overlay = document.getElementById('form-overlay');
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="form-modal review-form-modal">
         <h2>Добавить комментарий</h2>
         <div class="review-form-stack">
@@ -12287,7 +12330,7 @@ class NocturneWriter {
           <label class="form-field"><span>Комментарий</span><textarea class="form-control" id="review-comment" rows="6"></textarea></label>
         </div>
         <div class="form-actions"><button class="pill-btn" data-close-form>Отмена</button><button class="pill-btn ai-btn" id="save-review-comment">Сохранить</button></div>
-      </div>`;
+      </div>`);
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('#save-review-comment').onclick = async () => {
@@ -12301,7 +12344,7 @@ class NocturneWriter {
     const selectedText = ctx?.selectedText || getSelection()?.toString()?.trim() || '';
     this.closeContextMenu();
     const overlay = document.getElementById('form-overlay');
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="form-modal review-form-modal">
         <h2>Предложить замену</h2>
         <div class="review-form-stack">
@@ -12310,7 +12353,7 @@ class NocturneWriter {
           <label class="form-field"><span>Комментарий</span><textarea class="form-control" id="review-comment" rows="3"></textarea></label>
         </div>
         <div class="form-actions"><button class="pill-btn" data-close-form>Отмена</button><button class="pill-btn ai-btn" id="save-review-suggestion">Сохранить</button></div>
-      </div>`;
+      </div>`);
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('#save-review-suggestion').onclick = async () => {
@@ -12360,12 +12403,17 @@ class NocturneWriter {
     return !!editable && editable.dataset.docId === this.getFocusedDoc()?.id;
   }
 
-  renderReviewToolbarSlot() {
+  renderReviewToolbarSlot(animate = true) {
     const slot = document.getElementById('review-toolbar-slot');
     if (!slot) return;
     const mode = this.state.reviewMode || 'write';
+    if (animate && slot.__motionReviewMode !== mode) {
+      slot.__motionReviewMode = mode;
+      this.animateHeightTransition(slot, () => this.renderReviewToolbarSlot(false), { width: true });
+      return;
+    }
     if (mode === 'write') {
-      slot.innerHTML = '';
+      this.updateSurfaceHTML(slot, '', { resize: true });
       slot.className = 'review-toolbar-slot empty';
       return;
     }
@@ -12373,23 +12421,23 @@ class NocturneWriter {
       const enabled = this.hasFocusedTextSelection();
       const disabled = enabled ? '' : 'disabled';
       slot.className = 'review-toolbar-slot editor-tools';
-      slot.innerHTML = `
+      this.updateSurfaceHTML(slot, `
         <button class="review-tool-btn icon-only" data-action="quick-review-comment" title="${enabled ? 'Комментарий' : 'Комментарий — выделите текст'}" aria-label="Комментарий" ${disabled}><i class="bx bx-comment-detail"></i></button>
         <button class="review-tool-btn icon-only" data-action="quick-review-suggestion" title="${enabled ? 'Замена' : 'Замена — выделите текст'}" aria-label="Замена" ${disabled}><i class="bx bx-transfer-alt"></i></button>
         <div class="review-issue-dropdown">
           <button class="review-tool-btn icon-only has-chevron" data-action="toggle-review-issue-menu" title="${enabled ? 'Проблема' : 'Проблема — выделите текст'}" aria-label="Проблема" ${disabled}><i class="bx bx-error-circle"></i><i class="bx bx-chevron-down review-chevron"></i></button>
         </div>
         <button class="review-tool-btn icon-only" data-action="quick-typo-rule" title="${enabled ? 'В словарь' : 'В словарь — выделите текст'}" aria-label="В словарь" ${disabled}><i class="bx bx-book-add"></i></button>
-      `;
+      `, { resize: true });
       return;
     }
     const marks = this.reviewMarksForFocusedDoc();
     const docId = this.getFocusedDoc()?.id;
     const index = Math.min(marks.length - 1, Math.max(0, this.state.currentReviewIndexByDoc[docId] || 0));
     slot.className = 'review-toolbar-slot finalization-tools';
-    slot.innerHTML = marks.length
+    this.updateSurfaceHTML(slot, marks.length
       ? `<div class="review-toolbar-nav"><button class="review-tool-btn icon-only" data-action="review-prev" title="Предыдущая правка" aria-label="Предыдущая правка"><i class="bx bx-chevron-left"></i></button><span class="review-count">${index + 1} / ${marks.length}</span><button class="review-tool-btn icon-only" data-action="review-next" title="Следующая правка" aria-label="Следующая правка"><i class="bx bx-chevron-right"></i></button></div>`
-      : '<span class="review-empty-chip"><i class="bx bx-check-circle"></i>Правок нет</span>';
+      : '<span class="review-empty-chip"><i class="bx bx-check-circle"></i>Правок нет</span>', { resize: true });
   }
 
   renderReviewNavigator() {
@@ -12397,30 +12445,20 @@ class NocturneWriter {
     if (!nav) return;
     const marks = this.reviewMarksForFocusedDoc();
     if (this.state.reviewMode !== 'finalization') {
-      nav.classList.remove('active');
-      nav.setAttribute('aria-hidden', 'true');
-      nav.style.display = 'none';
-      nav.innerHTML = '';
+      this.closeOverlay(nav, { clear: true, duration: 220 });
       return;
     }
     if (!marks.length) {
-      nav.innerHTML = '';
-      nav.classList.remove('active', 'empty');
-      nav.setAttribute('aria-hidden', 'true');
-      nav.style.display = 'none';
+      this.closeOverlay(nav, { clear: true, duration: 220 });
       return;
     }
-    
-    // Measure old card height
-    const oldCard = nav.querySelector('.review-detail-card');
-    const oldHeight = oldCard ? oldCard.offsetHeight : 0;
     
     const docId = this.getFocusedDoc()?.id;
     const index = Math.min(marks.length - 1, Math.max(0, this.state.currentReviewIndexByDoc[docId] || 0));
     const mark = marks[index];
     this.state.activeReviewMarkId = mark.id;
     
-    nav.innerHTML = `
+    this.updateSurfaceHTML(nav, `
       <div class="review-nav-controls">
         <button data-action="review-prev"><i class="bx bx-chevron-left"></i></button>
         <span>${index + 1} / ${marks.length}</span>
@@ -12435,35 +12473,13 @@ class NocturneWriter {
         <div class="review-detail-actions">
           ${mark.kind === 'suggestion' ? '<button class="pill-btn ai-btn" data-action="review-accept">Принять</button><button class="pill-btn" data-action="review-reject">Отклонить</button>' : '<button class="pill-btn ai-btn" data-action="review-resolve">Решено</button>'}
         </div>
-      </div>`;
-      
-    nav.style.display = 'flex';
+      </div>`, { resize: true, key: mark.id });
+
+    clearTimeout(nav.__motionCloseTimer); nav.__motionGeneration = (nav.__motionGeneration || 0) + 1;
+    nav.classList.remove('motion-exiting');
     nav.classList.remove('empty');
     nav.classList.add('active');
     nav.setAttribute('aria-hidden', 'false');
-    
-    // Animate height if old height exists
-    const newCard = nav.querySelector('.review-detail-card');
-    if (oldHeight > 0 && newCard) {
-      newCard.style.height = `${oldHeight}px`;
-      newCard.offsetHeight; // reflow
-      newCard.style.transition = 'height 0.22s cubic-bezier(0.4, 0, 0.2, 1)';
-      
-      newCard.style.height = 'auto';
-      const newHeight = newCard.offsetHeight;
-      
-      newCard.style.height = `${oldHeight}px`;
-      newCard.offsetHeight; // reflow
-      newCard.style.height = `${newHeight}px`;
-      
-      newCard.addEventListener('transitionend', function handler(e) {
-        if (e.propertyName === 'height') {
-          newCard.style.height = '';
-          newCard.style.transition = '';
-          newCard.removeEventListener('transitionend', handler);
-        }
-      });
-    }
     
     this.updateReviewHighlights();
   }
@@ -12472,10 +12488,7 @@ class NocturneWriter {
     if (this.reviewMarksForFocusedDoc().length) return;
     const nav = document.getElementById('review-navigator');
     if (!nav) return;
-    nav.innerHTML = '';
-    nav.classList.remove('active', 'empty');
-    nav.setAttribute('aria-hidden', 'true');
-    nav.style.display = 'none';
+    this.closeOverlay(nav, { clear: true, duration: 220 });
     this.state.activeReviewMarkId = null;
     this.updateReviewHighlights();
   }
@@ -12860,10 +12873,10 @@ class NocturneWriter {
       || (this.isMobileLayout() && this.state.settings.reduceMobileAnimations);
   }
 
-  animateHeightTransition(element, updateCallback, { width = false } = {}) {
+  animateHeightTransition(element, updateCallback, { width = false, from = null } = {}) {
     if (!element) { updateCallback(); return; }
     const previous = element.__surfaceSizeTransition;
-    const startHeight = element.offsetHeight, startWidth = element.offsetWidth;
+    const startHeight = from?.height ?? element.offsetHeight, startWidth = from?.width ?? element.offsetWidth;
     element.__heightTransitionCleanup?.();
     if (this.shouldReduceSurfaceMotion()) { updateCallback(); return; }
     const original = { height: element.style.height, width: element.style.width, transition: element.style.transition, overflow: element.style.overflow };
@@ -12912,16 +12925,92 @@ class NocturneWriter {
     if (node.nodeType !== Node.ELEMENT_NODE) return String(node.nodeType);
     const field = node.dataset.syncField || node.getAttribute('name');
     const childField = node.matches('label') ? node.querySelector('input[data-sync-field]')?.dataset.syncField : '';
-    const key = node.dataset.surfaceKey || field || childField || node.dataset.action || node.dataset.value
+    const identity = ['docId', 'loreId', 'folderId', 'noteId', 'commandPaletteRun', 'settingsTab', 'kbTab', 'projectId', 'setting', 'settingSelect', 'mobileTab', 'assocTab', 'assocContent', 'ruleId', 'macroId', 'bookmarkId', 'ctxDoc'].find(key => node.dataset[key]);
+    const key = node.dataset.surfaceKey || (identity ? `${identity}:${node.dataset[identity]}` : '') || field || childField || node.dataset.action || node.dataset.value
       || (node.id && !node.id.startsWith('modal-title-') ? node.id : '') || node.classList[0] || '';
     return `${node.tagName}:${key}`;
   }
 
-  animateSurfaceContent(element, exiting = false) {
-    if (!element?.isConnected || this.shouldReduceSurfaceMotion()) return;
+  runMotion(element, frames, { channel = 'content', duration = 260, easing = 'cubic-bezier(.16, 1, .3, 1)' } = {}) {
+    if (!element?.isConnected) return { finished: Promise.resolve(false) };
+    const motions = element.__nocturneMotions ||= new Map();
+    const previous = motions.get(channel);
+    const first = { ...frames[0] };
+    if (previous) {
+      const visible = getComputedStyle(element);
+      for (const key of ['opacity', 'transform']) if (key in first) first[key] = visible[key];
+      previous.animation.cancel();
+    }
+    if (this.shouldReduceSurfaceMotion()) { motions.delete(channel); return { finished: Promise.resolve(true) }; }
+    const animation = element.animate([first, ...frames.slice(1)], { duration, easing });
+    const motion = { animation, finished: null };
+    motions.set(channel, motion);
+    motion.finished = animation.finished.then(() => {
+      if (motions.get(channel) === motion) motions.delete(channel);
+      return true;
+    }, () => { if (motions.get(channel) === motion) motions.delete(channel); return false; });
+    return motion;
+  }
+
+  animateViewChange(element, update, { direction = 1 } = {}) {
+    if (!element) { update(); return; }
+    if (this.isSurfaceVisible(element)) this.animateSurfaceContent(element, true);
+    update();
+    if (this.isSurfaceVisible(element)) this.runMotion(element, [{ opacity: .35, transform: `translateX(${direction * 8}px)` }, { opacity: 1, transform: 'translateX(0)' }], { channel: 'view', duration: 240 });
+  }
+
+  isSurfaceVisible(element) {
+    if (!element?.isConnected || !element.getClientRects().length) return false;
+    const panel = element.closest('.side-panel');
+    if (panel && !panel.classList.contains('open')) return false;
+    const overlay = element.closest('.modal-overlay, .kb-modal, .mobile-overlay, .mobile-tab-surface, .command-palette-overlay, .floating-notes-modal, .review-navigator');
+    return (!overlay || overlay.classList.contains('active')) && getComputedStyle(element).visibility !== 'hidden';
+  }
+
+  updateSurfaceHTML(element, html, { key = null, preserve = true, resize = false } = {}) {
+    if (!element || (element.__motionMarkup === html && element.__motionView === key)) return;
+    const next = element.cloneNode(false); next.innerHTML = html;
+    const viewChanged = key !== null && element.__motionView !== undefined && element.__motionView !== key;
+    const update = () => preserve ? this.patchSurface(element, next) : element.replaceChildren(...next.childNodes);
+    const change = () => viewChanged || !preserve ? this.animateViewChange(element, update, { direction: this.state.mobile.tabDirection || 1 }) : update();
+    if (resize && this.isSurfaceVisible(element)) this.animateHeightTransition(element.closest('.form-modal, .cleaner-modal, .command-palette-panel') || element, change);
+    else change();
+    element.__motionMarkup = html; element.__motionView = key;
+  }
+
+  updateSurfaceRoot(element, html) {
+    if (!element) return;
+    const template = document.createElement('template'); template.innerHTML = html.trim();
+    const next = template.content.firstElementChild;
+    if (!next || element.__motionMarkup === html) return;
+    const oldTab = element.dataset.mobileTab, newTab = next.dataset.mobileTab;
+    const update = () => this.patchSurface(element, next);
+    if (oldTab !== newTab && this.isSurfaceVisible(element)) this.animateViewChange(element, update, { direction: this.state.mobile.tabDirection || 1 });
+    else update();
+    element.__motionMarkup = html;
+  }
+
+  closeOverlay(overlay, { clear = false, duration = 330 } = {}) {
+    if (!overlay) return;
+    clearTimeout(overlay.__motionCloseTimer);
+    const generation = overlay.__motionGeneration = (overlay.__motionGeneration || 0) + 1;
+    overlay.classList.add('motion-exiting'); overlay.classList.remove('active'); overlay.setAttribute('aria-hidden', 'true');
+    const finish = () => {
+      if (overlay.__motionGeneration !== generation || overlay.classList.contains('active')) return;
+      overlay.classList.remove('motion-exiting');
+      if (clear) { overlay.replaceChildren(); overlay.__motionMarkup = null; overlay.__motionView = undefined; }
+    };
+    if (this.shouldReduceSurfaceMotion()) finish();
+    else overlay.__motionCloseTimer = setTimeout(finish, duration);
+  }
+
+  animateSurfaceContent(element, exiting = false, snapshot = null) {
+    if ((!snapshot && !this.isSurfaceVisible(element)) || this.shouldReduceSurfaceMotion()) return;
+    const opacity = getComputedStyle(element).opacity;
     let target = element;
     if (exiting) {
-      const rect = element.getBoundingClientRect();
+      element.__exitGhost?.remove();
+      const rect = snapshot?.rect || element.getBoundingClientRect();
       if (!rect.width || !rect.height) return;
       target = element.cloneNode(true);
       for (const node of [target, ...target.querySelectorAll('*')]) {
@@ -12929,18 +13018,26 @@ class NocturneWriter {
       }
       target.inert = true; target.setAttribute('aria-hidden', 'true');
       target.classList.add('surface-exit-ghost');
-      Object.assign(target.style, { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px`, margin: '0' });
+      target.classList.remove('hidden');
+      const owner = element.closest('.modal-overlay, .kb-modal, .mobile-overlay, .mobile-tab-surface, .command-palette-overlay, .review-navigator, .floating-notes-modal, .entity-hover-card, .doc-search-panel, .app-context-menu');
+      const style = getComputedStyle(element);
+      Object.assign(target.style, { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px`, margin: '0', font: snapshot?.font || style.font, color: snapshot?.color || style.color, zIndex: String((parseInt(owner ? getComputedStyle(owner).zIndex : '100', 10) || 100) + 1), maxHeight: `${rect.height}px` });
+      element.__exitGhost = target;
       document.body.append(target);
     }
-    const animation = target.animate(exiting
-      ? [{ opacity: 1, transform: 'translateY(0)' }, { opacity: 0, transform: 'translateY(-4px)' }]
+    const animation = this.runMotion(target, exiting
+      ? [{ opacity, transform: 'translateY(0)' }, { opacity: 0, transform: 'translateY(-4px)' }]
       : [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'translateY(0)' }],
-    { duration: exiting ? 140 : 260, easing: 'cubic-bezier(.16, 1, .3, 1)' });
-    if (exiting) animation.finished.then(() => target.remove(), () => target.remove());
+    { duration: exiting ? 140 : 260 });
+    if (exiting) animation.finished.then(() => { target.remove(); if (element.__exitGhost === target) element.__exitGhost = null; });
   }
 
-  patchSurface(element, next) {
+  patchSurface(element, next, resize = true) {
+    if (resize && element.matches('.folder-docs, .mobile-folder-docs') && element.classList.contains('collapsed') !== next.classList.contains('collapsed')) {
+      this.animateHeightTransition(element, () => this.patchSurface(element, next, false)); return;
+    }
     const focus = document.activeElement;
+    if (element.isContentEditable && (element === focus || element.contains(focus))) return;
     const symbolChanged = element.matches('i') && element.getAttribute('class') !== next.getAttribute('class');
     let textChanged = false;
     const busyAttributes = ['disabled', 'aria-busy', 'aria-label', 'data-busy-label'];
@@ -12979,36 +13076,50 @@ class NocturneWriter {
       }
     };
     const structural = oldNodes.length !== nextNodes.length || oldNodes.some((node, index) => this.surfaceNodeKey(node) !== this.surfaceNodeKey(nextNodes[index] || next));
-    if (structural && element.matches('.sync-mobile-content')) this.animateHeightTransition(element, update);
-    else if (structural && element.matches('.utility-list, .sync-device-list')) this.animateLayoutTransition(element, update);
+    const settingsChanged = element.matches('.settings-body') && element.querySelector('.settings-header h2')?.textContent !== next.querySelector('.settings-header h2')?.textContent;
+    if (settingsChanged) this.animateViewChange(element, update);
+    else if (structural && element.matches('.sync-mobile-content')) this.animateHeightTransition(element, update);
+    else if (structural && element.matches('.utility-list, .sync-device-list, .docs-list-scroll, .folder-docs, .mobile-folder-docs, .command-group, .command-palette-results, .character-grid, .locations-grid, .timeline-container, .mobile-lore-grid')) this.animateLayoutTransition(element, update);
     else update();
-    if (textChanged && element.matches('h2, [data-sync-status-title], [data-sync-status-detail], [data-sync-pairing-code]')) this.animateSurfaceContent(element);
-    if (symbolChanged && !this.shouldReduceSurfaceMotion()) element.animate([{ opacity: .25 }, { opacity: 1 }], { duration: 160, easing: 'ease-out' });
+    if (textChanged && !element.closest('input, textarea, [contenteditable="true"], .page-content') && this.isSurfaceVisible(element)) {
+      this.runMotion(element, [{ opacity: .6 }, { opacity: 1 }], { channel: 'text', duration: 160, easing: 'ease-out' });
+    }
+    if (symbolChanged) this.runMotion(element, [{ opacity: .25 }, { opacity: 1 }], { duration: 160, easing: 'ease-out' });
   }
 
-  presentFormModal(html) {
-    const overlay = document.getElementById('form-overlay');
+  presentOverlay(overlay, html, { activate = false } = {}) {
+    if (!overlay) return;
+    clearTimeout(overlay.__motionCloseTimer); overlay.__motionGeneration = (overlay.__motionGeneration || 0) + 1;
+    overlay.classList.remove('motion-exiting');
     const template = document.createElement('template'); template.innerHTML = html.trim();
-    const next = template.content.firstElementChild, current = overlay?.querySelector('.form-modal');
+    const next = template.content.firstElementChild, current = overlay.firstElementChild;
     if (!next || !overlay) return;
     const focusWasInside = current?.contains(document.activeElement);
     if (overlay.classList.contains('active') && current?.tagName === next.tagName) {
-      if (current.__surfaceMarkup !== html) this.animateHeightTransition(current, () => this.patchSurface(current, next), { width: true });
+      if (current.__surfaceMarkup !== html) this.animateHeightTransition(current.querySelector('.form-modal, .cleaner-modal') || current, () => this.patchSurface(current, next), { width: true });
     } else {
+      const from = overlay.classList.contains('active') && current ? { height: current.offsetHeight, width: current.offsetWidth } : null;
+      if (from) this.animateSurfaceContent(current, true);
       current?.__heightTransitionCleanup?.();
       overlay.replaceChildren(next);
+      if (from) { this.animateHeightTransition(next, () => {}, { width: true, from }); this.animateSurfaceContent(next); }
       next.offsetHeight;
     }
-    const modal = overlay.querySelector('.form-modal');
+    const modal = overlay.querySelector('.form-modal, .settings-modal, .command-palette-panel, .cleaner-modal') || overlay.firstElementChild;
+    overlay.firstElementChild.__surfaceMarkup = html;
     modal.__surfaceMarkup = html;
     const title = modal.querySelector('h1, h2, h3');
-    if (title) { title.id ||= 'modal-title-form-overlay'; modal.setAttribute('aria-labelledby', title.id); }
+    if (title) { title.id ||= `modal-title-${overlay.id || uid('surface')}`; modal.setAttribute('aria-labelledby', title.id); }
     modal.__surfaceKind = `${next.tagName}:${next.className}:${title?.textContent || ''}`;
-    overlay.classList.add('active');
+    if (activate) { overlay.classList.add('active'); overlay.setAttribute('aria-hidden', 'false'); }
     if (focusWasInside && !modal.contains(document.activeElement)) {
       (modal.querySelector('[autofocus], input:not([type="hidden"]):not([type="checkbox"]), textarea, .sync-primary, .nocturne-select-trigger') || modal).focus({ preventScroll: true });
     }
     return modal;
+  }
+
+  presentFormModal(html) {
+    return this.presentOverlay(document.getElementById('form-overlay'), html, { activate: true });
   }
 
   async runSurfaceAction(button, label, operation) {
@@ -13034,7 +13145,7 @@ class NocturneWriter {
   openSearchChooser() {
     const hasDoc = !!this.getFocusedDoc();
     const overlay = document.getElementById('form-overlay');
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="form-modal search-choice-modal">
         <div class="modal-head-row">
           <div><h2>Выберите режим поиска</h2><p>Быстрый переход к нужным фрагментам рукописи.</p></div>
@@ -13054,7 +13165,7 @@ class NocturneWriter {
             <small>Глобальный поиск по проекту.</small>
           </button>
         </div>
-      </div>`;
+      </div>`);
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
   }
@@ -13088,7 +13199,7 @@ class NocturneWriter {
     const current = total ? Math.min(total, this.searchSession.activeIndex + 1) : 0;
     
     const update = () => {
-      panel.innerHTML = `
+      this.updateSurfaceHTML(panel, `
         <div class="doc-search-panel-row">
           <i class="bx bx-search"></i>
           <input id="doc-search-query" data-doc-search-query value="${escapeHtml(this.searchSession.query || '')}" placeholder="Найти в документе">
@@ -13100,7 +13211,7 @@ class NocturneWriter {
         <div class="search-options-row">
           <label class="nocturne-check"><input type="checkbox" data-doc-search-case ${this.searchSession.caseSensitive ? 'checked' : ''}><span class="check-mark"></span><span>Учитывать регистр</span></label>
           <label class="nocturne-check"><input type="checkbox" data-doc-search-whole ${this.searchSession.wholeWords ? 'checked' : ''}><span class="check-mark"></span><span>Только целые слова</span></label>
-        </div>`;
+        </div>`);
     };
 
     if (panel.classList.contains('active')) {
@@ -13117,7 +13228,7 @@ class NocturneWriter {
     const total = this.searchSession.matches?.length || 0;
     const current = total ? Math.min(total, this.searchSession.activeIndex + 1) : 0;
     const count = document.querySelector('#doc-search-panel .search-count');
-    if (count) count.textContent = `${current} / ${total}`;
+    if (count) this.updateSurfaceHTML(count, `${current} / ${total}`);
   }
 
   closeDocumentSearch() {
@@ -13267,10 +13378,10 @@ class NocturneWriter {
     if (!nav || !this.searchSession) return;
     const total = this.searchSession.matches?.length || 0;
     const current = total ? this.searchSession.activeIndex + 1 : 0;
-    nav.innerHTML = `
+    this.updateSurfaceHTML(nav, `
       <button class="btn-icon" data-action="search-prev"><i class="bx bx-chevron-left"></i></button>
       <strong>${total ? `${current} / ${total}` : '0 / 0'}</strong>
-      <button class="btn-icon" data-action="search-next"><i class="bx bx-chevron-right"></i></button>`;
+      <button class="btn-icon" data-action="search-next"><i class="bx bx-chevron-right"></i></button>`, { resize: true });
     nav.classList.toggle('active', !!this.searchSession.query);
     nav.setAttribute('aria-hidden', this.searchSession.query ? 'false' : 'true');
   }
@@ -13316,7 +13427,7 @@ class NocturneWriter {
 
   renderGlobalSearchWindow() {
     const overlay = document.getElementById('form-overlay');
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="form-modal global-search-modal">
         <div class="modal-head-row">
           <div><h2>Поиск по проекту</h2><p>Результаты сгруппированы по документам.</p></div>
@@ -13330,7 +13441,7 @@ class NocturneWriter {
           </div>
         </div>
         <div class="global-search-results" id="global-search-results"></div>
-      </div>`;
+      </div>`);
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
   }
@@ -13352,7 +13463,7 @@ class NocturneWriter {
     const update = () => {
       const q = this.globalSearchState.query.trim();
       if (!q) {
-        box.innerHTML = '<div class="search-empty">Введите запрос, чтобы начать поиск.</div>';
+        this.updateSurfaceHTML(box, '<div class="search-empty">Введите запрос, чтобы начать поиск.</div>', { resize: true });
         return;
       }
       const smart = this.globalSearchState.entitySuggestions.map((entry) => `
@@ -13368,7 +13479,7 @@ class NocturneWriter {
               ${this.snippetForMatch(doc, match)}
             </button>`).join('')}
         </section>`).join('');
-      box.innerHTML = `${smart}${results || '<div class="search-empty">Совпадений нет.</div>'}`;
+      this.updateSurfaceHTML(box, `${smart}${results || '<div class="search-empty">Совпадений нет.</div>'}`, { resize: true });
     };
 
     if (modal && !this._globalSearchOpening) {
@@ -13421,7 +13532,7 @@ class NocturneWriter {
   renderReplaceWindow() {
     const overlay = document.getElementById('form-overlay');
     const s = this.replaceSession;
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="form-modal replace-modal">
         <div class="modal-head-row">
           <div><h2>Замена в документе</h2><p>${escapeHtml(this.getFocusedDoc()?.title || '')}</p></div>
@@ -13444,7 +13555,7 @@ class NocturneWriter {
           <button class="pill-btn" data-action="replace-current">Заменить текущее</button>
           <button class="pill-btn ai-btn" data-action="replace-all-preview">Заменить всё</button>
         </div>
-      </div>`;
+      </div>`);
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
   }
@@ -13470,7 +13581,7 @@ class NocturneWriter {
     if (summary) {
       const modal = document.querySelector('.replace-modal');
       const update = () => {
-        summary.innerHTML = this.replaceSession.find ? `Найдено: <strong>${this.replaceSession.matches.length}</strong>` : 'Введите текст для поиска.';
+        this.updateSurfaceHTML(summary, this.replaceSession.find ? `Найдено: <strong>${this.replaceSession.matches.length}</strong>` : 'Введите текст для поиска.', { resize: true });
       };
       if (modal && !this._replaceOpening) {
         this.animateHeightTransition(modal, update);
@@ -13641,12 +13752,12 @@ class NocturneWriter {
     if (!summary) return;
     const modal = document.querySelector('.replace-modal');
     const update = () => {
-      summary.innerHTML = `
+      this.updateSurfaceHTML(summary, `
         <div class="replace-preview">
           <strong>Будет заменено: ${matches.length}</strong>
           ${matches.slice(0, 8).map((match) => `<div>${this.snippetForMatch(doc, match, 36)}</div>`).join('')}
           <button class="pill-btn ai-btn" data-action="confirm-replace-all">Подтвердить замену всех</button>
-        </div>`;
+        </div>`, { resize: true });
     };
     if (modal) {
       this.animateHeightTransition(modal, update);
@@ -13708,7 +13819,7 @@ class NocturneWriter {
     }).filter((group) => group.matches.length);
     const total = groups.reduce((sum, group) => sum + group.matches.length, 0);
     const overlay = document.getElementById('form-overlay');
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="form-modal global-search-modal mentions-modal">
         <div class="modal-head-row">
           <div>
@@ -13728,7 +13839,7 @@ class NocturneWriter {
                 </button>`).join('')}
             </section>`).join('') : this.emptyStateMarkup('bx-search-alt', 'Упоминаний нет.', 'Эта сущность пока не встречается в документах.')}
         </div>
-      </div>`;
+      </div>`);
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
   }
@@ -13933,7 +14044,7 @@ class NocturneWriter {
     
     // Check if user is typing
     if (document.activeElement !== input) {
-      input.innerHTML = html;
+      this.updateSurfaceHTML(input, html, { key: `${this.state.noteMode}:${this.activeDoc?.id || ''}`, preserve: false });
     }
 
     document.querySelectorAll('.notes-tab').forEach((tab) => {
@@ -13995,7 +14106,7 @@ class NocturneWriter {
     const popover = document.getElementById('floating-note-popover');
     if (!popover) return;
     const doc = this.getFocusedDoc();
-    popover.innerHTML = `
+    this.updateSurfaceHTML(popover, `
       <button class="floating-menu-item ${doc ? '' : 'disabled'}" data-action="create-document-floating-note" ${doc ? '' : 'disabled'}>
         <i class="bx bx-file"></i>
         <span>${doc ? 'Заметка для текущего документа' : 'Нет активного документа'}<small>${escapeHtml(doc?.title || 'Откройте документ в рабочей области')}</small></span>
@@ -14012,7 +14123,7 @@ class NocturneWriter {
         <i class="bx bx-list-ul"></i>
         <span>Все заметки<small>Полный менеджер окон</small></span>
       </button>
-    `;
+    `, {});
   }
 
   showFloatingNoteMenu() {
@@ -14062,8 +14173,7 @@ class NocturneWriter {
     const modal = document.getElementById('floating-notes-modal');
     if (!modal) return;
     if (!this.state.floatingNotesManagerOpen) {
-      modal.classList.remove('active');
-      modal.innerHTML = '';
+      this.closeOverlay(modal, { clear: true });
       return;
     }
     const notes = [...this.state.floatingNotes].sort((a, b) => b.updatedAt - a.updatedAt);
@@ -14079,7 +14189,7 @@ class NocturneWriter {
       document: notes.filter((note) => note.scope === 'document' && !note.temporary).length,
       temporary: notes.filter((note) => note.temporary).length,
     };
-    modal.innerHTML = `
+    this.updateSurfaceHTML(modal, `
       <section class="floating-notes-modal-panel">
         <header class="floating-notes-modal-head">
           <div>
@@ -14092,7 +14202,8 @@ class NocturneWriter {
           ${groups.map(([title, groupNotes, empty]) => this.renderFloatingNotesModalSection(title, groupNotes, empty)).join('')}
         </div>
       </section>
-    `;
+    `, {});
+    clearTimeout(modal.__motionCloseTimer); modal.__motionGeneration = (modal.__motionGeneration || 0) + 1; modal.classList.remove('motion-exiting');
     modal.classList.add('active');
   }
 
@@ -14131,7 +14242,7 @@ class NocturneWriter {
         <span>${escapeHtml(note.title || 'Заметка')}</span>
         <small>${escapeHtml(this.floatingNoteScopeLabel(note))}</small>
       </button>`).join('');
-    manager.innerHTML = `
+    this.updateSurfaceHTML(manager, `
       <div class="floating-manager-head">
         <div><strong>Плавающие заметки</strong><span>${visibleCount} / ${total}</span></div>
         <div>
@@ -14141,14 +14252,14 @@ class NocturneWriter {
         </div>
       </div>
       ${items ? `<div class="floating-note-list">${items}</div>` : '<p class="floating-manager-empty">Окон заметок пока нет.</p>'}
-    `;
+    `, {});
   }
 
   renderFloatingNotes() {
     const layer = document.getElementById('floating-notes-layer');
     if (!layer) return;
     const notes = this.state.floatingNotes.filter((note) => this.floatingNoteVisible(note));
-    layer.innerHTML = notes.map((note) => this.renderFloatingNote(note)).join('');
+    this.updateSurfaceHTML(layer, notes.map((note) => this.renderFloatingNote(note)).join(''), {});
     this.renderFloatingNotesManager();
   }
 
@@ -14701,38 +14812,13 @@ class NocturneWriter {
   updateDictionaryList() {
     const current = document.querySelector('.dictionary-list');
     if (!current) return;
-    const next = document.createElement('div');
-    next.innerHTML = this.dictionarySettingsContent();
-    const nextList = next.querySelector('.dictionary-list');
-    if (!nextList) return;
-    clearTimeout(this.dictionaryListTimer);
-    const currentHeight = current.getBoundingClientRect().height;
-    if (currentHeight) current.style.height = `${Math.round(currentHeight)}px`;
-    current.classList.remove('is-entering');
-    current.classList.add('is-leaving');
-    this.dictionaryListTimer = window.setTimeout(() => {
-      current.innerHTML = nextList.innerHTML;
-      current.scrollTop = 0;
-      current.classList.remove('is-leaving');
-      current.classList.add('is-entering');
-      this.dictionaryListTimer = window.setTimeout(() => {
-        current.classList.remove('is-entering');
-        current.style.height = '';
-      }, 150);
-    }, 90);
+    const next = document.createElement('div'); next.innerHTML = this.dictionarySettingsContent();
+    const list = next.querySelector('.dictionary-list');
+    if (list) this.updateSurfaceHTML(current, list.innerHTML, { resize: true });
   }
 
   updateDictionarySearchList() {
-    const current = document.querySelector('.dictionary-list');
-    if (!current) return;
-    const next = document.createElement('div');
-    next.innerHTML = this.dictionarySettingsContent();
-    const nextList = next.querySelector('.dictionary-list');
-    if (!nextList) return;
-    current.innerHTML = nextList.innerHTML;
-    window.setTimeout(() => {
-      current.style.minHeight = '';
-    }, 0);
+    this.updateDictionaryList();
   }
 
   updateDictionaryFilter(filter) {
@@ -15178,7 +15264,7 @@ class NocturneWriter {
     const normalized = normalizeTypoToken(wrong);
     const builtin = wrong ? TYPO_LOOKUP[normalized] : null;
     const overlay = document.getElementById('form-overlay');
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="form-modal typo-rule-modal">
         <h2>${existing ? 'Редактировать правило' : 'Добавить правило в словарь'}</h2>
         <div class="form-grid">
@@ -15193,7 +15279,7 @@ class NocturneWriter {
           <button class="pill-btn ai-btn" id="save-typo-rule">Сохранить правило</button>
         </div>
       </div>
-    `;
+    `);
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('#save-typo-rule').onclick = async () => {
@@ -15298,7 +15384,7 @@ class NocturneWriter {
       document.body.appendChild(overlay);
     }
     
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="kb-import-card">
         <div class="kb-import-spinner">
           <div class="spinner-ring"></div>
@@ -15307,7 +15393,7 @@ class NocturneWriter {
         <h3>Импортируем словарь ошибок...</h3>
         <div class="kb-import-progress-list"></div>
       </div>
-    `;
+    `);
     
     overlay.classList.add('active');
     await new Promise(r => setTimeout(r, 600));
@@ -15324,7 +15410,7 @@ class NocturneWriter {
       const step = document.createElement('div');
       step.className = `kb-import-step ${steps[i].class}`;
       step.style.animationDelay = `${i * 150}ms`;
-      step.innerHTML = `<span>${steps[i].text}</span><i class="bx bx-check-circle"></i>`;
+      this.updateSurfaceHTML(step, `<span>${steps[i].text}</span><i class="bx bx-check-circle"></i>`, { resize: true });
       listEl.appendChild(step);
       await new Promise(r => setTimeout(r, 350));
     }
@@ -15436,7 +15522,7 @@ class NocturneWriter {
     const countEl = document.getElementById('goal-count');
     const fillEl = document.getElementById('goal-fill');
     if (!countEl || !fillEl) return;
-    countEl.textContent = `${words} / ${goal}`;
+    this.updateSurfaceHTML(countEl, `${words} / ${goal}`);
     const pct = Math.min(100, Math.round((words / goal) * 100));
     fillEl.style.width = `${pct}%`;
     
@@ -16221,7 +16307,7 @@ class NocturneWriter {
         const dropdown = switcher.querySelector('.kb-project-switcher-dropdown');
         if (dropdown) {
           const activeId = this.state.activeLoreId || 'world';
-          dropdown.innerHTML = `
+          this.updateSurfaceHTML(dropdown, `
             ${(this.state.kbProjects || []).map(p => `
               <div class="kb-project-item ${p.id === activeId ? 'active' : ''}" data-project-id="${p.id}">
                 <i class="bx bx-book-bookmark"></i>
@@ -16238,7 +16324,7 @@ class NocturneWriter {
               <i class="bx bx-edit-alt"></i>
               <span>Редактировать</span>
             </div>
-          `;
+          `, {});
         }
       }
       document.querySelectorAll('#kb-modal .kb-sidebar .settings-tab').forEach(tab => {
@@ -16247,7 +16333,7 @@ class NocturneWriter {
       });
       const main = document.querySelector('#kb-modal .kb-main');
       if (main) {
-        main.innerHTML = detail ? this.renderLoreDetail(detail.type, detail.item, this.state.kbReadMode) : `
+        this.updateSurfaceHTML(main, detail ? this.renderLoreDetail(detail.type, detail.item, this.state.kbReadMode) : `
           ${this.kbViewTools()}
           <div class="kb-search-wrap">
             <i class="bx bx-search"></i>
@@ -16299,17 +16385,8 @@ class NocturneWriter {
             <div class="character-grid" data-dnd-zone="notes">${notes.length ? notes.map((item) => this.noteCard(item, true)).join('') : this.emptyStateMarkup('bx-note', 'Записей пока нет.', 'Добавьте первую свободную запись или заметку к миру.', 'new-lore', 'Создать запись', 'data-lore-type="notes"')}</div>
           </section>
           ${activeSubtimeline ? this.subtimelinePanel(activeSubtimeline) : ''}
-        `;
-        if (this.kbTransitioning) {
-          main.classList.remove('kb-entering');
-          main.offsetHeight; // trigger reflow
-          main.classList.add('kb-entering');
-          clearTimeout(this._kbEntranceTimeout);
-          this._kbEntranceTimeout = setTimeout(() => {
-            main.classList.remove('kb-entering');
-          }, 800);
-          this.kbTransitioning = false;
-        }
+        `, { key: `${active}:${detail?.item?.id || ''}:${activeSubtimeline?.id || ''}` });
+        this.kbTransitioning = false;
       }
       if (!detail) {
         this.setupKbDragDrop();
@@ -16318,10 +16395,7 @@ class NocturneWriter {
       this.setupKbImportDnd();
       const searchInput = document.getElementById('kb-search');
       if (searchInput) {
-        searchInput.addEventListener('input', (e) => {
-          this.state.kbSearch = e.target.value;
-          this.applyKbSearch();
-        });
+        searchInput.oninput = e => { this.state.kbSearch = e.target.value; this.applyKbSearch(); };
       }
       return;
     }
@@ -16437,10 +16511,7 @@ class NocturneWriter {
 
     const searchInput = document.getElementById('kb-search');
     if (searchInput) {
-      searchInput.addEventListener('input', (e) => {
-        this.state.kbSearch = e.target.value;
-        this.applyKbSearch();
-      });
+      searchInput.oninput = e => { this.state.kbSearch = e.target.value; this.applyKbSearch(); };
       // Do not auto-focus search to avoid stealing focus on tab switch
     }
   }
@@ -16852,60 +16923,21 @@ class NocturneWriter {
   applyKbSearch() {
     const q = (this.state.kbSearch || '').toLowerCase().trim();
     const isSearching = q.length > 0;
-
-    const grids = Array.from(document.querySelectorAll('[data-dnd-zone]'));
-    const firstRects = new Map();
-    
-    if (isSearching) {
-      grids.forEach(grid => {
-        Array.from(grid.querySelectorAll('[data-lore-id]')).forEach(el => {
-          if (!el.classList.contains('hidden')) {
-            firstRects.set(el, el.getBoundingClientRect());
-          }
-        });
-      });
-    }
-    
-    document.querySelectorAll('.char-card, .loc-card, .timeline-item').forEach(el => {
-      const item = this.loreItemForElement(el);
-      if (item) {
-        const names = item.title ? [item.title] : this.entityMentionValues(item);
-        const docTitles = (item.chapterIds || []).map(id => this.state.docs.find(d => d.id === id)?.title || '').filter(Boolean);
-        const text = `${names.join(' ')} ${item.date || ''} ${item.body || item.role || ''} ${docTitles.join(' ')}`;
-        el.classList.toggle('hidden', isSearching && !text.toLowerCase().includes(q));
-        el.toggleAttribute('draggable', !isSearching && !window.Sortable);
-      }
-    });
-    
-    document.querySelectorAll('[data-dnd-zone]').forEach((zone) => {
-      zone.__sortable?.option?.('disabled', isSearching);
-    });
-    document.querySelectorAll('[data-dnd-zone="timeline"], [data-dnd-zone="subtimeline"]').forEach((zone) => this.updateTimelineConnectors(zone));
-
-    if (!isSearching) {
-      return;
-    }
-
-    // FLIP transition for layout shifts
-    requestAnimationFrame(() => {
-      firstRects.forEach((firstRect, el) => {
-        if (!el.parentNode || el.classList.contains('hidden')) return;
-        const lastRect = el.getBoundingClientRect();
-        const dx = firstRect.left - lastRect.left;
-        const dy = firstRect.top - lastRect.top;
-        if (dx !== 0 || dy !== 0) {
-          el.style.transition = 'none';
-          el.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
-          el.offsetHeight; // force reflow
-          el.style.transition = 'transform 300ms cubic-bezier(0.16, 1, 0.3, 1)';
-          el.style.transform = 'translate3d(0, 0, 0)';
-          setTimeout(() => {
-            el.style.transition = '';
-            el.style.transform = '';
-          }, 320);
+    for (const grid of document.querySelectorAll('[data-dnd-zone]')) {
+      this.animateLayoutTransition(grid, () => {
+        for (const el of grid.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card')) {
+          const item = this.loreItemForElement(el);
+          if (!item) continue;
+          const names = item.title ? [item.title] : this.entityMentionValues(item);
+          const titles = (item.chapterIds || []).map(id => this.state.docs.find(doc => doc.id === id)?.title || '');
+          const text = `${names.join(' ')} ${item.date || ''} ${item.body || item.role || ''} ${titles.join(' ')}`;
+          el.classList.toggle('hidden', isSearching && !text.toLowerCase().includes(q));
+          el.toggleAttribute('draggable', !isSearching && !window.Sortable);
         }
       });
-    });
+      grid.__sortable?.option?.('disabled', isSearching);
+      if (grid.matches('[data-dnd-zone="timeline"], [data-dnd-zone="subtimeline"]')) this.updateTimelineConnectors(grid);
+    }
   }
 
   loreItemForElement(el) {
@@ -17092,7 +17124,7 @@ class NocturneWriter {
 
   showCharExportModal(char, cleanName) {
     const overlay = document.getElementById('form-overlay');
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="form-modal search-choice-modal" style="width: min(920px, calc(100vw - 44px));">
         <div class="modal-head-row">
           <div><h2>Выберите формат экспорта</h2><p>Персонаж: <strong>${escapeHtml(char.displayName || char.name || 'Без имени')}</strong></p></div>
@@ -17119,7 +17151,7 @@ class NocturneWriter {
           </button>
         </div>
       </div>
-    `;
+    `);
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelectorAll('.search-mode-card').forEach(btn => {
@@ -17549,7 +17581,7 @@ class NocturneWriter {
         docxDesc = 'Карточка события и его сабтаймлайн.';
       }
     }
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="form-modal search-choice-modal dump-choice-modal">
         <div class="modal-head-row">
           <div><h2>${escapeHtml(title)}</h2><p>${escapeHtml(subtitle)}</p></div>
@@ -17569,7 +17601,7 @@ class NocturneWriter {
             <small>Текстовый формат Microsoft Word.</small>
           </button>
         </div>
-      </div>`;
+      </div>`);
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelectorAll('.search-mode-card').forEach((btn) => {
@@ -17749,7 +17781,7 @@ class NocturneWriter {
       document.body.appendChild(overlay);
     }
     
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="kb-import-card">
         <div class="kb-import-spinner">
           <div class="spinner-ring"></div>
@@ -17758,7 +17790,7 @@ class NocturneWriter {
         <h3>Импортируем данные...</h3>
         <div class="kb-import-progress-list"></div>
       </div>
-    `;
+    `);
     
     overlay.classList.add('active');
     // More generous initial delay (600ms) for high-end organic feel
@@ -17771,7 +17803,7 @@ class NocturneWriter {
       const step = document.createElement('div');
       step.className = 'kb-import-step success';
       step.style.animationDelay = `${i * 150}ms`;
-      step.innerHTML = `<span>Импорт: ${cat.label} (${cat.count})</span><i class="bx bx-check-circle"></i>`;
+      this.updateSurfaceHTML(step, `<span>Импорт: ${cat.label} (${cat.count})</span><i class="bx bx-check-circle"></i>`, { resize: true });
       listEl.appendChild(step);
       // Wait 350ms per step to let the user appreciate the checkmarks
       await new Promise(r => setTimeout(r, 350));
@@ -17781,7 +17813,7 @@ class NocturneWriter {
       const step = document.createElement('div');
       step.className = 'kb-import-step fail';
       step.style.animationDelay = `${categories.length * 150}ms`;
-      step.innerHTML = `<span>Пропущено/ошибок: ${failCount}</span><i class="bx bx-x-circle"></i>`;
+      this.updateSurfaceHTML(step, `<span>Пропущено/ошибок: ${failCount}</span><i class="bx bx-x-circle"></i>`, { resize: true });
       listEl.appendChild(step);
       await new Promise(r => setTimeout(r, 350));
     }
@@ -17820,7 +17852,7 @@ class NocturneWriter {
       document.body.appendChild(overlay);
     }
     
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="kb-import-card">
         <div class="kb-import-spinner">
           <div class="spinner-ring"></div>
@@ -17829,7 +17861,7 @@ class NocturneWriter {
         <h3>Импортируем документы...</h3>
         <div class="kb-import-progress-list"></div>
       </div>
-    `;
+    `);
     
     overlay.classList.add('active');
     await new Promise(r => setTimeout(r, 600));
@@ -17841,7 +17873,7 @@ class NocturneWriter {
       const step = document.createElement('div');
       step.className = 'kb-import-step success';
       step.style.animationDelay = `${i * 150}ms`;
-      step.innerHTML = `<span>Импорт: ${item.file.name}</span><i class="bx bx-check-circle"></i>`;
+      this.updateSurfaceHTML(step, `<span>Импорт: ${item.file.name}</span><i class="bx bx-check-circle"></i>`, { resize: true });
       listEl.appendChild(step);
       await new Promise(r => setTimeout(r, 350));
     }
@@ -17850,7 +17882,7 @@ class NocturneWriter {
       const step = document.createElement('div');
       step.className = 'kb-import-step success';
       step.style.animationDelay = `${importedDocs.length * 150}ms`;
-      step.innerHTML = `<span>Редакторские правки (${reviewFilesCount})</span><i class="bx bx-check-circle"></i>`;
+      this.updateSurfaceHTML(step, `<span>Редакторские правки (${reviewFilesCount})</span><i class="bx bx-check-circle"></i>`, { resize: true });
       listEl.appendChild(step);
       await new Promise(r => setTimeout(r, 350));
     }
@@ -17859,7 +17891,7 @@ class NocturneWriter {
       const step = document.createElement('div');
       step.className = 'kb-import-step fail';
       step.style.animationDelay = `${(importedDocs.length + 1) * 150}ms`;
-      step.innerHTML = `<span>Ошибок при импорте: ${failCount}</span><i class="bx bx-x-circle"></i>`;
+      this.updateSurfaceHTML(step, `<span>Ошибок при импорте: ${failCount}</span><i class="bx bx-x-circle"></i>`, { resize: true });
       listEl.appendChild(step);
       await new Promise(r => setTimeout(r, 350));
     }
@@ -18369,14 +18401,11 @@ class NocturneWriter {
       renderFn();
       return;
     }
-    main.classList.add('kb-main-fade-out');
-    await new Promise(resolve => setTimeout(resolve, 120));
+    const generation = this.kbMotionGeneration = (this.kbMotionGeneration || 0) + 1;
+    const fade = this.runMotion(main, [{ opacity: getComputedStyle(main).opacity }, { opacity: .15 }], { channel: 'view', duration: 120 });
+    if (!await fade.finished || generation !== this.kbMotionGeneration || !main.isConnected || !main.closest('.kb-modal.active')) return;
     renderFn();
-    main.classList.remove('kb-main-fade-out');
-    main.classList.add('kb-main-fade-in');
-    main.addEventListener('animationend', () => {
-      main.classList.remove('kb-main-fade-in');
-    }, { once: true });
+    this.runMotion(main, [{ opacity: .15 }, { opacity: 1 }], { channel: 'view', duration: 240 });
   }
 
   renderLoreEntityFields(type, item, iconOptions) {
@@ -18439,7 +18468,7 @@ class NocturneWriter {
       ['bx-castle', 'Замок'],
     ];
     const overlay = document.getElementById('form-overlay');
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <form class="form-modal lore-form-${type}" id="lore-form" novalidate>
         <h2>${id ? 'Редактировать' : 'Создать'} ${isSubtimeline ? 'саб-событие' : isTimeline ? 'событие' : 'карточку'}</h2>
         <div class="form-grid">
@@ -18565,45 +18594,19 @@ class NocturneWriter {
           <button class="pill-btn ai-btn" type="submit">Сохранить</button>
         </div>
       </form>
-    `;
+    `);
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     
-    // Tab switching behavior
-    overlay.querySelectorAll('.assoc-tab-btn').forEach(btn => {
-      btn.onclick = () => {
+    overlay.querySelectorAll('.assoc-tab-btn').forEach(button => {
+      button.onclick = () => {
         const wrapper = overlay.querySelector('.assoc-collapsible-content');
-        if (wrapper) {
-          const prevHeight = wrapper.offsetHeight;
-          wrapper.style.height = `${prevHeight}px`;
-          
-          overlay.querySelectorAll('.assoc-tab-btn').forEach(b => b.classList.remove('active'));
-          overlay.querySelectorAll('.assoc-tab-content').forEach(c => c.classList.remove('active'));
-          btn.classList.add('active');
-          const tab = btn.dataset.assocTab;
-          overlay.querySelector(`[data-assoc-content="${tab}"]`).classList.add('active');
-          
-          wrapper.style.height = 'auto';
-          const targetHeight = wrapper.offsetHeight;
-          
-          wrapper.style.height = `${prevHeight}px`;
-          // Force reflow
-          wrapper.offsetHeight;
-          
-          wrapper.style.transition = 'height 300ms ease-out';
-          wrapper.style.height = `${targetHeight}px`;
-          
-          setTimeout(() => {
-            wrapper.style.transition = '';
-            wrapper.style.height = '';
-          }, 300);
-        } else {
-          overlay.querySelectorAll('.assoc-tab-btn').forEach(b => b.classList.remove('active'));
-          overlay.querySelectorAll('.assoc-tab-content').forEach(c => c.classList.remove('active'));
-          btn.classList.add('active');
-          const tab = btn.dataset.assocTab;
-          overlay.querySelector(`[data-assoc-content="${tab}"]`).classList.add('active');
-        }
+        const update = () => {
+          overlay.querySelectorAll('.assoc-tab-btn').forEach(tab => tab.classList.toggle('active', tab === button));
+          overlay.querySelectorAll('.assoc-tab-content').forEach(body => body.classList.toggle('active', body.dataset.assocContent === button.dataset.assocTab));
+        };
+        if (wrapper) this.animateHeightTransition(wrapper, () => this.animateViewChange(wrapper, update));
+        else update();
       };
     });
 
@@ -18809,7 +18812,7 @@ class NocturneWriter {
               tempDiv.innerHTML = cardHtml.trim();
               const newCardEl = tempDiv.firstChild;
               if (newCardEl) {
-                card.replaceWith(newCardEl);
+                this.animateLayoutTransition(card.parentElement, () => this.patchSurface(card, newCardEl));
               }
             }
           });
@@ -18883,7 +18886,7 @@ class NocturneWriter {
     if (!item) return;
     const label = this.entityDisplayName(item) || item.title || 'элемент';
     const overlay = document.getElementById('form-overlay');
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="form-modal confirm-modal">
         <div class="confirm-icon"><i class="bx bx-trash"></i></div>
         <h2>Удалить карточку?</h2>
@@ -18893,7 +18896,7 @@ class NocturneWriter {
           <button class="pill-btn danger-btn" data-confirm-delete-lore>Удалить</button>
         </div>
       </div>
-    `;
+    `);
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('[data-confirm-delete-lore]').onclick = async () => {
@@ -19106,7 +19109,7 @@ class NocturneWriter {
       ['misc', 'bx-slider-alt', 'Прочее'],
     ];
     const active = this.state.activeSettingsTab;
-    document.getElementById('settings-overlay').innerHTML = `
+    this.presentOverlay(document.getElementById('settings-overlay'), `
       <div class="settings-modal">
         <aside class="settings-sidebar">
           <div class="settings-sidebar-title">Настройки</div>
@@ -19117,7 +19120,7 @@ class NocturneWriter {
           ${this.settingsContent(active)}
         </main>
       </div>
-    `;
+    `);
     this.updateRangeControls();
     this.updateAccentPickerControls();
     if (active === 'search') {
@@ -19697,7 +19700,7 @@ class NocturneWriter {
         resultsHtml = itemsHtml + sectionsHtml;
       }
     }
-    listEl.innerHTML = resultsHtml;
+    this.updateSurfaceHTML(listEl, resultsHtml, { resize: true });
     this.updateRangeControls(listEl);
     this.updateAccentPickerControls(listEl);
   }
@@ -19824,7 +19827,7 @@ class NocturneWriter {
     if (!listEl) { this.renderSettings(); return; }
     const countEl = document.querySelector('.macros-list-section h4');
     if (countEl) countEl.textContent = `Список макросов (${macros.length})`;
-    listEl.innerHTML = macros.length === 0
+    this.updateSurfaceHTML(listEl, macros.length === 0
       ? `<div class="macros-empty-state"><i class="bx bx-keyboard"></i><p>У вас пока нет макросов. Запишите первый макрос выше!</p></div>`
       : macros.map((macro, idx) => `
           <div class="macro-item">
@@ -19832,7 +19835,7 @@ class NocturneWriter {
             <div class="macro-arrow"><i class="bx bx-right-arrow-alt"></i></div>
             <div class="macro-value-badge">${escapeHtml(macro.value)}</div>
             <button class="btn-icon delete-btn" data-action="macro-delete" data-macro-idx="${idx}" title="Удалить"><i class="bx bx-trash"></i></button>
-          </div>`).join('');
+          </div>`).join(''), { resize: true });
   }
 
   getFormattingActionLabel(action, customText = '') {
@@ -19920,7 +19923,7 @@ class NocturneWriter {
     if (!listEl) { this.renderSettings(); return; }
     const countEl = document.querySelector('.formatting-list-section h4');
     if (countEl) countEl.textContent = `Список правил (${rules.length})`;
-    listEl.innerHTML = rules.length === 0
+    this.updateSurfaceHTML(listEl, rules.length === 0
       ? `<div class="formatting-empty-state" style="text-align: center; padding: 40px 20px; border: 1px dashed var(--border); border-radius: var(--radius-md); color: var(--text-muted);"><i class="bx bx-list-check" style="font-size: 48px; margin-bottom: 8px; opacity: 0.4;"></i><p style="margin: 0;">У вас пока нет настроенных правил автозамены. Добавьте первое правило выше!</p></div>`
       : rules.map((rule, idx) => `
           <div class="formatting-item" style="display: flex; align-items: center; justify-content: space-between; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); padding: 12px 18px; border-radius: 8px; gap: 16px;">
@@ -19933,7 +19936,7 @@ class NocturneWriter {
               <div class="toggle ${rule.enabled ? 'on' : ''}" data-action="formatting-toggle-rule" data-rule-idx="${idx}" data-kind="toggle"></div>
               <button class="btn-icon delete-btn" data-action="formatting-delete" data-rule-idx="${idx}" title="Удалить" style="color: var(--text-muted); cursor: pointer;"><i class="bx bx-trash"></i></button>
             </div>
-          </div>`).join('');
+          </div>`).join(''), { resize: true });
   }
 
   aiProviderPresets() {
@@ -20525,7 +20528,7 @@ class NocturneWriter {
 
   async resetSettings() {
     const overlay = document.getElementById('form-overlay');
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="form-modal confirm-modal">
         <div class="confirm-icon"><i class="bx bx-reset"></i></div>
         <h2>Сбросить настройки?</h2>
@@ -20535,7 +20538,7 @@ class NocturneWriter {
           <button class="pill-btn ai-btn" data-confirm-reset-settings>Сбросить</button>
         </div>
       </div>
-    `;
+    `);
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('[data-confirm-reset-settings]').onclick = async () => {
@@ -20597,7 +20600,7 @@ class NocturneWriter {
     const context = this.buildCurrentAiContext(doc, target) || { disabled: true, message: 'Knowledge Context выключен.' };
     const serialized = serializeAiContextSafe(context);
     const overlay = document.getElementById('form-overlay');
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="form-modal ai-context-preview-modal">
         <div class="modal-head-row">
           <div><h2>Knowledge Context Preview</h2><p>Read-only JSON, не вставляется в документ.</p></div>
@@ -20615,7 +20618,7 @@ class NocturneWriter {
         </div>
         <pre class="ai-context-preview" tabindex="0">${escapeHtml(serialized)}</pre>
         <div class="form-actions"><button class="pill-btn ai-btn" data-close-form>Закрыть</button></div>
-      </div>`;
+      </div>`);
     overlay.classList.add('active');
     overlay.querySelectorAll('[data-close-form]').forEach((button) => { button.onclick = () => overlay.classList.remove('active'); });
   }
@@ -21470,12 +21473,12 @@ ${raw}`;
       this.assistantState = 'no-document';
       this.assistantPanelMessage = docMessage;
       output.dataset.tone = 'empty';
-      output.innerHTML = '<strong>Нет активного документа</strong><span>Откройте или создайте рукопись, чтобы ассистент мог анализировать и предлагать изменения.</span>';
+      this.updateSurfaceHTML(output, '<strong>Нет активного документа</strong><span>Откройте или создайте рукопись, чтобы ассистент мог анализировать и предлагать изменения.</span>', { resize: true });
     } else if (providerMessage && !['error', 'empty'].includes(this.assistantState)) {
       this.assistantState = 'provider-missing';
       this.assistantPanelMessage = providerMessage;
       output.dataset.tone = 'empty';
-      output.innerHTML = '<strong>Ассистент не подключён</strong><span>Выберите провайдера в настройках ИИ.</span>';
+      this.updateSurfaceHTML(output, '<strong>Ассистент не подключён</strong><span>Выберите провайдера в настройках ИИ.</span>', { resize: true });
     } else if (!this.assistantPanelMessage || ['busy', 'no-document', 'provider-missing'].includes(this.assistantState)) {
       this.assistantState = 'idle';
       this.assistantPanelMessage = 'Готов к работе.';
@@ -21650,7 +21653,6 @@ ${raw}`;
     const canvas = document.getElementById('sentiment-graph');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
     const sentences = (docText(this.getFocusedDoc()?.ast).match(/[^.!?…]+[.!?…]?/g) || []).slice(-24);
     const hot = ['кровь', 'страх', 'удар', 'огонь', 'смерть', 'боль', 'крик', 'опасность'];
     const calm = ['тихо', 'мягко', 'спокойно', 'свет', 'дождь', 'сон'];
@@ -21658,16 +21660,34 @@ ${raw}`;
       const lower = sentence.toLowerCase();
       return 24 + hot.filter((w) => lower.includes(w)).length * 16 - calm.filter((w) => lower.includes(w)).length * 8 + Math.min(18, countWords(sentence));
     });
-    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent');
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    values.forEach((value, index) => {
-      const x = (index / Math.max(1, values.length - 1)) * canvas.width;
-      const y = canvas.height - Math.max(8, Math.min(canvas.height - 8, value));
-      if (index === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    ctx.stroke();
+    const color = getComputedStyle(document.documentElement).getPropertyValue('--accent');
+    if (canvas.__sentimentTarget?.join(',') === values.join(',') && canvas.__sentimentColor === color) return;
+    cancelAnimationFrame(canvas.__sentimentFrame);
+    canvas.__sentimentTarget = values; canvas.__sentimentColor = color;
+    const render = points => {
+      canvas.__sentimentValues = points;
+      ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath();
+      points.forEach((value, index) => {
+        const x = (index / Math.max(1, points.length - 1)) * canvas.width;
+        const y = canvas.height - Math.max(8, Math.min(canvas.height - 8, value));
+        if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    };
+    const from = canvas.__sentimentValues || values;
+    if (this.shouldReduceSurfaceMotion() || !this.isSurfaceVisible(canvas) || !from.length || !values.length) { render(values); return; }
+    const sample = index => {
+      const position = index / Math.max(1, values.length - 1) * (from.length - 1), left = Math.floor(position);
+      return from[left] + ((from[Math.min(left + 1, from.length - 1)] - from[left]) * (position - left));
+    };
+    const start = performance.now();
+    const tick = time => {
+      if (!canvas.isConnected) return;
+      const progress = Math.max(0, Math.min(1, (time - start) / 240)), eased = 1 - (1 - progress) ** 3;
+      render(values.map((value, index) => sample(index) + (value - sample(index)) * eased));
+      if (progress < 1) canvas.__sentimentFrame = requestAnimationFrame(tick);
+    };
+    canvas.__sentimentFrame = requestAnimationFrame(tick);
   }
 
   startSprint() {
@@ -21696,7 +21716,7 @@ ${raw}`;
   async showHistory() {
     const snapshots = (await this.db.getAll('snapshots')).filter((snap) => snap.docId === this.state.activeDocId).sort((a, b) => b.createdAt - a.createdAt).slice(0, 30);
     const overlay = document.getElementById('form-overlay');
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="form-modal">
         <h2>Машина времени</h2>
         <div class="form-grid">
@@ -21704,7 +21724,7 @@ ${raw}`;
         </div>
         <div class="form-actions"><button class="pill-btn" data-close-form>Закрыть</button></div>
       </div>
-    `;
+    `);
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelectorAll('[data-restore]').forEach((button) => button.onclick = async () => {
@@ -21818,7 +21838,7 @@ ${raw}`;
       document.body.appendChild(overlay);
     }
     
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="kb-import-card">
         <div class="kb-import-spinner">
           <div class="spinner-ring"></div>
@@ -21827,7 +21847,7 @@ ${raw}`;
         <h3>Экспортируем проект...</h3>
         <div class="kb-import-progress-list"></div>
       </div>
-    `;
+    `);
     
     overlay.classList.add('active');
     await new Promise(r => setTimeout(r, 600));
@@ -21852,7 +21872,7 @@ ${raw}`;
       const step = document.createElement('div');
       step.className = 'kb-import-step success';
       step.style.animationDelay = `${i * 150}ms`;
-      step.innerHTML = `<span>Упаковано: ${cat.label} (${cat.count})</span><i class="bx bx-check-circle"></i>`;
+      this.updateSurfaceHTML(step, `<span>Упаковано: ${cat.label} (${cat.count})</span><i class="bx bx-check-circle"></i>`, { resize: true });
       listEl.appendChild(step);
       await new Promise(r => setTimeout(r, 350));
     }
@@ -22021,31 +22041,7 @@ ${raw}`;
   }
 
   updateModalContent(contentEl, newHtml) {
-    const modal = contentEl.closest('.cleaner-modal');
-    if (!modal) {
-      contentEl.innerHTML = newHtml;
-      return;
-    }
-    
-    const prevHeight = modal.offsetHeight;
-    modal.style.height = `${prevHeight}px`;
-    
-    contentEl.innerHTML = newHtml;
-    
-    modal.style.height = '';
-    const targetHeight = modal.offsetHeight;
-    
-    modal.style.height = `${prevHeight}px`;
-    
-    requestAnimationFrame(() => {
-      modal.style.transition = 'height 300ms cubic-bezier(0.16, 1, 0.3, 1)';
-      modal.style.height = `${targetHeight}px`;
-      
-      setTimeout(() => {
-        modal.style.height = '';
-        modal.style.transition = '';
-      }, 300);
-    });
+    this.updateSurfaceHTML(contentEl, newHtml, { resize: true, preserve: false });
   }
 
   async transitionReaperImage(imgEl, nextState, options = {}) {
@@ -22226,7 +22222,7 @@ ${raw}`;
       document.body.appendChild(overlay);
     }
     
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="cleaner-modal-container">
         <div class="whats-new-reaper-wrapper floating" style="position: absolute; top: -270px; left: 50%; transform: translateX(-50%); width: 320px; height: 320px; pointer-events: none; z-index: 100;">
           <!-- Base layers -->
@@ -22401,7 +22397,7 @@ ${raw}`;
           </div>
         </div>
       </div>
-    `;
+    `);
     
     const imgEl = overlay.querySelector('#whats-new-reaper-img');
     const btn = overlay.querySelector('[data-action="close-whats-new"]');
@@ -22430,7 +22426,7 @@ ${raw}`;
       document.body.appendChild(overlay);
     }
     
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="cleaner-modal-container">
         <div class="cleaner-reaper-wrapper">
           <!-- Base layers -->
@@ -22452,7 +22448,7 @@ ${raw}`;
           </div>
         </div>
       </div>
-    `;
+    `);
     
     overlay.classList.add('active');
     
@@ -22747,13 +22743,13 @@ ${raw}`;
 
   openImportErrorModal(message, filename) {
     const overlay = document.getElementById('form-overlay');
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="form-modal confirm-modal">
         <div class="confirm-icon"><i class="bx bx-error-circle"></i></div>
         <h2>Dump не импортирован</h2>
         <p>${escapeHtml(filename)}: ${escapeHtml(message)}</p>
         <div class="form-actions"><button class="pill-btn ai-btn" data-close-form>Закрыть</button></div>
-      </div>`;
+      </div>`);
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
   }
@@ -22813,7 +22809,7 @@ ${raw}`;
       document.body.appendChild(overlay);
     }
     
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="kb-import-card">
         <div class="kb-import-spinner">
           <div class="spinner-ring"></div>
@@ -22822,7 +22818,7 @@ ${raw}`;
         <h3>Импортируем проект...</h3>
         <div class="kb-import-progress-list"></div>
       </div>
-    `;
+    `);
     overlay.classList.add('active');
     await new Promise(r => setTimeout(r, 600));
     
@@ -22841,7 +22837,7 @@ ${raw}`;
       const step = document.createElement('div');
       step.className = 'kb-import-step success';
       step.style.animationDelay = `${i * 150}ms`;
-      step.innerHTML = `<span>${steps[i]}</span><i class="bx bx-check-circle"></i>`;
+      this.updateSurfaceHTML(step, `<span>${steps[i]}</span><i class="bx bx-check-circle"></i>`, { resize: true });
       listEl.appendChild(step);
       await new Promise(r => setTimeout(r, 350));
     }
@@ -23422,7 +23418,7 @@ ${raw}`;
       ];
     }
     
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="kb-import-card">
         <div class="kb-import-spinner">
           <div class="spinner-ring"></div>
@@ -23431,7 +23427,7 @@ ${raw}`;
         <h3>Экспортируем файл...</h3>
         <div class="kb-import-progress-list"></div>
       </div>
-    `;
+    `);
     
     overlay.classList.add('active');
     await new Promise(r => setTimeout(r, 450));
@@ -23441,7 +23437,7 @@ ${raw}`;
       const step = document.createElement('div');
       step.className = 'kb-import-step success';
       step.style.animationDelay = `${i * 100}ms`;
-      step.innerHTML = `<span>${steps[i]}</span><i class="bx bx-check-circle"></i>`;
+      this.updateSurfaceHTML(step, `<span>${steps[i]}</span><i class="bx bx-check-circle"></i>`, { resize: true });
       listEl.appendChild(step);
       await new Promise(r => setTimeout(r, 200));
     }
@@ -23509,7 +23505,7 @@ ${raw}`;
   promptForMasterPassword() {
     const overlay = document.getElementById('form-overlay');
     if (!overlay) return;
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="form-modal confirm-modal">
         <div class="confirm-icon"><i class="bx bx-shield-quarter"></i></div>
         <h2>Включить сквозное шифрование?</h2>
@@ -23523,7 +23519,7 @@ ${raw}`;
           <button class="pill-btn ai-btn" data-action="save-prompt-e2e">Включить</button>
         </div>
       </div>
-    `;
+    `);
     overlay.classList.add('active');
     
     const cancelBtn = overlay.querySelector('[data-action="cancel-e2e"]');
@@ -23583,7 +23579,7 @@ ${raw}`;
 
   async resetData() {
     const overlay = document.getElementById('form-overlay');
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="form-modal confirm-modal">
         <div class="confirm-icon"><i class="bx bx-trash"></i></div>
         <h2>Сбросить локальную базу?</h2>
@@ -23592,7 +23588,7 @@ ${raw}`;
           <button class="pill-btn" data-close-form>Отмена</button>
           <button class="pill-btn danger-btn" data-confirm-reset-data>Сбросить</button>
         </div>
-      </div>`;
+      </div>`);
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('[data-confirm-reset-data]').onclick = async () => this.performResetData();
@@ -24660,7 +24656,7 @@ async httpGetJson(url, timeoutMs = 650) {
       document.body.appendChild(overlay);
     }
 
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="cleaner-modal-container">
         <div class="whats-new-reaper-wrapper floating" style="position: absolute; top: -270px; left: 50%; transform: translateX(-50%); width: 320px; height: 320px; pointer-events: none; z-index: 100;">
           <!-- Base layer -->
@@ -24685,7 +24681,7 @@ async httpGetJson(url, timeoutMs = 650) {
           </div>
         </div>
       </div>
-    `;
+    `);
 
     const imgEl = overlay.querySelector('#luna-streak-img');
     const btn = overlay.querySelector('[data-action="close-luna-streak"]');
@@ -24742,7 +24738,7 @@ async httpGetJson(url, timeoutMs = 650) {
       document.body.appendChild(overlay);
     }
 
-    overlay.innerHTML = `
+    this.presentOverlay(overlay, `
       <div class="cleaner-modal-container" style="margin-top: 50px;">
         <div class="cleaner-modal" style="max-width: 440px; width: 90%; background: #181824; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; text-align: left;">
           <h3 style="margin: 0 0 12px; font-size: 18px; color: var(--text-main); font-weight: 700; display: flex; align-items: center; gap: 8px;">
@@ -24778,7 +24774,7 @@ async httpGetJson(url, timeoutMs = 650) {
           </div>
         </div>
       </div>
-    `;
+    `);
 
     overlay.querySelector('#luna-debug-save-streak-btn').onclick = async () => {
       const val = parseInt(overlay.querySelector('#luna-debug-streak-input').value, 10) || 0;
@@ -24817,7 +24813,11 @@ async httpGetJson(url, timeoutMs = 650) {
 
   toast(message, duration = 2200) {
     const toast = document.getElementById('toast');
-    toast.textContent = message;
+    if (!toast) return;
+    const replacing = toast.classList.contains('active') && toast.textContent !== message;
+    const update = () => { toast.textContent = message; };
+    if (replacing) this.animateHeightTransition(toast, () => this.animateViewChange(toast, update), { width: true });
+    else update();
     toast.classList.add('active');
     clearTimeout(this.toastTimer);
     this.toastTimer = setTimeout(() => toast.classList.remove('active'), duration);

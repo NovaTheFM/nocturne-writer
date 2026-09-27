@@ -131,7 +131,7 @@ try {
       a.closeDocContextMenu(); await new Promise(resolve => setTimeout(resolve, 60)); open(); await new Promise(resolve => setTimeout(resolve, 320));
       return { afterExit, afterCancel: !!document.querySelector('#doc-menu-portal .doc-context-menu.open') };
     });
-    assert.equal(result.afterExit, true); assert.equal(result.afterCancel, true); return result;
+    assert.equal(result.afterExit, true, JSON.stringify(result)); assert.equal(result.afterCancel, true, JSON.stringify(result)); return result;
   });
   await check('reversing a moving document filter resumes its visible position and cleans transforms', async page => {
     await page.evaluate(async () => { const a = window.nocturneApp; await a.createDoc(a.defaultFolderId(), 'First hidden chapter', ''); await a.createDoc(a.defaultFolderId(), 'Kept chapter', ''); }); await page.waitForTimeout(650);
@@ -181,6 +181,32 @@ try {
     });
     assert.equal(result.ghosts, 0); assert.equal(result.height, ''); assert.equal(result.motions, 0); assert.equal(result.text, true); return result;
   }, { reducedMotion: 'reduce' });
+  await check('sentiment canvas interpolates rendered pixels and reverses from the displayed curve', async page => {
+    await page.evaluate(async () => { const a = window.nocturneApp; await a.createDoc(a.defaultFolderId(), 'Canvas motion chapter', ''); a.togglePanel('ai-panel'); }); await page.waitForTimeout(400);
+    const result = await page.evaluate(async () => {
+      const a = window.nocturneApp, doc = a.getFocusedDoc(), canvas = document.getElementById('sentiment-graph'), context = canvas.getContext('2d');
+      const center = () => {
+        const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data; let weighted = 0, total = 0;
+        for (let i = 3; i < pixels.length; i += 4) { weighted += Math.floor(i / 4 / canvas.width) * pixels[i]; total += pixels[i]; }
+        return total ? weighted / total : null;
+      };
+      doc.ast.blocks[0].html = 'Тихо. Спокойно.'; a.drawSentiment(true); await new Promise(resolve => setTimeout(resolve, 300)); const start = center();
+      doc.ast.blocks[0].html = 'Огонь. Страх.'; a.drawSentiment(true); const deadline = performance.now() + 600;
+      while (Math.abs(center() - start) < 2 && performance.now() < deadline) await new Promise(resolve => requestAnimationFrame(resolve));
+      const before = center(); doc.ast.blocks[0].html = 'Тихо. Спокойно.'; a.drawSentiment(true); const after = center(); await new Promise(resolve => setTimeout(resolve, 360));
+      return { start, before, after, end: center() };
+    });
+    assert.notEqual(result.start, null); assert.ok(result.before < result.start - 2, JSON.stringify(result)); assert.ok(Math.abs(result.before - result.after) < .1, JSON.stringify(result)); assert.ok(Math.abs(result.start - result.end) < .5, JSON.stringify(result)); return result;
+  });
+  await check('review tools grow without moving adjacent controls in one frame', async page => {
+    const result = await page.evaluate(async () => {
+      const a = window.nocturneApp, slot = document.getElementById('review-toolbar-slot'); await new Promise(resolve => setTimeout(resolve, 400));
+      const start = slot.getBoundingClientRect().width; a.state.reviewMode = 'editor'; a.renderReviewToolbarSlot(); const immediate = slot.getBoundingClientRect().width, frames = [], time = performance.now();
+      while (performance.now() - time < 450) { await new Promise(resolve => requestAnimationFrame(resolve)); frames.push(slot.getBoundingClientRect().width); }
+      return { start, immediate, frames, end: slot.getBoundingClientRect().width, inline: slot.style.width, tools: slot.querySelectorAll('button').length };
+    });
+    assert.ok(Math.abs(result.start - result.immediate) < 2, JSON.stringify(result)); assert.ok(result.end > 80); assert.ok(result.frames.some(value => value > result.start + 2 && value < result.end - 2), JSON.stringify(result)); assert.equal(result.inline, ''); assert.equal(result.tools, 4); return result;
+  });
   await mkdir('release/qa', { recursive: true }); await writeFile('release/qa/app-motion.json', JSON.stringify(results, null, 2));
   console.log(JSON.stringify(results, null, 2)); if (results.some(result => !result.passed)) process.exitCode = 1;
 } finally { await browser.close(); server.kill(); }

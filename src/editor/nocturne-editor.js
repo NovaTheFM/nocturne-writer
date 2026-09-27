@@ -673,7 +673,7 @@ function executeRuleAction(view, rule, from, to, isEnter = false) {
 }
 
 export class NocturneEditorBridge {
-  constructor({ onChange, onFocus, onSelectionUpdate, getSettings, getMentionIndex, onKeydown, getActiveBookmarkId }) {
+  constructor({ onChange, onFocus, onSelectionUpdate, getSettings, getMentionIndex, onKeydown, getActiveBookmarkId, motion }) {
     this.instances = new Map();
     this.onChange = onChange;
     this.onFocus = onFocus;
@@ -683,6 +683,7 @@ export class NocturneEditorBridge {
     this.onKeydown = onKeydown;
     this.getActiveBookmarkId = getActiveBookmarkId;
     this.visualPageRaf = new Map();
+    this.motion = motion;
   }
 
   mount({ paneId, doc, host, pageShell, overlay, readOnly = false }) {
@@ -975,6 +976,7 @@ export class NocturneEditorBridge {
         pageShell: instance.pageShell,
         overlay: instance.overlay,
         flexible: !settings.autoPaginate,
+        motion: this.motion,
       });
       this.onVisualPagesCalculated?.({ paneId, editor: instance.editor });
     });
