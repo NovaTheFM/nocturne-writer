@@ -29,6 +29,7 @@ try {
       await page.locator('.mobile-folder-head').first().click(); await page.waitForTimeout(85); await shot('mobile-folder-collapse-mid'); await page.waitForTimeout(350);
       await page.locator('.mobile-folder-head').first().click(); await page.waitForTimeout(350);
       await page.evaluate(() => window.nocturneApp.openSettingsTab('dictionary')); await page.waitForTimeout(400); await shot('mobile-dictionary');
+      await page.setViewportSize({ width: 360, height: 800 }); await page.waitForTimeout(350); await shot('mobile-dictionary-360');
       await page.evaluate(() => window.nocturneApp.mobileBack()); await page.waitForTimeout(100); await shot('mobile-settings-back-mid');
     } else {
       await page.evaluate(() => window.nocturneApp.toggleSplitMode()); await page.waitForTimeout(100); await shot('desktop-split-mid'); await page.waitForTimeout(400);
@@ -50,6 +51,8 @@ try {
       await page.evaluate(() => { const a = window.nocturneApp; a.togglePanel('ai-panel'); a.getFocusedDoc().ast.blocks[0].html = 'Тихо. Спокойно.'; a.drawSentiment(true); }); await page.waitForTimeout(450);
       await page.evaluate(() => { const a = window.nocturneApp; a.getFocusedDoc().ast.blocks[0].html = 'Огонь. Страх.'; a.drawSentiment(true); }); await page.waitForTimeout(85); await shot('desktop-sentiment-mid'); await page.waitForTimeout(350);
       await page.evaluate(() => { const a = window.nocturneApp; a.togglePanel('ai-panel'); a.state.settings.autoPaginate = true; a.nocturneEditor.get('primary').commands.setContent('<p>Новая страница рукописи.</p>'.repeat(90)); a.nocturneEditor.scheduleVisualPages('primary'); }); await page.waitForTimeout(450); await shot('desktop-paper-pages');
+      await page.setViewportSize({ width: 1280, height: 900 }); await page.waitForTimeout(350);
+      await page.evaluate(() => window.nocturneApp.setReviewMode('editor')); await page.waitForTimeout(90); await shot('desktop-toolbar-compact-mid'); await page.waitForTimeout(400); await shot('desktop-toolbar-compact');
     }
     assert.deepEqual(errors, []); const video = page.video(); await context.close(); await video.saveAs(`${directory}/${mobile ? 'mobile' : 'desktop'}-application.webm`);
   }

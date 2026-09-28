@@ -207,6 +207,35 @@ try {
     });
     assert.ok(Math.abs(result.start - result.immediate) < 2, JSON.stringify(result)); assert.ok(result.end > 80); assert.ok(result.frames.some(value => value > result.start + 2 && value < result.end - 2), JSON.stringify(result)); assert.equal(result.inline, ''); assert.equal(result.tools, 4); return result;
   });
+  await check('toolbar buttons remain separate in all review modes at compact desktop widths', async page => {
+    const samples = [];
+    for (const width of [1280, 1440, 1600]) {
+      await page.setViewportSize({ width, height: 900 }); await page.waitForTimeout(350);
+      for (const mode of ['write', 'editor', 'finalization']) {
+        await page.evaluate(mode => window.nocturneApp.setReviewMode(mode), mode); await page.waitForTimeout(650);
+        const sample = await page.evaluate(() => {
+          const boxes = [...document.querySelectorAll('.toolbar button')].map(button => ({ label: button.getAttribute('title') || button.textContent, rect: button.getBoundingClientRect() })).filter(({rect}) => rect.width > 1 && rect.height > 1);
+          const overlaps = [];
+          boxes.forEach((a, index) => boxes.slice(index + 1).forEach(b => { if (Math.min(a.rect.right, b.rect.right) - Math.max(a.rect.left, b.rect.left) > 2 && Math.min(a.rect.bottom, b.rect.bottom) - Math.max(a.rect.top, b.rect.top) > 2) overlaps.push([a.label, b.label]); }));
+          const saved = document.getElementById('save-indicator').getBoundingClientRect();
+          const saveOverlap = boxes.some(({rect}) => Math.min(rect.right, saved.right) - Math.max(rect.left, saved.left) > 2 && Math.min(rect.bottom, saved.bottom) - Math.max(rect.top, saved.top) > 2);
+          const aiIcon = document.querySelector('.toolbar [data-action="toggle-ai"] .toolbar-ai-svg');
+          return { overlaps, saveOverlap, aiIconWidth: aiIcon.getBoundingClientRect().width, aiIconOpacity: getComputedStyle(aiIcon).opacity, overflow: document.documentElement.scrollWidth > innerWidth + 1 };
+        });
+        assert.deepEqual(sample.overlaps, [], `${width}/${mode}: ${JSON.stringify(sample)}`); assert.equal(sample.saveOverlap, false, `${width}/${mode}: ${JSON.stringify(sample)}`); assert.ok(sample.aiIconWidth >= 18 && Number(sample.aiIconOpacity) > .5, `${width}/${mode}: ${JSON.stringify(sample)}`); assert.equal(sample.overflow, false); samples.push({ width, mode, ...sample });
+      }
+    }
+    return samples;
+  });
+  await check('mobile dictionary gives rule text and actions their own usable rows', async page => {
+    await page.evaluate(() => window.nocturneApp.openSettingsTab('dictionary')); await page.waitForTimeout(450);
+    const result = await page.evaluate(() => {
+      const card = document.querySelector('#mobile-panel .dictionary-card'), main = card.querySelector('.dictionary-rule-main').getBoundingClientRect(), actions = card.querySelector('.dictionary-card-actions').getBoundingClientRect();
+      const text = card.querySelector('.dictionary-rule-text').getBoundingClientRect(), controls = document.querySelector('#mobile-panel .dictionary-controls').getBoundingClientRect();
+      return { textWidth: text.width, actionsBelow: actions.top >= main.bottom, controlsFit: [...document.querySelectorAll('#mobile-panel .dictionary-toggle')].every(element => element.getBoundingClientRect().right <= controls.right), minHit: Math.min(...[...card.querySelectorAll('button')].map(element => element.getBoundingClientRect().height)), overflow: document.documentElement.scrollWidth > innerWidth + 1 };
+    });
+    assert.ok(result.textWidth > 180, JSON.stringify(result)); assert.equal(result.actionsBelow, true); assert.equal(result.controlsFit, true); assert.ok(result.minHit >= 44); assert.equal(result.overflow, false); return result;
+  }, { viewport: { width: 360, height: 800 }, isMobile: true, hasTouch: true });
   await mkdir('release/qa', { recursive: true }); await writeFile('release/qa/app-motion.json', JSON.stringify(results, null, 2));
   console.log(JSON.stringify(results, null, 2)); if (results.some(result => !result.passed)) process.exitCode = 1;
 } finally { await browser.close(); server.kill(); }

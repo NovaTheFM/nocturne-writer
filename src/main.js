@@ -12409,7 +12409,7 @@ class NocturneWriter {
     const mode = this.state.reviewMode || 'write';
     if (animate && slot.__motionReviewMode !== mode) {
       slot.__motionReviewMode = mode;
-      this.animateHeightTransition(slot, () => this.renderReviewToolbarSlot(false), { width: true });
+      this.animateLayoutTransition(slot.closest('.toolbar'), () => this.animateHeightTransition(slot, () => this.renderReviewToolbarSlot(false), { width: true }));
       return;
     }
     if (mode === 'write') {
