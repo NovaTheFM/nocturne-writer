@@ -58,6 +58,7 @@ android/settings.gradle
 android/variables.gradle
 capacitor.config.json
 docs/LAN_AND_ANDROID.md
+docs/MOTION_AUDIT.md
 docs/changed-files.txt
 electron/main.cjs
 electron/preload.cjs
@@ -68,6 +69,7 @@ scripts/benchmark-spelling.mjs
 scripts/build-android-apk.mjs
 scripts/build-native-vendor.mjs
 scripts/build-web.mjs
+scripts/capture-app-motion.mjs
 scripts/capture-interface-review.mjs
 scripts/capture-surface-motion.mjs
 scripts/check-no-phone-pc-sync.mjs
@@ -81,6 +83,7 @@ scripts/setup-android-sdk.py
 scripts/start-android-emulator.py
 scripts/sync-server.mjs
 scripts/test-ai-context.mjs
+scripts/test-app-motion.mjs
 scripts/test-build.mjs
 scripts/test-database-sync.mjs
 scripts/test-editor-adapter.mjs
@@ -132,6 +135,7 @@ src/css/polish.css
 src/css/variables.css
 src/editor/document-adapter.js
 src/editor/nocturne-editor.js
+src/editor/visual-pagination.js
 src/features/ai-context.js
 src/features/backups.js
 src/features/command-palette.js
