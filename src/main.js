@@ -3178,9 +3178,9 @@ class NocturneWriter {
           <div class="drop-item kb-drop-row" data-kb-open="notes"><i class="bx bx-note"></i><span>Записи</span><button type="button" data-action="open-kb-right" data-kb-tab="notes" title="Открыть справа"><i class="bx bx-columns"></i></button></div>
         </div>
         <div class="dropdown-menu popover-surface portal-floating-menu review-mode-menu" id="review-mode-menu" data-floating-menu="mode" role="menu" aria-label="Режим работы" aria-hidden="true">
-          <button class="floating-menu-item review-mode-option" type="button" role="menuitemradio" data-review-mode="write" aria-checked="true"><i class="bx bx-pen" aria-hidden="true"></i><span>Письмо<small>Работа с текстом</small></span><i class="bx bx-check review-mode-option-check" aria-hidden="true"></i></button>
-          <button class="floating-menu-item review-mode-option" type="button" role="menuitemradio" data-review-mode="editor" aria-checked="false"><i class="bx bx-comment-edit" aria-hidden="true"></i><span>Редактор<small>Комментарии и предложения</small></span><i class="bx bx-check review-mode-option-check" aria-hidden="true"></i></button>
-          <button class="floating-menu-item review-mode-option" type="button" role="menuitemradio" data-review-mode="finalization" aria-checked="false"><i class="bx bx-check-double" aria-hidden="true"></i><span>Финализация<small>Просмотр и обработка правок</small></span><i class="bx bx-check review-mode-option-check" aria-hidden="true"></i></button>
+          <button class="drop-item kb-drop-row review-mode-option" type="button" role="menuitemradio" data-review-mode="write" aria-checked="true"><i class="bx bx-pen" aria-hidden="true"></i><span>Письмо</span><i class="bx bx-check review-mode-option-check" aria-hidden="true"></i></button>
+          <button class="drop-item kb-drop-row review-mode-option" type="button" role="menuitemradio" data-review-mode="editor" aria-checked="false"><i class="bx bx-comment-edit" aria-hidden="true"></i><span>Редактор</span><i class="bx bx-check review-mode-option-check" aria-hidden="true"></i></button>
+          <button class="drop-item kb-drop-row review-mode-option" type="button" role="menuitemradio" data-review-mode="finalization" aria-checked="false"><i class="bx bx-check-double" aria-hidden="true"></i><span>Финализация</span><i class="bx bx-check review-mode-option-check" aria-hidden="true"></i></button>
         </div>
         <div class="format-menu popover-surface portal-floating-menu" id="format-menu" data-floating-menu="format" aria-hidden="true">
           <button data-format-block="paragraph"><i class="bx bx-text"></i><span>Обычный текст</span></button>
@@ -12302,9 +12302,10 @@ class NocturneWriter {
   renderReviewToolbarSlot() {
     const slot = document.getElementById('review-toolbar-slot');
     if (!slot) return;
+    const updateSlot = html => this.animateHeightTransition(slot, () => this.updateSurfaceHTML(slot, html), { width: true });
     const mode = this.state.reviewMode || 'write';
     if (mode === 'write') {
-      this.updateSurfaceHTML(slot, '', { resize: true });
+      updateSlot('');
       slot.className = 'review-toolbar-slot empty';
       delete slot.dataset.selectionReady;
       return;
@@ -12314,7 +12315,7 @@ class NocturneWriter {
       const disabled = enabled ? '' : 'disabled';
       slot.className = 'review-toolbar-slot editor-tools';
       slot.dataset.selectionReady = String(enabled);
-      this.updateSurfaceHTML(slot, `
+      updateSlot(`
         <span class="review-toolbar-caption"><i class="bx bx-comment-edit"></i>${enabled ? 'Пометки к выделению' : 'Выделите текст для пометки'}</span>
         <button class="review-tool-btn icon-only" data-action="quick-review-comment" title="${enabled ? 'Комментарий' : 'Комментарий — выделите текст'}" aria-label="Комментарий" ${disabled}><i class="bx bx-comment-detail"></i></button>
         <button class="review-tool-btn icon-only" data-action="quick-review-suggestion" title="${enabled ? 'Замена' : 'Замена — выделите текст'}" aria-label="Замена" ${disabled}><i class="bx bx-transfer-alt"></i></button>
@@ -12322,7 +12323,7 @@ class NocturneWriter {
           <button class="review-tool-btn icon-only has-chevron" data-action="toggle-review-issue-menu" title="${enabled ? 'Проблема' : 'Проблема — выделите текст'}" aria-label="Проблема" ${disabled}><i class="bx bx-error-circle"></i><i class="bx bx-chevron-down review-chevron"></i></button>
         </div>
         <button class="review-tool-btn icon-only" data-action="quick-typo-rule" title="${enabled ? 'В словарь' : 'В словарь — выделите текст'}" aria-label="В словарь" ${disabled}><i class="bx bx-book-add"></i></button>
-      `, { resize: true });
+      `);
       return;
     }
     const marks = this.reviewMarksForFocusedDoc();
@@ -12330,9 +12331,9 @@ class NocturneWriter {
     const index = Math.min(marks.length - 1, Math.max(0, this.state.currentReviewIndexByDoc[docId] || 0));
     slot.className = 'review-toolbar-slot finalization-tools';
     delete slot.dataset.selectionReady;
-    this.updateSurfaceHTML(slot, marks.length
+    updateSlot(marks.length
       ? `<div class="review-toolbar-nav"><button class="review-tool-btn icon-only" data-action="review-prev" title="Предыдущая правка" aria-label="Предыдущая правка"><i class="bx bx-chevron-left"></i></button><span class="review-count">${index + 1} / ${marks.length}</span><button class="review-tool-btn icon-only" data-action="review-next" title="Следующая правка" aria-label="Следующая правка"><i class="bx bx-chevron-right"></i></button></div>`
-      : '<span class="review-empty-chip"><i class="bx bx-check-circle"></i>Правок нет</span>', { resize: true });
+      : '<span class="review-empty-chip"><i class="bx bx-check-circle"></i>Правок нет</span>');
   }
 
   renderReviewNavigator() {
