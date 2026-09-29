@@ -1341,6 +1341,7 @@ class NocturneWriter {
     return {
       library: document.getElementById('library-menu'),
       kb: document.getElementById('kb-menu'),
+      mode: document.getElementById('review-mode-menu'),
       format: document.getElementById('format-menu'),
       split: document.getElementById('split-menu'),
       notes: document.getElementById('floating-note-popover'),
@@ -1367,6 +1368,7 @@ class NocturneWriter {
     return {
       library: document.querySelector('[data-action="toggle-library-menu"]'),
       kb: document.querySelector('#kb-dropdown [data-action="toggle-kb-menu"]'),
+      mode: document.querySelector('#review-mode-dropdown [data-action="toggle-review-mode-menu"]'),
       format: document.querySelector('#format-dropdown [data-action="toggle-format-menu"]'),
       split: document.querySelector('#split-menu-wrap [data-action="toggle-split-menu"]'),
       notes: document.querySelector('#floating-note-menu-wrap [data-floating-note-menu-anchor]'),
@@ -1379,6 +1381,7 @@ class NocturneWriter {
     return {
       library: document.querySelector('.sidebar-header-actions'),
       kb: document.getElementById('kb-dropdown'),
+      mode: document.getElementById('review-mode-dropdown'),
       format: document.getElementById('format-dropdown'),
       split: document.getElementById('split-menu-wrap'),
       notes: document.getElementById('floating-note-menu-wrap'),
@@ -1389,12 +1392,12 @@ class NocturneWriter {
 
   positionFloatingToolbarMenu(key, anchor = this.floatingMenuAnchor(key)) {
     const surface = this.floatingMenuSurface(key);
-    if (!surface || !anchor || !['library', 'kb', 'format', 'split', 'notes', 'search', 'review'].includes(key)) return;
+    if (!surface || !anchor || !['library', 'kb', 'mode', 'format', 'split', 'notes', 'search', 'review'].includes(key)) return;
     const anchorRect = anchor.getBoundingClientRect();
     const menuRect = surface.getBoundingClientRect();
     const margin = 10;
     const gap = 10;
-    const alignLeft = ['library', 'kb', 'format', 'review'].includes(key);
+    const alignLeft = ['library', 'kb', 'mode', 'format', 'review'].includes(key);
     let left = alignLeft ? anchorRect.left : anchorRect.right - menuRect.width;
     left = Math.max(margin, Math.min(left, window.innerWidth - menuRect.width - margin));
     const below = anchorRect.bottom + gap;
@@ -1413,7 +1416,7 @@ class NocturneWriter {
   syncFloatingMenuPortalState() {
     const portal = document.getElementById('floating-menu-portal');
     if (!portal) return;
-    const hasOpenMenu = ['library', 'kb', 'format', 'split', 'notes', 'search', 'review']
+    const hasOpenMenu = ['library', 'kb', 'mode', 'format', 'split', 'notes', 'search', 'review']
       .some((key) => this.isFloatingMenuOpen(key));
     portal.setAttribute('aria-hidden', hasOpenMenu ? 'false' : 'true');
   }
@@ -1440,7 +1443,7 @@ class NocturneWriter {
     if (surface && surface !== el) surface.style.pointerEvents = '';
     this.activeFloatingMenuKey = key;
     this.floatingMenuAnchor(key)?.setAttribute('aria-expanded', 'true');
-    if (key === 'library') el.querySelector('button')?.focus({ preventScroll: true });
+    if (key === 'library' || key === 'mode') el.querySelector('button')?.focus({ preventScroll: true });
     if (key === 'split') this.splitMenuOpen = true;
     this.syncFloatingMenuPortalState();
     requestAnimationFrame(() => this.positionFloatingToolbarMenu(key));
@@ -1486,7 +1489,7 @@ class NocturneWriter {
 
   closeAllFloatingMenus(options = '') {
     const except = typeof options === 'string' ? options : (options?.except || '');
-    ['library', 'kb', 'format', 'split', 'notes', 'search', 'review', 'doc', 'context'].forEach((key) => {
+    ['library', 'kb', 'mode', 'format', 'split', 'notes', 'search', 'review', 'doc', 'context'].forEach((key) => {
       if (key !== except) this.closeFloatingMenu(key, { animate: key !== 'doc' && key !== 'context' });
     });
   }
@@ -1824,14 +1827,25 @@ class NocturneWriter {
   }
 
   applyReviewMode() {
-    const mode = this.state.reviewMode || 'write';
+    const modeLabels = {
+      write: ['Письмо', 'bx-pen'],
+      editor: ['Редактор', 'bx-comment-edit'],
+      finalization: ['Финализация', 'bx-check-double'],
+    };
+    const mode = modeLabels[this.state.reviewMode] ? this.state.reviewMode : 'write';
     document.body.dataset.activeReviewMode = mode;
     delete document.body.dataset.reviewMode;
     document.querySelectorAll('[data-review-mode]').forEach((button) => {
       const active = button.dataset.reviewMode === mode;
       button.classList.toggle('active', active);
-      button.setAttribute('aria-pressed', String(active));
+      button.setAttribute(button.getAttribute('role') === 'menuitemradio' ? 'aria-checked' : 'aria-pressed', String(active));
     });
+    const trigger = document.querySelector('.review-mode-trigger');
+    if (trigger) {
+      trigger.querySelector('.review-mode-trigger-label').textContent = modeLabels[mode][0];
+      trigger.querySelector('.review-mode-trigger-icon').className = `bx ${modeLabels[mode][1]} review-mode-trigger-icon`;
+      trigger.setAttribute('aria-label', `Режим работы: ${modeLabels[mode][0]}`);
+    }
     document.querySelectorAll('.page-content').forEach((editable) => {
       const doc = this.state.docs.find((item) => item.id === editable.dataset.docId);
       const isLocked = !!(doc?.locked || mode === 'editor');
@@ -3048,12 +3062,10 @@ class NocturneWriter {
               <div class="dropdown-wrapper" id="kb-dropdown">
                 <button class="pill-btn kb-main-btn" data-action="toggle-kb-menu"><i class="bx bx-book-bookmark"></i> <span>База знаний</span> <i class="bx bx-chevron-down"></i></button>
               </div>
+              <div class="dropdown-wrapper review-mode-dropdown" id="review-mode-dropdown">
+                <button class="pill-btn review-mode-trigger" type="button" data-action="toggle-review-mode-menu" aria-label="Режим работы: Письмо" aria-haspopup="menu" aria-controls="review-mode-menu" aria-expanded="false"><i class="bx bx-pen review-mode-trigger-icon" aria-hidden="true"></i><span class="review-mode-trigger-label">Письмо</span><i class="bx bx-chevron-down" aria-hidden="true"></i></button>
+              </div>
               <div class="save-indicator" id="save-indicator" aria-live="polite"></div>
-            </div>
-            <div class="review-mode-switch toolbar-modes" role="group" aria-label="Режим работы">
-              <button type="button" data-review-mode="write" title="Письмо" aria-label="Письмо"><i class="bx bx-pen"></i><span>Письмо</span></button>
-              <button type="button" data-review-mode="editor" title="Редактор: комментарии и предложения без изменения текста" aria-label="Редактор"><i class="bx bx-comment-edit"></i><span>Редактор</span></button>
-              <button type="button" data-review-mode="finalization" title="Финализация: обработка правок и редактирование" aria-label="Финализация"><i class="bx bx-check-double"></i><span>Финализация</span></button>
             </div>
             <div class="toolbar-center">
               <div class="toolbar-history">
@@ -3164,6 +3176,11 @@ class NocturneWriter {
           <div class="drop-item kb-drop-row" data-kb-open="locations"><i class="bx bx-map-alt"></i><span>Локации</span><button type="button" data-action="open-kb-right" data-kb-tab="locations" title="Открыть справа"><i class="bx bx-columns"></i></button></div>
           <div class="drop-item kb-drop-row" data-kb-open="timeline"><i class="bx bx-git-commit"></i><span>Таймлайн</span><button type="button" data-action="open-kb-right" data-kb-tab="timeline" title="Открыть справа"><i class="bx bx-columns"></i></button></div>
           <div class="drop-item kb-drop-row" data-kb-open="notes"><i class="bx bx-note"></i><span>Записи</span><button type="button" data-action="open-kb-right" data-kb-tab="notes" title="Открыть справа"><i class="bx bx-columns"></i></button></div>
+        </div>
+        <div class="dropdown-menu popover-surface portal-floating-menu review-mode-menu" id="review-mode-menu" data-floating-menu="mode" role="menu" aria-label="Режим работы" aria-hidden="true">
+          <button class="floating-menu-item review-mode-option" type="button" role="menuitemradio" data-review-mode="write" aria-checked="true"><i class="bx bx-pen" aria-hidden="true"></i><span>Письмо<small>Работа с текстом</small></span><i class="bx bx-check review-mode-option-check" aria-hidden="true"></i></button>
+          <button class="floating-menu-item review-mode-option" type="button" role="menuitemradio" data-review-mode="editor" aria-checked="false"><i class="bx bx-comment-edit" aria-hidden="true"></i><span>Редактор<small>Комментарии и предложения</small></span><i class="bx bx-check review-mode-option-check" aria-hidden="true"></i></button>
+          <button class="floating-menu-item review-mode-option" type="button" role="menuitemradio" data-review-mode="finalization" aria-checked="false"><i class="bx bx-check-double" aria-hidden="true"></i><span>Финализация<small>Просмотр и обработка правок</small></span><i class="bx bx-check review-mode-option-check" aria-hidden="true"></i></button>
         </div>
         <div class="format-menu popover-surface portal-floating-menu" id="format-menu" data-floating-menu="format" aria-hidden="true">
           <button data-format-block="paragraph"><i class="bx bx-text"></i><span>Обычный текст</span></button>
@@ -3826,7 +3843,7 @@ class NocturneWriter {
       input?.dispatchEvent(new Event('change', { bubbles: true }));
       return;
     }
-    const insideFloatingMenu = event.target.closest?.('#floating-menu-portal, .sidebar-header-actions, #floating-note-menu-wrap, #split-menu-wrap, #kb-dropdown, #format-dropdown, #search-menu-wrap, .review-issue-dropdown, #app-context-menu, #doc-search-panel, #search-navigator, .doc-context-menu, .doc-menu-btn');
+    const insideFloatingMenu = event.target.closest?.('#floating-menu-portal, .sidebar-header-actions, #floating-note-menu-wrap, #split-menu-wrap, #kb-dropdown, #review-mode-dropdown, #format-dropdown, #search-menu-wrap, .review-issue-dropdown, #app-context-menu, #doc-search-panel, #search-navigator, .doc-context-menu, .doc-menu-btn');
     if (!insideFloatingMenu) {
       this.closeAllFloatingMenus();
     }
@@ -3867,7 +3884,10 @@ class NocturneWriter {
     }
     const reviewModeButton = event.target.closest('button[data-review-mode]');
     if (reviewModeButton) {
+      const fromMenu = !!reviewModeButton.closest('#review-mode-menu');
+      if (fromMenu) this.closeFloatingMenu('mode');
       this.setReviewMode(reviewModeButton.dataset.reviewMode);
+      if (fromMenu) this.floatingMenuAnchor('mode')?.focus({ preventScroll: true });
       return;
     }
     if (event.target.closest('#app-context-menu')) {
@@ -5809,10 +5829,11 @@ class NocturneWriter {
         options[next].focus(); return;
       }
     }
-    if (this.isFloatingMenuOpen('library') && ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Escape'].includes(event.key)) {
+    const keyboardMenu = ['library', 'mode'].find(key => this.isFloatingMenuOpen(key));
+    if (keyboardMenu && ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Escape'].includes(event.key)) {
       event.preventDefault();
-      if (event.key === 'Escape') { this.closeFloatingMenu('library'); this.floatingMenuAnchor('library')?.focus(); return; }
-      const options = [...this.floatingMenuElement('library').querySelectorAll('button')];
+      if (event.key === 'Escape') { this.closeFloatingMenu(keyboardMenu); this.floatingMenuAnchor(keyboardMenu)?.focus(); return; }
+      const options = [...this.floatingMenuElement(keyboardMenu).querySelectorAll('button')];
       const index = options.indexOf(document.activeElement);
       const next = event.key === 'Home' ? 0 : event.key === 'End' ? options.length - 1 : event.key === 'ArrowDown' ? (index + 1) % options.length : (index - 1 + options.length) % options.length;
       options[next]?.focus(); return;
@@ -7489,6 +7510,7 @@ class NocturneWriter {
         if (willOpen) this.openFloatingMenu('kb');
         else this.closeFloatingMenu('kb');
       },
+      'toggle-review-mode-menu': () => this.isFloatingMenuOpen('mode') ? this.closeFloatingMenu('mode') : this.openFloatingMenu('mode'),
       'toggle-split': () => this.toggleSplitMenu(),
       'toggle-format-menu': () => {
         const willOpen = !this.isFloatingMenuOpen('format');
@@ -11684,7 +11706,7 @@ class NocturneWriter {
         this.toast('Сначала добавьте текст в запись.');
         return;
       }
-      const noteBodyEl = paneEl?.querySelector('.lore-detail.note-detail .lore-detail-main p');
+      const noteBodyEl = paneEl?.querySelector('.lore-detail.note-detail .lore-detail-main:not(.timeline-associations-panel) > p');
       if (!range || !noteBodyEl?.contains(range.startContainer)) {
         this.toast('Выделите место в тексте записи.');
         return;
@@ -11747,7 +11769,7 @@ class NocturneWriter {
     const pane = this.getPane(paneId);
     if (!pane || !['document', 'note-detail'].includes(pane.type)) return;
     const paneEl = document.querySelector(`.workspace-pane[data-pane-id="${paneId}"]`);
-    const noteBody = paneEl?.querySelector('.lore-detail.note-detail .lore-detail-main p');
+    const noteBody = paneEl?.querySelector('.lore-detail.note-detail .lore-detail-main:not(.timeline-associations-panel) > p');
     const selection = window.getSelection();
     const selectedRange = pane.type === 'note-detail' && selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
     const range = selectedRange && noteBody?.contains(selectedRange.startContainer) ? selectedRange : null;
@@ -11824,7 +11846,7 @@ class NocturneWriter {
   jumpToDocumentBookmark(paneId, bookmark) {
     this._isJumpingToBookmark = true;
     if (this._jumpToBookmarkTimeout) clearTimeout(this._jumpToBookmarkTimeout);
-    this._jumpToBookmarkTimeout = setTimeout(() => { this._isJumpingToBookmark = false; }, 200);
+    this._jumpToBookmarkTimeout = setTimeout(() => { this._isJumpingToBookmark = false; }, 650);
 
     const editor = this.nocturneEditor?.get(paneId);
     if (!editor) return;
@@ -11857,12 +11879,16 @@ class NocturneWriter {
     }
     
     if (targetPos >= 0) {
-      editor.commands.focus(targetPos);
-      try {
-        editor.commands.scrollIntoView();
-      } catch (e) {
-        editor.view.dispatch(editor.view.state.tr.scrollIntoView());
-      }
+      editor.commands.setTextSelection(targetPos);
+      editor.view.dom.focus({ preventScroll: true });
+      requestAnimationFrame(() => {
+        const scroller = editor.view.dom.closest('.editor-scroll-area');
+        if (!scroller) return;
+        const caret = editor.view.coordsAtPos(targetPos);
+        const viewport = scroller.getBoundingClientRect();
+        const caretCenter = (caret.top + caret.bottom) / 2;
+        scroller.scrollTo({ top: scroller.scrollTop + caretCenter - (viewport.top + viewport.height / 2), behavior: 'smooth' });
+      });
       
       const inlineEl = editor.view.dom.querySelector(`[data-bookmark-id="${bookmark.id}"]`);
       if (inlineEl) {
@@ -11881,12 +11907,12 @@ class NocturneWriter {
   jumpToNoteBookmark(paneId, bookmark) {
     this._isJumpingToBookmark = true;
     if (this._jumpToBookmarkTimeout) clearTimeout(this._jumpToBookmarkTimeout);
-    this._jumpToBookmarkTimeout = setTimeout(() => { this._isJumpingToBookmark = false; }, 200);
+    this._jumpToBookmarkTimeout = setTimeout(() => { this._isJumpingToBookmark = false; }, 650);
 
     const paneEl = document.querySelector(`.workspace-pane[data-pane-id="${paneId}"]`);
     if (!paneEl) return;
     
-    const noteBodyEl = paneEl.querySelector('.lore-detail.note-detail .lore-detail-main p');
+    const noteBodyEl = paneEl.querySelector('.lore-detail.note-detail .lore-detail-main:not(.timeline-associations-panel) > p');
     if (!noteBodyEl) return;
     
     const targetEl = noteBodyEl.querySelector(`[data-bookmark-id="${bookmark.id}"]`);
@@ -11897,6 +11923,20 @@ class NocturneWriter {
     } else {
       noteBodyEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
+  }
+
+  activateBookmark(paneId, bookmarkId) {
+    const pane = this.getPane(paneId);
+    const isDoc = pane?.type === 'document';
+    const source = isDoc ? this.state.docs.find(doc => doc.id === pane.docId) : (this.state.lore.notes || []).find(note => note.id === pane?.entityId);
+    const bookmark = source?.bookmarks?.find(item => item.id === bookmarkId);
+    if (!bookmark) return;
+    this.state.activeBookmarkIdByPane ||= {};
+    this.state.activeBookmarkIdByPane[paneId] = bookmarkId;
+    this.renderBookmarksMenu(paneId);
+    this.updateBookmarkHighlights();
+    if (isDoc) this.jumpToDocumentBookmark(paneId, bookmark);
+    else setTimeout(() => this.jumpToNoteBookmark(paneId, bookmark), 75);
   }
 
   renderBookmarksMenu(paneId) {
@@ -11951,12 +11991,7 @@ class NocturneWriter {
     nav.className = 'pane-bookmarks-nav';
     const jumpTo = index => {
       if (!bookmarks.length) return;
-      const target = bookmarks[index];
-      this.state.activeBookmarkIdByPane[paneId] = target.id;
-      this.renderBookmarksMenu(paneId);
-      if (isDoc) this.jumpToDocumentBookmark(paneId, target);
-      else this.jumpToNoteBookmark(paneId, target);
-      this.updateBookmarkHighlights();
+      this.activateBookmark(paneId, bookmarks[index].id);
     };
     for (const [direction, label, icon] of [[-1, 'Предыдущая закладка', 'bx-chevron-left'], [1, 'Следующая закладка', 'bx-chevron-right']]) {
       const button = document.createElement('button');
@@ -12050,7 +12085,7 @@ class NocturneWriter {
       }
       
       // 2. Resolve Note Bookmarks in DOM
-      const noteBodyEls = document.querySelectorAll('.lore-detail.note-detail .lore-detail-main p');
+      const noteBodyEls = document.querySelectorAll('.lore-detail.note-detail .lore-detail-main:not(.timeline-associations-panel) > p');
       noteBodyEls.forEach((noteBodyEl) => {
         const paneEl = noteBodyEl.closest('.workspace-pane');
         const paneId = paneEl?.dataset.paneId;
@@ -12062,7 +12097,7 @@ class NocturneWriter {
             const sourceText = note.body || 'Текст записи пуст.';
             const renderText = value => escapeHtml(value).replace(/\n/g, '<br>');
             let bodyText = renderText(sourceText);
-            if (note.bookmarks?.length && this.state.reviewMode !== 'write') {
+            if (note.bookmarks?.length) {
               let cursor = 0;
               const pieces = [];
               const sorted = [...note.bookmarks].sort((a, b) => (a.offset || 0) - (b.offset || 0));
@@ -12075,7 +12110,7 @@ class NocturneWriter {
                 const id = escapeHtml(bookmark.id);
                 const active = this.state.activeBookmarkIdByPane?.[paneId] === bookmark.id ? ' active' : '';
                 pieces.push(renderText(sourceText.slice(cursor, position)));
-                pieces.push(`<span class="nocturne-bookmark-house${active}" data-bookmark-id="${id}"><span class="nocturne-bookmark-house-inner"><svg class="nocturne-bookmark-svg" viewBox="0 0 24 28" width="24" height="28"><path d="M12,2 L2,12 V24 A2,2 0 0,0 4,26 H20 A2,2 0 0,0 22,24 V12 L12,2 Z" /></svg></span></span>`);
+                pieces.push(`<span class="nocturne-bookmark-house${active}" data-bookmark-id="${id}"><button class="nocturne-bookmark-house-inner" type="button" aria-label="Перейти к закладке"><svg class="nocturne-bookmark-svg" viewBox="0 0 40 46" aria-hidden="true"><path d="M20 2 37 17v22a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5V17Z" /></svg><i class="bx bxs-bookmark" aria-hidden="true"></i></button></span>`);
                 pieces.push(`<span class="nocturne-bookmark-range${active}" data-bookmark-id="${id}">${renderText(quote)}</span>`);
                 cursor = position + quote.length;
               });
@@ -12084,6 +12119,10 @@ class NocturneWriter {
             }
             if (noteBodyEl.innerHTML !== bodyText) {
               noteBodyEl.innerHTML = bodyText;
+              noteBodyEl.querySelectorAll('.nocturne-bookmark-house-inner').forEach(button => {
+                button.addEventListener('pointerdown', event => event.preventDefault());
+                button.addEventListener('click', () => this.activateBookmark(paneId, button.closest('[data-bookmark-id]').dataset.bookmarkId));
+              });
             }
           }
         }
@@ -23597,7 +23636,7 @@ ${raw}`;
 
     if (!portal) return;
 
-    const hasOpenMenu = ['library', 'kb', 'format', 'split', 'notes', 'search', 'review']
+    const hasOpenMenu = ['library', 'kb', 'mode', 'format', 'split', 'notes', 'search', 'review']
 
       .some((key) => this.isFloatingMenuOpen(key));
 

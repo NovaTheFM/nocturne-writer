@@ -341,29 +341,23 @@ const createHouseWidget = (bookmarkId, isActive) => {
   const element = document.createElement('span');
   element.className = isActive ? 'nocturne-bookmark-house active' : 'nocturne-bookmark-house';
   element.setAttribute('data-bookmark-id', bookmarkId);
-  
   element.innerHTML = `
-    <span class="nocturne-bookmark-house-inner">
-      <svg class="nocturne-bookmark-svg" viewBox="0 0 24 28" width="24" height="28">
-        <path d="M12,2 L2,12 V24 A2,2 0 0,0 4,26 H20 A2,2 0 0,0 22,24 V12 L12,2 Z" />
-      </svg>
-      <button class="nocturne-bookmark-delete-btn" type="button" title="Удалить закладку">
-        <i class="bx bx-bookmark"></i>
-      </button>
-    </span>
+    <button class="nocturne-bookmark-house-inner" type="button" aria-label="Перейти к закладке">
+      <svg class="nocturne-bookmark-svg" viewBox="0 0 40 46" aria-hidden="true"><path d="M20 2 37 17v22a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5V17Z" /></svg>
+      <i class="bx bxs-bookmark" aria-hidden="true"></i>
+    </button>
   `;
-  
-  const deleteBtn = element.querySelector('.nocturne-bookmark-delete-btn');
-  deleteBtn.addEventListener('mousedown', (e) => {
+  const button = element.querySelector('button');
+  button.addEventListener('pointerdown', (e) => {
     e.stopPropagation();
     e.preventDefault();
   });
-  deleteBtn.addEventListener('click', (e) => {
+  button.addEventListener('click', (e) => {
     e.stopPropagation();
     e.preventDefault();
-    window.nocturneApp?.confirmDeleteBookmark(bookmarkId);
+    const paneId = element.closest('.workspace-pane')?.dataset.paneId;
+    if (paneId) window.nocturneApp?.activateBookmark(paneId, bookmarkId);
   });
-  
   return element;
 };
 

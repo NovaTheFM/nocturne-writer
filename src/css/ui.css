@@ -712,40 +712,15 @@ body.material .floating-menu-portal .popover-surface {
   flex: 0 0 auto;
   min-width: 0;
 }
-.review-mode-switch {
-  display: inline-grid;
-  grid-template-columns: repeat(3, auto);
-  gap: 2px;
-  padding: 3px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: rgba(12, 12, 16, .78);
-}
-.toolbar .review-mode-switch {
-  display: inline-grid;
-}
-.review-mode-switch button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 34px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-muted);
-  font: 600 12px var(--font-ui);
-  padding: 6px 9px;
-  cursor: pointer;
-  transition: background 170ms ease, color 170ms ease, box-shadow 170ms ease;
-}
-.review-mode-switch button i { font-size: 16px; }
-.review-mode-switch button:hover:not(.active) { color: var(--text-main); background: var(--hover-soft); }
-.review-mode-switch button.active {
-  color: var(--button-text-strong);
-  background: rgba(var(--accent-rgb, 139, 92, 246), .22);
-  box-shadow: inset 0 0 0 1px rgba(var(--accent-hover-rgb, 167, 139, 250), .28);
-}
+.review-mode-trigger { min-height: 34px; border-radius: 999px; }
+.review-mode-trigger .review-mode-trigger-icon { font-size: 17px; }
+.review-mode-menu { min-width: 252px; padding: 6px; }
+.review-mode-menu .review-mode-option { grid-template-columns: 32px minmax(0, 1fr) 16px; min-height: 56px; }
+.review-mode-option span { display: grid; gap: 2px; font-size: 13px; font-weight: 600; }
+.review-mode-option small { color: var(--text-muted); font-size: 11px; font-weight: 400; }
+.review-mode-option .review-mode-option-check { width: 16px; height: 16px; background: transparent; opacity: 0; font-size: 17px; }
+.review-mode-option.active { background: rgba(var(--accent-rgb, 139, 92, 246), .15); }
+.review-mode-option.active .review-mode-option-check { opacity: 1; }
 .save-indicator {
   width: 156px;
   min-width: 156px;
@@ -756,7 +731,7 @@ body.material .floating-menu-portal .popover-surface {
   gap: 7px;
   padding: 0 10px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 999px;
   background: rgba(255,255,255,.035);
   color: var(--text-muted);
   font: 700 12px var(--font-ui);
@@ -1322,6 +1297,10 @@ body.material .floating-menu-portal .popover-surface {
 }
 .workspace-pane-body > .editor-scroll-area {
   height: 100%;
+}
+.workspace-pane-body:has(> .lore-detail.note-detail) {
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .workspace-divider {
   cursor: col-resize;
@@ -5991,7 +5970,7 @@ body.theme-paper .ai-output {
 }
 body.theme-paper .doc-item.active,
 body.theme-paper .settings-tab.active,
-body.theme-paper .review-mode-switch button.active,
+body.theme-paper .review-mode-option.active,
 body.theme-paper .nocturne-select-option.selected {
   color: var(--text-main);
   background: rgba(var(--accent-rgb, 139, 92, 246),.12);
@@ -6002,7 +5981,6 @@ body.theme-paper .settings-tab.active,
 body.theme-paper .review-tool-btn:hover:not(:disabled) {
   color: var(--text-main);
 }
-body.theme-paper .review-mode-switch,
 body.theme-paper .goal-track {
   background: rgba(91,72,48,.09);
 }
@@ -6438,7 +6416,7 @@ main.kb-main > .kb-close-btn {
   }
   .toolbar-left,
   .toolbar-right { gap: 6px; }
-  .review-mode-switch,
+  .review-mode-dropdown,
   .toolbar .save-indicator,
   .toolbar-left .tool-divider { display: none; }
   .workspace-stage { height: calc(100dvh - 58px); }
@@ -11100,22 +11078,20 @@ body.compact-kb-sidebar .kb-sidebar {
   display: inline;
 }
 
-/* Default state: subtle vertical line/tick below the text baseline */
 .nocturne-bookmark-range::before {
   content: '';
   position: absolute;
-  bottom: -3px; /* raised from -5px */
+  bottom: -3px;
   left: 0;
   width: 2px;
   height: 5px;
-  background-color: var(--accent, #8b5cf6);
-  border-radius: 1px; /* rounded corners */
-  opacity: 0.75;
+  background-color: var(--accent);
+  border-radius: 1px;
+  opacity: .75;
   transition: opacity 0.2s ease, transform 0.2s ease;
   transform-origin: top center;
 }
 
-/* Hide the tick mark when hovered/active as it morphs into the house */
 .nocturne-bookmark-range:hover::before,
 .nocturne-bookmark-range.active::before,
 .nocturne-bookmark-house:hover + .nocturne-bookmark-range::before,
@@ -11124,98 +11100,70 @@ body.compact-kb-sidebar .kb-sidebar {
   transform: scaleY(0);
 }
 
-/* Sibling house widget container */
 .nocturne-bookmark-house {
   display: inline-block;
   position: relative;
-  width: 0;
-  height: 0;
+  width: 40px;
+  height: 46px;
+  margin-right: 4px;
   vertical-align: middle;
   user-select: none;
 }
 
 .nocturne-bookmark-house-inner {
   position: absolute;
-  top: 6px; /* space below text, slightly raised */
-  left: -11px; /* centered relative to the 2px tick mark (width 24px) */
-  width: 24px;
-  height: 28px;
-  opacity: 0;
-  transform: translate(0, -6px) scaleY(0.1) scaleX(0.5);
-  transform-origin: top center;
-  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-  pointer-events: none;
-  z-index: 50;
-}
-
-/* Morph/Flow transition into the house shape when hovered */
-.nocturne-bookmark-house:hover .nocturne-bookmark-house-inner,
-.nocturne-bookmark-house:has(+ .nocturne-bookmark-range:hover) .nocturne-bookmark-house-inner {
-  opacity: 1;
-  transform: translate(0, 0) scale(1);
-  pointer-events: auto;
-}
-
-/* Active states run entrance keyframe animation when DOM elements are recreated/mounted */
-.nocturne-bookmark-house.active .nocturne-bookmark-house-inner,
-.nocturne-bookmark-house:has(+ .nocturne-bookmark-range.active) .nocturne-bookmark-house-inner {
-  animation: bookmarkHouseFadeIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-  pointer-events: auto;
-}
-
-@keyframes bookmarkHouseFadeIn {
-  0% {
-    opacity: 0;
-    transform: translate(0, -6px) scaleY(0.1) scaleX(0.5);
-  }
-  100% {
-    opacity: 1;
-    transform: translate(0, 0) scale(1);
-  }
-}
-
-/* The house SVG styling */
-.nocturne-bookmark-svg {
-  position: absolute;
   top: 0;
   left: 0;
-  width: 24px;
-  height: 28px;
-  fill: var(--bg-card, #1e1e2e); /* theme background inside */
-  stroke: var(--accent, #8b5cf6); /* accent color outline */
-  stroke-width: 1.5;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 46px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent-hover);
+  cursor: pointer;
+  opacity: .82;
+  transform: translateY(3px) scale(.9);
+  transform-origin: bottom center;
+  transition: opacity 180ms ease, transform 220ms cubic-bezier(.2,.8,.2,1), color 180ms ease;
+  z-index: 50;
 }
-
-/* Note icon / delete button inside the house */
-.nocturne-bookmark-delete-btn {
+.nocturne-bookmark-house-inner:hover,
+.nocturne-bookmark-house-inner:focus-visible,
+.nocturne-bookmark-house.active .nocturne-bookmark-house-inner,
+.nocturne-bookmark-house:has(+ .nocturne-bookmark-range:hover) .nocturne-bookmark-house-inner {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+.nocturne-bookmark-house-inner:focus-visible {
+  outline: 2px solid var(--accent-hover);
+  outline-offset: 3px;
+  border-radius: 10px;
+}
+.nocturne-bookmark-svg {
   position: absolute;
-  top: 12px; /* centered inside the square base */
-  left: 2px;
-  width: 20px;
-  height: 14px;
-  border: none !important;
-  background: transparent !important;
-  color: var(--text-muted, #a1a1aa) !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  cursor: pointer !important;
-  padding: 0 !important;
-  transition: color 0.2s ease, transform 0.2s ease !important;
-  outline: none !important;
+  inset: 0;
+  width: 40px;
+  height: 46px;
+  fill: var(--bg-card);
+  stroke: var(--accent);
+  stroke-width: 2;
+  filter: drop-shadow(0 5px 8px rgba(0,0,0,.28));
+  transition: fill 180ms ease, stroke 180ms ease;
 }
-
-.nocturne-bookmark-delete-btn i {
-  font-size: 10px !important;
-  line-height: 1 !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
+.nocturne-bookmark-house-inner:hover .nocturne-bookmark-svg,
+.nocturne-bookmark-house.active .nocturne-bookmark-svg {
+  fill: rgba(var(--accent-rgb, 139, 92, 246), .2);
+  stroke: var(--accent-hover);
 }
-
-.nocturne-bookmark-delete-btn:hover {
-  color: var(--danger, #f43f5e) !important;
-  transform: scale(1.15) !important;
+.nocturne-bookmark-house-inner > i {
+  position: relative;
+  z-index: 1;
+  margin-top: 12px;
+  font-size: 17px;
+  line-height: 1;
+  pointer-events: none;
 }
 
 /* Flash animation on jump */
