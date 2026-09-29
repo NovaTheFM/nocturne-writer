@@ -33,23 +33,4 @@ css = re.sub(
 with open('src/css/ui.css', 'w', encoding='utf-8') as f:
     f.write(css)
 
-# 2. FIX MAIN.JS
-with open('src/main.js', 'r', encoding='utf-8') as f:
-    js = f.read()
-
-# Add experimentalDesign to bools array
-if "'experimentalDesign'" not in js:
-    js = js.replace("'compactPanels',", "'compactPanels', 'experimentalDesign',")
-
-# Add theme-experimental toggle in applySettings
-# Wait, let's find `shell.classList.toggle('glow-enabled', s.cursorGlow);`
-if "shell.classList.toggle('theme-experimental'" not in js:
-    js = js.replace(
-        "shell.classList.toggle('glow-enabled', s.cursorGlow);", 
-        "shell.classList.toggle('glow-enabled', s.cursorGlow);\n    shell.classList.toggle('theme-experimental', !!s.experimentalDesign);"
-    )
-
-with open('src/main.js', 'w', encoding='utf-8') as f:
-    f.write(js)
-
 print("Hotfix applied.")

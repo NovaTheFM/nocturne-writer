@@ -149,16 +149,12 @@
   <link rel="stylesheet" href="./src/css/variables.css?v=1.2.0" />
   <link rel="stylesheet" href="./src/css/animations.css?v=1.2.0" />
   <link rel="stylesheet" href="./src/css/ui.css?v=1.2.0" />
-  <link rel="stylesheet" href="./src/css/experimental.css?v=1.2.0" />
   <link rel="stylesheet" href="./src/css/polish.css?v=1.2.0" />
   <script>
     try {
       const s = localStorage.getItem('nocturne_settings');
       if (s) {
         const settings = JSON.parse(s);
-        if (settings.experimentalDesign) {
-          document.documentElement.classList.add('theme-experimental-boot');
-        }
         if (settings.accent) {
           document.documentElement.style.setProperty('--accent', settings.accent);
           const hex = settings.accent.replace('#', '');

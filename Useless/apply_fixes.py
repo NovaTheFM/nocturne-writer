@@ -66,18 +66,6 @@ with open('src/css/animations.css', 'w', encoding='utf-8') as f:
 with open('src/main.js', 'r', encoding='utf-8') as f:
     js = f.read()
 
-if 'experimentalDesign:' not in js:
-    js = js.replace('cursorGlow: true,', 'cursorGlow: true,\n      experimentalDesign: false,')
-
-# Add toggle
-toggle_html = r"${row('Экспериментальный дизайн', 'Включает ультра-хайповый детализированный UI (Glassmorphism, 3D).', toggle('experimentalDesign'))}"
-if 'experimentalDesign' not in js.split('miscSettingsContent() {')[1][:1500]:
-    js = re.sub(r'(miscSettingsContent\(\)\s*\{[\s\S]*?)(</div>\s*`;)', r'\1' + toggle_html + r'\n\2', js)
-
-# Inject classes
-if 'theme-experimental' not in js:
-    js = js.replace("document.body.classList.toggle('is-electron', !!window.ipcRenderer);", "document.body.classList.toggle('is-electron', !!window.ipcRenderer);\n    document.body.classList.toggle('theme-experimental', !!this.state.settings.experimentalDesign);\n    document.body.classList.toggle('glow-enabled', !!this.state.settings.cursorGlow);")
-
 # Clean JS cursor light tracking
 js = js.replace('<div class="cursor-light"></div>', '')
 js = js.replace('this.updateCursorLight(editable);', '')

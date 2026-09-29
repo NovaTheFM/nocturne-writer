@@ -11,7 +11,7 @@
 - `src/main.js` весит примерно 870 KB и содержит почти все приложение в классе `NocturneWriter`.
 - Внутри одного класса смешаны загрузка данных, нормализация моделей, рендер всего интерфейса, обработчики событий, мобильная оболочка, редактор, поиск, AI, импорт/экспорт, база знаний, заметки, review-режим, синхронизация и системные настройки.
 - Уже есть вынесенные модули: `src/core/db.js`, `src/core/defaults.js`, `src/core/utils.js`, `src/core/crypto.js`, `src/features/command-palette.js`, `src/features/ai-context.js`, `src/features/local-sync.js`, `src/editor/*`, `src/platform/*`, `src/ui/icons.js`.
-- `index.html` сейчас подключает CSS из `src/css/variables.css`, `src/css/animations.css`, `src/css/ui.css`, `src/css/experimental.css`.
+- `index.html` подключает CSS из `src/css/variables.css`, `src/css/animations.css`, `src/css/ui.css`, `src/css/polish.css`.
 - Документация проекта при этом говорит, что канонический файл стилей - `src/styles.css`, а CSS partials являются фрагментами. Это конфликт источника истины.
 - `src/styles.css` содержит около 222 KB стилей и похож на исторический монолит. В конце есть повторяющиеся блоки для paper theme, pagination и drag-and-drop overlay.
 - `src/css/ui.css` почти такого же размера, как `src/styles.css`, и фактически уже является главным UI-файлом для текущего `index.html`.
@@ -312,7 +312,6 @@ CSS нужно сначала привести к одному источник�
 - `src/css/assistant.css` - AI panel, suggestion bar, AI context preview.
 - `src/css/sync.css` - sync center, device cards, sync status.
 - `src/css/themes.css` - midnight, paper, matrix, lavender, crimson and theme overrides.
-- `src/css/experimental.css` - experimental design only.
 
 Then `index.html` imports these files in a stable order.
 

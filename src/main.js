@@ -474,11 +474,12 @@ class NocturneWriter {
   validateSettings(raw = {}) {
     const source = isPlainObject(raw) ? raw : {};
     const merged = { ...defaultSettings, ...source };
+    if (!Object.hasOwn(source, 'compactKbSidebar')) merged.compactKbSidebar = !!source.compactPanels;
     const clamp = (key, min, max, fallback = defaultSettings[key]) => {
       const value = Number(merged[key]);
       merged[key] = Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
     };
-    const bools = ['windowMaterial', 'cursorGlow', 'compactPanels', 'experimentalDesign', 'caretBreath', 'paragraphIndent', 'smartPunctuation', 'writerSyntax', 'baselineGrid', 'readability', 'typewriterSound', 'typewriterMode', 'strictSpellcheck', 'smartDictionary', 'sentenceFocus', 'showDontTell', 'sentimentTimeline', 'sprintLock', 'timeMachine', 'gitVersioning', 'e2e', 'watermark', 'liveSave', 'autoPaginate', 'showPageRulers', 'showZenButton', 'notesAutosave', 'toolbarSticky', 'reduceMobileAnimations', 'aiKnowledgeContext', 'aiContextCharacters', 'aiContextLocations', 'aiContextTimeline', 'aiContextSubtimelines', 'aiContextRules', 'aiContextNotes', 'autoReplaceDoubleDash', 'autoReplaceEnDash'];
+    const bools = ['windowMaterial', 'cursorGlow', 'compactPanels', 'compactKbSidebar', 'compactToolbar', 'compactSettings', 'compactNotes', 'caretBreath', 'paragraphIndent', 'smartPunctuation', 'writerSyntax', 'baselineGrid', 'readability', 'typewriterMode', 'strictSpellcheck', 'smartDictionary', 'sentenceFocus', 'showDontTell', 'sentimentTimeline', 'sprintLock', 'timeMachine', 'gitVersioning', 'e2e', 'watermark', 'liveSave', 'autoPaginate', 'showPageRulers', 'showZenButton', 'notesAutosave', 'toolbarSticky', 'reduceMobileAnimations', 'aiKnowledgeContext', 'aiContextCharacters', 'aiContextLocations', 'aiContextTimeline', 'aiContextSubtimelines', 'aiContextRules', 'aiContextNotes', 'autoReplaceDoubleDash', 'autoReplaceEnDash'];
     bools.forEach((key) => { merged[key] = !!merged[key]; });
     const allowedFonts = ['Lora', 'Manrope', 'Georgia', 'Inter', 'Playfair Display', 'Merriweather', 'Courier New'];
     if (Array.isArray(merged.customFonts)) {
@@ -7441,12 +7442,15 @@ class NocturneWriter {
       'macro-delete': () => {
         const btn = event.target.closest('[data-macro-idx]');
         const idx = parseInt(btn?.dataset.macroIdx, 10);
-        if (Number.isFinite(idx) && this.state.settings.macros) {
-          this.state.settings.macros.splice(idx, 1);
-          this.persistSettings();
-          this.renderMacrosListOnly();
-          this.toast('Макрос удален.');
-        }
+        if (Number.isFinite(idx)) this.confirmDeleteMacro(idx);
+      },
+      'toggle-associations': () => {
+        const fields = event.target.closest('.timeline-associations-fields');
+        if (!fields) return;
+        const collapsed = fields.classList.toggle('collapsed');
+        const button = fields.querySelector('.assoc-collapse-btn');
+        button?.setAttribute('aria-expanded', String(!collapsed));
+        button?.setAttribute('aria-label', collapsed ? 'Показать привязки и ассоциации' : 'Скрыть привязки и ассоциации');
       },
       'formatting-save-new': () => {
         const trigger = (document.getElementById('new-rule-trigger')?.value || '').trim();
@@ -7997,7 +8001,8 @@ class NocturneWriter {
       'open-backups': () => this.openBackups(),
       'backup-now': async () => { try { const copy = await this.backups.create(); this.toast(copy.external ? 'Копия сохранена в отдельную папку.' : 'Копия сохранена в этом браузере. Для защиты от очистки браузера подключите папку.'); } catch (error) { this.toast(`Не удалось создать копию: ${error.message}`); } },
       'choose-backup-directory': async () => { try { const result = await platformFiles.chooseBackupDirectory(this.db); if (result) this.toast(`Папка копий: ${result.path}`); } catch (error) { if (error.name !== 'AbortError') this.toast(error.message); } },
-      'toggle-card-view': () => { this.state.settings.cardView = this.state.settings.cardView === 'list' ? 'grid' : 'list'; this.applySettings(); this.persistSettings(); this.renderKb(); if (this.isMobileLayout()) this.renderMobileShell(); },
+      'toggle-card-view': () => { this.state.settings.cardView = this.state.settings.cardView === 'list' ? 'grid' : 'list'; this.applySettings(); this.persistSettings(); const control = document.querySelector('[data-action="toggle-card-view"]'); if (control) { const compact = this.state.settings.cardView === 'list'; control.setAttribute('aria-checked', String(compact)); control.classList.toggle('on', compact); } },
+      'open-compact-settings': () => this.openCompactSettings(),
       'edit-world-rules': () => this.editWorldRules(),
       'export-html': () => this.exportPrintable(),
       'export-docx': () => this.exportDocx(),
@@ -8503,7 +8508,7 @@ class NocturneWriter {
     if (typeof Flip !== 'undefined') {
       try { Flip.killFlipsOf(el); } catch (err) {}
     }
-    el.classList.remove('new-card-entrance', 'new-doc-entrance', 'kb-card-stagger-in', 'is-flipping');
+    el.classList.remove('new-card-entrance', 'new-doc-entrance', 'kb-enter-card', 'is-flipping');
     el._isFlippingGrid = false;
 
     if (smooth && !this.shouldReduceSurfaceMotion() && hasActiveMotion && (Math.abs(vis.x) > 0.5 || Math.abs(vis.y) > 0.5)) {
@@ -10021,13 +10026,13 @@ class NocturneWriter {
   }
 
   updateFolderEmptyPlaceholders() {
-    document.querySelectorAll('.folder-docs').forEach((zone) => {
+    document.querySelectorAll('.sidebar .folder-docs').forEach((zone) => {
       const hasDocs = zone.querySelectorAll('.doc-item').length > 0;
       let emptyPlaceholder = zone.querySelector('.doc-folder-empty');
       if (!hasDocs && !emptyPlaceholder) {
-        emptyPlaceholder = document.createElement('div');
-        emptyPlaceholder.className = 'doc-folder-empty';
-        emptyPlaceholder.textContent = 'В этой папке пока нет документов';
+        const template = document.createElement('template');
+        template.innerHTML = this.folderEmptyState(zone.dataset.folderId);
+        emptyPlaceholder = template.content.firstElementChild;
         zone.appendChild(emptyPlaceholder);
       } else if (hasDocs && emptyPlaceholder) {
         emptyPlaceholder.remove();
@@ -13067,7 +13072,7 @@ class NocturneWriter {
         } else {
           const added = target.cloneNode(true);
           element.insertBefore(added, element.childNodes[index] || null);
-          if (added.nodeType === Node.ELEMENT_NODE) this.animateSurfaceContent(added);
+          if (added.nodeType === Node.ELEMENT_NODE && !added.classList.contains('new-card-entrance') && !(this.kbTransitioning && added.closest('#kb-modal'))) this.animateSurfaceContent(added);
         }
       }
       for (const node of oldNodes) if (!used.has(node)) {
@@ -15238,15 +15243,6 @@ class NocturneWriter {
             ${diagnostics.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></div>`).join('')}
           </div>
         </section>
-      <div class="setting-row">
-        <div class="setting-info">
-          <span>Экспериментальный дизайн</span>
-          <small>Включает ультра-хайповый детализированный UI (Парящие панели, 3D, живой фон).</small>
-        </div>
-        <div class="setting-control">
-          <div class="toggle ${this.state.settings.experimentalDesign ? 'on' : ''}" data-setting="experimentalDesign" data-kind="toggle"></div>
-        </div>
-      </div>
       <div class="setting-row" style="border-top: 1px solid var(--border); padding-top: 16px; margin-top: 16px; justify-content: flex-start; gap: 16px;">
         <button class="pill-btn" data-action="show-whats-new" style="min-width: 140px;"><i class="bx bx-info-circle"></i> Что нового?</button>
       </div>
@@ -15685,13 +15681,8 @@ class NocturneWriter {
     const rect = this.rangeRect(range);
     if (!rect) return;
     const pageRect = page.getBoundingClientRect();
-    if (document.body.classList.contains('theme-experimental')) {
-      light.style.left = `${rect.left - pageRect.left}px`;
-      light.style.top = `${rect.top - pageRect.top + rect.height / 2}px`;
-    } else {
-      light.style.left = `${rect.left - pageRect.left - 17}px`;
-      light.style.top = `${rect.top - pageRect.top - 9}px`;
-    }
+    light.style.left = `${rect.left - pageRect.left - 17}px`;
+    light.style.top = `${rect.top - pageRect.top - 9}px`;
   }
 
   rangeRect(range) {
@@ -16284,6 +16275,8 @@ class NocturneWriter {
   }
 
   renderKb() {
+    if (this.kbTransitioning) this.kbMotionGeneration = (this.kbMotionGeneration || 0) + 1;
+    const enterCards = !!this.kbTransitioning;
     const active = this.state.activeKbTab;
     const detail = this.activeLoreDetailItem();
     
@@ -16385,12 +16378,13 @@ class NocturneWriter {
             <div class="character-grid" data-dnd-zone="notes">${notes.length ? notes.map((item) => this.noteCard(item, true)).join('') : this.emptyStateMarkup('bx-note', 'Записей пока нет.', 'Добавьте первую свободную запись или заметку к миру.', 'new-lore', 'Создать запись', 'data-lore-type="notes"')}</div>
           </section>
           ${activeSubtimeline ? this.subtimelinePanel(activeSubtimeline) : ''}
-        `, { key: `${active}:${detail?.item?.id || ''}:${activeSubtimeline?.id || ''}` });
+        `, { key: `${detail?.item?.id || ''}:${activeSubtimeline?.id || ''}` });
         this.kbTransitioning = false;
       }
       if (!detail) {
         this.setupKbDragDrop();
         this.applyKbSearch();
+        if (enterCards) this.animateKbEntrance(active);
       }
       this.setupKbImportDnd();
       const searchInput = document.getElementById('kb-search');
@@ -16506,7 +16500,9 @@ class NocturneWriter {
     if (!detail) {
       this.setupKbDragDrop();
       this.applyKbSearch();
+      if (enterCards) this.animateKbEntrance(active);
     }
+    this.kbTransitioning = false;
     this.setupKbImportDnd();
 
     const searchInput = document.getElementById('kb-search');
@@ -16514,6 +16510,36 @@ class NocturneWriter {
       searchInput.oninput = e => { this.state.kbSearch = e.target.value; this.applyKbSearch(); };
       // Do not auto-focus search to avoid stealing focus on tab switch
     }
+  }
+
+  animateKbEntrance(tab) {
+    const modal = document.getElementById('kb-modal');
+    if (!modal?.classList.contains('active') || this.shouldReduceSurfaceMotion()) return;
+    modal.querySelectorAll('.kb-enter-card').forEach(card => {
+      card.__kbEntranceAnimation?.cancel();
+      card.classList.remove('kb-enter-card');
+    });
+    const generation = this.kbEntranceGeneration = (this.kbEntranceGeneration || 0) + 1;
+    requestAnimationFrame(() => {
+      if (generation !== this.kbEntranceGeneration || this.state.activeKbTab !== tab || !modal.classList.contains('active')) return;
+      const section = modal.querySelector(`#kb-sec-${tab}`);
+      const cards = section?.querySelectorAll('.char-card:not(.hidden), .loc-card:not(.hidden), .timeline-item:not(.hidden), .empty-card:not(.hidden)') || [];
+      cards.forEach((card, index) => {
+        card.classList.add('kb-enter-card');
+        const animation = card.animate([
+          { opacity: 0, transform: 'translate3d(0, 16px, 0)' },
+          { opacity: 1, transform: 'translate3d(0, 0, 0)' }
+        ], { duration: 390, delay: Math.min(index, 15) * 48, easing: 'cubic-bezier(.16, 1, .3, 1)', fill: 'backwards' });
+        card.__kbEntranceAnimation = animation;
+        const cleanup = () => {
+          if (card.__kbEntranceAnimation !== animation) return;
+          card.__kbEntranceAnimation = null;
+          card.classList.remove('kb-enter-card');
+        };
+        animation.onfinish = cleanup;
+        animation.oncancel = cleanup;
+      });
+    });
   }
 
   activeLoreDetailItem() {
@@ -16954,6 +16980,12 @@ class NocturneWriter {
   setupKbDragDrop() {
     this.kbSortables.forEach((sortable) => sortable.destroy?.());
     this.kbSortables = [];
+    this.kbResizeZones ||= new Set();
+    for (const oldZone of this.kbResizeZones) {
+      if (oldZone.isConnected) continue;
+      oldZone._gridResizeObserver?.disconnect();
+      this.kbResizeZones.delete(oldZone);
+    }
     document.querySelectorAll('[data-dnd-zone]').forEach(zone => {
       this.setupKbSortable(zone);
       this.observeKbGridResize(zone);
@@ -16961,11 +16993,8 @@ class NocturneWriter {
   }
 
   observeKbGridResize(zone) {
-    if (!zone) return;
-    if (zone._gridResizeObserver) {
-      zone._gridResizeObserver.disconnect();
-      zone._gridResizeObserver = null;
-    }
+    if (!zone || zone._gridResizeObserver || !zone.matches('.character-grid, .locations-grid')) return;
+    this.kbResizeZones.add(zone);
     let prevZoneWidth = zone.clientWidth;
     const prevPosMap = new Map();
     zone._prevPosMap = prevPosMap;
@@ -16976,6 +17005,7 @@ class NocturneWriter {
         const currentZoneWidth = entry.contentRect.width;
         if (Math.abs(currentZoneWidth - prevZoneWidth) < 2) continue;
         prevZoneWidth = currentZoneWidth;
+        if (currentZoneWidth < 1) { prevPosMap.clear(); continue; }
 
         if (document.body.classList.contains('sortable-active')) continue;
 
@@ -16990,51 +17020,49 @@ class NocturneWriter {
           const cardData = cards.map(card => {
             const vis = this.getVisualTranslate(card);
             const rawRect = card.getBoundingClientRect();
-            const baseLeft = rawRect.left - vis.x;
-            const baseTop = rawRect.top - vis.y;
-            const relLeft = baseLeft - zoneRect.left;
-            const relTop = baseTop - zoneRect.top;
+            const relLeft = card.offsetLeft;
+            const relTop = card.offsetTop;
             const isVisible = rawRect.bottom >= (zoneRect.top - 200) && rawRect.top <= (zoneRect.bottom + 200);
-            return { card, rawRect, relLeft, relTop, width: rawRect.width, height: rawRect.height, vis, isVisible };
+            return { card, rawRect, relLeft, relTop, width: card.offsetWidth, height: card.offsetHeight, vis, isVisible };
           });
 
-          cardData.forEach(({ card, relLeft, relTop, width, height, vis, isVisible }) => {
+          cardData.forEach(({ card, rawRect, relLeft, relTop, width, height, vis, isVisible }) => {
             if (prevPosMap.has(card)) {
               const prev = prevPosMap.get(card);
               const dx = (prev.relLeft - relLeft) + vis.x;
               const dy = (prev.relTop - relTop) + vis.y;
 
               // Only trigger FLIP animation if card actually shifted row or column slot significantly
-              const isSlotWrap = isVisible && (Math.abs(dy) >= 14 || Math.abs(dx) >= 32);
+              const isSlotWrap = isVisible && (Math.abs(dy) >= 14 || Math.abs(prev.width - width) >= 24);
 
               prevPosMap.set(card, { relLeft, relTop, width, height });
 
               if (isSlotWrap && Math.abs(dx) < zoneRect.width * 1.5) {
-                if (card._activeNocturneAnim) {
-                  try { card._activeNocturneAnim.cancel(); } catch (e) {}
-                  card._activeNocturneAnim = null;
-                }
+                const scaleX = card._activeNocturneAnim ? rawRect.width / width : prev.width / width;
+                card._activeNocturneAnim?.cancel();
                 card._isFlippingGrid = true;
                 card.classList.add('is-flipping');
+                card.style.transformOrigin = '0 0';
 
                 const anim = card.animate([
-                  { transform: `translate3d(${dx}px, ${dy}px, 0)` },
-                  { transform: 'translate3d(0px, 0px, 0)' }
+                  { transform: `translate3d(${dx}px, ${dy}px, 0) scaleX(${scaleX})` },
+                  { transform: 'translate3d(0px, 0px, 0) scaleX(1)' }
                 ], {
-                  duration: 320,
+                  duration: 280,
                   easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
                   fill: 'none'
                 });
 
                 card._activeNocturneAnim = anim;
-                anim.onfinish = () => {
+                const cleanup = () => {
+                  if (card._activeNocturneAnim !== anim) return;
                   card.classList.remove('is-flipping');
                   card._isFlippingGrid = false;
-                  if (card._activeNocturneAnim === anim) {
-                    card._activeNocturneAnim = null;
-                    card.style.transform = '';
-                  }
+                  card._activeNocturneAnim = null;
+                  card.style.transformOrigin = '';
                 };
+                anim.onfinish = cleanup;
+                anim.oncancel = cleanup;
               }
             } else {
               prevPosMap.set(card, { relLeft, relTop, width, height });
@@ -17048,17 +17076,15 @@ class NocturneWriter {
     zone._gridResizeObserver = observer;
 
     requestAnimationFrame(() => {
-      const zoneRect = zone.getBoundingClientRect();
       const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card'))
         .filter(el => !el.classList.contains('hidden'));
       cards.forEach(card => {
         if (!prevPosMap.has(card)) {
-          const r = card.getBoundingClientRect();
           prevPosMap.set(card, {
-            relLeft: r.left - zoneRect.left,
-            relTop: r.top - zoneRect.top,
-            width: r.width,
-            height: r.height
+            relLeft: card.offsetLeft,
+            relTop: card.offsetTop,
+            width: card.offsetWidth,
+            height: card.offsetHeight
           });
         }
       });
@@ -18050,27 +18076,26 @@ class NocturneWriter {
     if (!window.Sortable) return;
     zone.querySelectorAll('[draggable]').forEach((el) => el.removeAttribute('draggable'));
     
-    // Prevent browser native drag-and-drop session from interfering with SortableJS
-    zone.addEventListener('dragstart', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-    }, { capture: true });
-
-    // Instantly cancel ongoing animations on all cards on pointerdown for immediate grab-and-drag
-    zone.addEventListener('pointerdown', (e) => {
-      const card = e.target.closest('.char-card, .loc-card, .timeline-item, .note-card');
-      if (card) {
+    if (!zone.__kbDragListenersBound) {
+      zone.addEventListener('dragstart', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }, { capture: true });
+      zone.addEventListener('pointerdown', (e) => {
+        const card = e.target.closest('.char-card, .loc-card, .timeline-item, .note-card');
+        if (!card) return;
         zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card').forEach((child) => {
-          this.cancelElementAnimations(child);
+          if (child._activeNocturneAnim || child.__kbEntranceAnimation) this.cancelElementAnimations(child);
         });
-      }
-    }, { capture: true, passive: true });
+      }, { capture: true, passive: true });
+      zone.__kbDragListenersBound = true;
+    }
 
     const zoneType = zone.dataset.dndZone;
     const isTimelineZone = ['timeline', 'subtimeline'].includes(zoneType);
     const mobile = this.isMobileLayout?.();
     const sortable = new window.Sortable(zone, {
-      animation: mobile ? 280 : 380,
+      animation: mobile ? 280 : 250,
       easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
       forceFallback: true,
       fallbackOnBody: !mobile,
@@ -18096,8 +18121,7 @@ class NocturneWriter {
       },
       onStart: (event) => {
         document.body.classList.add('sortable-active');
-        const kbMain = document.querySelector('#kb-modal .kb-main');
-        if (kbMain) kbMain.classList.remove('kb-entering');
+        this.kbEntranceGeneration = (this.kbEntranceGeneration || 0) + 1;
         if (window.Capacitor?.Plugins?.Haptics?.impact) {
           window.Capacitor.Plugins.Haptics.impact({ style: 'light' }).catch(() => {});
         }
@@ -18105,7 +18129,7 @@ class NocturneWriter {
 
         // Cancel active animations on all cards in container to prevent mid-flight glitches
         event.from.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card').forEach((child) => {
-          this.cancelElementAnimations(child);
+          if (child._activeNocturneAnim || child.__kbEntranceAnimation) this.cancelElementAnimations(child);
         });
 
         // Remove entrance animation classes immediately on drag start to prevent style/ghost glitches
@@ -18126,6 +18150,8 @@ class NocturneWriter {
         this.updateTimelineConnectors(event.from);
       },
       onEnd: async (event) => {
+        const timelineDrop = isTimelineZone && event.to === event.from;
+        if (timelineDrop) event.to.classList.add('timeline-connecting');
         document.body.classList.remove('sortable-active');
         event.from.classList.remove('is-dragging');
         event.to.classList.remove('is-dragging');
@@ -18134,9 +18160,11 @@ class NocturneWriter {
         this.kbSuppressClickUntil = Date.now() + 260;
         
         // Trigger FLIP landing animation
-        if (event.item && this.lastDragMousePos && this.dragClickOffset) {
-          this.animateSortableDrop(event.item, this.lastDragMousePos, this.dragClickOffset);
-        }
+        const landing = event.item && this.lastDragMousePos && this.dragClickOffset
+          ? this.animateKbSortableDrop(event.item, this.lastDragMousePos, this.dragClickOffset)
+          : Promise.resolve();
+
+        if (timelineDrop) landing.finally(() => requestAnimationFrame(() => event.to.classList.remove('timeline-connecting')));
 
         if (event.oldIndex !== event.newIndex) {
           await this.persistKbDomOrder(zoneType, event.from);
@@ -18146,6 +18174,25 @@ class NocturneWriter {
     });
     zone.__sortable = sortable;
     this.kbSortables.push(sortable);
+  }
+
+  animateKbSortableDrop(item, lastMousePos, clickOffset) {
+    this.cancelElementAnimations(item);
+    const rect = item.getBoundingClientRect();
+    const dx = lastMousePos.x - clickOffset.x - rect.left;
+    const dy = lastMousePos.y - clickOffset.y - rect.top;
+    if (this.shouldReduceSurfaceMotion() || (Math.abs(dx) < 2 && Math.abs(dy) < 2)) return Promise.resolve();
+    item.classList.add('is-flipping');
+    const animation = item.animate([
+      { transform: `translate3d(${dx}px, ${dy}px, 0)` },
+      { transform: 'translate3d(0, 0, 0)' }
+    ], { duration: 300, easing: 'cubic-bezier(.16, 1, .3, 1)' });
+    item._activeNocturneAnim = animation;
+    return animation.finished.catch(() => {}).then(() => {
+      if (item._activeNocturneAnim !== animation) return;
+      item._activeNocturneAnim = null;
+      item.classList.remove('is-flipping');
+    });
   }
 
   updateTimelineConnectors(zone) {
@@ -18480,10 +18527,10 @@ class NocturneWriter {
           ` : this.renderLoreEntityFields(type, item, iconOptions)}
           <label class="lore-field lore-field-wide lore-description-field">Описание <textarea class="form-control" name="body" required>${escapeHtml(item.body || '')}</textarea></label>
           ${isTimeline ? `
-            <div class="lore-field lore-field-wide timeline-associations-fields">
-              <div class="associations-title-row" onclick="this.closest('.timeline-associations-fields').classList.toggle('collapsed')">
+            <div class="lore-field lore-field-wide timeline-associations-fields collapsed">
+              <div class="associations-title-row" data-action="toggle-associations">
                 <h4 class="associations-title"><i class="bx bx-link"></i> Привязки и Ассоциации</h4>
-                <button type="button" class="btn-icon assoc-collapse-btn" title="Скрыть/Показать"><i class="bx bx-chevron-down"></i></button>
+                <button type="button" class="btn-icon assoc-collapse-btn" aria-label="Показать привязки и ассоциации" aria-expanded="false"><i class="bx bx-chevron-down"></i></button>
               </div>
               <div class="assoc-collapsible-wrapper">
                 <div class="assoc-collapsible-content">
@@ -19136,6 +19183,28 @@ class NocturneWriter {
     }
   }
 
+  openCompactSettings() {
+    const overlay = document.getElementById('form-overlay');
+    const toggle = (key, title) => `<button type="button" class="toggle ${this.state.settings[key] ? 'on' : ''}" data-setting="${key}" data-kind="toggle" role="switch" aria-checked="${!!this.state.settings[key]}" aria-label="${title}"></button>`;
+    const row = (title, note, control) => `<div class="setting-row compact-option"><div class="setting-info"><span>${title}</span><small>${note}</small></div><div class="setting-control">${control}</div></div>`;
+    const cardsCompact = this.state.settings.cardView === 'list';
+    this.presentOverlay(overlay, `
+      <div class="form-modal utility-modal compact-settings-modal">
+        <div class="modal-head-row"><div><h2>Компактный вид</h2><p>Каждую часть интерфейса можно настроить отдельно.</p></div><button type="button" class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div>
+        <div class="compact-settings-list">
+          ${row('Панель документов', 'Узкая боковая панель рукописи.', toggle('compactPanels', 'Компактная панель документов'))}
+          ${row('Панель базы знаний', 'Больше места для карточек и таймлайна.', toggle('compactKbSidebar', 'Компактная панель базы знаний'))}
+          ${row('Карточки базы знаний', 'Компактные карточки персонажей и локаций.', `<button type="button" class="toggle ${cardsCompact ? 'on' : ''}" data-action="toggle-card-view" role="switch" aria-checked="${cardsCompact}" aria-label="Компактные карточки базы знаний"></button>`)}
+          ${row('Панель инструментов', 'Плотнее расположить инструменты редактора.', toggle('compactToolbar', 'Компактная панель инструментов'))}
+          ${row('Настройки', 'Уменьшить отступы в меню настроек.', toggle('compactSettings', 'Компактные настройки'))}
+          ${row('Панель заметок', 'Показывать больше заметок без прокрутки.', toggle('compactNotes', 'Компактная панель заметок'))}
+        </div>
+      </div>
+    `);
+    overlay.classList.add('active');
+    overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
+  }
+
   openSettingsTab(tab = 'visual') {
     this.state.activeSettingsTab = tab;
     this.closeAllFloatingMenus();
@@ -19231,7 +19300,7 @@ class NocturneWriter {
           ${row('Скорость мигания', 'Интервал мигания кастомной каретки в миллисекундах.', range('caretBlink', 250, 1400, 10, 'ms'))}
           ${row('Плавное дыхание каретки', 'Добавляет еле заметную анимацию каретки вместо резкого мигания.', toggle('caretBreath'))}
           ${row('Уровень контрастности текста', 'Поднимает или снижает яркость текста на странице, не меняя тему целиком.', range('textContrast', 45, 100, 1, '%'))}
-          ${row('Компактный режим панелей', 'Сужает боковые панели и плотнее собирает служебный интерфейс.', toggle('compactPanels'))}
+          ${row('Компактный вид', 'Настройте плотность отдельных частей интерфейса.', `<button class="pill-btn" data-action="open-compact-settings"><i class="bx bx-slider-alt"></i> Настроить</button>`)}
           ${row('Режим пишущей машинки', 'Держит активную строку вертикально по центру экрана — как в профессиональных редакторах.', toggle('typewriterMode'))}
           ${(this.isAndroidRuntime() || this.isCapacitorRuntime()) ? row('Уменьшить анимации на телефоне', 'По умолчанию мобильные анимации включены. Включите это только если устройство заметно тормозит.', toggle('reduceMobileAnimations')) : ''}
           ${this.isMobileLayout() ? '' : row('Горячие клавиши', 'Открывает справку по реально доступным сочетаниям клавиш.', `<button class="pill-btn" data-action="open-shortcuts"><i class="bx bx-keyboard"></i> Показать</button>`)}
@@ -19296,7 +19365,6 @@ class NocturneWriter {
           ${row('Фокус на предложении / абзаце', 'Приглушает соседний текст и помогает вычитывать текущий фрагмент.', toggle('sentenceFocus'))}
           ${row('Пагинация MS Word (Экспериментально)', 'Разбивает ваш текст на страницы визуально, симулируя печатный лист. Может вызывать баги при быстром наборе текста на стыке страниц.', toggle('autoPaginate'))}
           ${row('Линейки страниц', 'Показывает тонкие направляющие полей и рабочей области страницы.', toggle('showPageRulers'))}
-          ${row('Звуки клавиш (Экспериментально)', 'Мягкий тихий щелчок синтезатора при наборе текста.', toggle('typewriterSound'))}
           ${row('Анимация письма', 'Искры, волна, туман или отключение анимации ввода.', select('writingAnimation', [['sparkles', 'Искры'], ['ripple', 'Волна'], ['mist', 'Туман'], ['off', 'Выключено']]))}
           ${row('Дневная цель слов', 'Количество слов, к которому стремится дневной прогресс в нижней части sidebar.', range('dailyGoal', 100, 10000, 100))}
                               ${row('Show, Don’t Tell анализатор', 'Локально подсвечивает слабые слова и места, где фразу можно показать действием.', toggle('showDontTell'))}
@@ -19377,6 +19445,7 @@ class NocturneWriter {
           </div>
           ${row('Креативность', 'Температура запроса: ниже — предсказуемее, выше — свободнее формулировки.', range('aiTemperature', 0, 1.4, .05))}
           ${row('Контекст базы знаний', 'Передаёт ассистенту релевантных персонажей, локации, таймлайн, сабтаймлайны и заметки как справочный контекст, не вставляя его в документ.', toggle('aiKnowledgeContext'))}
+          ${row('Правила мира', 'Ограничения лора, которые учитывает ассистент.', `<button class="pill-btn" data-action="edit-world-rules"><i class="bx bx-book-content"></i> Открыть правила</button>`)}
           ${row('Группы контекста', 'Можно отключить отдельные части контекста для более коротких запросов.', `
             <div class="context-settings-grid">
               <label class="nocturne-check"><input type="checkbox" data-setting="aiContextCharacters" ${s.aiContextCharacters ? 'checked' : ''}><span class="check-mark"></span><span>Characters</span></label>
@@ -19449,7 +19518,7 @@ class NocturneWriter {
       { tab: 'visual', label: 'Скорость мигания', note: 'Интервал мигания кастомной каретки в миллисекундах.', key: 'caretBlink', type: 'range', min: 250, max: 1400, step: 10, suffix: 'ms' },
       { tab: 'visual', label: 'Плавное дыхание каретки', note: 'Добавляет еле заметную анимацию каретки вместо резкого мигания.', key: 'caretBreath', type: 'toggle' },
       { tab: 'visual', label: 'Уровень контрастности текста', note: 'Поднимает или снижает яркость текста на странице, не меняя тему целиком.', key: 'textContrast', type: 'range', min: 45, max: 100, step: 1, suffix: '%' },
-      { tab: 'visual', label: 'Компактный режим панелей', note: 'Сужает боковые панели и плотнее собирает служебный интерфейс.', key: 'compactPanels', type: 'toggle' },
+      { tab: 'visual', label: 'Компактный вид', note: 'Настройка плотности панелей, карточек, инструментов и заметок.', key: 'compactSettingsMenu', type: 'action', action: 'open-compact-settings' },
       { tab: 'visual', label: 'Режим пишущей машинки', note: 'Держит активную строку вертикально по центру экрана — как в профессиональных редакторах.', key: 'typewriterMode', type: 'toggle' },
       { tab: 'editor', label: 'Шрифт рукописи', note: 'Меняет семейство шрифта только в рабочей рукописи, не в интерфейсе.', key: 'fontFamily', type: 'select', options: [...presetFonts, ...customFonts] },
       { tab: 'editor', label: 'Размер шрифта', note: 'Базовый размер текста на странице редактора.', key: 'fontSize', type: 'range', min: 14, max: 26, step: 1, suffix: 'px' },
@@ -19466,7 +19535,6 @@ class NocturneWriter {
       { tab: 'focus', label: 'Фокус на предложении / абзаце', note: 'Приглушает соседний текст и помогает вычитывать текущий фрагмент.', key: 'sentenceFocus', type: 'toggle' },
       { tab: 'focus', label: 'Пагинация MS Word (Экспериментально)', note: 'Разбивает ваш текст на страницы визуально, симулируя печатный лист.', key: 'autoPaginate', type: 'toggle' },
       { tab: 'focus', label: 'Линейки страниц', note: 'Показывает тонкие направляющие полей и рабочей области страницы.', key: 'showPageRulers', type: 'toggle' },
-      { tab: 'focus', label: 'Звуки клавиш (Экспериментально)', note: 'Мягкий тихий щелчок синтезатора при наборе текста.', key: 'typewriterSound', type: 'toggle' },
       { tab: 'focus', label: 'Анимация письма', note: 'Искры, волна, туман или отключение анимации ввода.', key: 'writingAnimation', type: 'select', options: [['sparkles', 'Искры'], ['ripple', 'Волна'], ['mist', 'Туман'], ['off', 'Выключено']] },
       { tab: 'focus', label: 'Дневная цель слов', note: 'Количество слов, к которому стремится дневной прогресс в нижней части sidebar.', key: 'dailyGoal', type: 'range', min: 100, max: 10000, step: 100 },
       { tab: 'focus', label: 'Show, Don’t Tell анализатор', note: 'Локально подсвечивает слабые слова и места, где фразу можно показать действием.', key: 'showDontTell', type: 'toggle' },
@@ -19479,6 +19547,7 @@ class NocturneWriter {
       { tab: 'ai', label: 'Персона редактора', note: 'Стиль поведения AI ассистента.', key: 'aiPersona', type: 'select', options: [['critic', 'Злой критик'], ['muse', 'Муза'], ['coauthor', 'Соавтор']] },
       { tab: 'ai', label: 'Креативность', note: 'Температура запроса: ниже — предсказуемее, выше — свободнее.', key: 'aiTemperature', type: 'range', min: 0, max: 1.4, step: 0.05 },
       { tab: 'ai', label: 'Контекст базы знаний', note: 'Передаёт ассистенту релевантных персонажей, локации, таймлайн и т.д.', key: 'aiKnowledgeContext', type: 'toggle' },
+      { tab: 'ai', label: 'Правила мира', note: 'Ограничения лора для ассистента.', key: 'worldRules', type: 'action', action: 'edit-world-rules' },
       { tab: 'ai', label: 'Строгость хранителя лора', note: 'Насколько жёстко локальная проверка реагирует на противоречия с Базой знаний.', key: 'loreStrictness', type: 'range', min: 0, max: 100, step: 1, suffix: '%' },
       { tab: 'ai', label: 'Реакция на конфликт лора', note: 'Действие при обнаружении нестыковок с Базой Знаний.', key: 'loreReaction', type: 'select', options: [['soft', 'Подсказать'], ['warn', 'Предупредить'], ['hard', 'Блокировать сохранение абзаца']] },
       { tab: 'ai', label: 'Sentiment Timeline', note: 'Показывает локальную кривую эмоциональной напряжённости.', key: 'sentimentTimeline', type: 'toggle' },
@@ -19490,7 +19559,6 @@ class NocturneWriter {
       { tab: 'export', label: 'Водяной знак PDF', note: 'Добавляет полупрозрачную подпись автора и дату в печатный PDF-макет.', key: 'watermark', type: 'toggle' },
       { tab: 'export', label: 'Имя автора', note: 'Попадает в метаданные DOCX и используется в водяном знаке PDF.', key: 'authorName', type: 'input' },
       { tab: 'review', label: 'Экспортировать .nocturned рядом с DOCX', note: 'Если у документа есть редакторские правок, рядом с DOCX скачивается JSON-файл обмена правками.', key: 'exportNocturned', type: 'toggle' },
-      { tab: 'misc', label: 'Экспериментальный дизайн', note: 'Включает ультра-хайповый детализированный UI.', key: 'experimentalDesign', type: 'toggle' },
       { tab: 'formatting', label: 'Автозамена -- на длинное тире —', note: 'Автоматически заменяет два дефиса на длинное тире (em-dash) при вводе. При нажатии Backspace возвращает дефисы.', key: 'autoReplaceDoubleDash', type: 'toggle' },
       { tab: 'formatting', label: 'Автозамена дефиса на среднее тире –', note: 'Автоматически заменяет одиночный дефис на среднее тире (en-dash), когда он находится между отдельными словами.', key: 'autoReplaceEnDash', type: 'toggle' },
     ];
@@ -19531,14 +19599,14 @@ class NocturneWriter {
       const tabsList = [
         { id: 'visual', label: 'Внешний вид и Оформление', note: 'Цветовая тема, акцентный цвет темы, стиль каретки, компактность, typewriter.' },
         { id: 'editor', label: 'Настройки рукописи и Шрифты', note: 'Размер, отступы, шрифты рукописи, умная пунктуация, строгость проверки.' },
-        { id: 'focus', label: 'Концентрация и Фокус', note: 'Режим дзен, фокус на абзаце, пагинация MS Word, звуки клавиш, анимация.' },
+        { id: 'focus', label: 'Концентрация и Фокус', note: 'Режим дзен, фокус на абзаце, пагинация MS Word, анимация.' },
         { id: 'dictionary', label: 'Словарь автозамены', note: 'Настройка автоматического исправления опечаток и правил spellcheck.' },
         { id: 'review', label: 'Режимы работы и Редактура', note: 'Режим письма, редактора или финализации, экспорт правок.' },
         { id: 'macros', label: 'Клавиатурные макросы', note: 'Настройка клавиатурных макросов и автозамены.' },
         { id: 'ai', label: 'AI Ассистент', note: 'Провайдеры искусственного интеллекта, ключи, температура, контекст базы знаний.' },
         { id: 'data', label: 'Данные и Резервное копирование', note: 'Интервалы автосохранения, Git-версионирование, сквозное шифрование, удаление данных.' },
         { id: 'export', label: 'Параметры экспорта', note: 'Водяной знак PDF, имя автора.' },
-        { id: 'misc', label: 'Прочее', note: 'Экспериментальный дизайн, очистка, сброс настроек.' }
+        { id: 'misc', label: 'Прочее', note: 'Очистка и сброс настроек.' }
       ];
       const scoredSections = tabsList
         .map((tab) => ({ tab, score: this.scoreSettingSection(tab, query) }))
@@ -19591,6 +19659,8 @@ class NocturneWriter {
             control = select(item.key, item.options);
           } else if (item.type === 'input') {
             control = input(item.key, item.inputType || 'text');
+          } else if (item.type === 'action') {
+            control = `<button class="pill-btn" data-action="${item.action}"><i class="bx bx-chevron-right"></i> Открыть</button>`;
           } else if (item.type === 'accent') {
             control = this.renderAccentColorControl();
           }
@@ -19631,14 +19701,14 @@ class NocturneWriter {
       const tabsList = [
         { id: 'visual', label: 'Внешний вид и Оформление', note: 'Цветовая тема, акцентный цвет темы, стиль каретки, компактность, typewriter.' },
         { id: 'editor', label: 'Настройки рукописи и Шрифты', note: 'Размер, отступы, шрифты рукописи, умная пунктуация, строгость проверки.' },
-        { id: 'focus', label: 'Концентрация и Фокус', note: 'Режим дзен, фокус на абзаце, пагинация MS Word, звуки клавиш, анимация.' },
+        { id: 'focus', label: 'Концентрация и Фокус', note: 'Режим дзен, фокус на абзаце, пагинация MS Word, анимация.' },
         { id: 'dictionary', label: 'Словарь автозамены', note: 'Настройка автоматического исправления опечаток и правил spellcheck.' },
         { id: 'review', label: 'Режимы работы и Редактура', note: 'Режим письма, редактора или финализации, экспорт правок.' },
         { id: 'macros', label: 'Клавиатурные макросы', note: 'Настройка клавиатурных макросов и автозамены.' },
         { id: 'ai', label: 'AI Ассистент', note: 'Провайдеры искусственного интеллекта, ключи, температура, контекст базы знаний.' },
         { id: 'data', label: 'Данные и Резервное копирование', note: 'Интервалы автосохранения, Git-версионирование, сквозное шифрование, удаление данных.' },
         { id: 'export', label: 'Параметры экспорта', note: 'Водяной знак PDF, имя автора.' },
-        { id: 'misc', label: 'Прочее', note: 'Экспериментальный дизайн, очистка, сброс настроек.' }
+        { id: 'misc', label: 'Прочее', note: 'Очистка и сброс настроек.' }
       ];
       const scoredSections = tabsList
         .map((tab) => ({ tab, score: this.scoreSettingSection(tab, query) }))
@@ -19691,6 +19761,8 @@ class NocturneWriter {
             control = select(item.key, item.options);
           } else if (item.type === 'input') {
             control = input(item.key, item.inputType || 'text');
+          } else if (item.type === 'action') {
+            control = `<button class="pill-btn" data-action="${item.action}"><i class="bx bx-chevron-right"></i> Открыть</button>`;
           } else if (item.type === 'accent') {
             control = this.renderAccentColorControl();
           }
@@ -19800,6 +19872,39 @@ class NocturneWriter {
         </section>
       </div>
     `;
+  }
+
+  confirmDeleteMacro(index) {
+    const macro = this.state.settings.macros?.[index];
+    if (!macro) return;
+    const overlay = document.getElementById('form-overlay');
+    this.presentOverlay(overlay, `
+      <div class="form-modal confirm-modal">
+        <div class="confirm-icon"><i class="bx bx-trash"></i></div>
+        <h2>Удалить макрос?</h2>
+        <p>Сочетание «${escapeHtml(macro.keys)}» больше не будет вставлять «${escapeHtml(macro.value)}».</p>
+        <div class="form-actions">
+          <button class="pill-btn" data-close-form>Отмена</button>
+          <button class="pill-btn danger-btn" data-confirm-delete-macro>Удалить</button>
+        </div>
+      </div>
+    `);
+    overlay.classList.add('active');
+    overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
+    overlay.querySelector('[data-confirm-delete-macro]').onclick = () => {
+      overlay.classList.remove('active');
+      const row = [...document.querySelectorAll('.macro-item')][index];
+      const remove = () => {
+        const current = this.state.settings.macros?.indexOf(macro) ?? -1;
+        if (current < 0) return;
+        this.state.settings.macros.splice(current, 1);
+        this.persistSettings();
+        this.renderMacrosListOnly();
+        this.toast('Макрос удалён.');
+      };
+      if (row) this.animateShatter(row, remove);
+      else remove();
+    };
   }
 
   renderMacrosListOnly() {
@@ -20165,6 +20270,7 @@ class NocturneWriter {
       this.state.settings[key] = !this.state.settings[key];
       control.classList.toggle('on', this.state.settings[key]);
       control.classList.toggle('active', this.state.settings[key]);
+      if (control.hasAttribute('aria-checked')) control.setAttribute('aria-checked', String(this.state.settings[key]));
     } else if (control.type === 'checkbox') {
       this.state.settings[key] = !!control.checked;
     } else if (control.type === 'range') {
@@ -20482,8 +20588,10 @@ class NocturneWriter {
     shell.classList.toggle('compact', s.compactPanels);
     document.body.classList.toggle('compact', s.compactPanels);
     shell.classList.toggle('glow-enabled', s.cursorGlow);
-    shell.classList.toggle('theme-experimental', !!s.experimentalDesign);
-    document.body.classList.toggle('theme-experimental', !!s.experimentalDesign);
+    document.body.classList.toggle('compact-kb-sidebar', !!s.compactKbSidebar);
+    document.body.classList.toggle('compact-toolbar', !!s.compactToolbar);
+    document.body.classList.toggle('compact-settings', !!s.compactSettings);
+    document.body.classList.toggle('compact-notes', !!s.compactNotes);
     shell.classList.toggle('indent-paragraphs', s.paragraphIndent);
     shell.classList.toggle('baseline-grid', s.baselineGrid);
     shell.classList.toggle('flexible-pages', !s.autoPaginate);
@@ -21888,6 +21996,9 @@ ${raw}`;
       mobileStandaloneUser: /^[ \t\u00A0]*(?!(?:[Гг]лава|[Сс]цена|[Зз]аметка|[Ии]дея|[Вв]опрос|[Оо]твет|[Оо]писание|[Вв]ажно|[Пп]римечание|[Вв]нимание|[Сс]уть|[Ии]тог|[Вв]ывод|[Пп]ример|[Шш]аг|[Ии]нгредиенты|[Пп]ерсонажи|[Кк]онтекст|[Сс]южет|[Cc]hapter|[Ss]cene|[Nn]ote|[Ii]dea|[Qq]uestion|[Aa]nswer|[Dd]escription|[Ii]mportant|[Aa]ttention|[Ss]ummary|[Cc]onclusion|[Ee]xample|[Ss]tep|[Ii]ngredients|[Cc]haracters|[Cc]ontext|[Pp]lot|[Ww]arning|[Ii]nfo|[Tt]odo|[Dd]raft|[Ff]ix|[Uu]pd|[Pp]\.[Ss])(?![a-zA-Z0-9_а-яА-ЯёЁ]))(?!\d+(?![a-zA-Z0-9_а-яА-ЯёЁ]))(([^:\r\n\s\.\?!,]+(?:\s+[^:\r\n\s\.\?!,]+)?)(?:\s+(?:in\s+reply\s+to|в\s+ответ\s+(?:на)?)\s+([^:\r\n]+))?:\s*)$/i,
       forwardHeader: /^[ \t\u00A0]*(\[?(?:Forwarded\s+from|Переслано\s+от|Forwarded\s+Message|Пересланное\s+сообщение)\s+[^\]\r\n]+\]?:?\s*)$/i,
       replyHeader: /^[ \t\u00A0]*(\[?(?:in\s+reply\s+to|в\s+ответ\s+(?:на)?)\s+[^\]\r\n]+\]?:?\s*)$/i,
+      mobileNoCommaHeader: /^\s*([^:\[\]\r\n]{1,100}?)\s+\[(?:\d{1,4}[./-]\d{1,2}[./-]\d{2,4})[,\s]+\d{1,2}:\d{2}(?::\d{2})?\](?::\s*|\s+(?=\S)|\s*$)/i,
+      pcHeaderNoColon: /^\s*(\[\d{1,4}[./-]\d{1,2}[./-]\d{2,4}[,\s]+\d{1,2}:\d{2}(?::\d{2})?\]\s+[^:\[\]\r\n]{1,100})\s*$/i,
+      standaloneTimestamp: /^\s*(\[?\d{1,4}[./-]\d{1,2}[./-]\d{2,4}[,\s]+\d{1,2}:\d{2}(?::\d{2})?\]?)\s*$/i,
     };
   }
 
@@ -21895,13 +22006,17 @@ ${raw}`;
     if (!text) return [];
     const matches = [];
     const lines = text.split(/\r?\n/);
+    const normalizedLines = lines.map(line => line.replace(/[\u200B\u200E\u200F\uFEFF\u202F]/g, ' '));
     const regexes = this.getCleanerRegexes();
+    const hasTelegramContext = normalizedLines.some(line => regexes.pcHeader.test(line) || regexes.mobileTimestampHeader.test(line) || regexes.mobileNoCommaHeader.test(line) || regexes.pcHeaderNoColon.test(line) || regexes.forwardHeader.test(line) || regexes.replyHeader.test(line));
+    const standaloneUsers = normalizedLines.filter(line => regexes.mobileStandaloneUser.test(line)).length;
+    const allowStandaloneUsers = hasTelegramContext || standaloneUsers >= 2;
 
-    const plainTextLines = lines
+    const plainTextLines = normalizedLines
       .filter(line => {
         const trimmed = line.trim();
         if (!trimmed) return false;
-        if (regexes.pcHeader.test(trimmed) || regexes.mobileTimestampHeader.test(trimmed) || regexes.mobileStandaloneUser.test(trimmed) || regexes.forwardHeader.test(trimmed) || regexes.replyHeader.test(trimmed)) return false;
+        if (regexes.pcHeader.test(trimmed) || regexes.mobileTimestampHeader.test(trimmed) || regexes.mobileNoCommaHeader.test(trimmed) || regexes.pcHeaderNoColon.test(trimmed) || regexes.standaloneTimestamp.test(trimmed) || (allowStandaloneUsers && regexes.mobileStandaloneUser.test(trimmed)) || regexes.forwardHeader.test(trimmed) || regexes.replyHeader.test(trimmed)) return false;
         if (trimmed.startsWith('>')) return false;
         return true;
       })
@@ -21910,17 +22025,20 @@ ${raw}`;
     let lastWasHeader = false;
     let lastHeaderWasReply = false;
 
-    lines.forEach((line, idx) => {
+    normalizedLines.forEach((line, idx) => {
       const trimmed = line.trim();
       if (!trimmed) return;
 
       const pcMatch = line.match(regexes.pcHeader);
       const mobileTsMatch = !pcMatch ? line.match(regexes.mobileTimestampHeader) : null;
-      const forwardMatch = !pcMatch && !mobileTsMatch ? line.match(regexes.forwardHeader) : null;
-      const replyMatch = !pcMatch && !mobileTsMatch && !forwardMatch ? line.match(regexes.replyHeader) : null;
-      const mobileUserMatch = !pcMatch && !mobileTsMatch && !forwardMatch && !replyMatch ? line.match(regexes.mobileStandaloneUser) : null;
+      const mobileNoCommaMatch = !pcMatch && !mobileTsMatch ? line.match(regexes.mobileNoCommaHeader) : null;
+      const pcNoColonMatch = !pcMatch && !mobileTsMatch && !mobileNoCommaMatch ? line.match(regexes.pcHeaderNoColon) : null;
+      const forwardMatch = !pcMatch && !mobileTsMatch && !mobileNoCommaMatch && !pcNoColonMatch ? line.match(regexes.forwardHeader) : null;
+      const replyMatch = !pcMatch && !mobileTsMatch && !mobileNoCommaMatch && !pcNoColonMatch && !forwardMatch ? line.match(regexes.replyHeader) : null;
+      const timestampMatch = hasTelegramContext && !pcMatch && !mobileTsMatch && !mobileNoCommaMatch && !pcNoColonMatch && !forwardMatch && !replyMatch ? line.match(regexes.standaloneTimestamp) : null;
+      const mobileUserMatch = allowStandaloneUsers && !pcMatch && !mobileTsMatch && !mobileNoCommaMatch && !pcNoColonMatch && !forwardMatch && !replyMatch && !timestampMatch ? line.match(regexes.mobileStandaloneUser) : null;
 
-      if (pcMatch || mobileTsMatch || forwardMatch || replyMatch || mobileUserMatch) {
+      if (pcMatch || mobileTsMatch || mobileNoCommaMatch || pcNoColonMatch || forwardMatch || replyMatch || timestampMatch || mobileUserMatch) {
         const isReply = replyMatch || /in\s+reply\s+to|в\s+ответ/i.test(trimmed);
         let type = 'pc';
         let rawHeader = '';
@@ -21937,12 +22055,23 @@ ${raw}`;
           rawHeader = mobileTsMatch[1];
           isInline = mobileTsMatch[0].length < line.trimEnd().length;
           headerLength = mobileTsMatch[0].length;
+        } else if (mobileNoCommaMatch) {
+          type = 'mobile';
+          rawHeader = mobileNoCommaMatch[0];
+          isInline = mobileNoCommaMatch[0].length < line.trimEnd().length;
+          headerLength = mobileNoCommaMatch[0].length;
+        } else if (pcNoColonMatch) {
+          type = 'pc';
+          rawHeader = pcNoColonMatch[1];
         } else if (forwardMatch) {
           type = 'forward';
           rawHeader = forwardMatch[1];
         } else if (replyMatch) {
           type = 'reply';
           rawHeader = replyMatch[1];
+        } else if (timestampMatch) {
+          type = 'mobile';
+          rawHeader = timestampMatch[1];
         } else if (mobileUserMatch) {
           type = isReply ? 'mobile_reply' : 'mobile';
           rawHeader = mobileUserMatch[1];
@@ -21954,6 +22083,7 @@ ${raw}`;
           lineIndex: idx,
           isInline,
           headerLength,
+          cleanLine: line,
         });
 
         lastWasHeader = true;
@@ -21967,7 +22097,7 @@ ${raw}`;
         const followsHeader = lastWasHeader;
         const isDuplicateContent = quoteContentLower.length > 2 && plainTextLines.some(plain => plain.includes(quoteContentLower) || quoteContentLower.includes(plain));
 
-        if (followsHeader || isDuplicateContent) {
+        if (hasTelegramContext && (followsHeader || isDuplicateContent)) {
           matches.push({
             type: 'reply_quote',
             raw: line,
@@ -22004,7 +22134,7 @@ ${raw}`;
       }
 
       if (match.isInline && match.headerLength > 0) {
-        const remainder = line.slice(match.headerLength);
+        const remainder = (match.cleanLine || line).slice(match.headerLength);
         if (remainder.trim()) {
           cleanedLines.push(remainder);
         }
@@ -23206,8 +23336,7 @@ ${raw}`;
   }
 
   kbViewTools() {
-    const compact = this.state.settings.cardView === 'list';
-    return `<div class="kb-view-tools"><button class="pill-btn" data-action="edit-world-rules"><i class="bx bx-book-content"></i> Правила мира</button><button class="pill-btn" data-action="toggle-card-view" aria-pressed="${compact}"><i class="bx ${compact ? 'bx-grid-alt' : 'bx-list-ul'}"></i> ${compact ? 'Карточки' : 'Компактный вид'}</button></div>`;
+    return '';
   }
 
   editWorldRules() {

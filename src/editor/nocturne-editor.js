@@ -743,10 +743,6 @@ export class NocturneEditorBridge {
         },
         handleDOMEvents: {
           keydown: (view, event) => {
-            const settings = this.getSettings?.() || {};
-            if (settings.typewriterSound && !event.ctrlKey && !event.altKey && !event.metaKey) {
-              this.playTypewriterSound();
-            }
             this.onKeydown?.(event);
             return false;
           },
@@ -898,33 +894,6 @@ export class NocturneEditorBridge {
         scrollContainer._twAnim = requestAnimationFrame(animate);
       }
     });
-  }
-
-  playTypewriterSound() {
-    if (!this.audioCtx) {
-      this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    const ctx = this.audioCtx;
-    if (ctx.state === 'suspended') ctx.resume();
-    
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    
-    // Soft, rounded click sound (low pitch)
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(300, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.04);
-    
-    // Attack phase (5ms) to prevent speaker popping/cracking, then soft decay
-    gain.gain.setValueAtTime(0, ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.005);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
-    
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.06);
   }
 
   setEditable(paneId, editable) {
