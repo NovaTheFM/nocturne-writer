@@ -273,34 +273,9 @@ class NocturneWriter {
       getMentionIndex: () => this.buildEntityMentionIndex(),
       getActiveBookmarkId: (paneId) => {
         const pane = this.getPane(paneId);
-        if (pane?.type === 'document' && pane.docId) {
-          const doc = this.state.docs.find(d => d.id === pane.docId);
-          if (doc && doc.bookmarks && doc.bookmarks.length) {
-            // Sort bookmarks using the same logic to match indices
-            const editor = this.nocturneEditor?.get(paneId);
-            const sorted = [...doc.bookmarks];
-            const behavior = this.state.settings?.bookmarkBehavior || 'text';
-            if (behavior === 'time') {
-              sorted.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-            } else if (editor) {
-              const blockOrder = [];
-              editor.state.doc.descendants((node) => {
-                if (node.attrs?.blockId) blockOrder.push(node.attrs.blockId);
-              });
-              sorted.sort((a, b) => {
-                const idxA = blockOrder.indexOf(a.start?.blockId);
-                const idxB = blockOrder.indexOf(b.start?.blockId);
-                if (idxA !== idxB) return idxA - idxB;
-                return (a.start?.offset || 0) - (b.start?.offset || 0);
-              });
-            }
-            const currentIndex = this.state.activeBookmarkIndexByPane?.[paneId];
-            if (currentIndex !== undefined && currentIndex >= 0 && currentIndex < sorted.length) {
-              return sorted[currentIndex].id;
-            }
-          }
-        }
-        return null;
+        if (pane?.type !== 'document' || !pane.docId) return null;
+        const id = this.state.activeBookmarkIdByPane?.[paneId];
+        return this.state.docs.find(doc => doc.id === pane.docId)?.bookmarks?.some(bookmark => bookmark.id === id) ? id : null;
       },
       onFocus: (paneId) => {
         if (this.state.workspace?.focusedPaneId !== paneId) this.setFocusedPane(paneId);
@@ -312,6 +287,7 @@ class NocturneWriter {
         this.updateActiveBlock();
         this.updateEditorSelectionState();
         this.updateToolbarState();
+        this.refreshReviewToolbarSelection();
       },
       onVisualPagesCalculated: () => {
         this.renderTypoSvgOverlays();
@@ -1401,7 +1377,7 @@ class NocturneWriter {
 
   floatingMenuAnchorWrapper(key) {
     return {
-      library: document.querySelector('.library-tools'),
+      library: document.querySelector('.sidebar-header-actions'),
       kb: document.getElementById('kb-dropdown'),
       format: document.getElementById('format-dropdown'),
       split: document.getElementById('split-menu-wrap'),
@@ -1580,7 +1556,6 @@ class NocturneWriter {
       if (pane?.type === 'document') {
         this.renderEditor(paneId);
       } else {
-        this.triggerBookmarkAutoJump(paneId);
         this.renderBookmarksMenu(paneId);
       }
     });
@@ -1618,7 +1593,6 @@ class NocturneWriter {
     if (pane?.type === 'document') {
       this.renderEditor(paneId);
     } else {
-      this.triggerBookmarkAutoJump(paneId);
       this.renderBookmarksMenu(paneId);
     }
     this.updateWorkspaceFocusClasses();
@@ -1841,7 +1815,7 @@ class NocturneWriter {
       pane.classList.toggle('active-pane', pane.dataset.paneId === this.state.workspace?.focusedPaneId);
     });
     const isDoc = this.getFocusedPane()?.type === 'document';
-    document.querySelector('.toolbar-center')?.classList.toggle('toolbar-disabled', !isDoc || this.state.reviewMode === 'editor');
+    document.querySelector('.toolbar-center')?.classList.toggle('toolbar-disabled', !isDoc);
     if (!isDoc) {
       window.getSelection()?.removeAllRanges();
       const caret = document.getElementById('custom-caret');
@@ -1854,7 +1828,9 @@ class NocturneWriter {
     document.body.dataset.activeReviewMode = mode;
     delete document.body.dataset.reviewMode;
     document.querySelectorAll('[data-review-mode]').forEach((button) => {
-      button.classList.toggle('active', button.dataset.reviewMode === mode);
+      const active = button.dataset.reviewMode === mode;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', String(active));
     });
     document.querySelectorAll('.page-content').forEach((editable) => {
       const doc = this.state.docs.find((item) => item.id === editable.dataset.docId);
@@ -1871,6 +1847,7 @@ class NocturneWriter {
 
   setReviewMode(mode) {
     if (!['write', 'editor', 'finalization'].includes(mode)) return;
+    if (this.state.reviewMode === mode) return;
     this.state.reviewMode = mode;
     safeSetStorageItem(localStorage, 'nocturne-review-mode', mode);
     this.applyReviewMode();
@@ -1879,12 +1856,7 @@ class NocturneWriter {
     this.renderReviewToolbarSlot();
     this.toast(mode === 'editor' ? 'Режим редактора: текст защищён от ввода.' : mode === 'finalization' ? 'Режим финализации: правки видны и доступны.' : 'Режим письма.', 950);
     
-    if (this.state.workspace?.panes) {
-      for (const paneId of Object.keys(this.state.workspace.panes)) {
-        this.triggerBookmarkAutoJump(paneId);
-        this.renderBookmarksMenu(paneId);
-      }
-    }
+    if (this.state.workspace?.panes) Object.keys(this.state.workspace.panes).forEach((paneId) => this.renderBookmarksMenu(paneId));
   }
 
   setSaveStatus(state, docId = this.getFocusedDoc()?.id || this.state.activeDocId, message = '') {
@@ -3058,11 +3030,14 @@ class NocturneWriter {
         <aside class="sidebar" id="sidebar">
           <div class="sidebar-header">
             <div class="brand"><span class="brand-logo-img"></span> Nocturne</div>
-            <button class="btn-icon" data-action="open-settings" title="Настройки"><i class="bx bx-cog"></i></button>
+            <div class="sidebar-header-actions">
+              <button class="btn-icon sidebar-tools-btn" data-action="toggle-library-menu" title="Инструменты проекта" aria-label="Инструменты проекта" aria-haspopup="menu" aria-controls="library-menu" aria-expanded="false"><i class="bx bx-wrench"></i></button>
+              <button class="btn-icon" data-action="open-settings" title="Настройки" aria-label="Настройки"><i class="bx bx-cog"></i></button>
+            </div>
           </div>
           <div class="docs-container" id="docs-container"></div>
           <div class="sidebar-footer">
-            <div class="library-tools"><button class="pill-btn library-tools-trigger" data-action="toggle-library-menu" aria-haspopup="menu" aria-controls="library-menu" aria-expanded="false"><i class="bx bx-dots-horizontal-rounded"></i><span>Инструменты</span><i class="bx bx-chevron-up"></i></button><button class="btn-icon" data-action="open-sync-panel" title="Связь по Wi-Fi" aria-label="Связь по Wi-Fi"><i class="bx bx-wifi"></i></button></div>
+            <button class="pill-btn sidebar-sync-trigger" data-action="open-sync-panel" title="Связь по Wi-Fi"><i class="bx bx-wifi"></i><span>Связь по Wi-Fi</span></button>
             <div class="goal-label"><span>Цель дня</span><span id="goal-count">0 / 0</span></div>
             <div class="goal-track"><div class="goal-fill" id="goal-fill"></div></div>
           </div>
@@ -3073,27 +3048,30 @@ class NocturneWriter {
               <div class="dropdown-wrapper" id="kb-dropdown">
                 <button class="pill-btn kb-main-btn" data-action="toggle-kb-menu"><i class="bx bx-book-bookmark"></i> <span>База знаний</span> <i class="bx bx-chevron-down"></i></button>
               </div>
-              <div class="tool-divider"></div>
-              <button class="tool-btn" data-command="undo" title="Отменить"><i class="bx bx-undo"></i></button>
-              <button class="tool-btn" data-command="redo" title="Повторить"><i class="bx bx-redo"></i></button>
-              <div class="review-mode-switch" role="group" aria-label="Режим работы">
-                <button type="button" data-review-mode="write">Письмо</button>
-                <button type="button" data-review-mode="editor">Редактор</button>
-                <button type="button" data-review-mode="finalization">Финал</button>
-              </div>
               <div class="save-indicator" id="save-indicator" aria-live="polite"></div>
             </div>
+            <div class="review-mode-switch toolbar-modes" role="group" aria-label="Режим работы">
+              <button type="button" data-review-mode="write" title="Письмо" aria-label="Письмо"><i class="bx bx-pen"></i><span>Письмо</span></button>
+              <button type="button" data-review-mode="editor" title="Редактор: комментарии и предложения без изменения текста" aria-label="Редактор"><i class="bx bx-comment-edit"></i><span>Редактор</span></button>
+              <button type="button" data-review-mode="finalization" title="Финализация: обработка правок и редактирование" aria-label="Финализация"><i class="bx bx-check-double"></i><span>Финализация</span></button>
+            </div>
             <div class="toolbar-center">
-              <div class="review-toolbar-slot" id="review-toolbar-slot"></div>
-              <div class="format-dropdown" id="format-dropdown">
-                <button class="format-button" data-action="toggle-format-menu"><span id="format-label">Обычный текст</span><i class="bx bx-chevron-down"></i></button>
+              <div class="toolbar-history">
+                <button class="tool-btn" data-command="undo" title="Отменить" aria-label="Отменить"><i class="bx bx-undo"></i></button>
+                <button class="tool-btn" data-command="redo" title="Повторить" aria-label="Повторить"><i class="bx bx-redo"></i></button>
               </div>
-              <button class="tool-btn" data-command="bold" title="Жирный"><i class="bx bx-bold"></i></button>
-              <button class="tool-btn" data-command="italic" title="Курсив"><i class="bx bx-italic"></i></button>
-              <div class="tool-divider"></div>
-              <button class="tool-btn" data-command="justifyLeft" title="По левому краю"><i class="bx bx-align-left"></i></button>
-              <button class="tool-btn" data-command="justifyCenter" title="По центру"><i class="bx bx-align-middle"></i></button>
-              <button class="tool-btn" data-command="justifyFull" title="По ширине"><i class="bx bx-align-justify"></i></button>
+              <div class="review-toolbar-slot" id="review-toolbar-slot"></div>
+              <div class="toolbar-formatting">
+                <div class="format-dropdown" id="format-dropdown">
+                  <button class="format-button" data-action="toggle-format-menu"><span id="format-label">Обычный текст</span><i class="bx bx-chevron-down"></i></button>
+                </div>
+                <button class="tool-btn" data-command="bold" title="Жирный"><i class="bx bx-bold"></i></button>
+                <button class="tool-btn" data-command="italic" title="Курсив"><i class="bx bx-italic"></i></button>
+                <div class="tool-divider"></div>
+                <button class="tool-btn" data-command="justifyLeft" title="По левому краю"><i class="bx bx-align-left"></i></button>
+                <button class="tool-btn" data-command="justifyCenter" title="По центру"><i class="bx bx-align-middle"></i></button>
+                <button class="tool-btn" data-command="justifyFull" title="По ширине"><i class="bx bx-align-justify"></i></button>
+              </div>
               <div class="tool-divider"></div>
               <div class="search-menu-wrap" id="search-menu-wrap">
                 <button class="tool-btn" data-action="toggle-search-menu" title="Поиск и замена"><i class="bx bx-search-alt"></i></button>
@@ -3567,12 +3545,13 @@ class NocturneWriter {
           this.updateEditorSelectionState();
           this.updateActiveBlock();
           this.updateToolbarState();
+          this.refreshReviewToolbarSelection();
 
           // Clear active bookmark on user-initiated cursor/selection movement
           if (!this._isJumpingToBookmark) {
             const focusedPaneId = this.state.workspace?.focusedPaneId;
-            if (focusedPaneId && this.state.activeBookmarkIndexByPane && this.state.activeBookmarkIndexByPane[focusedPaneId] !== undefined) {
-              delete this.state.activeBookmarkIndexByPane[focusedPaneId];
+            if (focusedPaneId && this.state.activeBookmarkIdByPane?.[focusedPaneId]) {
+              delete this.state.activeBookmarkIdByPane[focusedPaneId];
               this.updateBookmarkHighlights();
             }
           }
@@ -3847,7 +3826,7 @@ class NocturneWriter {
       input?.dispatchEvent(new Event('change', { bubbles: true }));
       return;
     }
-    const insideFloatingMenu = event.target.closest?.('#floating-menu-portal, .library-tools, #floating-note-menu-wrap, #split-menu-wrap, #kb-dropdown, #format-dropdown, #search-menu-wrap, .review-issue-dropdown, #app-context-menu, #doc-search-panel, #search-navigator, .doc-context-menu, .doc-menu-btn');
+    const insideFloatingMenu = event.target.closest?.('#floating-menu-portal, .sidebar-header-actions, #floating-note-menu-wrap, #split-menu-wrap, #kb-dropdown, #format-dropdown, #search-menu-wrap, .review-issue-dropdown, #app-context-menu, #doc-search-panel, #search-navigator, .doc-context-menu, .doc-menu-btn');
     if (!insideFloatingMenu) {
       this.closeAllFloatingMenus();
     }
@@ -6557,11 +6536,9 @@ class NocturneWriter {
       this.closeContextMenu();
       return;
     } else if (action === 'context-review-comment') {
-      this.closeContextMenu();
       this.openReviewCommentForm();
       return;
     } else if (action === 'context-review-suggestion') {
-      this.closeContextMenu();
       this.openReviewSuggestionForm();
       return;
     } else if (action === 'context-review-issue') {
@@ -10718,7 +10695,6 @@ class NocturneWriter {
     this.updateActiveBlock();
     this.disableBrowserSpellcheck();
     this.applyReviewMode();
-    this.triggerBookmarkAutoJump(paneId);
     this.renderBookmarksMenu(paneId);
     this.renderReviewNavigator();
     this.updateReviewHighlights();
@@ -11635,18 +11611,18 @@ class NocturneWriter {
     };
   }
 
-  async addBookmarkFromContext() {
-    const ctx = this.state.contextMenu;
+  async addBookmarkFromContext(overrideContext = null) {
+    const ctx = overrideContext || this.state.contextMenu;
     if (!ctx) return;
     
     const paneEl = document.querySelector(`.workspace-pane[data-pane-id="${ctx.paneId}"]`);
-    let range = null;
+    let range = overrideContext?.range || null;
     const selection = window.getSelection();
-    const hasSelection = selection && !selection.isCollapsed && ctx.selectedText;
+    const hasSelection = !overrideContext && selection && !selection.isCollapsed && ctx.selectedText;
     
     if (hasSelection) {
       range = this.restoreContextRange();
-    } else if (typeof ctx.x === 'number' && typeof ctx.y === 'number') {
+    } else if (!overrideContext && typeof ctx.x === 'number' && typeof ctx.y === 'number') {
       if (document.caretRangeFromPoint) {
         range = document.caretRangeFromPoint(ctx.x, ctx.y);
       } else if (document.caretPositionFromPoint) {
@@ -11662,18 +11638,31 @@ class NocturneWriter {
       }
     }
     
-    if (!range) {
+    if (!range && !overrideContext) {
       range = this.restoreContextRange();
     }
     
     if (ctx.docId) {
       const doc = this.state.docs.find(d => d.id === ctx.docId);
       if (!doc) return;
+      const editor = this.nocturneEditor?.get(ctx.paneId);
+      if (!editor?.state.doc.textContent.trim()) {
+        this.toast('Сначала добавьте текст в документ.');
+        return;
+      }
       
       const bookmarkAnchor = this.serializeRangeToBookmarkAnchor(range, ctx.paneId, ctx.docId);
       if (!bookmarkAnchor) return;
       
       doc.bookmarks = doc.bookmarks || [];
+      const existing = doc.bookmarks.find(bookmark => bookmark.start?.blockId === bookmarkAnchor.start.blockId && bookmark.start?.offset === bookmarkAnchor.start.offset && bookmark.quote === bookmarkAnchor.quote);
+      if (existing) {
+        this.state.activeBookmarkIdByPane ||= {};
+        this.state.activeBookmarkIdByPane[ctx.paneId] = existing.id;
+        this.renderBookmarksMenu(ctx.paneId);
+        this.toast('Здесь уже есть закладка.');
+        return;
+      }
       const bookmark = {
         id: uid('bookmark'),
         createdAt: Date.now(),
@@ -11684,49 +11673,35 @@ class NocturneWriter {
       await this.db.put('docs', doc);
       this.toast('Закладка установлена в документе.');
       
-      // Auto-select the newly created bookmark
-      this.state.activeBookmarkIndexByPane = this.state.activeBookmarkIndexByPane || {};
-      const sorted = [...doc.bookmarks];
-      const behavior = this.state.settings?.bookmarkBehavior || 'text';
-      if (behavior === 'time') {
-        sorted.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-      } else {
-        const editor = this.nocturneEditor?.get(ctx.paneId);
-        if (editor) {
-          const blockOrder = [];
-          editor.state.doc.descendants((node) => {
-            if (node.attrs?.blockId) blockOrder.push(node.attrs.blockId);
-          });
-          sorted.sort((a, b) => {
-            const idxA = blockOrder.indexOf(a.start?.blockId);
-            const idxB = blockOrder.indexOf(b.start?.blockId);
-            if (idxA !== idxB) return idxA - idxB;
-            return (a.start?.offset || 0) - (b.start?.offset || 0);
-          });
-        }
-      }
-      const newIdx = sorted.findIndex(b => b.id === bookmark.id);
-      if (newIdx >= 0) {
-        this.state.activeBookmarkIndexByPane[ctx.paneId] = newIdx;
-      }
+      this.state.activeBookmarkIdByPane ||= {};
+      this.state.activeBookmarkIdByPane[ctx.paneId] = bookmark.id;
       
       this.renderBookmarksMenu(ctx.paneId);
     } else if (ctx.noteId) {
       const note = (this.state.lore.notes || []).find(n => n.id === ctx.noteId);
       if (!note) return;
+      if (!note.body?.trim()) {
+        this.toast('Сначала добавьте текст в запись.');
+        return;
+      }
+      const noteBodyEl = paneEl?.querySelector('.lore-detail.note-detail .lore-detail-main p');
+      if (!range || !noteBodyEl?.contains(range.startContainer)) {
+        this.toast('Выделите место в тексте записи.');
+        return;
+      }
       
       let quote = ctx.selectedText || '';
       let offset = 0;
       
       if (range) {
-        const noteBodyEl = paneEl?.querySelector('.lore-detail.note-detail .lore-detail-main p');
         if (noteBodyEl && noteBodyEl.contains(range.startContainer)) {
           const pre = range.cloneRange();
           pre.selectNodeContents(noteBodyEl);
           pre.setEnd(range.startContainer, range.startOffset);
-          offset = pre.toString().length;
+          const precedingContent = pre.cloneContents();
+          offset = (precedingContent.textContent || '').length + precedingContent.querySelectorAll('br').length;
           if (!quote) {
-            const fullText = noteBodyEl.textContent || '';
+            const fullText = note.body || '';
             quote = fullText.slice(offset, offset + 1);
             if (!quote && offset > 0) {
               quote = fullText.slice(offset - 1, offset);
@@ -11742,6 +11717,14 @@ class NocturneWriter {
       if (!quote) quote = ' ';
       
       note.bookmarks = note.bookmarks || [];
+      const existing = note.bookmarks.find(bookmark => bookmark.offset === offset && bookmark.quote === quote);
+      if (existing) {
+        this.state.activeBookmarkIdByPane ||= {};
+        this.state.activeBookmarkIdByPane[ctx.paneId] = existing.id;
+        this.renderBookmarksMenu(ctx.paneId);
+        this.toast('Здесь уже есть закладка.');
+        return;
+      }
       const bookmark = {
         id: uid('bookmark'),
         quote: quote,
@@ -11753,16 +11736,28 @@ class NocturneWriter {
       await this.saveLore();
       this.toast('Закладка установлена в заметке.');
       
-      // Auto-select the newly created bookmark
-      this.state.activeBookmarkIndexByPane = this.state.activeBookmarkIndexByPane || {};
-      const sorted = [...note.bookmarks].sort((a, b) => (a.offset || 0) - (b.offset || 0));
-      const newIdx = sorted.findIndex(b => b.id === bookmark.id);
-      if (newIdx >= 0) {
-        this.state.activeBookmarkIndexByPane[ctx.paneId] = newIdx;
-      }
+      this.state.activeBookmarkIdByPane ||= {};
+      this.state.activeBookmarkIdByPane[ctx.paneId] = bookmark.id;
       
       this.renderBookmarksMenu(ctx.paneId);
     }
+  }
+
+  async addBookmarkAtCurrentPosition(paneId) {
+    const pane = this.getPane(paneId);
+    if (!pane || !['document', 'note-detail'].includes(pane.type)) return;
+    const paneEl = document.querySelector(`.workspace-pane[data-pane-id="${paneId}"]`);
+    const noteBody = paneEl?.querySelector('.lore-detail.note-detail .lore-detail-main p');
+    const selection = window.getSelection();
+    const selectedRange = pane.type === 'note-detail' && selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
+    const range = selectedRange && noteBody?.contains(selectedRange.startContainer) ? selectedRange : null;
+    await this.addBookmarkFromContext({
+      paneId,
+      docId: pane.type === 'document' ? pane.docId : null,
+      noteId: pane.type === 'note-detail' ? pane.entityId : null,
+      selectedText: range && !range.collapsed ? range.toString() : '',
+      range,
+    });
   }
 
   confirmDeleteBookmark(bookmarkId) {
@@ -11791,6 +11786,9 @@ class NocturneWriter {
 
   async deleteBookmark(bookmarkId) {
     let found = false;
+    Object.keys(this.state.activeBookmarkIdByPane || {}).forEach(paneId => {
+      if (this.state.activeBookmarkIdByPane[paneId] === bookmarkId) delete this.state.activeBookmarkIdByPane[paneId];
+    });
     
     // 1. Search docs
     for (const doc of this.state.docs) {
@@ -11821,39 +11819,6 @@ class NocturneWriter {
       });
     }
     this.updateBookmarkHighlights();
-  }
-
-  getAutoJumpBookmark(bookmarks, editorOrText, isDocument) {
-    if (!bookmarks || !bookmarks.length) return null;
-    
-    const behavior = this.state.settings?.bookmarkBehavior || 'text';
-    const sorted = [...bookmarks];
-    
-    if (behavior === 'time') {
-      sorted.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-      return sorted[sorted.length - 1];
-    }
-    
-    // Behavior is 'text'
-    if (isDocument && editorOrText) {
-      const blockOrder = [];
-      editorOrText.state.doc.descendants((node) => {
-        if (node.attrs?.blockId) blockOrder.push(node.attrs.blockId);
-      });
-      sorted.sort((a, b) => {
-        const idxA = blockOrder.indexOf(a.start?.blockId);
-        const idxB = blockOrder.indexOf(b.start?.blockId);
-        if (idxA !== idxB) return idxA - idxB;
-        return (a.start?.offset || 0) - (b.start?.offset || 0);
-      });
-      return sorted[sorted.length - 1];
-    } else if (!isDocument) {
-      sorted.sort((a, b) => (a.offset || 0) - (b.offset || 0));
-      return sorted[sorted.length - 1];
-    }
-    
-    sorted.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-    return sorted[sorted.length - 1];
   }
 
   jumpToDocumentBookmark(paneId, bookmark) {
@@ -11934,254 +11899,143 @@ class NocturneWriter {
     }
   }
 
-  triggerBookmarkAutoJump(paneId) {
-    if (this.state.reviewMode !== 'editor') return;
-    
-    const pane = this.state.workspace?.panes?.[paneId];
-    if (!pane) return;
-    
-    this.state.activeBookmarkIndexByPane = this.state.activeBookmarkIndexByPane || {};
-    
-    if (pane.type === 'document' && pane.docId) {
-      const doc = this.state.docs.find(d => d.id === pane.docId);
-      if (doc && doc.bookmarks && doc.bookmarks.length) {
-        const editor = this.nocturneEditor?.get(paneId);
-        if (editor) {
-          const targetBookmark = this.getAutoJumpBookmark(doc.bookmarks, editor, true);
-          if (targetBookmark) {
-            const sorted = [...doc.bookmarks];
-            const behavior = this.state.settings?.bookmarkBehavior || 'text';
-            if (behavior === 'time') {
-              sorted.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-            } else {
-              const blockOrder = [];
-              editor.state.doc.descendants((node) => {
-                if (node.attrs?.blockId) blockOrder.push(node.attrs.blockId);
-              });
-              sorted.sort((a, b) => {
-                const idxA = blockOrder.indexOf(a.start?.blockId);
-                const idxB = blockOrder.indexOf(b.start?.blockId);
-                if (idxA !== idxB) return idxA - idxB;
-                return (a.start?.offset || 0) - (b.start?.offset || 0);
-              });
-            }
-            const idx = sorted.findIndex(x => x.id === targetBookmark.id);
-            if (idx >= 0) {
-              this.state.activeBookmarkIndexByPane[paneId] = idx;
-            }
-            this.jumpToDocumentBookmark(paneId, targetBookmark);
-          }
-        }
-      }
-    } else if (pane.type === 'note-detail' && pane.entityId) {
-      const note = (this.state.lore.notes || []).find(n => n.id === pane.entityId);
-      if (note && note.bookmarks && note.bookmarks.length) {
-        const targetBookmark = this.getAutoJumpBookmark(note.bookmarks, null, false);
-        if (targetBookmark) {
-          const sorted = [...note.bookmarks].sort((a, b) => (a.offset || 0) - (b.offset || 0));
-          const idx = sorted.findIndex(x => x.id === targetBookmark.id);
-          if (idx >= 0) {
-            this.state.activeBookmarkIndexByPane[paneId] = idx;
-          }
-          setTimeout(() => {
-            this.jumpToNoteBookmark(paneId, targetBookmark);
-          }, 100);
-        }
-      }
-    }
-  }
-
   renderBookmarksMenu(paneId) {
     const paneEl = document.querySelector(`.workspace-pane[data-pane-id="${paneId}"]`);
     if (!paneEl) return;
-    
-    // Remove existing widget
+    const wasOpen = !!paneEl.querySelector('.pane-bookmarks-dropdown.active');
     paneEl.querySelector('.pane-bookmarks-widget')?.remove();
-    
+    paneEl.querySelector('.pane-bookmarks-dropdown')?.remove();
     const pane = this.getPane(paneId);
-    if (!pane?.type) return;
-    
-    let bookmarks = [];
-    let isDoc = false;
-    let doc = null;
-    let note = null;
-    
-    if (pane.type === 'document' && pane.docId) {
-      doc = this.state.docs.find(d => d.id === pane.docId);
-      if (doc) {
-        bookmarks = doc.bookmarks || [];
-        isDoc = true;
-      }
-    } else if (pane.type === 'note-detail' && pane.entityId) {
-      note = (this.state.lore.notes || []).find(n => n.id === pane.entityId);
-      if (note) {
-        bookmarks = note.bookmarks || [];
-        isDoc = false;
-      }
-    }
-    
-    // Sort bookmarks to match settings flow order
+    const header = paneEl.querySelector('.workspace-pane-header');
+    const actions = header?.querySelector('.pane-header-actions');
+    if (!actions || !['document', 'note-detail'].includes(pane?.type)) return;
+    const isDoc = pane.type === 'document';
+    const source = isDoc ? this.state.docs.find(doc => doc.id === pane.docId) : (this.state.lore.notes || []).find(note => note.id === pane.entityId);
+    if (!source) return;
+    const bookmarks = [...(source.bookmarks || [])];
     const editor = isDoc ? this.nocturneEditor?.get(paneId) : null;
-    const sortedBookmarks = [...bookmarks];
-    const behavior = this.state.settings?.bookmarkBehavior || 'text';
-    if (behavior === 'time') {
-      sortedBookmarks.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-    } else {
-      if (isDoc && editor) {
-        const blockOrder = [];
-        editor.state.doc.descendants((node) => {
-          if (node.attrs?.blockId) blockOrder.push(node.attrs.blockId);
-        });
-        sortedBookmarks.sort((a, b) => {
-          const idxA = blockOrder.indexOf(a.start?.blockId);
-          const idxB = blockOrder.indexOf(b.start?.blockId);
-          if (idxA !== idxB) return idxA - idxB;
-          return (a.start?.offset || 0) - (b.start?.offset || 0);
-        });
-      } else if (!isDoc) {
-        sortedBookmarks.sort((a, b) => (a.offset || 0) - (b.offset || 0));
-      }
+    if (this.state.settings?.bookmarkBehavior === 'time') {
+      bookmarks.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    } else if (isDoc && editor) {
+      const blockOrder = new Map();
+      editor.state.doc.descendants(node => {
+        if (node.attrs?.blockId) blockOrder.set(node.attrs.blockId, blockOrder.size);
+      });
+      bookmarks.sort((a, b) => ((blockOrder.get(a.start?.blockId) ?? Number.MAX_SAFE_INTEGER) - (blockOrder.get(b.start?.blockId) ?? Number.MAX_SAFE_INTEGER)) || (a.start?.offset || 0) - (b.start?.offset || 0));
+    } else if (!isDoc) {
+      bookmarks.sort((a, b) => (a.offset || 0) - (b.offset || 0));
     }
-    
-    if (!sortedBookmarks.length) {
-      this.updateBookmarkHighlights();
-      return;
-    }
-    
+    this.state.activeBookmarkIdByPane ||= {};
+    const activeId = this.state.activeBookmarkIdByPane[paneId];
+    const activeIndex = bookmarks.findIndex(bookmark => bookmark.id === activeId);
     const widget = document.createElement('div');
     widget.className = 'pane-bookmarks-widget';
-    
-    // Prev Button
-    const prevBtn = document.createElement('button');
-    prevBtn.className = 'pane-bookmarks-nav-btn btn-icon prev';
-    prevBtn.title = 'Предыдущая закладка';
-    prevBtn.innerHTML = '<i class="bx bx-chevron-left"></i>';
-    prevBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.state.activeBookmarkIndexByPane = this.state.activeBookmarkIndexByPane || {};
-      let currentIndex = this.state.activeBookmarkIndexByPane[paneId] ?? 0;
-      currentIndex = (currentIndex - 1 + sortedBookmarks.length) % sortedBookmarks.length;
-      this.state.activeBookmarkIndexByPane[paneId] = currentIndex;
-      const target = sortedBookmarks[currentIndex];
-      if (isDoc) {
-        this.jumpToDocumentBookmark(paneId, target);
-      } else {
-        this.jumpToNoteBookmark(paneId, target);
-      }
-      this.updateBookmarkHighlights();
-    });
-    
-    // Main Bookmark Dropdown Button
-    const button = document.createElement('button');
-    button.className = 'pane-bookmarks-btn btn-icon';
-    button.title = 'Список закладок';
-    this.updateSurfaceHTML(button, `<i class="bx bxs-bookmark"></i><span class="bookmarks-count">${sortedBookmarks.length}</span>`, {});
-    
-    // Next Button
-    const nextBtn = document.createElement('button');
-    nextBtn.className = 'pane-bookmarks-nav-btn btn-icon next';
-    nextBtn.title = 'Следующая закладка';
-    nextBtn.innerHTML = '<i class="bx bx-chevron-right"></i>';
-    nextBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.state.activeBookmarkIndexByPane = this.state.activeBookmarkIndexByPane || {};
-      let currentIndex = this.state.activeBookmarkIndexByPane[paneId] ?? 0;
-      currentIndex = (currentIndex + 1) % sortedBookmarks.length;
-      this.state.activeBookmarkIndexByPane[paneId] = currentIndex;
-      const target = sortedBookmarks[currentIndex];
-      if (isDoc) {
-        this.jumpToDocumentBookmark(paneId, target);
-      } else {
-        this.jumpToNoteBookmark(paneId, target);
-      }
-      this.updateBookmarkHighlights();
-    });
-    
+    const trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'pane-bookmarks-btn';
+    trigger.setAttribute('aria-label', `Закладки: ${bookmarks.length}`);
+    trigger.setAttribute('aria-expanded', String(wasOpen));
+    trigger.setAttribute('aria-controls', `pane-bookmarks-${paneId}`);
+    trigger.innerHTML = `<i class="bx bx-bookmark" aria-hidden="true"></i><span>Закладки</span><span class="bookmarks-count">${bookmarks.length}</span><i class="bx bx-chevron-down" aria-hidden="true"></i>`;
+    widget.appendChild(trigger);
     const dropdown = document.createElement('div');
-    dropdown.className = 'pane-bookmarks-dropdown';
-    
-    // Header
-    const header = document.createElement('div');
-    header.className = 'pane-bookmarks-header';
-    this.updateSurfaceHTML(header, `<strong>Закладки (${sortedBookmarks.length})</strong>`, {});
-    dropdown.appendChild(header);
-    
-    // List
+    dropdown.className = `pane-bookmarks-dropdown${wasOpen ? ' active' : ''}`;
+    dropdown.id = `pane-bookmarks-${paneId}`;
+    dropdown.setAttribute('role', 'region');
+    dropdown.setAttribute('aria-label', 'Закладки');
+    dropdown.setAttribute('aria-hidden', String(!wasOpen));
+    const dropdownHeader = document.createElement('div');
+    dropdownHeader.className = 'pane-bookmarks-header';
+    dropdownHeader.innerHTML = `<strong>Закладки</strong><span class="pane-bookmarks-position">${activeIndex < 0 ? '—' : activeIndex + 1} / ${bookmarks.length}</span>`;
+    const nav = document.createElement('div');
+    nav.className = 'pane-bookmarks-nav';
+    const jumpTo = index => {
+      if (!bookmarks.length) return;
+      const target = bookmarks[index];
+      this.state.activeBookmarkIdByPane[paneId] = target.id;
+      this.renderBookmarksMenu(paneId);
+      if (isDoc) this.jumpToDocumentBookmark(paneId, target);
+      else this.jumpToNoteBookmark(paneId, target);
+      this.updateBookmarkHighlights();
+    };
+    for (const [direction, label, icon] of [[-1, 'Предыдущая закладка', 'bx-chevron-left'], [1, 'Следующая закладка', 'bx-chevron-right']]) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'pane-bookmarks-nav-btn';
+      button.disabled = !bookmarks.length;
+      button.title = label;
+      button.setAttribute('aria-label', label);
+      button.innerHTML = `<i class="bx ${icon}" aria-hidden="true"></i>`;
+      button.addEventListener('click', () => jumpTo(activeIndex < 0 ? (direction < 0 ? bookmarks.length - 1 : 0) : (activeIndex + direction + bookmarks.length) % bookmarks.length));
+      nav.appendChild(button);
+    }
+    dropdownHeader.appendChild(nav);
+    dropdown.appendChild(dropdownHeader);
     const list = document.createElement('div');
     list.className = 'pane-bookmarks-list';
-    
-    sortedBookmarks.forEach((b, index) => {
+    if (!bookmarks.length) list.innerHTML = '<p class="pane-bookmarks-empty">Здесь пока нет закладок. Установите первую в текущем месте текста.</p>';
+    bookmarks.forEach((bookmark, index) => {
       const item = document.createElement('div');
-      item.className = 'pane-bookmarks-item';
-      
-      const textSpan = document.createElement('span');
-      textSpan.className = 'pane-bookmarks-item-text';
-      textSpan.textContent = b.quote || `Закладка ${index + 1}`;
-      textSpan.title = 'Перейти к закладке';
-      textSpan.addEventListener('click', () => {
-        this.state.activeBookmarkIndexByPane = this.state.activeBookmarkIndexByPane || {};
-        this.state.activeBookmarkIndexByPane[paneId] = index;
-        if (isDoc) {
-          this.jumpToDocumentBookmark(paneId, b);
-        } else {
-          this.jumpToNoteBookmark(paneId, b);
-        }
-        dropdown.classList.remove('active');
-        this.updateBookmarkHighlights();
-      });
-      
-      const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'pane-bookmarks-item-delete btn-icon';
-      deleteBtn.title = 'Удалить закладку';
-      deleteBtn.innerHTML = '<i class="bx bx-trash"></i>';
-      deleteBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.confirmDeleteBookmark(b.id);
-      });
-      
-      item.appendChild(textSpan);
-      item.appendChild(deleteBtn);
+      item.className = `pane-bookmarks-item${bookmark.id === activeId ? ' active' : ''}`;
+      const jumpButton = document.createElement('button');
+      jumpButton.type = 'button';
+      jumpButton.className = 'pane-bookmarks-item-text';
+      jumpButton.title = 'Перейти к закладке';
+      jumpButton.textContent = bookmark.quote?.trim() || `Закладка ${index + 1}`;
+      jumpButton.addEventListener('click', () => { dropdown.classList.remove('active'); jumpTo(index); });
+      const deleteButton = document.createElement('button');
+      deleteButton.type = 'button';
+      deleteButton.className = 'pane-bookmarks-item-delete btn-icon';
+      deleteButton.title = 'Удалить закладку';
+      deleteButton.setAttribute('aria-label', `Удалить закладку ${index + 1}`);
+      deleteButton.innerHTML = '<i class="bx bx-trash" aria-hidden="true"></i>';
+      deleteButton.addEventListener('click', () => this.confirmDeleteBookmark(bookmark.id));
+      item.append(jumpButton, deleteButton);
       list.appendChild(item);
     });
-    
     dropdown.appendChild(list);
-    
-    // Toggle dropdown
-    button.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const wasActive = dropdown.classList.contains('active');
-      // Close all other dropdowns
-      document.querySelectorAll('.pane-bookmarks-dropdown').forEach(d => d.classList.remove('active'));
-      if (!wasActive) {
-        dropdown.classList.add('active');
-      }
-    });
-    
-    // Close dropdown on click outside
-    const outsideClickListener = (e) => {
-      if (!widget.contains(e.target)) {
-        dropdown.classList.remove('active');
-      }
+    const addButton = document.createElement('button');
+    addButton.type = 'button';
+    addButton.className = 'pane-bookmarks-add';
+    addButton.innerHTML = '<i class="bx bx-plus" aria-hidden="true"></i><span>Добавить в текущем месте</span>';
+    addButton.addEventListener('pointerdown', event => event.preventDefault());
+    addButton.addEventListener('click', () => this.addBookmarkAtCurrentPosition(paneId));
+    dropdown.appendChild(addButton);
+    const setOpen = open => {
+      dropdown.classList.toggle('active', open);
+      dropdown.setAttribute('aria-hidden', String(!open));
+      trigger.setAttribute('aria-expanded', String(open));
     };
-    document.addEventListener('click', outsideClickListener);
-    // Cleanup event listener when widget is removed
-    const observer = new MutationObserver((mutations, obs) => {
+    trigger.addEventListener('click', event => {
+      event.stopPropagation();
+      const open = !dropdown.classList.contains('active');
+      document.querySelectorAll('.pane-bookmarks-dropdown.active').forEach(element => {
+        element.classList.remove('active');
+        element.setAttribute('aria-hidden', 'true');
+        document.querySelector(`[aria-controls="${element.id}"]`)?.setAttribute('aria-expanded', 'false');
+      });
+      setOpen(open);
+    });
+    const onOutside = event => {
+      if (!widget.contains(event.target) && !dropdown.contains(event.target)) setOpen(false);
+    };
+    const onKeyDown = event => {
+      if (event.key === 'Escape' && dropdown.classList.contains('active')) { setOpen(false); trigger.focus(); }
+    };
+    document.addEventListener('click', onOutside);
+    document.addEventListener('keydown', onKeyDown);
+    const observer = new MutationObserver((_, instance) => {
       if (!paneEl.contains(widget)) {
-        document.removeEventListener('click', outsideClickListener);
-        obs.disconnect();
+        document.removeEventListener('click', onOutside);
+        document.removeEventListener('keydown', onKeyDown);
+        instance.disconnect();
       }
     });
     observer.observe(paneEl, { childList: true, subtree: true });
-    
-    widget.appendChild(prevBtn);
-    widget.appendChild(button);
-    widget.appendChild(nextBtn);
-    widget.appendChild(dropdown);
-    paneEl.appendChild(widget);
-    
+    actions.prepend(widget);
+    paneEl.appendChild(dropdown);
     this.updateBookmarkHighlights();
   }
-
   updateBookmarkHighlights() {
     if (this._updateBookmarkHighlightsTimer) clearTimeout(this._updateBookmarkHighlightsTimer);
     this._updateBookmarkHighlightsTimer = setTimeout(() => {
@@ -12205,33 +12059,28 @@ class NocturneWriter {
         if (pane?.type === 'note-detail' && pane.entityId) {
           const note = (this.state.lore.notes || []).find(n => n.id === pane.entityId);
           if (note) {
-            let bodyText = escapeHtml(note.body || 'Текст записи пуст.').replace(/\n/g, '<br>');
-            const activeIndex = this.state.activeBookmarkIndexByPane?.[paneId];
-            
-            if (note.bookmarks && note.bookmarks.length && this.state.reviewMode !== 'write') {
-              // Sort descending by offset to replace from end to start to prevent offset corruption
-              const sorted = [...note.bookmarks].sort((a, b) => b.offset - a.offset);
-              sorted.forEach((b) => {
-                const escapedQuote = escapeHtml(b.quote);
-                const isActive = activeIndex !== undefined && note.bookmarks[activeIndex]?.id === b.id;
-                const cls = isActive ? 'nocturne-bookmark-range active' : 'nocturne-bookmark-range';
-                
-                const rangeHtml = `<span class="${cls}" data-bookmark-id="${b.id}">${escapedQuote}</span>`;
-                const houseCls = isActive ? 'nocturne-bookmark-house active' : 'nocturne-bookmark-house';
-                const houseHtml = `
-                  <span class="${houseCls}" data-bookmark-id="${b.id}">
-                    <span class="nocturne-bookmark-house-inner">
-                      <svg class="nocturne-bookmark-svg" viewBox="0 0 24 28" width="24" height="28">
-                        <path d="M12,2 L2,12 V24 A2,2 0 0,0 4,26 H20 A2,2 0 0,0 22,24 V12 L12,2 Z" />
-                      </svg>
-                      <button class="nocturne-bookmark-delete-btn" type="button" title="Удалить закладку" onclick="event.stopPropagation(); event.preventDefault(); window.nocturneApp?.confirmDeleteBookmark('${b.id}');">
-                        <i class="bx bx-bookmark"></i>
-                      </button>
-                    </span>
-                  </span>
-                `;
-                bodyText = bodyText.replace(escapedQuote, houseHtml + rangeHtml);
+            const sourceText = note.body || 'Текст записи пуст.';
+            const renderText = value => escapeHtml(value).replace(/\n/g, '<br>');
+            let bodyText = renderText(sourceText);
+            if (note.bookmarks?.length && this.state.reviewMode !== 'write') {
+              let cursor = 0;
+              const pieces = [];
+              const sorted = [...note.bookmarks].sort((a, b) => (a.offset || 0) - (b.offset || 0));
+              sorted.forEach(bookmark => {
+                const quote = bookmark.quote || '';
+                const offset = Math.max(0, Number(bookmark.offset) || 0);
+                const position = sourceText.slice(offset, offset + quote.length) === quote
+                  ? offset : sourceText.indexOf(quote, offset);
+                if (!quote || position < cursor) return;
+                const id = escapeHtml(bookmark.id);
+                const active = this.state.activeBookmarkIdByPane?.[paneId] === bookmark.id ? ' active' : '';
+                pieces.push(renderText(sourceText.slice(cursor, position)));
+                pieces.push(`<span class="nocturne-bookmark-house${active}" data-bookmark-id="${id}"><span class="nocturne-bookmark-house-inner"><svg class="nocturne-bookmark-svg" viewBox="0 0 24 28" width="24" height="28"><path d="M12,2 L2,12 V24 A2,2 0 0,0 4,26 H20 A2,2 0 0,0 22,24 V12 L12,2 Z" /></svg></span></span>`);
+                pieces.push(`<span class="nocturne-bookmark-range${active}" data-bookmark-id="${id}">${renderText(quote)}</span>`);
+                cursor = position + quote.length;
               });
+              pieces.push(renderText(sourceText.slice(cursor)));
+              bodyText = pieces.join('');
             }
             if (noteBodyEl.innerHTML !== bodyText) {
               noteBodyEl.innerHTML = bodyText;
@@ -12242,9 +12091,9 @@ class NocturneWriter {
     }, 50);
   }
 
-  async createReviewMarkFromSelection(kind, category = 'style', options = {}) {
+  async createReviewMarkFromSelection(kind, category = 'style', options = {}, rangeOverride = null) {
     const ctx = this.state.contextMenu;
-    const range = this.restoreContextRange();
+    const range = rangeOverride?.cloneRange() || this.restoreContextRange();
     const docId = ctx?.docId || this.getFocusedDoc()?.id;
     const anchor = this.serializeRangeToReviewAnchor(range, docId);
     if (!anchor || !anchor.quote.trim()) return null;
@@ -12285,6 +12134,7 @@ class NocturneWriter {
   }
 
   openReviewCommentForm() {
+    const range = this.contextSelectionRange?.cloneRange() || (getSelection()?.rangeCount ? getSelection().getRangeAt(0).cloneRange() : null);
     this.closeContextMenu();
     const overlay = document.getElementById('form-overlay');
     this.presentOverlay(overlay, `
@@ -12314,14 +12164,15 @@ class NocturneWriter {
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('#save-review-comment').onclick = async () => {
-      await this.createReviewMarkFromSelection('comment', overlay.querySelector('#review-category').value, { comment: overlay.querySelector('#review-comment').value.trim() });
+      await this.createReviewMarkFromSelection('comment', overlay.querySelector('#review-category').value, { comment: overlay.querySelector('#review-comment').value.trim() }, range);
       overlay.classList.remove('active');
     };
   }
 
   openReviewSuggestionForm() {
     const ctx = this.state.contextMenu;
-    const selectedText = ctx?.selectedText || getSelection()?.toString()?.trim() || '';
+    const range = this.contextSelectionRange?.cloneRange() || (getSelection()?.rangeCount ? getSelection().getRangeAt(0).cloneRange() : null);
+    const selectedText = ctx?.selectedText || range?.toString()?.trim() || '';
     this.closeContextMenu();
     const overlay = document.getElementById('form-overlay');
     this.presentOverlay(overlay, `
@@ -12337,7 +12188,7 @@ class NocturneWriter {
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('#save-review-suggestion').onclick = async () => {
-      await this.createReviewMarkFromSelection('suggestion', 'style', { suggestion: overlay.querySelector('#review-suggestion').value, comment: overlay.querySelector('#review-comment').value.trim() });
+      await this.createReviewMarkFromSelection('suggestion', 'style', { suggestion: overlay.querySelector('#review-suggestion').value, comment: overlay.querySelector('#review-comment').value.trim() }, range);
       overlay.classList.remove('active');
     };
   }
@@ -12375,6 +12226,10 @@ class NocturneWriter {
   }
 
   hasFocusedTextSelection() {
+    const editor = this.nocturneEditor?.get(this.state.workspace?.focusedPaneId || 'primary');
+    if (editor && !editor.state.selection.empty) {
+      return !!editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, ' ').trim();
+    }
     const sel = getSelection();
     if (!sel?.rangeCount || sel.isCollapsed || !String(sel.toString()).trim()) return false;
     const range = sel.getRangeAt(0);
@@ -12383,25 +12238,45 @@ class NocturneWriter {
     return !!editable && editable.dataset.docId === this.getFocusedDoc()?.id;
   }
 
-  renderReviewToolbarSlot(animate = true) {
+  refreshReviewToolbarSelection() {
+    if (this.state.reviewMode !== 'editor') return;
+    const slot = document.getElementById('review-toolbar-slot');
+    if (!slot) return;
+    const enabled = this.hasFocusedTextSelection();
+    if (slot.dataset.selectionReady === String(enabled)) return;
+    slot.dataset.selectionReady = String(enabled);
+    const caption = slot.querySelector('.review-toolbar-caption');
+    if (caption?.lastChild) caption.lastChild.textContent = enabled ? 'Пометки к выделению' : 'Выделите текст для пометки';
+    for (const [action, label] of [
+      ['quick-review-comment', 'Комментарий'],
+      ['quick-review-suggestion', 'Замена'],
+      ['toggle-review-issue-menu', 'Проблема'],
+      ['quick-typo-rule', 'В словарь'],
+    ]) {
+      const button = slot.querySelector(`[data-action="${action}"]`);
+      if (!button) continue;
+      button.disabled = !enabled;
+      button.title = enabled ? label : `${label} — выделите текст`;
+    }
+  }
+
+  renderReviewToolbarSlot() {
     const slot = document.getElementById('review-toolbar-slot');
     if (!slot) return;
     const mode = this.state.reviewMode || 'write';
-    if (animate && slot.__motionReviewMode !== mode) {
-      slot.__motionReviewMode = mode;
-      this.animateLayoutTransition(slot.closest('.toolbar'), () => this.animateHeightTransition(slot, () => this.renderReviewToolbarSlot(false), { width: true }));
-      return;
-    }
     if (mode === 'write') {
       this.updateSurfaceHTML(slot, '', { resize: true });
       slot.className = 'review-toolbar-slot empty';
+      delete slot.dataset.selectionReady;
       return;
     }
     if (mode === 'editor') {
       const enabled = this.hasFocusedTextSelection();
       const disabled = enabled ? '' : 'disabled';
       slot.className = 'review-toolbar-slot editor-tools';
+      slot.dataset.selectionReady = String(enabled);
       this.updateSurfaceHTML(slot, `
+        <span class="review-toolbar-caption"><i class="bx bx-comment-edit"></i>${enabled ? 'Пометки к выделению' : 'Выделите текст для пометки'}</span>
         <button class="review-tool-btn icon-only" data-action="quick-review-comment" title="${enabled ? 'Комментарий' : 'Комментарий — выделите текст'}" aria-label="Комментарий" ${disabled}><i class="bx bx-comment-detail"></i></button>
         <button class="review-tool-btn icon-only" data-action="quick-review-suggestion" title="${enabled ? 'Замена' : 'Замена — выделите текст'}" aria-label="Замена" ${disabled}><i class="bx bx-transfer-alt"></i></button>
         <div class="review-issue-dropdown">
@@ -12415,6 +12290,7 @@ class NocturneWriter {
     const docId = this.getFocusedDoc()?.id;
     const index = Math.min(marks.length - 1, Math.max(0, this.state.currentReviewIndexByDoc[docId] || 0));
     slot.className = 'review-toolbar-slot finalization-tools';
+    delete slot.dataset.selectionReady;
     this.updateSurfaceHTML(slot, marks.length
       ? `<div class="review-toolbar-nav"><button class="review-tool-btn icon-only" data-action="review-prev" title="Предыдущая правка" aria-label="Предыдущая правка"><i class="bx bx-chevron-left"></i></button><span class="review-count">${index + 1} / ${marks.length}</span><button class="review-tool-btn icon-only" data-action="review-next" title="Следующая правка" aria-label="Следующая правка"><i class="bx bx-chevron-right"></i></button></div>`
       : '<span class="review-empty-chip"><i class="bx bx-check-circle"></i>Правок нет</span>', { resize: true });
@@ -12440,9 +12316,9 @@ class NocturneWriter {
     
     this.updateSurfaceHTML(nav, `
       <div class="review-nav-controls">
-        <button data-action="review-prev"><i class="bx bx-chevron-left"></i></button>
+        <button type="button" data-action="review-prev" title="Предыдущая правка" aria-label="Предыдущая правка"><i class="bx bx-chevron-left"></i></button>
         <span>${index + 1} / ${marks.length}</span>
-        <button data-action="review-next"><i class="bx bx-chevron-right"></i></button>
+        <button type="button" data-action="review-next" title="Следующая правка" aria-label="Следующая правка"><i class="bx bx-chevron-right"></i></button>
       </div>
       <div class="review-detail-card">
         <div><span class="review-chip ${mark.category}">${this.reviewCategoryLabel(mark.category)}</span><span class="review-chip">${this.reviewKindLabel(mark.kind)}</span>${mark.source === 'ai' ? '<span class="review-chip">AI</span>' : ''}</div>
@@ -12503,11 +12379,28 @@ class NocturneWriter {
     const snapshot = this.reviewToolbarSelectionSnapshot || this.selectionSnapshot;
     if (snapshot) this.restoreSelectionSnapshot(snapshot);
     if (!this.hasFocusedTextSelection()) return true;
-    this.contextSelectionRange = getSelection().getRangeAt(0).cloneRange();
+    const selection = getSelection();
+    let range = selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
+    if (!range || range.collapsed || !range.toString().trim()) {
+      const editor = this.nocturneEditor?.get(this.state.workspace?.focusedPaneId || 'primary');
+      if (!editor || editor.state.selection.empty) return true;
+      try {
+        const start = editor.view.domAtPos(editor.state.selection.from);
+        const end = editor.view.domAtPos(editor.state.selection.to);
+        range = document.createRange();
+        range.setStart(start.node, start.offset);
+        range.setEnd(end.node, end.offset);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      } catch {
+        return true;
+      }
+    }
+    this.contextSelectionRange = range.cloneRange();
     if (action === 'quick-review-comment') this.openReviewCommentForm();
     if (action === 'quick-review-suggestion') this.openReviewSuggestionForm();
     if (action === 'quick-review-issue') this.createReviewMarkFromSelection('issue', button?.dataset.reviewCategory || 'style');
-    if (action === 'quick-typo-rule') this.openTypoRuleForm(getSelection().toString());
+    if (action === 'quick-typo-rule') this.openTypoRuleForm(range.toString());
     this.closeFloatingMenu('review');
     return true;
   }
@@ -19312,7 +19205,7 @@ class NocturneWriter {
           ${row('Дневная цель слов', 'Количество слов, к которому стремится дневной прогресс в нижней части sidebar.', range('dailyGoal', 100, 10000, 100))}
                               ${row('Show, Don’t Tell анализатор', 'Локально подсвечивает слабые слова и места, где фразу можно показать действием.', toggle('showDontTell'))}
           ${row('Фокус-линза', 'Позволяет временно выделить диалоги или описания и приглушить остальной текст.', select('dialogueLens', [['off', 'Выключено'], ['dialogues', 'Только диалоги'], ['descriptions', 'Только описания']]))}
-          ${row('Поведение закладок', 'Определяет, к какой закладке перемещать автоматически в режиме Чтения, если их несколько.', select('bookmarkBehavior', [['text', 'Последняя по тексту'], ['time', 'Последняя по времени']]))}
+          ${row('Порядок закладок', 'Выберите, как упорядочивать закладки в списке документа и записи.', select('bookmarkBehavior', [['text', 'По тексту'], ['time', 'По времени добавления']]))}
         </div>`,
       ai: `
         <div class="tab-content active">
@@ -19482,7 +19375,7 @@ class NocturneWriter {
       { tab: 'focus', label: 'Дневная цель слов', note: 'Количество слов, к которому стремится дневной прогресс в нижней части sidebar.', key: 'dailyGoal', type: 'range', min: 100, max: 10000, step: 100 },
       { tab: 'focus', label: 'Show, Don’t Tell анализатор', note: 'Локально подсвечивает слабые слова и места, где фразу можно показать действием.', key: 'showDontTell', type: 'toggle' },
       { tab: 'focus', label: 'Фокус-линза', note: 'Позволяет временно выделить диалоги или описания и приглушить остальной текст.', key: 'dialogueLens', type: 'select', options: [['off', 'Выключено'], ['dialogues', 'Только диалоги'], ['descriptions', 'Только описания']] },
-      { tab: 'focus', label: 'Поведение закладок', note: 'Определяет, к какой закладке перемещать автоматически в режиме Чтения, если их несколько.', key: 'bookmarkBehavior', type: 'select', options: [['text', 'Последняя по тексту'], ['time', 'Последняя по времени']] },
+      { tab: 'focus', label: 'Порядок закладок', note: 'Выберите, как упорядочивать закладки в списке документа и записи.', key: 'bookmarkBehavior', type: 'select', options: [['text', 'По тексту'], ['time', 'По времени добавления']] },
       { tab: 'ai', label: 'LLM Provider', note: 'Режим «Не настроен» ничего не генерирует.', key: 'aiProvider', type: 'select', options: [['local', 'Не настроен / без генерации'], ['ollama', 'Ollama'], ['groq', 'Groq free tier'], ['gemini', 'Gemini free tier'], ['openai', 'OpenAI-compatible'], ['anthropic', 'Anthropic-compatible']] },
       { tab: 'ai', label: 'Endpoint', note: 'Адрес API выбранного провайдера.', key: 'aiEndpoint', type: 'input' },
       { tab: 'ai', label: 'API Key', note: 'Ключ хранится локально в настройках браузера.', key: 'aiKey', type: 'input', inputType: 'password' },
