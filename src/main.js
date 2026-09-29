@@ -19777,14 +19777,14 @@ class NocturneWriter {
           <h4>Добавить новый макрос</h4>
           <div class="macro-form-grid">
             <div class="macro-form-field">
-              <label>Сочетание клавиш</label>
+              <label for="new-macro-keys">Сочетание клавиш</label>
               <div class="macro-record-wrapper">
                 <input class="form-control" type="text" id="new-macro-keys" placeholder="Нажмите 'Записать'..." value="${escapeHtml(recordedVal)}" readonly>
                 <button class="pill-btn ${this.macroRecordingState ? 'recording active' : ''}" data-action="macro-record-toggle">${recordBtnText}</button>
               </div>
             </div>
             <div class="macro-form-field">
-              <label>Выводимый символ</label>
+              <label for="new-macro-value">Выводимый символ</label>
               <input class="form-control" type="text" id="new-macro-value" placeholder="Например, « или —" maxlength="50">
             </div>
             <div class="macro-form-field btn-field">
