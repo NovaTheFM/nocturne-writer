@@ -7810,6 +7810,7 @@ class NocturneWriter {
         };
       },
       'close-kb': () => {
+        this.cancelKbEntrance();
         this.state.activeSubtimelineId = null;
         this.state.activeLoreDetail = null;
         this.state.kbReadMode = false;
@@ -8588,16 +8589,7 @@ class NocturneWriter {
             el._isFlippingGrid = false;
             const zone = el.closest('[data-dnd-zone]');
             if (zone && zone._prevPosMap) {
-              const zoneRect = zone.getBoundingClientRect();
-              const newRect = el.getBoundingClientRect();
-              zone._prevPosMap.set(el, {
-                relLeft: newRect.left - zoneRect.left,
-                relTop: newRect.top - zoneRect.top,
-                left: newRect.left,
-                top: newRect.top,
-                width: newRect.width,
-                height: newRect.height
-              });
+              zone._prevPosMap.set(el, { left: el.offsetLeft, top: el.offsetTop });
             }
           });
         }
@@ -8635,15 +8627,7 @@ class NocturneWriter {
       
       const zone = item.element.closest('[data-dnd-zone]');
       if (zone && zone._prevPosMap) {
-        const zoneRect = zone.getBoundingClientRect();
-        zone._prevPosMap.set(item.element, {
-          relLeft: newRect.left - zoneRect.left,
-          relTop: newRect.top - zoneRect.top,
-          left: newRect.left,
-          top: newRect.top,
-          width: newRect.width,
-          height: newRect.height
-        });
+        zone._prevPosMap.set(item.element, { left: item.element.offsetLeft, top: item.element.offsetTop });
       }
 
       return {
@@ -8677,16 +8661,7 @@ class NocturneWriter {
         }
         const zone = item.element.closest('[data-dnd-zone]');
         if (zone && zone._prevPosMap && item.element.parentNode) {
-          const zoneRect = zone.getBoundingClientRect();
-          const r = item.element.getBoundingClientRect();
-          zone._prevPosMap.set(item.element, {
-            relLeft: r.left - zoneRect.left,
-            relTop: r.top - zoneRect.top,
-            left: r.left,
-            top: r.top,
-            width: r.width,
-            height: r.height
-          });
+          zone._prevPosMap.set(item.element, { left: item.element.offsetLeft, top: item.element.offsetTop });
         }
       };
     });
@@ -13072,7 +13047,7 @@ class NocturneWriter {
         } else {
           const added = target.cloneNode(true);
           element.insertBefore(added, element.childNodes[index] || null);
-          if (added.nodeType === Node.ELEMENT_NODE && !added.classList.contains('new-card-entrance') && !(this.kbTransitioning && added.closest('#kb-modal'))) this.animateSurfaceContent(added);
+          if (added.nodeType === Node.ELEMENT_NODE && !added.classList.contains('new-card-entrance') && !(this.kbRendering && added.closest('#kb-modal'))) this.animateSurfaceContent(added);
         }
       }
       for (const node of oldNodes) if (!used.has(node)) {
@@ -13084,7 +13059,7 @@ class NocturneWriter {
     const settingsChanged = element.matches('.settings-body') && element.querySelector('.settings-header h2')?.textContent !== next.querySelector('.settings-header h2')?.textContent;
     if (settingsChanged) this.animateViewChange(element, update);
     else if (structural && element.matches('.sync-mobile-content')) this.animateHeightTransition(element, update);
-    else if (structural && element.matches('.utility-list, .sync-device-list, .docs-list-scroll, .folder-docs, .mobile-folder-docs, .command-group, .command-palette-results, .character-grid, .locations-grid, .timeline-container, .mobile-lore-grid')) this.animateLayoutTransition(element, update);
+    else if (structural && !(this.kbRendering && element.closest('#kb-modal')) && element.matches('.utility-list, .sync-device-list, .docs-list-scroll, .folder-docs, .mobile-folder-docs, .command-group, .command-palette-results, .character-grid, .locations-grid, .timeline-container, .mobile-lore-grid')) this.animateLayoutTransition(element, update);
     else update();
     if (textChanged && !element.closest('input, textarea, [contenteditable="true"], .page-content') && this.isSurfaceVisible(element)) {
       this.runMotion(element, [{ opacity: .6 }, { opacity: 1 }], { channel: 'text', duration: 160, easing: 'ease-out' });
@@ -16275,7 +16250,12 @@ class NocturneWriter {
   }
 
   renderKb() {
-    if (this.kbTransitioning) this.kbMotionGeneration = (this.kbMotionGeneration || 0) + 1;
+    if (this.kbTransitioning) {
+      this.kbMotionGeneration = (this.kbMotionGeneration || 0) + 1;
+      this.cancelKbEntrance();
+      const main = document.querySelector('#kb-modal .kb-main');
+      main?.__nocturneMotions?.get('view')?.animation.cancel();
+    }
     const enterCards = !!this.kbTransitioning;
     const active = this.state.activeKbTab;
     const detail = this.activeLoreDetailItem();
@@ -16326,7 +16306,9 @@ class NocturneWriter {
       });
       const main = document.querySelector('#kb-modal .kb-main');
       if (main) {
-        this.updateSurfaceHTML(main, detail ? this.renderLoreDetail(detail.type, detail.item, this.state.kbReadMode) : `
+        this.kbRendering = true;
+        try {
+          this.updateSurfaceHTML(main, detail ? this.renderLoreDetail(detail.type, detail.item, this.state.kbReadMode) : `
           ${this.kbViewTools()}
           <div class="kb-search-wrap">
             <i class="bx bx-search"></i>
@@ -16378,7 +16360,10 @@ class NocturneWriter {
             <div class="character-grid" data-dnd-zone="notes">${notes.length ? notes.map((item) => this.noteCard(item, true)).join('') : this.emptyStateMarkup('bx-note', 'Записей пока нет.', 'Добавьте первую свободную запись или заметку к миру.', 'new-lore', 'Создать запись', 'data-lore-type="notes"')}</div>
           </section>
           ${activeSubtimeline ? this.subtimelinePanel(activeSubtimeline) : ''}
-        `, { key: `${detail?.item?.id || ''}:${activeSubtimeline?.id || ''}` });
+        `);
+        } finally {
+          this.kbRendering = false;
+        }
         this.kbTransitioning = false;
       }
       if (!detail) {
@@ -16515,31 +16500,60 @@ class NocturneWriter {
   animateKbEntrance(tab) {
     const modal = document.getElementById('kb-modal');
     if (!modal?.classList.contains('active') || this.shouldReduceSurfaceMotion()) return;
-    modal.querySelectorAll('.kb-enter-card').forEach(card => {
+    const section = modal.querySelector(`#kb-sec-${tab}`);
+    if (section) this.animateKbCards(section);
+  }
+
+  cancelKbEntrance() {
+    this.kbEntranceGeneration = (this.kbEntranceGeneration || 0) + 1;
+    const modal = document.getElementById('kb-modal');
+    modal?.querySelectorAll('.kb-enter-card').forEach(card => {
       card.__kbEntranceAnimation?.cancel();
+      card.__kbEntranceAnimation = null;
       card.classList.remove('kb-enter-card');
     });
+    modal?.querySelectorAll('.char-card, .loc-card, .timeline-item').forEach(card => {
+      if (card._activeNocturneAnim) this.cancelElementAnimations(card);
+    });
+    modal?.querySelectorAll('.timeline-line').forEach(line => {
+      line.__timelineConnectorAnimation?.cancel();
+      line.__timelineConnectorAnimation = null;
+    });
+    modal?.querySelectorAll('.timeline-connecting').forEach(zone => zone.classList.remove('timeline-connecting'));
+  }
+
+  animateKbCards(root, { single = false } = {}) {
+    if (!root?.isConnected || this.shouldReduceSurfaceMotion()) return;
     const generation = this.kbEntranceGeneration = (this.kbEntranceGeneration || 0) + 1;
+    const timelineZone = root.matches('.timeline-container') ? root : root.querySelector('.timeline-container');
+    if (timelineZone) timelineZone.classList.add('timeline-connecting');
     requestAnimationFrame(() => {
-      if (generation !== this.kbEntranceGeneration || this.state.activeKbTab !== tab || !modal.classList.contains('active')) return;
-      const section = modal.querySelector(`#kb-sec-${tab}`);
-      const cards = section?.querySelectorAll('.char-card:not(.hidden), .loc-card:not(.hidden), .timeline-item:not(.hidden), .empty-card:not(.hidden)') || [];
-      cards.forEach((card, index) => {
-        card.classList.add('kb-enter-card');
-        const animation = card.animate([
-          { opacity: 0, transform: 'translate3d(0, 16px, 0)' },
-          { opacity: 1, transform: 'translate3d(0, 0, 0)' }
-        ], { duration: 390, delay: Math.min(index, 15) * 48, easing: 'cubic-bezier(.16, 1, .3, 1)', fill: 'backwards' });
-        card.__kbEntranceAnimation = animation;
-        const cleanup = () => {
-          if (card.__kbEntranceAnimation !== animation) return;
-          card.__kbEntranceAnimation = null;
-          card.classList.remove('kb-enter-card');
-        };
-        animation.onfinish = cleanup;
-        animation.oncancel = cleanup;
+      if (generation !== this.kbEntranceGeneration || !root.isConnected) return;
+      const cards = [...root.querySelectorAll('.char-card:not(.hidden), .loc-card:not(.hidden), .timeline-item:not(.hidden), .empty-card:not(.hidden)')];
+      const animations = cards.map((card, index) => this.playKbCardEntrance(card, single ? 0 : index * (timelineZone ? 140 : 105)));
+      if (timelineZone) Promise.all(animations).then(() => {
+        if (generation === this.kbEntranceGeneration && timelineZone.isConnected) this.animateTimelineConnectors(timelineZone);
       });
     });
+  }
+
+  playKbCardEntrance(card, delay = 0) {
+    if (!card?.isConnected || this.shouldReduceSurfaceMotion()) return Promise.resolve();
+    card.__kbEntranceAnimation?.cancel();
+    card.classList.add('kb-enter-card');
+    const animation = card.animate([
+      { opacity: 0, translate: '0 18px' },
+      { opacity: 1, translate: '0 0' }
+    ], { duration: 420, delay, easing: 'cubic-bezier(.16, 1, .3, 1)', fill: 'backwards' });
+    card.__kbEntranceAnimation = animation;
+    const cleanup = () => {
+      if (card.__kbEntranceAnimation !== animation) return;
+      card.__kbEntranceAnimation = null;
+      card.classList.remove('kb-enter-card');
+    };
+    animation.onfinish = cleanup;
+    animation.oncancel = cleanup;
+    return animation.finished.catch(() => {});
   }
 
   activeLoreDetailItem() {
@@ -16950,17 +16964,22 @@ class NocturneWriter {
     const q = (this.state.kbSearch || '').toLowerCase().trim();
     const isSearching = q.length > 0;
     for (const grid of document.querySelectorAll('[data-dnd-zone]')) {
-      this.animateLayoutTransition(grid, () => {
-        for (const el of grid.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card')) {
-          const item = this.loreItemForElement(el);
-          if (!item) continue;
-          const names = item.title ? [item.title] : this.entityMentionValues(item);
-          const titles = (item.chapterIds || []).map(id => this.state.docs.find(doc => doc.id === id)?.title || '');
-          const text = `${names.join(' ')} ${item.date || ''} ${item.body || item.role || ''} ${titles.join(' ')}`;
-          el.classList.toggle('hidden', isSearching && !text.toLowerCase().includes(q));
-          el.toggleAttribute('draggable', !isSearching && !window.Sortable);
-        }
-      });
+      const changed = [];
+      for (const el of grid.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card')) {
+        const item = this.loreItemForElement(el);
+        if (!item) continue;
+        const names = item.title ? [item.title] : this.entityMentionValues(item);
+        const titles = (item.chapterIds || []).map(id => this.state.docs.find(doc => doc.id === id)?.title || '');
+        const text = `${names.join(' ')} ${item.date || ''} ${item.body || item.role || ''} ${titles.join(' ')}`;
+        const hidden = isSearching && !text.toLowerCase().includes(q);
+        if (el.classList.contains('hidden') !== hidden) changed.push([el, hidden]);
+        el.toggleAttribute('draggable', !isSearching && !window.Sortable);
+      }
+      if (changed.length) {
+        const update = () => changed.forEach(([el, hidden]) => el.classList.toggle('hidden', hidden));
+        if (this.isSurfaceVisible(grid)) this.animateLayoutTransition(grid, update);
+        else update();
+      }
       grid.__sortable?.option?.('disabled', isSearching);
       if (grid.matches('[data-dnd-zone="timeline"], [data-dnd-zone="subtimeline"]')) this.updateTimelineConnectors(grid);
     }
@@ -16978,8 +16997,11 @@ class NocturneWriter {
   }
 
   setupKbDragDrop() {
-    this.kbSortables.forEach((sortable) => sortable.destroy?.());
-    this.kbSortables = [];
+    this.kbSortables = this.kbSortables.filter((sortable) => {
+      if (sortable.el?.isConnected) return true;
+      sortable.destroy?.();
+      return false;
+    });
     this.kbResizeZones ||= new Set();
     for (const oldZone of this.kbResizeZones) {
       if (oldZone.isConnected) continue;
@@ -16987,7 +17009,7 @@ class NocturneWriter {
       this.kbResizeZones.delete(oldZone);
     }
     document.querySelectorAll('[data-dnd-zone]').forEach(zone => {
-      this.setupKbSortable(zone);
+      if (!zone.__sortable) this.setupKbSortable(zone);
       this.observeKbGridResize(zone);
     });
   }
@@ -16998,154 +17020,49 @@ class NocturneWriter {
     let prevZoneWidth = zone.clientWidth;
     const prevPosMap = new Map();
     zone._prevPosMap = prevPosMap;
-    let resizeRaf = null;
-
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const currentZoneWidth = entry.contentRect.width;
-        if (Math.abs(currentZoneWidth - prevZoneWidth) < 2) continue;
-        prevZoneWidth = currentZoneWidth;
-        if (currentZoneWidth < 1) { prevPosMap.clear(); continue; }
-
-        if (document.body.classList.contains('sortable-active')) continue;
-
-        if (resizeRaf) cancelAnimationFrame(resizeRaf);
-        resizeRaf = requestAnimationFrame(() => {
-          resizeRaf = null;
-          const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card'))
-            .filter(el => !el.classList.contains('hidden'));
-          if (!cards.length) return;
-
-          const zoneRect = zone.getBoundingClientRect();
-          const cardData = cards.map(card => {
-            const vis = this.getVisualTranslate(card);
-            const rawRect = card.getBoundingClientRect();
-            const relLeft = card.offsetLeft;
-            const relTop = card.offsetTop;
-            const isVisible = rawRect.bottom >= (zoneRect.top - 200) && rawRect.top <= (zoneRect.bottom + 200);
-            return { card, rawRect, relLeft, relTop, width: card.offsetWidth, height: card.offsetHeight, vis, isVisible };
-          });
-
-          cardData.forEach(({ card, rawRect, relLeft, relTop, width, height, vis, isVisible }) => {
-            if (prevPosMap.has(card)) {
-              const prev = prevPosMap.get(card);
-              const dx = (prev.relLeft - relLeft) + vis.x;
-              const dy = (prev.relTop - relTop) + vis.y;
-
-              // Only trigger FLIP animation if card actually shifted row or column slot significantly
-              const isSlotWrap = isVisible && (Math.abs(dy) >= 14 || Math.abs(prev.width - width) >= 24);
-
-              prevPosMap.set(card, { relLeft, relTop, width, height });
-
-              if (isSlotWrap && Math.abs(dx) < zoneRect.width * 1.5) {
-                const scaleX = card._activeNocturneAnim ? rawRect.width / width : prev.width / width;
-                card._activeNocturneAnim?.cancel();
-                card._isFlippingGrid = true;
-                card.classList.add('is-flipping');
-                card.style.transformOrigin = '0 0';
-
-                const anim = card.animate([
-                  { transform: `translate3d(${dx}px, ${dy}px, 0) scaleX(${scaleX})` },
-                  { transform: 'translate3d(0px, 0px, 0) scaleX(1)' }
-                ], {
-                  duration: 280,
-                  easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
-                  fill: 'none'
-                });
-
-                card._activeNocturneAnim = anim;
-                const cleanup = () => {
-                  if (card._activeNocturneAnim !== anim) return;
-                  card.classList.remove('is-flipping');
-                  card._isFlippingGrid = false;
-                  card._activeNocturneAnim = null;
-                  card.style.transformOrigin = '';
-                };
-                anim.onfinish = cleanup;
-                anim.oncancel = cleanup;
-              }
-            } else {
-              prevPosMap.set(card, { relLeft, relTop, width, height });
-            }
-          });
-        });
-      }
+    const capture = () => {
+      if (!zone.isConnected || !zone.clientWidth) { prevPosMap.clear(); return; }
+      const viewportRect = (zone.closest('.kb-pane-section, .kb-main') || zone).getBoundingClientRect();
+      const cards = [...zone.querySelectorAll('.char-card:not(.hidden), .loc-card:not(.hidden)')];
+      const activeCards = new Set(cards);
+      for (const card of prevPosMap.keys()) if (!activeCards.has(card)) prevPosMap.delete(card);
+      cards.forEach(card => {
+        const left = card.offsetLeft;
+        const top = card.offsetTop;
+        const previous = prevPosMap.get(card);
+        prevPosMap.set(card, { left, top });
+        if (!previous || document.body.classList.contains('sortable-active')) return;
+        const rect = card.getBoundingClientRect();
+        if (rect.bottom < viewportRect.top - 200 || rect.top > viewportRect.bottom + 200) return;
+        if (Math.abs(previous.top - top) < 12 && Math.abs(previous.left - left) < 48) return;
+        const currentTranslate = card._activeNocturneAnim ? getComputedStyle(card).translate.split(' ').map(Number.parseFloat) : [0, 0];
+        const dx = previous.left - left + (currentTranslate[0] || 0);
+        const dy = previous.top - top + (currentTranslate[1] || 0);
+        card._activeNocturneAnim?.cancel();
+        card.classList.add('is-flipping');
+        const animation = card.animate([
+          { translate: `${dx}px ${dy}px` },
+          { translate: '0px 0px' }
+        ], { duration: Math.min(560, 320 + Math.max(Math.abs(dx), Math.abs(dy)) * .18), easing: 'cubic-bezier(.25, .46, .45, .94)' });
+        card._activeNocturneAnim = animation;
+        const cleanup = () => {
+          if (card._activeNocturneAnim !== animation) return;
+          card._activeNocturneAnim = null;
+          card.classList.remove('is-flipping');
+        };
+        animation.onfinish = cleanup;
+        animation.oncancel = cleanup;
+      });
+    };
+    const observer = new ResizeObserver(entries => {
+      const width = entries[0]?.contentRect.width || 0;
+      if (Math.abs(width - prevZoneWidth) < 1) return;
+      prevZoneWidth = width;
+      capture();
     });
-
     observer.observe(zone);
     zone._gridResizeObserver = observer;
-
-    requestAnimationFrame(() => {
-      const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card'))
-        .filter(el => !el.classList.contains('hidden'));
-      cards.forEach(card => {
-        if (!prevPosMap.has(card)) {
-          prevPosMap.set(card, {
-            relLeft: card.offsetLeft,
-            relTop: card.offsetTop,
-            width: card.offsetWidth,
-            height: card.offsetHeight
-          });
-        }
-      });
-    });
-  }
-
-  triggerDeferredFlip(zone) {
-    const prevPosMap = zone._prevPosMap;
-    if (!prevPosMap || !prevPosMap.size) return;
-
-    const zoneRect = zone.getBoundingClientRect();
-    const cards = Array.from(zone.querySelectorAll('.char-card, .loc-card, .timeline-item, .note-card'))
-      .filter(el => !el.classList.contains('hidden'));
-
-    cards.forEach(card => {
-      const prev = prevPosMap.get(card);
-      if (!prev) return;
-
-      this.cancelElementAnimations(card);
-      const rect = card.getBoundingClientRect();
-      const relLeft = rect.left - zoneRect.left;
-      const relTop = rect.top - zoneRect.top;
-
-      const dx = (prev.relLeft !== undefined ? prev.relLeft : (prev.left - zoneRect.left)) - relLeft;
-      const dy = (prev.relTop !== undefined ? prev.relTop : (prev.top - zoneRect.top)) - relTop;
-      const scaleX = rect.width ? prev.width / rect.width : 1;
-      const scaleY = rect.height ? prev.height / rect.height : 1;
-
-      const isPosShift = Math.abs(dx) > 1 || Math.abs(dy) > 1;
-      const isScaleShift = Math.abs(scaleX - 1) > 0.01 || Math.abs(scaleY - 1) > 0.01;
-
-      if (isPosShift || isScaleShift) {
-        card._isFlippingGrid = true;
-        card.style.transformOrigin = '0 0';
-
-        const anim = card.animate([
-          { transform: `translate3d(${dx}px, ${dy}px, 0) scale(${scaleX}, ${scaleY})` },
-          { transform: 'translate3d(0px, 0px, 0) scale(1, 1)' }
-        ], {
-          duration: 320,
-          easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
-          fill: 'none'
-        });
-
-        card._activeNocturneAnim = anim;
-        anim.onfinish = () => {
-          card._isFlippingGrid = false;
-          card.style.transformOrigin = '';
-          if (card._activeNocturneAnim === anim) card._activeNocturneAnim = null;
-        };
-      }
-
-      prevPosMap.set(card, {
-        relLeft,
-        relTop,
-        left: rect.left,
-        top: rect.top,
-        width: rect.width,
-        height: rect.height
-      });
-    });
+    requestAnimationFrame(capture);
   }
 
   showCharExportModal(char, cleanName) {
@@ -18122,6 +18039,7 @@ class NocturneWriter {
       onStart: (event) => {
         document.body.classList.add('sortable-active');
         this.kbEntranceGeneration = (this.kbEntranceGeneration || 0) + 1;
+        if (isTimelineZone) event.from.querySelectorAll('.timeline-line').forEach(line => line.__timelineConnectorAnimation?.cancel());
         if (window.Capacitor?.Plugins?.Haptics?.impact) {
           window.Capacitor.Plugins.Haptics.impact({ style: 'light' }).catch(() => {});
         }
@@ -18151,6 +18069,7 @@ class NocturneWriter {
       },
       onEnd: async (event) => {
         const timelineDrop = isTimelineZone && event.to === event.from;
+        const dropGeneration = this.kbEntranceGeneration;
         if (timelineDrop) event.to.classList.add('timeline-connecting');
         document.body.classList.remove('sortable-active');
         event.from.classList.remove('is-dragging');
@@ -18164,7 +18083,10 @@ class NocturneWriter {
           ? this.animateKbSortableDrop(event.item, this.lastDragMousePos, this.dragClickOffset)
           : Promise.resolve();
 
-        if (timelineDrop) landing.finally(() => requestAnimationFrame(() => event.to.classList.remove('timeline-connecting')));
+        if (timelineDrop) landing.finally(() => {
+          if (dropGeneration === this.kbEntranceGeneration && this.isSurfaceVisible(event.to)) this.animateTimelineConnectors(event.to);
+          else event.to.classList.remove('timeline-connecting');
+        });
 
         if (event.oldIndex !== event.newIndex) {
           await this.persistKbDomOrder(zoneType, event.from);
@@ -18202,6 +18124,26 @@ class NocturneWriter {
     items.at(-1)?.classList.add('last');
   }
 
+  animateTimelineConnectors(zone) {
+    if (!zone?.isConnected) return;
+    const lines = [...zone.querySelectorAll('.timeline-item:not(.last):not(.hidden) .timeline-line')];
+    lines.forEach(line => line.__timelineConnectorAnimation?.cancel());
+    zone.classList.remove('timeline-connecting');
+    if (this.shouldReduceSurfaceMotion()) return;
+    lines.forEach((line, index) => {
+      const animation = line.animate([
+        { transform: 'scaleY(0)' },
+        { transform: 'scaleY(1)' }
+      ], { duration: 190, delay: index * 190, easing: 'cubic-bezier(.16, 1, .3, 1)', fill: 'backwards' });
+      line.__timelineConnectorAnimation = animation;
+      const cleanup = () => {
+        if (line.__timelineConnectorAnimation === animation) line.__timelineConnectorAnimation = null;
+      };
+      animation.onfinish = cleanup;
+      animation.oncancel = cleanup;
+    });
+  }
+
   async persistKbDomOrder(type, zone) {
     const order = [...zone.querySelectorAll('[data-lore-id]')].map((el) => el.dataset.loreId);
     const list = type === 'subtimeline' ? this.timelineEvent(zone.dataset.parentId)?.subEvents : this.state.lore[type];
@@ -18237,23 +18179,17 @@ class NocturneWriter {
 
   characterCard(item, draggable = false) {
     const visual = item.image ? `<img src="${item.image}" alt="" loading="lazy" decoding="async">` : `<i class="bx ${item.icon || 'bx-user'}"></i>`;
-    const isNew = this.state.newlyCreatedId === item.id;
-    const entranceClass = isNew ? ' new-card-entrance' : '';
-    return `<div class="char-card${entranceClass}" data-lore-type="characters" data-lore-id="${item.id}">${this.loreCardActions('characters', item.id)}<div class="char-img">${visual}</div><div class="char-info"><h3>${escapeHtml(this.entityDisplayName(item))}</h3><p>${escapeHtml(item.role || item.body)}</p></div></div>`;
+    return `<div class="char-card" data-lore-type="characters" data-lore-id="${item.id}">${this.loreCardActions('characters', item.id)}<div class="char-img">${visual}</div><div class="char-info"><h3>${escapeHtml(this.entityDisplayName(item))}</h3><p>${escapeHtml(item.role || item.body)}</p></div></div>`;
   }
 
   locationCard(item, draggable = false) {
     const visual = item.image ? `<img src="${escapeHtml(item.image)}" alt="" loading="lazy" decoding="async">` : `<i class="bx ${escapeHtml(item.icon || 'bx-buildings')}"></i>`;
-    const isNew = this.state.newlyCreatedId === item.id;
-    const entranceClass = isNew ? ' new-card-entrance' : '';
-    return `<div class="loc-card${entranceClass}" data-lore-type="locations" data-lore-id="${item.id}">${this.loreCardActions('locations', item.id)}<div class="loc-img">${visual}</div><div class="loc-info"><h3>${escapeHtml(this.entityDisplayName(item))}</h3><p>${escapeHtml(item.role || item.body)}</p></div></div>`;
+    return `<div class="loc-card" data-lore-type="locations" data-lore-id="${item.id}">${this.loreCardActions('locations', item.id)}<div class="loc-img">${visual}</div><div class="loc-info"><h3>${escapeHtml(this.entityDisplayName(item))}</h3><p>${escapeHtml(item.role || item.body)}</p></div></div>`;
   }
 
   noteCard(item, draggable = false) {
-    const isNew = this.state.newlyCreatedId === item.id;
-    const entranceClass = isNew ? ' new-card-entrance' : '';
     const completedClass = item.completed ? ' note-card-completed' : '';
-    return `<div class="char-card note-card${entranceClass}${completedClass}" data-lore-type="notes" data-lore-id="${item.id}">${this.loreCardActions('notes', item.id)}<div class="char-img"><i class="bx bx-note"></i></div><div class="char-info"><h3>${escapeHtml(item.title || 'Без названия')}</h3><p>${escapeHtml(item.body || 'Пустая запись')}</p></div></div>`;
+    return `<div class="char-card note-card${completedClass}" data-lore-type="notes" data-lore-id="${item.id}">${this.loreCardActions('notes', item.id)}<div class="char-img"><i class="bx bx-note"></i></div><div class="char-info"><h3>${escapeHtml(item.title || 'Без названия')}</h3><p>${escapeHtml(item.body || 'Пустая запись')}</p></div></div>`;
   }
 
   timelineCard(item, options = {}) {
@@ -18308,10 +18244,7 @@ class NocturneWriter {
       </div>
     ` : '';
 
-    const isNew = this.state.newlyCreatedId === item.id;
-    const entranceClass = isNew ? ' new-card-entrance' : '';
-
-    return `<div class="timeline-item ${isLast ? 'last' : ''}${entranceClass}" data-lore-type="${type}" data-lore-id="${item.id}"${parentAttr}>
+    return `<div class="timeline-item ${isLast ? 'last' : ''}" data-lore-type="${type}" data-lore-id="${item.id}"${parentAttr}>
       <div class="timeline-track"><div class="timeline-dot"></div><div class="timeline-line"></div></div>
       <div class="timeline-content-wrapper">
         <div class="timeline-date">${escapeHtml(item.date)}</div>
@@ -18409,7 +18342,8 @@ class NocturneWriter {
   }
 
   openSubtimeline(id) {
-    if (!this.timelineEvent(id)) return;
+    const parent = this.timelineEvent(id);
+    if (!parent) return;
     this.state.activeSubtimelineId = id;
     this.state.activeKbTab = 'timeline';
     this.state.mobile.kbTab = 'timeline';
@@ -18417,17 +18351,28 @@ class NocturneWriter {
       this.switchMobileTab('lore', { keepOverlay: false });
       return;
     }
-    this.renderKb();
+    const main = document.querySelector('#kb-modal .kb-main');
+    if (!main) { this.renderKb(); return; }
+    this.cancelKbEntrance();
+    main.querySelector('.subtimeline-overlay')?.remove();
+    const template = document.createElement('template');
+    template.innerHTML = this.subtimelinePanel(parent).trim();
+    const overlay = template.content.firstElementChild;
+    main.append(overlay);
+    this.setupKbDragDrop();
+    this.animateKbCards(overlay);
   }
 
   closeSubtimeline() {
     if (!this.state.activeSubtimelineId) return;
+    this.cancelKbEntrance();
     this.state.activeSubtimelineId = null;
     if (this.isMobileLayout()) {
       this.renderMobileShell();
       return;
     }
-    this.renderKb();
+    document.querySelector('#kb-modal .subtimeline-overlay')?.remove();
+    this.setupKbDragDrop();
   }
 
   openKb(tab) {
@@ -18832,7 +18777,6 @@ class NocturneWriter {
       else {
         collection.push(next);
         this.state.kbSearch = '';
-        this.state.newlyCreatedId = next.id;
       }
       overlay.classList.remove('active');
       setTimeout(async () => {
@@ -18884,8 +18828,7 @@ class NocturneWriter {
             tempDiv.innerHTML = cardHtml.trim();
             const cardElement = tempDiv.firstChild;
             if (cardElement) {
-              cardElement.classList.add('new-card-entrance');
-              this.animateLayoutTransition(grid, () => {
+              const insertCard = () => {
                 if (type === 'notes') {
                   const firstCompleted = grid.querySelector('.note-card-completed');
                   if (firstCompleted) {
@@ -18896,22 +18839,22 @@ class NocturneWriter {
                 } else {
                   grid.appendChild(cardElement);
                 }
-              });
-              
-              setTimeout(() => {
-                cardElement.classList.remove('new-card-entrance');
-              }, 1000);
+              };
+              if (type === 'notes' && grid.querySelector('.note-card-completed')) this.animateLayoutTransition(grid, insertCard);
+              else insertCard();
             }
           });
 
           this.setupKbDragDrop();
           this.renderKb();
-
-          setTimeout(() => {
-            if (this.state.newlyCreatedId === next.id) {
-              this.state.newlyCreatedId = null;
-            }
-          }, 1000);
+          document.querySelectorAll(`[data-lore-id="${next.id}"]`).forEach(card => {
+            if (!card.matches('.char-card, .loc-card, .timeline-item') || !this.isSurfaceVisible(card)) return;
+            const zone = card.closest('.timeline-container');
+            if (zone) zone.classList.add('timeline-connecting');
+            this.playKbCardEntrance(card).then(() => {
+              if (zone?.isConnected) this.animateTimelineConnectors(zone);
+            });
+          });
         }
 
         // Re-render active split-screen or main panes showing detail cards

@@ -4323,6 +4323,18 @@ body.resizing-floating-note {
 }
 .toggle.on { background: var(--accent); }
 .toggle.on::after { transform: translateX(20px); }
+.compact-settings-modal button.toggle {
+  appearance: none;
+  display: block;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  font: inherit;
+}
+.compact-settings-modal button.toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
 
 .settings-section-note {
   margin: 0 0 16px;
@@ -4837,6 +4849,12 @@ body.sortable-active .note-card,
 .kb-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 34px; }
 .character-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 24px; justify-content: start; }
 .locations-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px; justify-content: start; }
+.workspace-stage[data-mode="split"] .kb-pane-section .character-grid { min-width: 220px; }
+.workspace-stage[data-mode="split"] .kb-pane-section .locations-grid { min-width: 280px; }
+.workspace-stage[data-mode="split"] .kb-pane-section .char-card { width: 220px; justify-self: center; }
+.workspace-stage[data-mode="split"] .kb-pane-section .loc-card { width: 280px; justify-self: center; }
+:root[data-card-view="list"] .workspace-stage[data-mode="split"] .kb-pane-section .character-grid { min-width: 280px; }
+:root[data-card-view="list"] .workspace-stage[data-mode="split"] .kb-pane-section .char-card { width: 280px; }
 .char-card, .loc-card, .note-card, .timeline-item {
   content-visibility: visible;
 }
@@ -4942,18 +4960,17 @@ body.sortable-active * {
   margin-bottom: -14px;
   background: var(--border);
   transform-origin: top center;
-  transition: opacity 300ms ease 100ms, transform 360ms cubic-bezier(.16, 1, .3, 1) 80ms;
+  transform: scaleY(1);
+  transition: transform 180ms cubic-bezier(.16, 1, .3, 1);
 }
-body.sortable-active .timeline-line,
 .timeline-container.timeline-connecting .timeline-line,
 .sortable-drag .timeline-line,
 .sortable-ghost .timeline-line,
 .sortable-chosen .timeline-line,
 .timeline-item.sortable-drop-landing .timeline-line {
-  opacity: 0 !important;
   transform: scaleY(0);
-  transition: none !important;
 }
+.timeline-container.timeline-connecting .timeline-line { transition: none; }
 .timeline-item.last .timeline-line { display: none; }
 .timeline-content-wrapper {
   flex: 1;
@@ -5244,7 +5261,7 @@ body.sortable-active .timeline-line,
 .loc-card.hidden,
 .timeline-item.hidden,
 .note-card.hidden { display: none !important; }
-.timeline-container.is-dragging .timeline-line { opacity: 0 !important; }
+.timeline-container.is-dragging .timeline-line { transform: scaleY(0); }
 .timeline-container.is-dragging .timeline-dot {
   transform: scale(.6);
   border-color: #3e3e4d;
@@ -5431,7 +5448,11 @@ body.mobile-shell-active .sortable-fallback-drag.timeline-item {
   background: var(--bg-deep);
   box-shadow: var(--shadow-float);
   transform-origin: center;
-  animation: slide-up 360ms cubic-bezier(.16, 1, .3, 1) both;
+  animation: kb-subtimeline-rise 360ms cubic-bezier(.16, 1, .3, 1) both;
+}
+@keyframes kb-subtimeline-rise {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .material .kb-modal {
   background: rgba(8,8,10,.72);
@@ -9536,28 +9557,6 @@ input:-webkit-autofill:active {
              new-item-glow-anim 1.2s cubic-bezier(0.16, 1, 0.3, 1) both;
   will-change: transform, opacity, border-color, box-shadow;
 }
-.new-card-entrance:not(.timeline-item) {
-  animation: new-item-entrance-anim 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-/* Timeline specific entrance optimizations to avoid track jumping */
-.timeline-item.new-card-entrance {
-  animation: none !important;
-  border: none !important;
-  box-shadow: none !important;
-}
-.timeline-item.new-card-entrance .timeline-content {
-  animation: new-item-entrance-anim 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
-  will-change: transform, opacity;
-}
-.timeline-item.new-card-entrance .timeline-date,
-.timeline-item.new-card-entrance .timeline-dot {
-  animation: new-item-entrance-anim 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
-  will-change: transform, opacity;
-}
-
-/* Empty State fade-in slide-up animation */
-
 /* Disable transitions on currently dragged/ghost elements for instant cursor tracking */
 .sortable-drag,
 .sortable-fallback-drag,
