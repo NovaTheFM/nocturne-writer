@@ -24692,7 +24692,9 @@ async httpGetJson(url, timeoutMs = 650) {
     const btn = overlay.querySelector('[data-action="close-luna-streak"]');
     if (imgEl && btn) {
       btn.addEventListener('mouseenter', () => {
-        const hoverState = type === 'congrats' ? 'luna_love' : 'luna_happy';
+        const hoverState = type === 'congrats'
+          ? (streakCount >= 30 ? 'luna_absolute' : 'luna_love')
+          : 'luna_happy';
         this.transitionLunaImage(imgEl, hoverState, { duration: 250 });
       });
       btn.addEventListener('mouseleave', () => {

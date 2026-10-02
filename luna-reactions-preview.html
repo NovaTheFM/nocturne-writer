@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><base href="/"><title>Луна — от грусти до восторга</title><link rel="stylesheet" href="./src/css/fonts.css?v=1.2.0">
+<link href="./src/vendor/boxicons/css/boxicons.min.css" rel="stylesheet">
+<link rel="stylesheet" href="./src/css/variables.css?v=1.2.0" />
+<link rel="stylesheet" href="./src/css/animations.css?v=1.2.0" />
+<link rel="stylesheet" href="./src/css/ui.css?v=1.2.0" />
+<link rel="stylesheet" href="./src/css/polish.css?v=1.2.0" />
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden}body{background:#08080c;color:var(--text-main);font-family:Manrope,Arial,sans-serif;display:flex;flex-direction:column}
+.gallery-header{padding:30px 32px 0;display:flex;align-items:center;justify-content:space-between;gap:24px}.gallery-header h1{font-size:22px;margin:0;font-weight:600;letter-spacing:-.5px}.gallery-header p{font-size:12px;margin:0;color:var(--text-muted)}
+.gallery{flex:1;min-height:0;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;padding:0 16px 30px;align-items:center}.reaction{min-width:0;text-align:center;border-right:1px solid rgba(255,255,255,.05)}.reaction:last-child{border-right:0}.reaction>h2{font-size:14px;margin:0 0 20px;font-weight:600;color:#c3b1ef}.reaction-space{position:relative;width:100%;height:calc(650px * var(--scale))}.reaction-stage{position:absolute;left:50%;top:0;width:480px;height:650px;transform:translateX(-50%) scale(var(--scale));transform-origin:top center}
+.reaction-stage .cleaner-overlay{position:absolute;inset:0;width:480px;height:650px;background:transparent;backdrop-filter:none;opacity:1;pointer-events:none}.reaction-stage .cleaner-modal-container{position:absolute;top:270px;left:50%;transform:translateX(-50%);margin:0;width:480px}.reaction-stage .cleaner-modal{margin:auto}.reaction-stage .whats-new-reaper-wrapper.floating{animation:none;transform:translateX(-50%)!important}.reaction-stage .cleaner-modal{transform:none}.reaction-stage .cleaner-overlay{transition:none}
+.gallery-footer{position:fixed;left:0;right:0;bottom:16px;text-align:center;font-size:12px;color:var(--text-muted)}button.fullscreen{background:transparent;border:1px solid var(--border);border-radius:999px;color:var(--text-main);padding:8px 14px;font:inherit;font-size:12px;cursor:pointer}
+</style></head><body><header class="gallery-header"><h1>Луна · от грусти до восторга</h1><button class="fullscreen" onclick="document.documentElement.requestFullscreen()">На весь экран</button></header><main class="gallery"><section class="reaction"><h2>Цепочка прервалась</h2><div class="reaction-space"><div class="reaction-stage"><div class="cleaner-overlay active"><div class="cleaner-modal-container">
+        <div class="whats-new-reaper-wrapper floating" style="position: absolute; top: -270px; left: 50%; transform: translateX(-50%); width: 320px; height: 320px; pointer-events: none; z-index: 100;">
+          <!-- Base layer -->
+          <img src="./reaper_photo/luna_cry.png" id="luna-streak-img" class="cleaner-reaper-img" alt="Luna">
+          <!-- Glow overlay -->
+          <img src="./reaper_photo/luna_happy.png" id="cleaner-reaper-glow-img" class="cleaner-reaper-img" style="opacity: 0; z-index: 10;" alt="Luna Glow">
+        </div>
+        <div class="cleaner-modal" style="max-width: 480px; width: 90%; background: rgba(18, 18, 24, 0.85); box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 32px; backdrop-filter: blur(10px); position: relative; z-index: 101; overflow: hidden; text-align: center;" aria-labelledby="modal-title-luna-streak-overlay">
+          <div class="cleaner-content">
+            <h2 style="margin: 0 0 8px; font-size: 22px; color: var(--text-main); font-weight: 700;" id="modal-title-luna-streak-overlay">
+              Цепочка прервалась...
+            </h2>
+            <div style="font-size: 15px; line-height: 1.6; color: var(--text-main); margin-bottom: 20px;">
+              Вчерашний день прошел без магии твоих слов... Хнык...
+            </div>
+            
+            <div class="form-actions" style="justify-content: center; gap: 12px; margin-top: 24px;">
+              <button class="pill-btn ai-btn" data-action="close-luna-streak" style="min-width: 160px; height: 38px; border-radius: 99px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;">
+                Прости, Луна...
+              </button>
+            </div>
+          </div>
+        </div>
+      </div></div></div></div></section><section class="reaction"><h2>1–2 дня</h2><div class="reaction-space"><div class="reaction-stage"><div class="cleaner-overlay active"><div class="cleaner-modal-container">
+        <div class="whats-new-reaper-wrapper floating" style="position: absolute; top: -270px; left: 50%; transform: translateX(-50%); width: 320px; height: 320px; pointer-events: none; z-index: 100;">
+          <!-- Base layer -->
+          <img src="./reaper_photo/lil_mascot.png" id="luna-streak-img" class="cleaner-reaper-img" alt="Luna">
+          <!-- Glow overlay -->
+          <img src="./reaper_photo/luna_happy.png" id="cleaner-reaper-glow-img" class="cleaner-reaper-img" style="opacity: 0; z-index: 10;" alt="Luna Glow">
+        </div>
+        <div class="cleaner-modal" style="max-width: 480px; width: 90%; background: rgba(18, 18, 24, 0.85); box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 32px; backdrop-filter: blur(10px); position: relative; z-index: 101; overflow: hidden; text-align: center;" aria-labelledby="modal-title-luna-streak-overlay">
+          <div class="cleaner-content">
+            <h2 style="margin: 0 0 8px; font-size: 22px; color: var(--text-main); font-weight: 700;" id="modal-title-luna-streak-overlay">
+              Цель дня достигнута!
+            </h2>
+            <div style="font-size: 15px; line-height: 1.6; color: var(--text-main); margin-bottom: 20px;">
+              Потрясающая концентрация!
+            </div>
+            
+        <div style="display: inline-flex; align-items: center; justify-content: center; background: rgba(139, 92, 246, 0.15); border: 1px solid var(--accent); border-radius: 12px; padding: 12px 24px; margin: 12px 0;">
+          <span style="font-size: 32px; font-weight: 800; color: var(--accent); margin-right: 8px;">1</span>
+          <span style="font-size: 14px; font-weight: 600; text-align: left; line-height: 1.2; color: var(--text-main);">
+            день<br>подряд!
+          </span>
+        </div>
+      
+            <div class="form-actions" style="justify-content: center; gap: 12px; margin-top: 24px;">
+              <button class="pill-btn ai-btn" data-action="close-luna-streak" style="min-width: 160px; height: 38px; border-radius: 99px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;">
+                Спасибо, Луна
+              </button>
+            </div>
+          </div>
+        </div>
+      </div></div></div></div></section><section class="reaction"><h2>3–6 дней</h2><div class="reaction-space"><div class="reaction-stage"><div class="cleaner-overlay active"><div class="cleaner-modal-container">
+        <div class="whats-new-reaper-wrapper floating" style="position: absolute; top: -270px; left: 50%; transform: translateX(-50%); width: 320px; height: 320px; pointer-events: none; z-index: 100;">
+          <!-- Base layer -->
+          <img src="./reaper_photo/luna_happy.png" id="luna-streak-img" class="cleaner-reaper-img" alt="Luna">
+          <!-- Glow overlay -->
+          <img src="./reaper_photo/luna_happy.png" id="cleaner-reaper-glow-img" class="cleaner-reaper-img" style="opacity: 0; z-index: 10;" alt="Luna Glow">
+        </div>
+        <div class="cleaner-modal" style="max-width: 480px; width: 274px; background: rgba(18, 18, 24, 0.85); box-shadow: rgba(0, 0, 0, 0.5) 0px 20px 40px, rgba(255, 255, 255, 0.05) 0px 1px 0px inset; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 32px; backdrop-filter: blur(10px); position: relative; z-index: 101; overflow: hidden; text-align: center; height: 358px;" aria-labelledby="modal-title-luna-streak-overlay">
+          <div class="cleaner-content">
+            <h2 style="margin: 0 0 8px; font-size: 22px; color: var(--text-main); font-weight: 700;" id="modal-title-luna-streak-overlay">
+              Цель дня достигнута!
+            </h2>
+            <div style="font-size: 15px; line-height: 1.6; color: var(--text-main); margin-bottom: 20px;">
+              Это было мощно!
+            </div>
+            
+        <div style="display: inline-flex; align-items: center; justify-content: center; background: rgba(139, 92, 246, 0.15); border: 1px solid var(--accent); border-radius: 12px; padding: 12px 24px; margin: 12px 0;">
+          <span style="font-size: 32px; font-weight: 800; color: var(--accent); margin-right: 8px;">3</span>
+          <span style="font-size: 14px; font-weight: 600; text-align: left; line-height: 1.2; color: var(--text-main);">
+            дня<br>подряд!
+          </span>
+        </div>
+      
+            <div class="form-actions" style="justify-content: center; gap: 12px; margin-top: 24px;">
+              <button class="pill-btn ai-btn" data-action="close-luna-streak" style="min-width: 160px; height: 38px; border-radius: 99px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;">
+                Спасибо, Луна
+              </button>
+            </div>
+          </div>
+        </div>
+      </div></div></div></div></section><section class="reaction"><h2>7–13 дней</h2><div class="reaction-space"><div class="reaction-stage"><div class="cleaner-overlay active"><div class="cleaner-modal-container">
+        <div class="whats-new-reaper-wrapper floating" style="position: absolute; top: -270px; left: 50%; transform: translateX(-50%); width: 320px; height: 320px; pointer-events: none; z-index: 100;">
+          <!-- Base layer -->
+          <img src="./reaper_photo/luna_congrats.png" id="luna-streak-img" class="cleaner-reaper-img" alt="Luna">
+          <!-- Glow overlay -->
+          <img src="./reaper_photo/luna_happy.png" id="cleaner-reaper-glow-img" class="cleaner-reaper-img" style="opacity: 0; z-index: 10;" alt="Luna Glow">
+        </div>
+        <div class="cleaner-modal" style="max-width: 480px; width: 274px; background: rgba(18, 18, 24, 0.85); box-shadow: rgba(0, 0, 0, 0.5) 0px 20px 40px, rgba(255, 255, 255, 0.05) 0px 1px 0px inset; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 32px; backdrop-filter: blur(10px); position: relative; z-index: 101; overflow: hidden; text-align: center; height: 358px;" aria-labelledby="modal-title-luna-streak-overlay">
+          <div class="cleaner-content">
+            <h2 style="margin: 0 0 8px; font-size: 22px; color: var(--text-main); font-weight: 700;" id="modal-title-luna-streak-overlay">
+              Цель дня достигнута!
+            </h2>
+            <div style="font-size: 15px; line-height: 1.6; color: var(--text-main); margin-bottom: 20px;">
+              Целая неделя! Молодец!
+            </div>
+            
+        <div style="display: inline-flex; align-items: center; justify-content: center; background: rgba(139, 92, 246, 0.15); border: 1px solid var(--accent); border-radius: 12px; padding: 12px 24px; margin: 12px 0;">
+          <span style="font-size: 32px; font-weight: 800; color: var(--accent); margin-right: 8px;">7</span>
+          <span style="font-size: 14px; font-weight: 600; text-align: left; line-height: 1.2; color: var(--text-main);">
+            дней<br>подряд!
+          </span>
+        </div>
+      
+            <div class="form-actions" style="justify-content: center; gap: 12px; margin-top: 24px;">
+              <button class="pill-btn ai-btn" data-action="close-luna-streak" style="min-width: 160px; height: 38px; border-radius: 99px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;">
+                Спасибо, Луна
+              </button>
+            </div>
+          </div>
+        </div>
+      </div></div></div></div></section><section class="reaction"><h2>14–29 дней</h2><div class="reaction-space"><div class="reaction-stage"><div class="cleaner-overlay active"><div class="cleaner-modal-container">
+        <div class="whats-new-reaper-wrapper floating" style="position: absolute; top: -270px; left: 50%; transform: translateX(-50%); width: 320px; height: 320px; pointer-events: none; z-index: 100;">
+          <!-- Base layer -->
+          <img src="./reaper_photo/luna_love.png" id="luna-streak-img" class="cleaner-reaper-img" alt="Luna">
+          <!-- Glow overlay -->
+          <img src="./reaper_photo/luna_happy.png" id="cleaner-reaper-glow-img" class="cleaner-reaper-img" style="opacity: 0; z-index: 10;" alt="Luna Glow">
+        </div>
+        <div class="cleaner-modal" style="max-width: 480px; width: 274px; background: rgba(18, 18, 24, 0.85); box-shadow: rgba(0, 0, 0, 0.5) 0px 20px 40px, rgba(255, 255, 255, 0.05) 0px 1px 0px inset; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 32px; backdrop-filter: blur(10px); position: relative; z-index: 101; overflow: hidden; text-align: center; height: 358px;" aria-labelledby="modal-title-luna-streak-overlay">
+          <div class="cleaner-content">
+            <h2 style="margin: 0 0 8px; font-size: 22px; color: var(--text-main); font-weight: 700;" id="modal-title-luna-streak-overlay">
+              Цель дня достигнута!
+            </h2>
+            <div style="font-size: 15px; line-height: 1.6; color: var(--text-main); margin-bottom: 20px;">
+              Уже две недели! Я горжусь тобой!
+            </div>
+            
+        <div style="display: inline-flex; align-items: center; justify-content: center; background: rgba(139, 92, 246, 0.15); border: 1px solid var(--accent); border-radius: 12px; padding: 12px 24px; margin: 12px 0;">
+          <span style="font-size: 32px; font-weight: 800; color: var(--accent); margin-right: 8px;">14</span>
+          <span style="font-size: 14px; font-weight: 600; text-align: left; line-height: 1.2; color: var(--text-main);">
+            дней<br>подряд!
+          </span>
+        </div>
+      
+            <div class="form-actions" style="justify-content: center; gap: 12px; margin-top: 24px;">
+              <button class="pill-btn ai-btn" data-action="close-luna-streak" style="min-width: 160px; height: 38px; border-radius: 99px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;">
+                Спасибо, Луна
+              </button>
+            </div>
+          </div>
+        </div>
+      </div></div></div></div></section><section class="reaction"><h2>30 дней и больше</h2><div class="reaction-space"><div class="reaction-stage"><div class="cleaner-overlay active"><div class="cleaner-modal-container">
+        <div class="whats-new-reaper-wrapper floating" style="position: absolute; top: -270px; left: 50%; transform: translateX(-50%); width: 320px; height: 320px; pointer-events: none; z-index: 100;">
+          <!-- Base layer -->
+          <img src="./reaper_photo/luna_absolute.png" id="luna-streak-img" class="cleaner-reaper-img" alt="Luna">
+          <!-- Glow overlay -->
+          <img src="./reaper_photo/luna_happy.png" id="cleaner-reaper-glow-img" class="cleaner-reaper-img" style="opacity: 0; z-index: 10;" alt="Luna Glow">
+        </div>
+        <div class="cleaner-modal" style="max-width: 480px; width: 274px; background: rgba(18, 18, 24, 0.85); box-shadow: rgba(0, 0, 0, 0.5) 0px 20px 40px, rgba(255, 255, 255, 0.05) 0px 1px 0px inset; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 32px; backdrop-filter: blur(10px); position: relative; z-index: 101; overflow: hidden; text-align: center; height: 358px;" aria-labelledby="modal-title-luna-streak-overlay">
+          <div class="cleaner-content">
+            <h2 style="margin: 0 0 8px; font-size: 22px; color: var(--text-main); font-weight: 700;" id="modal-title-luna-streak-overlay">
+              Цель дня достигнута!
+            </h2>
+            <div style="font-size: 15px; line-height: 1.6; color: var(--text-main); margin-bottom: 20px;">
+              Спасибо, проводишь столько времени со мной, я ценю это!
+            </div>
+            
+        <div style="display: inline-flex; align-items: center; justify-content: center; background: rgba(139, 92, 246, 0.15); border: 1px solid var(--accent); border-radius: 12px; padding: 12px 24px; margin: 12px 0;">
+          <span style="font-size: 32px; font-weight: 800; color: var(--accent); margin-right: 8px;">30</span>
+          <span style="font-size: 14px; font-weight: 600; text-align: left; line-height: 1.2; color: var(--text-main);">
+            дней<br>подряд!
+          </span>
+        </div>
+      
+            <div class="form-actions" style="justify-content: center; gap: 12px; margin-top: 24px;">
+              <button class="pill-btn ai-btn" data-action="close-luna-streak" style="min-width: 160px; height: 38px; border-radius: 99px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;">
+                Спасибо, Луна
+              </button>
+            </div>
+          </div>
+        </div>
+      </div></div></div></div></section></main><footer class="gallery-footer">Грусть → спокойствие → радость → поздравление → любовь → абсолютный восторг · F11 — выход из полного экрана</footer>
+<script>const resize=()=>{const panel=document.querySelector('.reaction');document.documentElement.style.setProperty('--scale',Math.min(panel.clientWidth/480,(innerHeight-150)/650));};addEventListener('resize',resize);resize();</script></body></html>
