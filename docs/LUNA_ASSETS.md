@@ -7,8 +7,8 @@
 | 1–2 дня | lil_mascot.png | Уже существовал |
 | 3–6 дней | luna_happy.png | Уже существовал |
 | 7–13 дней | luna_congrats.png | Уже существовал |
-| 14–29 дней и наведение на поздравляющую кнопку до 30 дней | luna_love.png | Создан: сердечки в глазах, широкая улыбка, два сердечка рядом |
-| От 30 дней | luna_absolute.png | Создан: крупные сердечки в глазах, слёзы радости, раскрытые объятия, пять сердечек рядом |
+| 14–29 дней и наведение на поздравляющую кнопку до 30 дней | luna_love.png | Перерисован: поднятые руки как у 7–13 дней, без подушки, сердечки в глазах, румянец, два сердечка рядом |
+| От 30 дней | luna_absolute.png | Перерисован: та же поза с поднятыми руками, компактная улыбка, сердечки в глазах, слёзы радости, четыре сердечка рядом |
 | Прерванная серия | luna_cry.png | Создан: слёзы, грустное выражение, объятия с прежней подушкой |
 
 Новые изображения созданы встроенным `image_gen` с исходными PNG в качестве референсов. У всех итоговых изображений размер 1254×1254, формат PNG RGBA, настоящий прозрачный фон. Сохранены маскот, палитра, костюм, мягкая рисованная стилистика и масштаб. Более сильные поздравления сопровождаются более выраженными восторгом и любовью.
@@ -16,6 +16,8 @@
 При наведении на кнопку после 30 дней сохраняется `luna_absolute`, чтобы реакция не становилась слабее. Наведение при прерванной серии использует существующую `luna_happy`.
 
 Исходные три изображения не заменялись. Первые, более сдержанные варианты сохранены только для сравнения в игнорируемой папке `release/qa/luna/`.
+
+После замечания о скачках эмоции исправлена последовательность: подушка остаётся в ранних реакциях, а начиная с 7 дней Луна постоянно держит руки поднятыми. Изображения 14–29 и 30+ созданы на основе `luna_congrats.png` и исправленной `luna_love.png`. У высшей реакции уменьшена высота рта; усиление любви передают глаза, румянец, слёзы радости и сердечки. Отклонённые варианты сохранены в `release/qa/luna/`.
 
 ## Проверка
 
@@ -28,8 +30,8 @@
 
 | Новый файл | Размер в байтах |
 |---|---:|
-| reaper_photo/luna_love.png | 944078 |
-| reaper_photo/luna_absolute.png | 1045468 |
+| reaper_photo/luna_love.png | 959711 |
+| reaper_photo/luna_absolute.png | 1009061 |
 | reaper_photo/luna_cry.png | 915571 |
 
 ## Итоговые промпты
@@ -38,24 +40,24 @@
 
 ### luna_love.png
 
-Референсы: `reaper_photo/lil_mascot.png`, `reaper_photo/luna_congrats.png`.
+Референс: `reaper_photo/luna_congrats.png`.
 
 ```text
-Use case: identity-preserve. Asset luna_love.png, the FOURTH reaction (14-day streak), stronger and more lovingly exaggerated than the THIRD open-eyed arms-raised congratulation.
-Reference 1 lil_mascot.png: exact edit target for character identity, outfit, pose, layout and style. Reference 2 luna_congrats.png: emotional baseline which this new sprite must clearly exceed.
-Keep the EXACT same seated chibi Luna with the exact same purple nightcap, hair shape, crescent/star hair clips, outfit, shoes, gold sleeve stars and same purple heart pillow bearing a dark crescent/feather emblem. Make her lovingly delighted to an exaggerated level: huge shining open purple eyes with prominent lavender heart-shaped pupils, bright rosy blush, a wider open ecstatic pink smile than the congrats reference. Hug her original heart cushion very tightly in her original seated pose. Add TWO small floating lavender hearts, one on each side of her head, in the SAME soft outlined shaded illustration style, kept within original transparent padding.
-All non-expression features must faithfully match the reference character. Exact dark-purple hair, skin tone, lavender hat ruffles, purple crescent/star and pompom, pale gold hair crescent/star, full body proportions, original hand-drawn chibi anime linework, restrained soft shaded painting and color palette. Keep the original sprite scale and layout for modal crossfades. Do not switch to new art style, glossy 3D or add fine details. Genuine transparent background, single square full-body PNG, no scene, floor, text, watermark or border. Love and excitement must read clearly even as a small app mascot.
+Use case: identity-preserve. Correct luna_love.png, the 14–29-day reaction in a strictly escalating sprite sequence. This is an extremely faithful edit of reference 1, the EXISTING luna_congrats.png (7–13 days). Preserve its exact full-body seated pose WITH BOTH HANDS RAISED in celebration, entire outfit and original framing. DO NOT include any cushion or held heart. Never revert to the earlier hugging-cushion pose.
+Change the face to noticeably MORE happy, excited and lovingly overwhelmed than the reference 7-day image. Her original large purple eyes now have vivid shining pink-lavender HEART-SHAPED pupils, retain original thick lashes and large white highlights. Lift brows slightly with excitement and intensify soft rosy blush on both cheeks. Her mouth is a joyful open smile with a gently upturned top edge and pink tongue in the same rendering as the original, approximately the SAME SIZE as the original mouth, NEVER bigger or elongated; keep it compact and cute. Add two small lavender-pink floating hearts near the sides of her raised hands, with the original dark outline and soft shading.
+Critical invariants: EXACT same Luna character, face shape, scale, bangs and long dark muted-purple hair silhouette, gold crescent and star clips at viewer left, dark purple nightcap with scalloped lavender trim, purple crescent and star, pompom, lavender collar and bow with gold star clasp, original dark dress, sleeves, ruffled hem and shoes. Keep original gold stars on sleeves and round mitten hands. Preserve original restrained painted shading, soft dark linework, palette and hand-drawn anime chibi sticker style. Change only expression and add floating hearts; keep original raised-arm posture and prop continuity with 7–13 and 30+.
+Single square PNG with genuinely transparent background, 1254x1254 matching reference, original character position and padding, no floor, text, watermark, extra objects or restyling. It must read as a happier loving upgrade of the SAME 7-day pose, even at small modal size.
 ```
 
 ### luna_absolute.png
 
-Референсы: `reaper_photo/luna_congrats.png`, `reaper_photo/luna_love.png`.
+Референсы: `reaper_photo/luna_love.png`, `reaper_photo/luna_congrats.png`.
 
 ```text
-Use case: identity-preserve. Asset luna_absolute.png: FINAL FIFTH reaction, 30-day writing streak, an exaggerated explosion of loving gratitude and joy. It MUST look visibly MORE ecstatic and MORE loving than reference 2's heart eyes and two floating hearts.
-Reference 1 luna_congrats.png is the exact character, outfit, raised-arms seated pose and style edit target. Reference 2 luna_love.png is the fourth reaction: emotional minimum to EXCEED.
-Keep exact reference Luna identity and art style. Seated full-body Luna throws BOTH same round mitten hands upward and outward as if asking for a giant hug. Face is overwhelmed by love: her very large original purple irises contain HUGE glowing lavender-pink heart-shaped pupils taking most of each iris, retain the same lash shapes. Two small transparent pale lavender tears of JOY glisten at the outer bottom eye corners; bright rosy cheeks, the widest delighted open pink smile in the set. Add a cluster of FIVE buoyant lavender-pink hearts around her head and raised hands, slightly varied sizes, same dark outlined softly painted style. Keep full character, hearts and original hat inside canvas without cropping, with original central sprite position and head/body scale.
-Precisely preserve long dark muted purple hair silhouette and fringe, purple nightcap silhouette, scalloped lavender hat trim, crescent symbol, star on viewer right and pompom, pale gold crescent and star hair clips at viewer left, original lavender collar and bow with pale gold star clasp, dark purple outfit with lavender ruffles, gold sleeve stars, original shoes and seated body proportions. Same soft dark outlines and smooth restrained shading. This is the same existing hand-drawn anime chibi sticker, not a redesign. Do not add new costume pieces, cushion, accessories or text. No scene, floor shadow, glow halo, background, lettering, watermark, border. Single square PNG with genuinely transparent background. The highest affection reaction should be instantly distinct even displayed at small modal size.
+Use case: identity-preserve. Correct luna_absolute.png, the final 30+ day reaction, using the newly corrected 14-day luna_love.png as the EXACT edit target. Reference 2 luna_congrats.png locks original mascot style and anatomy. Continue the same visual sequence: EXACT same seated full-body pose with both hands raised, NO cushion or held prop.
+MOST CRITICAL CORRECTION: make the mouth a NATURAL COMPACT delighted smile, a small upward-curved open crescent with pink tongue, approximately 65 pixels wide by 35 pixels tall on a 1254px square. This is less than half the vertical height of the target reference's mouth. Keep surrounding cheek and chin proportions unchanged. Do NOT create a huge vertical oval, a tall open mouth, a large shouting mouth, an exaggerated gape, jaw distortion, broad white teeth or bulging lips. The joy comes from eyes and blush, NEVER from enlarging the mouth.
+Emotion must be MORE overjoyed and lovingly overwhelmed than the 14-day reference: the same huge brilliant purple eyes with heart-shaped pink-lavender pupils, make those heart pupils slightly larger and more luminous within the unchanged original iris size; retain original dark lashes and white highlights. Add a tiny glossy pale-lavender tear of JOY at the outside lower corner of each eye, rosy blush, and FIVE small lavender-pink floating hearts around head and raised hands instead of the original two. Keep hearts moderate, not enormous, avoid covering hat or cropping. Face should radiate grateful bliss and love, compact cute happy mouth consistent with the original artist's style.
+Do an extremely faithful minimal edit. Preserve EXACT target character position, 1254x1254 canvas, original head/body scale, raised-arm pose, round mitten hands, original face outline and bangs, long dark purple hair silhouette, gold crescent and star hair clips at viewer left, original dark purple nightcap with scalloped lavender trim, purple crescent, purple star and pompom, lavender collar and bow with pale gold star clasp, outfit ruffles, original boots and sleeve stars. Preserve reference dark soft outlines, restrained smooth painted shading and original muted purple/lavender/gold palette. No restyling, no extra costume or accessories. Single square full-body PNG with genuinely transparent background, no floor, text, border, watermark, new props or scene.
 ```
 
 ### luna_cry.png
