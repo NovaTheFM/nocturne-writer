@@ -165,3 +165,16 @@
 .whats-new-reaper-wrapper .cleaner-reaper-img {
   filter: none !important;
 }
+
+@keyframes luna-portrait-float {
+  0%, 100% { transform: translateX(calc(-50% - 28px)); }
+  50% { transform: translateX(calc(-50% - 12px)); }
+}
+
+.luna-streak-portrait.floating {
+  animation: luna-portrait-float 8s ease-in-out infinite;
+}
+
+.luna-streak-portrait .cleaner-reaper-img {
+  will-change: auto;
+}
