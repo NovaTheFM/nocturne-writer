@@ -24569,6 +24569,8 @@ async httpGetJson(url, timeoutMs = 650) {
       moonImg = 'luna_cry.png';
     }
 
+    const lunaImageSize = type === 'congrats' && streakCount >= 30 ? 300 : 320;
+
     const congratsPhrases = [
       "Ты отлично справляешься!",
       "Хорошо постарался!",
@@ -24663,7 +24665,7 @@ async httpGetJson(url, timeoutMs = 650) {
 
     this.presentOverlay(overlay, `
       <div class="cleaner-modal-container">
-        <div class="whats-new-reaper-wrapper floating" style="position: absolute; top: -270px; left: 50%; transform: translateX(-50%); width: 320px; height: 320px; pointer-events: none; z-index: 100;">
+        <div class="whats-new-reaper-wrapper floating" style="position: absolute; top: -${lunaImageSize - 50}px; left: 50%; transform: translateX(-50%); width: ${lunaImageSize}px; height: ${lunaImageSize}px; pointer-events: none; z-index: 100;">
           <!-- Base layer -->
           <img src="./reaper_photo/${moonImg}" id="luna-streak-img" class="cleaner-reaper-img" alt="Luna">
           <!-- Glow overlay -->
