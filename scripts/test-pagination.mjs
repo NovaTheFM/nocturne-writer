@@ -7,7 +7,9 @@ const url = 'http://localhost:5315';
 const server = spawn(process.execPath, ['server.mjs'], { env: { ...process.env, PORT: '5315', SYNC_PORT: '8915' }, stdio: 'ignore', windowsHide: true });
 const browser = await chromium.launch({ headless: true });
 const results = [];
+const match = process.argv.find(arg => arg.startsWith('--match='))?.slice(8);
 async function check(name, run, options = {}) {
+  if (match && !name.includes(match)) return;
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, ...options });
   const page = await context.newPage(), errors = []; page.on('pageerror', error => errors.push(error.message));
   try {
@@ -38,8 +40,36 @@ async function geometry(page, paneId = 'primary') {
       }
       return false;
     });
-    return { breaks: paginationPluginKey.getState(e.state).pageBreaks.map(({ pos, height, type }) => ({ pos, height, type })), pages: page.querySelectorAll('.page-sheet-bg:not(.motion-sheet-exiting)').length, misses: misses.slice(0, 8), blockCount, text: e.getText(), json: e.getJSON() };
+    const sheets = [...page.querySelectorAll('.page-sheet-bg:not(.motion-sheet-exiting)')];
+    return { breaks: paginationPluginKey.getState(e.state).pageBreaks.map(({ pos, height, type }) => ({ pos, height, type })), pages: sheets.length, width: page.getBoundingClientRect().width, expectedHeight: height, sheetHeights: sheets.map(sheet => sheet.getBoundingClientRect().height), misses: misses.slice(0, 8), blockCount, text: e.getText(), json: e.getJSON() };
   }, paneId);
+}
+async function splitDocuments(page, paginated) {
+  await page.evaluate(async paginated => {
+    const a = window.nocturneApp;
+    a.nocturneEditor.get('primary').commands.setContent(`<p>${'Live resizing of the first manuscript. '.repeat(85)}</p>`);
+    await a.saveActiveDoc({ silent: true }); const first = a.getFocusedDoc().id;
+    await a.createDoc(a.defaultFolderId(), 'Second split manuscript', '');
+    a.nocturneEditor.get('primary').commands.setContent(`<p>${'Second manuscript must also follow the divider. '.repeat(70)}</p>`);
+    await a.saveActiveDoc({ silent: true }); const second = a.getFocusedDoc().id;
+    a.state.settings.autoPaginate = paginated; a.applySettings();
+    a.openInPane('primary', { type: 'document', docId: first });
+    a.openSecondaryPane({ type: 'document', docId: second });
+  }, paginated);
+  await page.waitForTimeout(700);
+}
+async function dragSplit(page, inspect) {
+  const divider = await page.locator('#workspace-divider').boundingBox(), stage = await page.locator('#workspace-stage').boundingBox();
+  await page.mouse.move(divider.x + divider.width / 2, divider.y + 40); await page.mouse.down();
+  try {
+    for (const ratio of [.37, .64, .43, .7, .5]) {
+      await page.mouse.move(stage.x + stage.width * ratio, divider.y + 40, { steps: 6 });
+      await page.waitForTimeout(120);
+      assert.equal(await page.evaluate(() => document.body.classList.contains('resizing-workspace')), true);
+      await inspect(ratio);
+    }
+  } finally { await page.mouse.up(); }
+  assert.equal(await page.evaluate(() => document.body.classList.contains('resizing-workspace')), false);
 }
 try {
   for (let i = 0; i < 60; i++) { try { if ((await fetch(url)).ok) break; } catch {} await new Promise(resolve => setTimeout(resolve, 100)); }
@@ -103,6 +133,33 @@ try {
     const large = await geometry(page); assert.deepEqual(large.misses, []); assert.ok(large.pages > before.pages);
     await page.evaluate(() => window.nocturneApp.toggleSplitMode()); await page.waitForTimeout(650);
     const split = await geometry(page); assert.deepEqual(split.misses, []); assert.ok(split.pages >= large.pages); return { before: before.pages, large: large.pages, split: split.pages };
+  });
+  await check('live split resizing keeps both paginated manuscripts inside their current sheets before mouseup', async page => {
+    await splitDocuments(page, true);
+    const before = Object.fromEntries(await Promise.all(['primary', 'secondary'].map(async id => [id, await geometry(page, id)]))), measurements = [];
+    await dragSplit(page, async ratio => {
+      for (const paneId of ['primary', 'secondary']) {
+        const current = await geometry(page, paneId);
+        assert.deepEqual(current.misses, [], JSON.stringify({ ratio, paneId, width: current.width, misses: current.misses }));
+        assert.ok(current.pages > 1 && current.sheetHeights.every(height => Math.abs(height - current.expectedHeight) < 2), JSON.stringify({ ratio, paneId, expected: current.expectedHeight, heights: current.sheetHeights }));
+        assert.deepEqual(current.json, before[paneId].json);
+        measurements.push({ ratio, paneId, width: current.width, pages: current.pages });
+      }
+    });
+    for (const paneId of ['primary', 'secondary']) assert.deepEqual((await geometry(page, paneId)).misses, []);
+    assert.ok(new Set(measurements.map(item => item.width)).size > 4); return measurements;
+  });
+  await check('live split resizing leaves pagination disabled and both documents intact by default', async page => {
+    assert.equal(await page.evaluate(() => window.nocturneApp.state.settings.autoPaginate), false);
+    await splitDocuments(page, false);
+    const before = Object.fromEntries(await Promise.all(['primary', 'secondary'].map(async id => [id, (await geometry(page, id)).json])));
+    await dragSplit(page, async () => {
+      for (const paneId of ['primary', 'secondary']) {
+        const current = await geometry(page, paneId);
+        assert.equal(current.pages, 0); assert.deepEqual(current.breaks, []); assert.deepEqual(current.json, before[paneId]);
+      }
+    });
+    assert.equal(await page.evaluate(() => window.nocturneApp.state.settings.autoPaginate), false);
   });
   await check('spellcheck underline follows its text after pagination and font reflow', async page => {
     await enable(page, `<p>${'Reflow underline sentence. '.repeat(650)}</p>`);
