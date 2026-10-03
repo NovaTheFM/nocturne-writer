@@ -3,7 +3,12 @@ import { mkdir, writeFile } from 'node:fs/promises';
 
 const checks = [
   ['syntax', ['scripts/check-source.mjs']],
-  ['unit', ['--test', 'scripts/test-database-sync.mjs', 'scripts/test-project-backups.mjs', 'scripts/test-smart-speller.mjs']],
+  ['unit', ['--test', 'scripts/test-database-sync.mjs', 'scripts/test-project-backups.mjs', 'scripts/test-smart-speller.mjs', 'scripts/test-sync-auth.mjs']],
+  ['audit-data', ['scripts/test-audit-data.mjs']],
+  ['audit-editor', ['scripts/test-audit-editor.mjs']],
+  ['audit-sync', ['scripts/test-audit-sync.mjs']],
+  ['audit-platform', ['scripts/test-audit-platform.mjs']],
+  ['release-tools', ['scripts/test-release-tools.py'], 'python'],
   ['editor-adapter', ['scripts/test-editor-adapter.mjs']],
   ['ai-context', ['scripts/test-ai-context.mjs']],
   ['reliability', ['scripts/test-reliability.mjs']],

@@ -25,26 +25,26 @@ def safe_package_name(name):
 def clean_build_dir():
     if BUILD_DIR.resolve().parent != ROOT.resolve():
         raise ValueError('Build directory must stay inside the project.')
-    if BUILD_DIR.exists():
-      shutil.rmtree(BUILD_DIR)
+    for directory in [APP_SRC, BUILD_DIR / "electron", BUILD_DIR / "scripts", BUILD_DIR / "dist"]:
+        if directory.resolve().parent != BUILD_DIR.resolve():
+            raise ValueError('Generated directory must stay inside the build directory.')
+        if directory.exists():
+            shutil.rmtree(directory)
     BUILD_DIR.mkdir(parents=True, exist_ok=True)
     APP_SRC.mkdir(parents=True, exist_ok=True)
     RELEASE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def copy_web_app():
-    required = [ROOT / "index.html", ROOT / "src", ROOT / "reaper_photo"]
+    required = [ROOT / "dist/index.html", ROOT / "dist/src", ROOT / "dist/reaper_photo"]
     missing = [str(path) for path in required if not path.exists()]
     if missing:
         raise FileNotFoundError(f"Missing production files: {', '.join(missing)}")
 
-    shutil.copy2(ROOT / "index.html", APP_SRC / "index.html")
-    shutil.copytree(ROOT / "src", APP_SRC / "src")
-    shutil.copytree(ROOT / "reaper_photo", APP_SRC / "reaper_photo")
+    shutil.copy2(ROOT / "dist/index.html", APP_SRC / "index.html")
+    shutil.copytree(ROOT / "dist/src", APP_SRC / "src")
+    shutil.copytree(ROOT / "dist/reaper_photo", APP_SRC / "reaper_photo")
     shutil.copytree(ROOT / "electron", BUILD_DIR / "electron")
-    scripts_dir = BUILD_DIR / "scripts"
-    scripts_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(ROOT / "scripts" / "sync-server.mjs", scripts_dir / "sync-server.mjs")
 
 
 def write_package(app_name):
@@ -64,7 +64,7 @@ def write_package(app_name):
         "author": "Nocturne Writer",
         "main": "electron/main.cjs",
         "scripts": {
-            "build": "electron-builder --win nsis"
+            "build": "electron-builder --win nsis portable"
         },
         "dependencies": {
             "bonjour-service": "^1.4.0",
@@ -199,7 +199,20 @@ def write_package(app_name):
             }
         }
     }
-    (BUILD_DIR / "package.json").write_text(json.dumps(package, ensure_ascii=False, indent=2), encoding="utf-8")
+    lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
+    for name in ["bonjour-service", "ws", "simple-git", "electron"]:
+        field = "devDependencies" if name == "electron" else "dependencies"
+        package[field][name] = lock["packages"]["node_modules/" + name]["version"]
+    build_lock = BUILD_DIR / "package-lock.json"
+    if not build_lock.exists():
+        raise FileNotFoundError("Desktop packaging lockfile is missing. Restore electron-package-lock.json before building.")
+    pinned = json.loads(build_lock.read_text(encoding="utf-8"))
+    package["devDependencies"]["electron-builder"] = pinned["packages"]["node_modules/electron-builder"]["version"]
+    package["type"] = "module"
+    pinned["name"], pinned["version"] = package["name"], package["version"]
+    pinned["packages"][""] = {"name": package["name"], "version": package["version"], "dependencies": package["dependencies"], "devDependencies": package["devDependencies"]}
+    build_lock.write_text(json.dumps(pinned, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (BUILD_DIR / "package.json").write_text(json.dumps(package, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def copy_release_exes():
@@ -216,6 +229,14 @@ def copy_release_exes():
             target = RELEASE_DIR / f"{exe.stem}-new{exe.suffix}"
             shutil.copy2(exe, target)
         copied.append(target)
+        if "Setup" not in exe.name:
+            portable = ROOT / "Nocturne Writer.exe"
+            backup = ROOT / "release/qa/pre-audit-Nocturne-Writer.exe"
+            if portable.exists() and not backup.exists():
+                backup.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(portable, backup)
+            shutil.copy2(exe, portable)
+            copied.append(portable)
     return copied
 
 
@@ -225,11 +246,18 @@ def main():
     args = parser.parse_args()
 
     print("=== Nocturne Writer standalone Electron build ===")
+    run("npm run build")
     clean_build_dir()
+    lock_source = ROOT / "electron-package-lock.json"
+    if lock_source.exists():
+        shutil.copy2(lock_source, BUILD_DIR / "package-lock.json")
     copy_web_app()
     write_package(args.name)
 
-    run("npm install", cwd=BUILD_DIR)
+    run("npm ci --ignore-scripts --no-audit --no-fund", cwd=BUILD_DIR)
+    installed_electron = ROOT / "node_modules/electron"
+    shutil.copytree(installed_electron / "dist", BUILD_DIR / "node_modules/electron/dist", dirs_exist_ok=True)
+    shutil.copy2(installed_electron / "path.txt", BUILD_DIR / "node_modules/electron/path.txt")
     run("npm run build", cwd=BUILD_DIR)
 
     copied = copy_release_exes()

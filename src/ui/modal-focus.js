@@ -42,7 +42,7 @@ export function manageModalFocus() {
   };
   const observer = new MutationObserver(update);
   observer.observe(document.body, { attributes: true, attributeFilter: ['class'], childList: true, subtree: true });
-  document.addEventListener('keydown', event => {
+  const onKeydown = event => {
     if ([' ', 'Enter'].includes(event.key) && event.target.matches('[role="switch"], [role="button"]:not(button)')) { event.preventDefault(); event.target.click(); return; }
     if (event.key !== 'Tab' || !active) return;
     const list = focusables(active);
@@ -50,7 +50,12 @@ export function manageModalFocus() {
     const index = list.indexOf(document.activeElement);
     if (event.shiftKey && index <= 0) { event.preventDefault(); list.at(-1).focus(); }
     else if (!event.shiftKey && (index < 0 || index === list.length - 1)) { event.preventDefault(); list[0].focus(); }
-  }, true);
+  };
+  document.addEventListener('keydown', onKeydown, true);
   update();
-  return () => observer.disconnect();
+  return () => {
+    observer.disconnect();
+    document.removeEventListener('keydown', onKeydown, true);
+    for (const element of document.querySelectorAll('[data-modal-inert]')) { element.inert = false; delete element.dataset.modalInert; }
+  };
 }

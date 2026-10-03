@@ -405,11 +405,16 @@ class NocturneWriter {
     this.startMobileSystemBar();
     this.applyAndroidSystemBars();
     this.startGitAutosave();
+    this.disposeNativeOpenFiles = platformFiles.onOpenFilesPending(() => this.openPendingNativeFiles());
+    const openedNativeFiles = await this.openPendingNativeFiles();
 
     // Check if new version first run (specifically for Electron desktop users)
     const currentVersion = '1.2.0';
     const showWhatsNew = this.runtime.isElectron && this.state.settings.lastSeenVersion !== currentVersion;
-    if (showWhatsNew) {
+    if (openedNativeFiles) {
+      this.state.settings.lastSeenVersion = currentVersion;
+      await this.persistSettings();
+    } else if (showWhatsNew) {
       setTimeout(() => {
         this.openWhatsNewModal();
         this.state.settings.lastSeenVersion = currentVersion;
@@ -441,6 +446,32 @@ class NocturneWriter {
         console.warn('Git autosave failed:', err);
       }
     }, minutes * 60000);
+  }
+
+  openPendingNativeFiles() {
+    this.nativeFileWork = (this.nativeFileWork || Promise.resolve()).catch(error => this.toast(error.message)).then(async () => {
+      const files = await platformFiles.takeOpenFiles();
+      for (const file of files) {
+        if (file.error) { this.toast(`${file.name}: ${file.error}`); continue; }
+        try {
+          if (/\.nocturnedump$/iu.test(file.name)) await this.handleProjectDumpText(file.data, file.name);
+          else if (/\.nocturned$/iu.test(file.name)) {
+            const payload = await this.readNocturnedFile(new File([file.data], file.name));
+            if (payload) this.queueNocturnedImportModal(payload, file.name);
+          }
+          else await this.importKbFiles([new File([file.data], file.name, { type: 'application/json' })]);
+          const overlay = document.getElementById('form-overlay');
+          if (overlay?.classList.contains('active')) await new Promise(resolve => {
+            const observer = new MutationObserver(() => {
+              if (!overlay.classList.contains('active')) { observer.disconnect(); resolve(); }
+            });
+            observer.observe(overlay, { attributes: true, attributeFilter: ['class'] });
+          });
+        } catch (error) { this.toast(`${file.name}: ${error.message}`); }
+      }
+      return files.length;
+    });
+    return this.nativeFileWork;
   }
 
   showStorageWarnings() {
@@ -1417,13 +1448,7 @@ class NocturneWriter {
     this.positionFloatingToolbarMenu(this.activeFloatingMenuKey);
   }
 
-  syncFloatingMenuPortalState() {
-    const portal = document.getElementById('floating-menu-portal');
-    if (!portal) return;
-    const hasOpenMenu = ['library', 'kb', 'mode', 'format', 'split', 'notes', 'search', 'review']
-      .some((key) => this.isFloatingMenuOpen(key));
-    portal.setAttribute('aria-hidden', hasOpenMenu ? 'false' : 'true');
-  }
+
 
   openFloatingMenu(key) {
     this.closeAllFloatingMenus({ except: key, immediateLogic: true });
@@ -2701,36 +2726,9 @@ class NocturneWriter {
     this.renderMobileShell();
   }
 
-  buildSyncMergePreview(message) {
-    const payload = message.dump?.payload || {};
-    const lore = payload.lore || {};
-    const timeline = lore.timeline || [];
-    const deviceName = message.deviceName || 'устройство';
-    const folderTitle = this.remoteConnectFolderTitle(message);
-    const stats = {
-      docs: payload.docs?.length || 0,
-      folders: payload.folders?.length || 0,
-      characters: lore.characters?.length || 0,
-      locations: lore.locations?.length || 0,
-      timeline: timeline.length,
-      subtimelines: timeline.reduce((sum, item) => sum + (item.subEvents?.length || 0), 0),
-      notes: payload.floatingNotes?.length || 0,
-      conflicts: (payload.docs || []).filter((doc) => this.state.docs.some((local) => local.id === doc.id)).length,
-    };
-    return {
-      remoteDeviceId: message.from,
-      remoteDeviceName: deviceName,
-      stats,
-      connectFolders: [folderTitle],
-      receivedAt: Date.now(),
-    };
-  }
 
-  remoteConnectFolderTitle(message) {
-    const name = message.deviceName || 'устройство';
-    const source = /android|phone|тел/i.test(name) ? 'С телефона' : 'С компьютера';
-    return `${source} — ${name}`;
-  }
+
+
 
   async applySyncMergePreview() {
     const remote = this.state.sync.remoteState;
@@ -9496,25 +9494,7 @@ class NocturneWriter {
     }
   }
 
-  readStoredZip(buffer) {
-    const view = new DataView(buffer);
-    const decoder = new TextDecoder();
-    const files = {};
-    let offset = 0;
-    while (offset + 30 < buffer.byteLength && view.getUint32(offset, true) === 0x04034b50) {
-      const method = view.getUint16(offset + 8, true);
-      const compressedSize = view.getUint32(offset + 18, true);
-      const fileNameLength = view.getUint16(offset + 26, true);
-      const extraLength = view.getUint16(offset + 28, true);
-      const nameStart = offset + 30;
-      const dataStart = nameStart + fileNameLength + extraLength;
-      const name = decoder.decode(new Uint8Array(buffer, nameStart, fileNameLength));
-      if (method === 0) files[name] = decoder.decode(new Uint8Array(buffer, dataStart, compressedSize));
-      else if (method === 8) throw new Error('Импорт DOCX поддерживает документы, экспортированные Nocturne. Сжатые Word DOCX пока не распаковываются.');
-      offset = dataStart + compressedSize;
-    }
-    return files;
-  }
+
 
   async readNocturnedFile(file) {
     try {
@@ -21390,27 +21370,9 @@ ${raw}`;
       });
   }
 
-  checkLore() {
-    const doc = this.getFocusedDoc();
-    const text = docText(doc?.ast);
-    const issues = [];
-    if (/Эрион[^.?!…]{0,80}голубые глаза|голубые глаза[^.?!…]{0,80}Эрион/i.test(text)) {
-      issues.push('Конфликт: у Эриона в лоре карие глаза, в тексте найдены голубые.');
-    }
-    const normalizedText = normalizeTypoToken(text);
-    [...this.state.lore.characters, ...this.state.lore.locations].forEach((entity) => {
-      const matched = this.entityMentionValues(entity).some((alias) => alias && normalizedText.includes(normalizeTypoToken(alias)));
-      if (!matched) return;
-      if (!entity.documentIds?.includes(doc.id)) issues.push(`Связь добавлена: ${this.entityDisplayName(entity)} фигурирует в текущей главе.`);
-      entity.documentIds = [...new Set([...(entity.documentIds || []), doc.id])];
-    });
-    this.saveLore();
-    return issues.length ? issues.join('\n') : 'Проверка лора завершена: явных конфликтов не найдено.';
-  }
 
-  hasHardLoreConflict(doc = this.activeDoc) {
-    return false;
-  }
+
+
 
   updateAssistantPanelState() {
     const docMessage = this.assistantDocumentProblem();
@@ -23716,7 +23678,6 @@ ${raw}`;
     location.reload();
   }
 
-// --- syncActiveDocFromFocusedPane ---
 
   syncActiveDocFromFocusedPane() {
 
@@ -23728,7 +23689,6 @@ ${raw}`;
 
 
 
-// --- syncFloatingMenuPortalState ---
 
   syncFloatingMenuPortalState() {
 
@@ -23746,7 +23706,6 @@ ${raw}`;
 
 
 
-// --- renderMobileSync ---
 
   renderSyncConnectionForm() {
     const s = this.state.sync;
@@ -23788,7 +23747,6 @@ ${raw}`;
       </div></div>`;
   }
 
-// --- renderSyncDeviceCard ---
 
   renderSyncDeviceCard(device = {}, mode = 'discovered') {
 
@@ -23826,7 +23784,6 @@ ${raw}`;
 
 
 
-// --- syncStatusLabel ---
 
   syncStatusLabel(status) {
 
@@ -23850,7 +23807,6 @@ ${raw}`;
 
 
 
-// --- renderSyncMergePreview ---
 
   renderSyncMergePreview(preview) {
 
@@ -23898,7 +23854,6 @@ ${raw}`;
 
 
 
-// --- renderSyncStatus ---
 
   renderSyncStatus() {
 
@@ -23914,7 +23869,6 @@ ${raw}`;
 
 
 
-// --- updateSyncStatusUi ---
 
   updateSyncStatusUi() {
 
@@ -23950,7 +23904,6 @@ ${raw}`;
 
 
 
-// --- isLocalSyncDevice ---
 
   isLocalSyncDevice(device = {}) {
 
@@ -23968,7 +23921,6 @@ ${raw}`;
 
 
 
-// --- applySyncServerStatus ---
 
   applySyncServerStatus(payload = {}) {
 
@@ -24010,7 +23962,6 @@ ${raw}`;
 
 
 
-// --- candidateSyncHosts ---
 
   candidateSyncHosts() {
 
@@ -24062,7 +24013,6 @@ ${raw}`;
 
 
 
-// --- cancelSyncDiscoveryScan ---
 
   cancelSyncDiscoveryScan() {
 
@@ -24078,7 +24028,6 @@ ${raw}`;
 
 
 
-// --- renderSyncSurfaces ---
 
   renderSyncSurfaces() {
     const focused = document.activeElement?.matches('[data-sync-field]') ? { field: document.activeElement.dataset.syncField, start: document.activeElement.selectionStart, end: document.activeElement.selectionEnd } : null;
@@ -24105,7 +24054,6 @@ ${raw}`;
   }
 
 
-// --- disconnectLocalSync ---
 
   disconnectLocalSync() {
 
@@ -24117,7 +24065,6 @@ ${raw}`;
 
 
 
-// --- buildSyncMergePreview ---
 
   buildSyncMergePreview(message) {
 
@@ -24169,7 +24116,6 @@ ${raw}`;
 
 
 
-// --- openSyncPanel ---
 
   async controlLanServer(action) {
     try {
@@ -24220,7 +24166,6 @@ ${raw}`;
 
 
 
-// --- renderOpenSyncPanel ---
 
   renderOpenSyncPanel() {
 
@@ -24240,7 +24185,6 @@ ${raw}`;
 
 
 
-// --- renderDesktopSyncCenter ---
 
   renderDesktopSyncCenter() {
     const s = this.state.sync, server = s.server || {};
@@ -24259,7 +24203,6 @@ ${raw}`;
     </div>`;
   }
 
-// --- connectLocalSyncFromUi ---
 
 async connectLocalSyncFromUi() {
 
@@ -24339,7 +24282,6 @@ async connectLocalSyncFromUi() {
 
 
 
-// --- probeSyncDiscoveryHost ---
 
 async probeSyncDiscoveryHost(host, port = this.state.sync.port || '8787', method = 'manual') {
 
@@ -24351,7 +24293,6 @@ async probeSyncDiscoveryHost(host, port = this.state.sync.port || '8787', method
 
 
 
-// --- preferredLanIps ---
 
   preferredLanIps(ips = []) {
 
@@ -24371,7 +24312,6 @@ async probeSyncDiscoveryHost(host, port = this.state.sync.port || '8787', method
 
 
 
-// --- isPrivateLanIp ---
 
   isPrivateLanIp(ip = '') {
 
@@ -24391,7 +24331,6 @@ async probeSyncDiscoveryHost(host, port = this.state.sync.port || '8787', method
 
 
 
-// --- remoteConnectFolderTitle ---
 
   remoteConnectFolderTitle(message) {
 
@@ -24405,7 +24344,6 @@ async probeSyncDiscoveryHost(host, port = this.state.sync.port || '8787', method
 
 
 
-// --- scanForSyncServers ---
 
 async scanForSyncServers() {
 
@@ -24505,7 +24443,6 @@ async scanForSyncServers() {
 
 
 
-// --- normalizeDiscoveredDevice ---
 
   normalizeDiscoveredDevice(payload, host, port, method = 'scan') {
 
@@ -24539,7 +24476,6 @@ async scanForSyncServers() {
 
 
 
-// --- httpGetJson ---
 
 async httpGetJson(url, timeoutMs = 650) {
 

@@ -10,6 +10,12 @@ contextBridge.exposeInMainWorld('nocturneElectron', {
   writeBackup: (data, name) => ipcRenderer.invoke('nocturne:backup-write', data, name),
   readBackup: name => ipcRenderer.invoke('nocturne:backup-read', name),
   openDumpFile: () => ipcRenderer.invoke('nocturne:open-dump-file'),
+  takeOpenFiles: () => ipcRenderer.invoke('nocturne:take-open-files'),
+  onOpenFilesPending: callback => {
+    const listener = () => callback();
+    ipcRenderer.on('nocturne:open-files-pending', listener);
+    return () => ipcRenderer.removeListener('nocturne:open-files-pending', listener);
+  },
   saveDumpFile: (data, suggestedName) => {
     if (typeof data !== 'string') return Promise.reject(new Error('Dump data must be a string.'));
     if (data.length > 80 * 1024 * 1024) return Promise.reject(new Error('Dump data is too large.'));

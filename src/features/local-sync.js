@@ -4,16 +4,6 @@ import { SYNC_PROTOCOL_VERSION, pairingNonce, pairingProof, verifyPairingProof }
 
 export { SYNC_PROTOCOL_VERSION };
 
-export function createDeviceId() {
-  try {
-    const existing = localStorage.getItem('nocturne-sync-device-id');
-    if (existing) return existing;
-  } catch {}
-  const id = uid('device');
-  try { localStorage.setItem('nocturne-sync-device-id', id); } catch {}
-  return id;
-}
-
 export function defaultDeviceName(runtime = {}) {
   if (runtime.isAndroid) return 'Android телефон';
   if (runtime.isCapacitor) return 'Мобильное устройство';

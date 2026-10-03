@@ -8,7 +8,7 @@
     "dev": "node server.mjs",
     "build:editor": "node scripts/build-editor-vendor.mjs && node scripts/build-gsap-vendor.mjs && node scripts/build-native-vendor.mjs",
     "build": "npm run build:editor && node scripts/build-web.mjs",
-    "check": "npm run build:editor && node scripts/check-source.mjs && node scripts/test-editor-adapter.mjs",
+    "check": "node scripts/check-source.mjs && node scripts/test-editor-adapter.mjs",
     "test": "node scripts/verify-project.mjs",
     "smoke:desktop": "node scripts/desktop-smoke.mjs",
     "electron:dev": "cross-env ELECTRON_DEV_URL=http://localhost:5173 electron electron/main.cjs",

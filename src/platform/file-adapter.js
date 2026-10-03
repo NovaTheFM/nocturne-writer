@@ -113,6 +113,16 @@ export async function shareFileOrText(data, options = {}) {
   return saveTextFile(data, options.suggestedName || 'nocturne-share.txt', options.mime || 'text/plain;charset=utf-8');
 }
 
+export async function takeOpenFiles() {
+  if (!detectRuntime().isElectron) return [];
+  return window.nocturneElectron.takeOpenFiles?.() || [];
+}
+
+export function onOpenFilesPending(callback) {
+  if (!detectRuntime().isElectron) return () => {};
+  return window.nocturneElectron.onOpenFilesPending?.(callback) || (() => {});
+}
+
 let backupDirectoryHandle = null;
 export async function controlSyncServer(action = 'status') {
   const methods = { status: 'syncServerStatus', start: 'syncServerStart', stop: 'syncServerStop', 'refresh-token': 'syncServerRefreshToken', 'connection-info': 'syncServerConnectionInfo' };
@@ -194,6 +204,7 @@ export async function saveGitSnapshot(data, projectName) {
 }
 
 export const platformFiles = {
+  takeOpenFiles, onOpenFilesPending,
   controlSyncServer,
   printHtmlDocument,
   initializeBackupDirectory, chooseBackupDirectory, writeBackup, readBackup,

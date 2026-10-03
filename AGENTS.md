@@ -18,17 +18,23 @@ Targets: Browser (served via Node), Electron desktop, Android (Capacitor).
 ```
 index.html          ← entry point (loads src/css/* + src/main.js)
 src/
-  main.js           ← monolithic app entry (~750 KB, all UI logic lives here)
+  main.js           ← monolithic app entry (~1.26 MB, UI orchestration)
   styles.css        ← legacy monolithic stylesheet (~200 KB)
   core/
     db.js           ← IndexedDB wrapper (all persistence)
     crypto.js       ← E2E encryption helpers (AES-GCM via WebCrypto)
+    record-protection.js ← protected records and locked views
+    sync-auth.js    ← protocol 3 pairing proofs; code stays local
     utils.js        ← shared utility functions
     defaults.js     ← default data shapes / constants
     typos.js        ← typo/spell-check dictionary
   features/
     command-palette.js  ← Ctrl+K command palette logic
     ai-context.js       ← AI knowledge context serialisation
+    database-sync.js    ← record versions, tombstones and conflicts
+    local-sync.js       ← authenticated LAN client
+    backups.js          ← backup rotation and restore
+  editor/             ← Tiptap bridge, model adapters and visual pagination
   ui/
     icons.js            ← SVG icon library
   platform/
@@ -43,7 +49,7 @@ electron/
   preload.cjs         ← contextBridge / IPC preload
 
 scripts/
-  build-web.mjs       ← production bundler (copies files to dist/)
+  build-web.mjs       ← copies current web assets to dist/ after vendor build
   build-android-apk.mjs
   sync-server.mjs     ← LAN sync server
   desktop-smoke.mjs   ← Playwright smoke test
@@ -86,7 +92,7 @@ npm run dev          # starts dev server on http://localhost:5173
 
 Open `http://localhost:5173` in a browser.
 
-Syntax check (no execution):
+Source syntax and pure document adapter checks (no vendor rebuild):
 ```bash
 npm run check
 ```
@@ -117,12 +123,13 @@ npm run android:build:debug
 
 All entities stored in IndexedDB (`db.js`). Key object stores:
 
-- `projects` — manuscript projects (title, body, settings, snapshots)
-- `characters` — character cards
-- `locations` — location cards
-- `events` — timeline events
-- `subtimelines` — sub-timeline groups
-- `notes` — free-form notes
+- `docs`, `folders` — manuscript chapters and folders
+- `lore` — worlds containing characters, locations, timeline/subevents, notes and rules
+- `settings`, `snapshots`, `stats`, `floatingNotes`, `typoRules`, `reviewMarks`
+- `syncDevices`, `syncMappings`, `syncQueue`, `syncConflicts`, `syncJournal`, `syncTrash`
+- `backups`, `activity`, `drafts`, `trash`
+
+The canonical list of all 19 stores is `DATABASE_STORES` in `src/core/db.js`. Protected stores use `record-protection.js` and `crypto.js`. Small UI preferences may use existing localStorage keys; manuscript data and identity go through IndexedDB.
 
 Export format: `.nocturnedump` (JSON, optionally AES-GCM encrypted).
 
@@ -130,7 +137,14 @@ Export format: `.nocturnedump` (JSON, optionally AES-GCM encrypted).
 
 ## Testing
 
-No automated unit test suite yet. Use the Playwright smoke test:
+Automated Node unit tests and Playwright regression suites use isolated profiles. Run the complete verification pipeline:
+
+```bash
+npm test
+node scripts/verify-project.mjs --artifacts # after fresh Android/Electron builds
+```
+
+Smoke test against the running development server:
 
 ```bash
 npm run dev &
@@ -156,12 +170,12 @@ npm run smoke:desktop
 
 | File | Size |
 |------|------|
-| `src/main.js` | ~750 KB |
+| `src/main.js` | ~1.26 MB |
 | `src/styles.css` | ~200 KB |
 | `src/core/typos.js` | ~16 KB |
 | `src/features/command-palette.js` | ~16 KB |
 | `src/features/ai-context.js` | ~7 KB |
-| `src/core/db.js` | ~3.5 KB |
+| `src/core/db.js` | ~10 KB |
 | `src/core/crypto.js` | ~2 KB |
 
 ---
@@ -171,7 +185,7 @@ npm run smoke:desktop
 To ensure version tracking and seamless update delivery, the application tracks changes via `updates.md` and displays a "What's New" (Что нового) modal to desktop (Electron) users on first launch after an update.
 
 ### Rule 1: Log Every Change in `updates.md`
-Whenever you edit code or fix bugs, you MUST log your changes in [updates.md](file:///c:/today%20we%20steal%20the%20code%202/updates.md) at the root of the project.
+Whenever you edit code or fix bugs, you MUST log your changes in [updates.md](updates.md) at the root of the project.
 Format:
 ```markdown
 ## [YYYY-MM-DD HH:MM] Версия X.Y.Z — Short Release Header
@@ -186,13 +200,14 @@ Format:
 When the user gives the command `"Обновляем"` (or similar release/update command), you must execute the following sequence:
 1. **Read `updates.md`**: Collect all changes logged since the last version change.
 2. **Compile "What's New" Content**:
-   - Update the HTML content inside the `openWhatsNewModal()` method in [main.js](file:///c:/today%20we%20steal%20the%20code%202/src/main.js) to list the newly added features and fixes, keeping it clear, neat, and structured.
+   - Update the HTML content inside the `openWhatsNewModal()` method in [main.js](src/main.js) to list the newly added features and fixes, keeping it clear, neat, and structured.
 3. **Increment Version**:
    - Run the automated version bumping script: `python bump_version.py [X.Y.Z]` (where `[X.Y.Z]` is the target version, e.g. `1.0.3`). If no version is specified, it will auto-increment the patch number.
-   - This script automatically updates versions in `package.json`, `src/main.js` (`currentVersion` and `appVersion`), and all query-string cache-busters in `index.html`.
+   - This script updates `package.json`, both lockfiles, `src/main.js` (`currentVersion`, `appVersion`, current What's New header), query-string cache-busters, Android `versionName` and incrementing `versionCode`. Invalid/decreasing versions are rejected; failures restore the original files.
 4. **Compile / Package App**:
    - Run the packaging command `python web2exe_fixed.py` to compile the app to executable.
    - Wait for the build process to finish.
+   - The packager first builds current web/vendor assets, uses `electron-package-lock.json`, and creates both installer and portable EXE. Version is not bumped during ordinary fixes.
 5. **Log Release**:
    - Ensure the new release is logged as a version section in `updates.md`.
 

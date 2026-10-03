@@ -13,6 +13,35 @@ const { Bonjour } = require('bonjour-service');
 const root = path.resolve(__dirname, '..');
 const devUrl = process.env.NOCTURNE_DEV_URL || process.env.ELECTRON_DEV_URL || '';
 if (process.env.NOCTURNE_TEST_PROFILE) app.setPath('userData', path.resolve(process.env.NOCTURNE_TEST_PROFILE));
+const associatedExtensions = new Set(['.nocturnedump', '.nocturnmemory', '.nocturnecharacters', '.nocturneplaces', '.nocturnetimelines', '.nocturnenotes', '.nocturnechar', '.nocturneplace', '.nocturnetime', '.nocturnenote', '.nocturned']);
+const pendingOpenFiles = [];
+function queueOpenFiles(filenames, directory = process.cwd()) {
+  for (const filename of filenames) {
+    if (typeof filename !== 'string' || filename.startsWith('-') || !associatedExtensions.has(path.extname(filename).toLowerCase())) continue;
+    const target = path.resolve(directory, filename);
+    if (!pendingOpenFiles.includes(target)) pendingOpenFiles.push(target);
+  }
+  for (const win of BrowserWindow.getAllWindows()) win.webContents.send('nocturne:open-files-pending');
+}
+queueOpenFiles(process.argv.slice(1));
+app.on('open-file', (event, filename) => { event.preventDefault(); queueOpenFiles([filename]); });
+if (!app.requestSingleInstanceLock()) app.quit();
+else app.on('second-instance', (_event, argv, directory) => {
+  queueOpenFiles(argv.slice(1), directory);
+  const win = BrowserWindow.getAllWindows()[0];
+  if (win && !process.env.NOCTURNE_TEST_PROFILE) { if (win.isMinimized()) win.restore(); win.focus(); }
+});
+ipcMain.handle('nocturne:take-open-files', async () => {
+  const files = [];
+  for (const filename of pendingOpenFiles.splice(0)) {
+    try {
+      const stat = await fs.stat(filename);
+      if (!stat.isFile() || stat.size > 80 * 1024 * 1024) throw new Error('Файл слишком большой или недоступен.');
+      files.push({ name: path.basename(filename), data: await fs.readFile(filename, 'utf8'), size: stat.size });
+    } catch (error) { files.push({ name: path.basename(filename), error: error.message }); }
+  }
+  return files;
+});
 let chosenBackupDirectory = null;
 const validBackupName = name => typeof name === 'string' && /^nocturne-[\dTZ.-]+\.nocturnedump$/.test(name);
 async function backupDirectory() {

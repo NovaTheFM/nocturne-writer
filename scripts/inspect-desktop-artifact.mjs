@@ -19,7 +19,8 @@ for (const filename of ['index.html', ...await files('src'), ...await files('rea
   assert.deepEqual(asar.extractFile(archive, join('app_src', filename)), await readFile(filename), `Outdated packaged file: ${filename}`); verified.push(filename);
 }
 for (const filename of ['electron/main.cjs', 'electron/preload.cjs']) { assert.deepEqual(asar.extractFile(archive, normalize(filename)), await readFile(filename)); verified.push(filename); }
-const filename = 'release/electron/Nocturne Writer Setup 1.2.0.exe';
+const { version } = JSON.parse(await readFile('package.json', 'utf8'));
+const filename = `release/electron/Nocturne Writer Setup ${version}.exe`;
 const result = { artifact: filename, bytes: (await stat(filename)).size, sha256: createHash('sha256').update(await readFile(filename)).digest('hex'), verifiedPackagedFiles: verified };
 await writeFile('release/qa/desktop-artifact.json', JSON.stringify(result, null, 2));
 console.log(`Desktop installer verified: ${verified.length} packaged files, ${result.bytes} bytes, SHA256 ${result.sha256}`);
