@@ -798,10 +798,10 @@ export class NocturneEditorBridge {
 
     const instance = { paneId, docId: doc.id, editor, host, pageShell, overlay };
     this.instances.set(paneId, instance);
-    instance.measuredPageWidth = pageShell.getBoundingClientRect().width;
+    let measuredWidth = pageShell.getBoundingClientRect().width;
     instance.resizeObserver = new ResizeObserver(() => {
       const width = pageShell.getBoundingClientRect().width;
-      if (Math.abs(width - instance.measuredPageWidth) > .5) { instance.measuredPageWidth = width; this.scheduleVisualPages(paneId); }
+      if (Math.abs(width - measuredWidth) > .5) { measuredWidth = width; this.scheduleVisualPages(paneId); }
     });
     instance.resizeObserver.observe(pageShell);
     instance.onFontsLoaded = () => this.scheduleVisualPages(paneId);
@@ -1004,7 +1004,6 @@ export class NocturneEditorBridge {
     const raf = requestAnimationFrame(() => {
       this.visualPageRaf.delete(paneId);
       if (instance.editor.isDestroyed || instance.editor.view.composing) return;
-      instance.measuredPageWidth = instance.pageShell.getBoundingClientRect().width;
       const settings = this.getSettings?.() || {};
       calculateVisualPages({
         editor: instance.editor,

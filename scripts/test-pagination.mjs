@@ -130,9 +130,9 @@ try {
     await enable(page, `<p>${'Resize and split content '.repeat(1100)}</p>`);
     const before = await geometry(page);
     await page.evaluate(() => { const a = window.nocturneApp; a.state.settings.fontSize = 21; a.applySettings(); a.nocturneEditor.scheduleVisualPages('primary'); }); await page.waitForTimeout(500);
-    const large = await geometry(page); assert.deepEqual(large.misses, []); assert.ok(large.pages > before.pages);
+    const large = await geometry(page); assert.deepEqual(large.misses, [], JSON.stringify({ phase: 'font', width: large.width, expectedHeight: large.expectedHeight })); assert.ok(large.pages > before.pages);
     await page.evaluate(() => window.nocturneApp.toggleSplitMode()); await page.waitForTimeout(650);
-    const split = await geometry(page); assert.deepEqual(split.misses, []); assert.ok(split.pages >= large.pages); return { before: before.pages, large: large.pages, split: split.pages };
+    const split = await geometry(page); assert.deepEqual(split.misses, [], JSON.stringify({ phase: 'split', width: split.width, expectedHeight: split.expectedHeight })); assert.ok(split.pages >= large.pages); return { before: before.pages, large: large.pages, split: split.pages };
   });
   await check('live split resizing keeps both paginated manuscripts inside their current sheets before mouseup', async page => {
     await splitDocuments(page, true);
@@ -193,7 +193,7 @@ try {
         await page.waitForTimeout(100);
         await page.keyboard.insertText(' Дополнение 🙂');
       } else if (step === 1) {
-        await page.evaluate(() => { const a = window.nocturneApp; a.state.settings.fontSize = 21; a.applySettings(); });
+        await page.evaluate(() => { const a = window.nocturneApp; a.state.settings.fontSize = 21; a.state.settings.paragraphIndent = true; a.applySettings(); });
       } else if (step === 2) await page.evaluate(() => window.nocturneApp.nocturneEditor.get('primary').commands.undo());
       else if (step === 3) await page.evaluate(() => window.nocturneApp.nocturneEditor.get('primary').commands.redo());
       await page.waitForTimeout(300);
@@ -201,9 +201,28 @@ try {
       assert.deepEqual(result.misses, [], JSON.stringify({ ratio, step, misses: result.misses }));
       const expected = original + (step === 2 ? '' : ' Дополнение 🙂');
       assert.ok(result.text === expected, JSON.stringify({ step, actualLength: result.text.length, expectedLength: expected.length, tail: result.text.slice(-80) }));
+      assert.equal(await page.locator('.primary-pane [contenteditable="true"]').count(), 1);
       measurements.push({ ratio, pages: result.pages, fontSize: await page.evaluate(() => window.nocturneApp.state.settings.fontSize) }); step++;
+      if (step === 5) {
+        await page.evaluate(() => { const a = window.nocturneApp; a.state.settings.autoPaginate = false; a.applySettings(); }); await page.waitForTimeout(300);
+        assert.equal((await geometry(page)).pages, 0);
+        assert.equal(await page.locator('.pagination-measure').count(), 0);
+      }
     });
-    assert.deepEqual((await geometry(page)).misses, []); return measurements;
+    assert.equal(await page.locator('.pagination-measure').count(), 0); return measurements;
+  });
+  await check('a long unbroken Unicode string reflows during drag without splitting surrogate pairs', async page => {
+    const text = 'абвгдеёж🙂'.repeat(1900);
+    await enable(page, `<p>${text}</p>`); await page.evaluate(() => window.nocturneApp.toggleSplitMode()); await page.waitForTimeout(650);
+    const measurements = [];
+    await dragSplit(page, async ratio => {
+      const result = await geometry(page);
+      assert.deepEqual(result.misses, []); assert.equal(result.text, text); assert.ok(result.pages > 1);
+      for (const boundary of result.breaks) assert.ok(!/[\uDC00-\uDFFF]/.test(text[boundary.pos - 1]), `break at the middle of an emoji: ${boundary.pos}`);
+      measurements.push({ ratio, pages: result.pages });
+    });
+    await page.waitForFunction(() => !window.nocturneApp.nocturneEditor.visualPageRaf.has('primary'));
+    assert.equal(await page.locator('.pagination-measure').count(), 0); return measurements;
   });
   await check('spellcheck underline follows its text after pagination and font reflow', async page => {
     await enable(page, `<p>${'Reflow underline sentence. '.repeat(650)}</p>`);

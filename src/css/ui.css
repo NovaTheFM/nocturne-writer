@@ -1662,11 +1662,16 @@ body[data-active-review-mode="editor"] .toolbar-history { padding-right: 0; bord
   white-space: pre-wrap;
 }
 .page-content h1, .page-content h2, .page-content h3 { white-space: pre-wrap; }
-.indent-paragraphs .page-content p { text-indent: 2.2em; }
+.indent-paragraphs .page-content p,
+.indent-paragraphs .pagination-measure p { text-indent: 2.2em; }
 .indent-paragraphs .page-content p[style*="text-align: center"],
 .indent-paragraphs .page-content p[style*="text-align: right"],
 .indent-paragraphs .page-content p.has-text-align-center,
-.indent-paragraphs .page-content p.has-text-align-right {
+.indent-paragraphs .page-content p.has-text-align-right,
+.indent-paragraphs .pagination-measure p[style*="text-align: center"],
+.indent-paragraphs .pagination-measure p[style*="text-align: right"],
+.indent-paragraphs .pagination-measure p.has-text-align-center,
+.indent-paragraphs .pagination-measure p.has-text-align-right {
   text-indent: 0 !important;
 }
 .baseline-grid .page-content p,
