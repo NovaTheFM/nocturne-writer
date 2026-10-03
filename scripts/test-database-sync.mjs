@@ -8,6 +8,7 @@ class MemoryDb {
   async getAllRaw(name) { return structuredClone([...this.store(name).values()]); }
   async getAll(name) { return this.getAllRaw(name); }
   async get(name, id) { return structuredClone(this.store(name).get(id)); }
+  async getRaw(name, id) { return this.get(name, id); }
   async put(name, value, options = {}) { this.store(name).set(value.id, structuredClone(value)); this.onMutation?.({ store: name, id: value.id, action: 'put', origin: options.origin }); }
   async delete(name, id, options = {}) { this.store(name).delete(id); this.onMutation?.({ store: name, id, action: 'delete', origin: options.origin }); }
   async atomicWrite(entries, options = {}) {
@@ -41,6 +42,15 @@ async function pair() {
   return { a, b, left, right };
 }
 async function reconcile(a, b) { const sa = await a.buildState(), sb = await b.buildState(); await a.receiveState(sb); await b.receiveState(sa); }
+
+test('receiving a batch reads each manuscript by key instead of rescanning its store', async () => {
+  const { a, b, left, right } = await pair();
+  for (let i = 0; i < 100; i++) await right.put('docs', { id: `batch-${i}`, title: `Chapter ${i}` });
+  const state = await b.buildState(); let scans = 0;
+  const read = left.getAllRaw.bind(left); left.getAllRaw = async name => { if (name === 'docs') scans++; return read(name); };
+  await a.receiveState(state);
+  assert.equal(scans, 0); assert.equal((await left.getAll('docs')).length, 100);
+});
 
 test('missing chapters, notes and worlds move in both directions', async () => {
   const { a, b, left, right } = await pair();
