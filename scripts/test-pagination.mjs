@@ -131,5 +131,24 @@ try {
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
     await page.screenshot({ path: 'release/qa/pagination-mobile.png' }); return { pages: result.pages };
   }, { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await check('a trailing blank line can start a new sheet without moving the whole paragraph', async page => {
+    const measurements = await page.evaluate(() => {
+      const a = window.nocturneApp, instance = a.nocturneEditor.instances.get('primary'), style = getComputedStyle(instance.pageShell);
+      const height = Math.round(instance.pageShell.getBoundingClientRect().width * 1123 / 794), line = parseFloat(getComputedStyle(instance.editor.view.dom.querySelector('p')).lineHeight);
+      return { lines: Math.floor((height - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)) / line) };
+    });
+    await enable(page, `<p>${'<br>'.repeat(measurements.lines)}</p>`);
+    const result = await page.evaluate(() => {
+      const a = window.nocturneApp, instance = a.nocturneEditor.instances.get('primary'), e = instance.editor, shell = instance.pageShell;
+      const style = getComputedStyle(shell), origin = shell.getBoundingClientRect().top;
+      const height = Math.round(shell.getBoundingClientRect().width * 1123 / 794), stride = height + 60, misses = [];
+      for (let pos = 1; pos <= e.state.doc.content.size - 1; pos++) {
+        const c = e.view.coordsAtPos(pos), y = c.top - origin, within = y % stride;
+        if (within < parseFloat(style.paddingTop) - 3 || within + c.bottom - c.top > height - parseFloat(style.paddingBottom) + 3) misses.push(pos);
+      }
+      return { firstPage: Math.floor((e.view.coordsAtPos(1).top - origin) / stride), misses };
+    });
+    assert.equal(result.firstPage, 0); assert.deepEqual(result.misses, []); return result;
+  });
 } finally { await browser.close(); server.kill(); await mkdir('release/qa', { recursive: true }); await writeFile('release/qa/pagination-regressions.json', JSON.stringify(results, null, 2)); }
 if (results.some(result => !result.passed)) process.exitCode = 1;

@@ -9,6 +9,7 @@ const checks = [
   ['audit-sync', ['scripts/test-audit-sync.mjs']],
   ['audit-platform', ['scripts/test-audit-platform.mjs']],
   ['pagination', ['scripts/test-pagination.mjs']],
+  ['pagination-interaction', ['scripts/test-pagination-interaction.mjs']],
   ['release-tools', ['scripts/test-release-tools.py'], 'python'],
   ['editor-adapter', ['scripts/test-editor-adapter.mjs']],
   ['ai-context', ['scripts/test-ai-context.mjs']],
