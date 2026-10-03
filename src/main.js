@@ -13,6 +13,7 @@ import {
   normalizeHtml,
   parseBlocksFromEditable,
   parseTimelineRank,
+  safeImageUrl,
   stripAnalysisMarkup,
   textFromHtml,
   uid,
@@ -399,7 +400,7 @@ class NocturneWriter {
     await this.loadRememberedSyncDevices();
     this.attemptTrustedAutoReconnect().catch(error => console.warn('LAN reconnect:', error.message));
     await platformFiles.initializeBackupDirectory(this.db);
-    this.backups = new ProjectBackups({ db: this.db, files: platformFiles, buildDump: () => this.buildNocturneDump(), enabled: () => this.state.settings.automaticBackups !== false && (!this.state.settings.e2e || !!this.state.sessionPassword) });
+    this.backups = new ProjectBackups({ db: this.db, files: platformFiles, buildDump: () => this.buildNocturneDump(), enabled: () => !this.resettingData && this.state.settings.automaticBackups !== false && (!this.state.settings.e2e || !!this.state.sessionPassword) });
     this.startMobileSystemBar();
     this.applyAndroidSystemBars();
     this.startGitAutosave();
@@ -594,7 +595,9 @@ class NocturneWriter {
   }
 
   async loadDocs() {
-    const docs = await this.db.getAll('docs');
+    const rawDocs = await this.db.getAllRaw('docs');
+    this.db.trackDocumentVersions(rawDocs);
+    const docs = await Promise.all(rawDocs.map(record => this.db.decodeRecord('docs', record)));
     const drafts = new Map((await this.db.getAll('drafts')).map(draft => [draft.id, draft]));
     const password = this.state.sessionPassword;
     return Promise.all(docs.map(async (storedDoc) => {
@@ -753,7 +756,7 @@ class NocturneWriter {
 
   sanitizeFloatingNote(note = {}) {
     const now = Date.now();
-    const scope = ['global', 'document', 'character', 'location'].includes(note.scope) ? note.scope : 'global';
+    const scope = ['global', 'document', 'character', 'location', 'note'].includes(note.scope) ? note.scope : 'global';
     return {
       id: note.id || uid('float-note'),
       title: String(note.title || 'Новая заметка').slice(0, 120),
@@ -845,7 +848,7 @@ class NocturneWriter {
       role: item.role || '',
       body: item.body || '',
       icon: item.icon || 'bx-user',
-      image: item.image || '',
+      image: safeImageUrl(item.image),
       aliases: Array.isArray(item.aliases) ? item.aliases.filter(Boolean) : [],
       mentionForms: Array.isArray(item.mentionForms) ? item.mentionForms.filter(Boolean) : [],
       documentIds: Array.isArray(item.documentIds) ? item.documentIds : [],
@@ -864,7 +867,7 @@ class NocturneWriter {
       role: item.role || '',
       body: item.body || '',
       icon: item.icon || 'bx-buildings',
-      image: item.image || '',
+      image: safeImageUrl(item.image),
       aliases: Array.isArray(item.aliases) ? item.aliases.filter(Boolean) : [],
       mentionForms: Array.isArray(item.mentionForms) ? item.mentionForms.filter(Boolean) : [],
       documentIds: Array.isArray(item.documentIds) ? item.documentIds : [],
@@ -2645,6 +2648,7 @@ class NocturneWriter {
   }
 
   scheduleDatabaseSync() {
+    if (this.resettingData || this.importingProject) return;
     clearTimeout(this.databaseSyncTimer);
     this.databaseSyncTimer = setTimeout(() => this.sendSyncProjectState().catch(error => {
       this.state.sync.statusDetail = error.message;
@@ -2670,7 +2674,9 @@ class NocturneWriter {
     await this.loadFloatingNotes(); await this.loadReviewMarks(); await this.loadTypoRules();
     const notes = await this.db.get('settings', 'global-notes');
     if (notes && !notes.locked) this.state.globalNotes = notes.text || '';
-    this.state.sync.conflicts = (await this.db.getAll('syncConflicts')).length;
+    const conflicts = await this.db.getAll('syncConflicts');
+    for (const id of this.localDocConflicts || []) if (!conflicts.some(conflict => conflict.origin === 'local-tab' && conflict.recordId === id)) this.localDocConflicts.delete(id);
+    this.state.sync.conflicts = conflicts.length;
     this.state.sync.statusDetail = this.state.sync.conflicts ? `Есть ${this.state.sync.conflicts} конфликтов. Обе версии сохранены.` : 'Базы сверены. Все изменения сохранены на обоих устройствах.';
     this.renderDocs(); this.renderKb(); this.renderNotes(); this.updateSyncStatusUi();
     if (focused && !this.state.docs.some(doc => doc.id === focused)) { this.initWorkspace(); this.renderWorkspace(); }
@@ -13834,13 +13840,14 @@ class NocturneWriter {
   }
 
   writeLiveDraft(docId = this.getFocusedDoc()?.id || this.state.activeDocId) {
-    if (this.deletedDocIds?.has(docId)) return;
+    if (this.resettingData || this.deletedDocIds?.has(docId)) return;
     this.nocturneEditor?.syncDocFromEditorByDocId(docId);
     const doc = this.state.docs.find((item) => item.id === docId);
     if (!doc || doc.locked || !this.state.settings.liveSave) return;
     const copy = structuredClone(doc);
     const previous = this.draftWrites.get(doc.id) || Promise.resolve();
-    const write = previous.catch(() => {}).then(() => this.db.put('drafts', copy));
+    const write = previous.catch(() => {}).then(() => this.localDocConflicts?.has(doc.id)
+      ? this.databaseSync.captureDocumentConflict(copy) : this.db.put('drafts', copy));
     this.draftWrites.set(doc.id, write);
     write.catch(error => this.setSaveStatus('error', doc.id, error.message));
     return write;
@@ -13889,7 +13896,7 @@ class NocturneWriter {
   }
 
   saveDocByIdDebounced(docId) {
-    if (!docId) return;
+    if (!docId || this.resettingData) return;
     this.setSaveStatus('saving', docId);
     if (!this.saveDocDebouncers.has(docId)) {
       this.saveDocDebouncers.set(docId, debounce(() => this.saveDocById(docId, { silent: true }), 450));
@@ -13898,7 +13905,7 @@ class NocturneWriter {
   }
 
   saveDocById(docId, options = {}) {
-    if (this.deletedDocIds?.has(docId)) return Promise.resolve(false);
+    if (this.resettingData || this.deletedDocIds?.has(docId)) return Promise.resolve(false);
     this.nocturneEditor.syncDocFromEditorByDocId(docId);
     this.docSaves ||= new Map();
     const previous = this.docSaves.get(docId) || Promise.resolve();
@@ -13908,7 +13915,7 @@ class NocturneWriter {
   }
 
   async commitDocById(docId, options = {}) {
-    if (this.deletedDocIds?.has(docId)) return false;
+    if (this.resettingData || this.deletedDocIds?.has(docId)) return false;
     this.nocturneEditor?.syncDocFromEditorByDocId(docId);
     const doc = this.state.docs.find((item) => item.id === docId);
     if (!doc || doc.locked) return;
@@ -13933,6 +13940,16 @@ class NocturneWriter {
       if (!options.silent) this.toast('Сохранено.');
       return true;
     } catch (error) {
+      if (error.code === 'SYNC_RETRY') {
+        this.localDocConflicts ||= new Set(); this.localDocConflicts.add(doc.id);
+        const pending = structuredClone(doc); delete pending.encrypted;
+        await this.databaseSync.captureDocumentConflict(pending);
+        this.state.sync.conflicts = (await this.db.getAll('syncConflicts')).length;
+        this.setSaveStatus('error', doc.id, 'Глава изменена в другой вкладке. Обе версии сохранены в разделе «Разные версии».');
+        this.updateSyncStatusUi();
+        if (!options.silent) this.toast('Глава изменена в другой вкладке. Выберите версию в разделе «Разные версии».');
+        return false;
+      }
       this.setSaveStatus('error', doc.id, error?.message || 'IndexedDB не принял сохранение.');
       const quota = /quota|disk|storage/i.test(error?.name || error?.message || '');
       if (!options.silent) this.toast(quota ? 'Недостаточно места для сохранения. Экспортируйте проект или удалите старые снапшоты.' : 'Ошибка сохранения.');
@@ -13988,7 +14005,7 @@ class NocturneWriter {
         .map((pane) => pane.docId);
       return paneDocs.includes(note.linkedId);
     }
-    if (note.scope === 'character' || note.scope === 'location') {
+    if (['character', 'location', 'note'].includes(note.scope)) {
       const detail = this.state.activeLoreDetail;
       const modalActive = document.getElementById('kb-modal')?.classList.contains('active');
       if (modalActive && detail?.id === note.linkedId && this.singularLoreType(detail.type) === note.scope) return true;
@@ -14003,8 +14020,9 @@ class NocturneWriter {
     if (note.temporary) return 'Временная';
     if (note.scope === 'global') return 'Общая';
     if (note.scope === 'document') return this.state.docs.find((doc) => doc.id === note.linkedId)?.title || 'Документ';
-    const list = note.scope === 'location' ? this.state.lore.locations : this.state.lore.characters;
-    return this.entityDisplayName(list.find((item) => item.id === note.linkedId)) || (note.scope === 'location' ? 'Локация' : 'Персонаж');
+    const list = note.scope === 'note' ? this.state.lore.notes : note.scope === 'location' ? this.state.lore.locations : this.state.lore.characters;
+    const item = list.find((item) => item.id === note.linkedId);
+    return (note.scope === 'note' ? item?.title : this.entityDisplayName(item)) || (note.scope === 'note' ? 'Запись' : note.scope === 'location' ? 'Локация' : 'Персонаж');
   }
 
   floatingNoteTypeLabel(note) {
@@ -14012,6 +14030,7 @@ class NocturneWriter {
     if (note.scope === 'document') return 'Документ';
     if (note.scope === 'character') return 'Персонаж';
     if (note.scope === 'location') return 'Локация';
+    if (note.scope === 'note') return 'Запись';
     return 'Общая';
   }
 
@@ -17781,84 +17800,38 @@ class NocturneWriter {
   }
 
   async processImportedKbData(data) {
-    if (!data || typeof data !== 'object') return null;
-    const type = data.type;
-    let result = { characters: 0, locations: 0, timeline: 0, notes: 0 };
-    
-    if (type === 'nocturnmemory') {
-      if (data.lore) {
-        if (Array.isArray(data.lore.characters)) {
-          data.lore.characters.forEach(c => this.upsertCharacter(c));
-          result.characters += data.lore.characters.length;
-        }
-        if (Array.isArray(data.lore.locations)) {
-          data.lore.locations.forEach(l => this.upsertLocation(l));
-          result.locations += data.lore.locations.length;
-        }
-        if (Array.isArray(data.lore.timeline)) {
-          data.lore.timeline.forEach(t => this.upsertTimelineEvent(t));
-          result.timeline += data.lore.timeline.length;
-        }
-        return result;
-      }
+    if (!isPlainObject(data)) return null;
+    const formats = {
+      nocturnecharacters: ['characters', 'characters'], nocturneplaces: ['locations', 'locations'],
+      nocturnetimelines: ['timeline', 'timeline'], nocturnenotes: ['notes', 'notes'],
+      nocturnechar: ['characters', 'character', true], nocturneplace: ['locations', 'location', true],
+      nocturnetime: ['timeline', 'event', true], nocturnenote: ['notes', 'note', true],
+    };
+    let lore;
+    if (data.type === 'nocturnmemory') lore = data.lore;
+    else {
+      const format = formats[data.type];
+      if (!format || data[format[1]] === undefined) return null;
+      lore = { [format[0]]: format[2] ? [data[format[1]]] : data[format[1]] };
     }
-    if (type === 'nocturnecharacters') {
-      if (Array.isArray(data.characters)) {
-        data.characters.forEach(c => this.upsertCharacter(c));
-        result.characters += data.characters.length;
-        return result;
-      }
-    }
-    if (type === 'nocturneplaces') {
-      if (Array.isArray(data.locations)) {
-        data.locations.forEach(l => this.upsertLocation(l));
-        result.locations += data.locations.length;
-        return result;
-      }
-    }
-    if (type === 'nocturnetimelines') {
-      if (Array.isArray(data.timeline)) {
-        data.timeline.forEach(t => this.upsertTimelineEvent(t));
-        result.timeline += data.timeline.length;
-        return result;
-      }
-    }
-    if (type === 'nocturnechar') {
-      if (data.character) {
-        this.upsertCharacter(data.character);
-        result.characters += 1;
-        return result;
-      }
-    }
-    if (type === 'nocturneplace') {
-      if (data.location) {
-        this.upsertLocation(data.location);
-        result.locations += 1;
-        return result;
-      }
-    }
-    if (type === 'nocturnetime') {
-      if (data.event) {
-        this.upsertTimelineEvent(data.event);
-        result.timeline += 1;
-        return result;
-      }
-    }
-    if (type === 'nocturnenotes') {
-      if (Array.isArray(data.notes)) {
-        data.notes.forEach(n => this.upsertNote(n));
-        result.notes += data.notes.length;
-        return result;
-      }
-    }
-    if (type === 'nocturnenote') {
-      if (data.note) {
-        this.upsertNote(data.note);
-        result.notes += 1;
-        return result;
-      }
-    }
-    return null;
+    if (!lore) return null;
+    this.validateProjectDump({ format: 'nocturnedump', payload: { lore } });
+    const handlers = {
+      characters: [item => this.normalizeCharacter(item), item => this.upsertCharacter(item)],
+      locations: [item => this.normalizeLocation(item), item => this.upsertLocation(item)],
+      timeline: [item => this.normalizeTimelineEvent(item), item => this.upsertTimelineEvent(item)],
+      notes: [item => this.normalizeNote(item), item => this.upsertNote(item)],
+      rules: [item => typeof item === 'string' ? { id: uid('rule'), text: item } : { ...item, id: item.id || uid('rule'), text: item.text || '' }, item => {
+        this.state.lore.rules ||= [];
+        const index = this.state.lore.rules.findIndex(rule => rule.id === item.id || rule.text === item.text);
+        if (index < 0) this.state.lore.rules.push(item);
+        else this.state.lore.rules[index] = { ...item, id: this.state.lore.rules[index].id };
+      }],
+    };
+    const prepared = Object.entries(handlers).map(([key, [normalize]]) => [key, (lore[key] || []).map(normalize)]);
+    const result = {};
+    for (const [key, items] of prepared) { items.forEach(handlers[key][1]); result[key] = items.length; }
+    return result;
   }
 
   upsertNote(note) {
@@ -18111,18 +18084,20 @@ class NocturneWriter {
   }
 
   characterCard(item, draggable = false) {
-    const visual = item.image ? `<img src="${item.image}" alt="" loading="lazy" decoding="async">` : `<i class="bx ${item.icon || 'bx-user'}"></i>`;
-    return `<div class="char-card" data-lore-type="characters" data-lore-id="${item.id}">${this.loreCardActions('characters', item.id)}<div class="char-img">${visual}</div><div class="char-info"><h3>${escapeHtml(this.entityDisplayName(item))}</h3><p>${escapeHtml(item.role || item.body)}</p></div></div>`;
+    const image = safeImageUrl(item.image);
+    const visual = image ? `<img src="${escapeHtml(image)}" alt="" loading="lazy" decoding="async">` : `<i class="bx ${escapeHtml(item.icon || 'bx-user')}"></i>`;
+    return `<div class="char-card" data-lore-type="characters" data-lore-id="${escapeHtml(item.id)}">${this.loreCardActions('characters', item.id)}<div class="char-img">${visual}</div><div class="char-info"><h3>${escapeHtml(this.entityDisplayName(item))}</h3><p>${escapeHtml(item.role || item.body)}</p></div></div>`;
   }
 
   locationCard(item, draggable = false) {
-    const visual = item.image ? `<img src="${escapeHtml(item.image)}" alt="" loading="lazy" decoding="async">` : `<i class="bx ${escapeHtml(item.icon || 'bx-buildings')}"></i>`;
-    return `<div class="loc-card" data-lore-type="locations" data-lore-id="${item.id}">${this.loreCardActions('locations', item.id)}<div class="loc-img">${visual}</div><div class="loc-info"><h3>${escapeHtml(this.entityDisplayName(item))}</h3><p>${escapeHtml(item.role || item.body)}</p></div></div>`;
+    const image = safeImageUrl(item.image);
+    const visual = image ? `<img src="${escapeHtml(image)}" alt="" loading="lazy" decoding="async">` : `<i class="bx ${escapeHtml(item.icon || 'bx-buildings')}"></i>`;
+    return `<div class="loc-card" data-lore-type="locations" data-lore-id="${escapeHtml(item.id)}">${this.loreCardActions('locations', item.id)}<div class="loc-img">${visual}</div><div class="loc-info"><h3>${escapeHtml(this.entityDisplayName(item))}</h3><p>${escapeHtml(item.role || item.body)}</p></div></div>`;
   }
 
   noteCard(item, draggable = false) {
     const completedClass = item.completed ? ' note-card-completed' : '';
-    return `<div class="char-card note-card${completedClass}" data-lore-type="notes" data-lore-id="${item.id}">${this.loreCardActions('notes', item.id)}<div class="char-img"><i class="bx bx-note"></i></div><div class="char-info"><h3>${escapeHtml(item.title || 'Без названия')}</h3><p>${escapeHtml(item.body || 'Пустая запись')}</p></div></div>`;
+    return `<div class="char-card note-card${completedClass}" data-lore-type="notes" data-lore-id="${escapeHtml(item.id)}">${this.loreCardActions('notes', item.id)}<div class="char-img"><i class="bx bx-note"></i></div><div class="char-info"><h3>${escapeHtml(item.title || 'Без названия')}</h3><p>${escapeHtml(item.body || 'Пустая запись')}</p></div></div>`;
   }
 
   timelineCard(item, options = {}) {
@@ -18204,23 +18179,24 @@ class NocturneWriter {
   }
 
   loreCardActions(type, id) {
+    const safeId = escapeHtml(id), safeType = escapeHtml(type);
     let doneButton = '';
     if (type === 'notes') {
       const note = (this.state.lore.notes || []).find(n => n.id === id);
       const isCompleted = note?.completed;
       const icon = isCompleted ? 'bx-check-double' : 'bx-check';
       const title = isCompleted ? 'Вернуть в работу' : 'Исполнено';
-      doneButton = `<button type="button" data-action="toggle-note-completed" data-lore-id="${id}" class="done-btn ${isCompleted ? 'active' : ''}" title="${title}"><i class="bx ${icon}"></i></button>`;
+      doneButton = `<button type="button" data-action="toggle-note-completed" data-lore-id="${safeId}" class="done-btn ${isCompleted ? 'active' : ''}" title="${title}"><i class="bx ${icon}"></i></button>`;
     }
     const cleanerButton = type === 'notes'
-      ? `<button type="button" data-action="clean-note" data-lore-id="${id}" class="cleaner-btn" title="«Чистильщик™»"><i class="reaper-icon"></i></button>`
+      ? `<button type="button" data-action="clean-note" data-lore-id="${safeId}" class="cleaner-btn" title="«Чистильщик™»"><i class="reaper-icon"></i></button>`
       : '';
     return `<div class="lore-card-actions">
       ${doneButton}
       ${cleanerButton}
-      <button type="button" data-action="dump-single-entity" data-lore-type="${type}" data-lore-id="${id}" title="Дамп карточки"><i class="bx bx-download"></i></button>
-      <button type="button" data-action="edit-lore" data-lore-type="${type}" data-lore-id="${id}" title="Редактировать"><i class="bx bx-edit"></i></button>
-      <button type="button" data-action="delete-lore" data-lore-type="${type}" data-lore-id="${id}" title="Удалить"><i class="bx bx-trash"></i></button>
+      <button type="button" data-action="dump-single-entity" data-lore-type="${safeType}" data-lore-id="${safeId}" title="Дамп карточки"><i class="bx bx-download"></i></button>
+      <button type="button" data-action="edit-lore" data-lore-type="${safeType}" data-lore-id="${safeId}" title="Редактировать"><i class="bx bx-edit"></i></button>
+      <button type="button" data-action="delete-lore" data-lore-type="${safeType}" data-lore-id="${safeId}" title="Удалить"><i class="bx bx-trash"></i></button>
     </div>`;
   }
 
@@ -20491,6 +20467,7 @@ class NocturneWriter {
   }
 
   async persistSettings() {
+    if (this.resettingData) return;
     this.state.settings = this.validateSettings(this.state.settings);
     await this.db.put('settings', { id: 'app', value: this.state.settings });
     await this.persistGlobalNotes();
@@ -20498,7 +20475,7 @@ class NocturneWriter {
   }
 
   async persistGlobalNotes() {
-    if (this.state.settings.e2e && !this.state.sessionPassword) return;
+    if (this.resettingData || (this.state.settings.e2e && !this.state.sessionPassword)) return;
     if ((await this.db.get('settings', 'global-notes'))?.locked) return;
     await this.db.put('settings', { id: 'global-notes', text: this.state.globalNotes || '', updatedAt: Date.now() });
     safeRemoveStorageItem(localStorage, 'nocturne-global-notes');
@@ -20526,7 +20503,7 @@ class NocturneWriter {
     overlay.classList.add('active');
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('[data-confirm-reset-settings]').onclick = async () => {
-      this.state.settings = { ...defaultSettings };
+      this.state.settings = { ...structuredClone(defaultSettings), e2e: this.state.settings.e2e };
       await this.persistSettings();
       overlay.classList.remove('active');
       this.applySettings();
@@ -20786,8 +20763,8 @@ class NocturneWriter {
     const fullText = docText(doc?.ast);
     const text = fullText.slice(-4200);
     const targetText = aiTarget?.selectedText || aiTarget?.targetBlockText || '';
-    const entities = this.findRelevantLore(`${targetText}\n${text}`).map((item) => `${this.entityDisplayName(item) || item.title}: ${item.body}`).join('\n');
-    const knowledgeContext = aiContext ? serializeAiContextSafe(aiContext) : '';
+    const context = this.state.settings.aiKnowledgeContext ? aiContext || this.buildCurrentAiContext(doc, aiTarget) : null;
+    const knowledgeContext = context ? serializeAiContextSafe(context) : '';
     let persona = {
       critic: 'Ты злой, точный литературный критик. Указывай на слабые места без комплиментов.',
       muse: 'Ты поэтичная муза. Предлагай образные, музыкальные решения.',
@@ -20928,7 +20905,7 @@ ${contract}
 ${modeInstruction}
 
 Knowledge context (справочно, не вставлять в документ):
-${knowledgeContext || entities || 'Нет совпадений.'}
+${this.state.settings.aiKnowledgeContext ? knowledgeContext || 'Нет совпадений.' : 'Knowledge Context выключен.'}
 
 Контекст до цели:
 ${aiTarget?.contextBefore || text.slice(-1200)}
@@ -21553,6 +21530,7 @@ ${raw}`;
     const doc = this.state.docs.find((item) => item.id === suggestion?.docId);
     const target = suggestion?.target;
     if (!doc || !target) return false;
+    this.nocturneEditor.syncDocFromEditorByDocId(doc.id);
     if (this.containsUnsafeAiOutput(suggestion.text)) {
       this.clearSuggestion();
       this.setAssistantOutput('AI-предложение отклонено: модель вернула служебный протокол вместо текста.', 'error');
@@ -21563,6 +21541,10 @@ ${raw}`;
     const block = doc.ast.blocks[blockIndex];
     if (!block) {
       this.toast('AI-результат готов, но место вставки изменилось. Повторите запрос.');
+      return false;
+    }
+    if (target.mode !== 'replace-selection' && typeof target.targetBlockText === 'string' && blockText(block) !== target.targetBlockText) {
+      this.toast('AI-результат готов, но исходный абзац изменился. Повторите запрос.');
       return false;
     }
     if (suggestion.mode === 'inline-continuation') {
@@ -22699,11 +22681,14 @@ ${raw}`;
     if (raw.schemaVersion !== undefined && ![1, 2, 3, 4].includes(Number(raw.schemaVersion))) throw new Error('Версия резервной копии не поддерживается.');
     ['folders', 'docs', 'typoRules', 'reviewMarks', 'snapshots', 'lores', 'settingsRecords', 'floatingNotes', 'stats', 'trash', 'syncMappings', 'syncRevisions', 'syncConflicts'].forEach((key) => {
       if (payload[key] !== undefined && !Array.isArray(payload[key])) throw new Error(`Некорректный раздел ${key}.`);
+      const ids = new Set();
       for (const item of payload[key] || []) {
         if (!isPlainObject(item) || typeof item.id !== 'string' || !item.id) throw new Error(`Повреждена запись раздела ${key}.`);
+        if (ids.has(item.id)) throw new Error(`Повторяющийся ID в разделе ${key}: ${item.id}.`);
+        ids.add(item.id);
       }
     });
-    if (payload.lore && typeof payload.lore !== 'object') throw new Error('Некорректный раздел lore.');
+    if (payload.lore !== undefined && !isPlainObject(payload.lore)) throw new Error('Некорректный раздел lore.');
     const walk = (value, depth = 0) => {
       if (depth > 100) throw new Error('Слишком глубокая структура резервной копии.');
       if (!value || typeof value !== 'object') return;
@@ -22714,7 +22699,90 @@ ${raw}`;
       }
     };
     walk(payload);
+    this.validateImportedModels(payload);
     return raw;
+  }
+
+  validateImportedModels(payload) {
+    const fail = label => { throw new Error(`Повреждена структура ${label}.`); };
+    const strings = (item, keys, label) => {
+      for (const key of keys) if (item[key] !== undefined && item[key] !== null && typeof item[key] !== 'string') fail(`${label}.${key}`);
+    };
+    const records = (items, label, validate, { rules = false } = {}) => {
+      if (items === undefined) return;
+      if (!Array.isArray(items)) fail(label);
+      const ids = new Set();
+      for (const item of items) {
+        if (rules && typeof item === 'string') continue;
+        if (!isPlainObject(item)) fail(label);
+        if (item.id) { if (ids.has(item.id)) fail(`${label}: повторяющийся ID ${item.id}`); ids.add(item.id); }
+        validate(item, label);
+      }
+    };
+    const entity = (item, label) => {
+      strings(item, ['name', 'displayName', 'firstName', 'lastName', 'role', 'body', 'icon', 'image', 'title', 'date', 'text'], label);
+      for (const key of ['aliases', 'mentionForms', 'documentIds', 'characterIds', 'locationIds', 'chapterIds', 'noteIds']) {
+        if (item[key] !== undefined && (!Array.isArray(item[key]) || item[key].some(value => typeof value !== 'string'))) fail(`${label}.${key}`);
+      }
+      if (item.characterRoles !== undefined && (!isPlainObject(item.characterRoles) || Object.values(item.characterRoles).some(value => typeof value !== 'string'))) fail(`${label}.characterRoles`);
+      records(item.subEvents, `${label}.subEvents`, entity);
+    };
+    const encrypted = (item, label) => {
+      if (!item.encrypted) return false;
+      if (!isPlainObject(item.encrypted) || ['salt', 'iv', 'data'].some(key => typeof item.encrypted[key] !== 'string' || !item.encrypted[key])) fail(`${label}.encrypted`);
+      return true;
+    };
+    const world = (item, label) => {
+      if (encrypted(item, label)) return;
+      strings(item, ['title'], label);
+      for (const key of ['characters', 'locations', 'timeline', 'notes', 'rules']) records(item[key], `${label}.${key}`, entity, { rules: key === 'rules' });
+    };
+    const pmNode = (node, label, depth = 0) => {
+      if (depth > 100 || !isPlainObject(node) || typeof node.type !== 'string') fail(label);
+      if (!['doc', 'paragraph', 'heading', 'blockquote', 'codeBlock', 'horizontalRule', 'text', 'hardBreak'].includes(node.type)) fail(`${label}.${node.type}`);
+      if (node.type === 'text' && typeof node.text !== 'string') fail(`${label}.text`);
+      if (node.content !== undefined) { if (!Array.isArray(node.content)) fail(`${label}.content`); node.content.forEach(child => pmNode(child, label, depth + 1)); }
+      if (node.attrs !== undefined && !isPlainObject(node.attrs)) fail(`${label}.attrs`);
+      if (node.marks !== undefined && (!Array.isArray(node.marks) || node.marks.some(mark => !isPlainObject(mark) || !['bold', 'italic', 'underline', 'strike', 'code', 'link'].includes(mark.type)))) fail(`${label}.marks`);
+    };
+    const document = (item, label) => {
+      if (encrypted(item, label)) return;
+      strings(item, ['title', 'notes', 'description', 'summary'], label);
+      if (item.ast !== undefined) {
+        if (!isPlainObject(item.ast)) fail(`${label}.ast`);
+        records(item.ast.blocks, `${label}.ast.blocks`, block => strings(block, ['html', 'type', 'align'], label));
+      }
+      if (item.pmJson !== undefined) { if (item.pmJson?.type !== 'doc') fail(`${label}.pmJson`); pmNode(item.pmJson, `${label}.pmJson`); }
+      if (item.bookmarks !== undefined && !Array.isArray(item.bookmarks)) fail(`${label}.bookmarks`);
+    };
+    if (payload.lore) world(payload.lore, 'lore');
+    records(payload.lores, 'lores', world);
+    records(payload.docs, 'docs', document);
+    records(payload.snapshots, 'snapshots', document);
+    records(payload.trash, 'trash', (item, label) => { if (!encrypted(item, label) && item.doc) document(item.doc, `${label}.doc`); });
+    const settings = (item, label) => {
+      if (!isPlainObject(item)) fail(label);
+      for (const key of ['customFonts', 'customAiProviders', 'customInputRules', 'customAiPersonas', 'macros', 'kbProjects']) records(item[key], `${label}.${key}`, entry => strings(entry, ['id', 'name', 'data', 'trigger', 'text', 'key', 'endpoint', 'model', 'value', 'keys', 'title'], label));
+      if (item.userLexicon !== undefined && !Array.isArray(item.userLexicon)) fail(`${label}.userLexicon`);
+    };
+    if (payload.settings !== undefined) settings(payload.settings, 'settings');
+    for (const item of payload.settingsRecords || []) if (item.id === 'app' && item.value !== undefined) settings(item.value, 'settingsRecords.app');
+  }
+
+  async validateDecodedImportedModels(payload) {
+    const decoded = { ...payload };
+    const sections = { docs: 'docs', lores: 'lore', snapshots: 'snapshots', trash: 'trash', floatingNotes: 'floatingNotes', reviewMarks: 'reviewMarks', typoRules: 'typoRules', settingsRecords: 'settings' };
+    for (const [key, store] of Object.entries(sections)) {
+      if (!payload[key]) continue;
+      decoded[key] = await Promise.all(payload[key].map(async record => {
+        if (!record.encrypted || !this.state.sessionPassword) return record;
+        const value = record.protectedStore ? await this.db.decodeRecord(store, record) : { ...record, ...await decryptJson(record.encrypted, this.state.sessionPassword) };
+        if (value.locked) return record;
+        if (value.id !== record.id) throw new Error('ID защищённой записи не совпадает с её содержимым.');
+        return value;
+      }));
+    }
+    this.validateImportedModels(decoded);
   }
 
   async handleProjectDumpText(text, filename = 'project.nocturnedump') {
@@ -22856,8 +22924,16 @@ ${raw}`;
     this.validateProjectDump(dump);
     if (dump.checksum && dump.checksum !== await this.checksumText(JSON.stringify(dump.payload))) throw new Error('Контрольная сумма резервной копии не совпала.');
     if (!['replace', 'merge'].includes(mode)) throw new Error('Неизвестный режим импорта.');
+    if (this.importingProject) throw new Error('Дождитесь завершения текущего импорта.');
     const payload = dump.payload || {};
+    await this.validateDecodedImportedModels(payload);
+    await this.databaseSync?.work;
+    const rollback = Object.fromEntries(await Promise.all([...this.db.db.objectStoreNames].map(async store => [store, await this.db.getAllRaw(store)])));
+    let committed = false;
+    this.importingProject = true;
+    clearTimeout(this.databaseSyncTimer);
     const original = Object.fromEntries(['settings', 'folders', 'docs', 'lore', 'globalNotes', 'floatingNotes', 'typoRules', 'reviewMarks', 'activeLoreId', 'kbProjects', 'activeDocId'].map(key => [key, structuredClone(this.state[key])]));
+    const originalLoreById = this.loreById;
     const report = { mode, docs: 0, folders: 0, characters: 0, locations: 0, timeline: 0, snapshots: 0, reviewMarks: 0, conflicts: 0 };
     try {
     if (mode === 'replace') {
@@ -22878,25 +22954,32 @@ ${raw}`;
       this.state.floatingNotes = (payload.floatingNotes || []).map((note) => note.protectedStore ? note : this.sanitizeFloatingNote(note));
       this.state.typoRules = (payload.typoRules || []).map((rule) => rule.protectedStore ? rule : this.sanitizeTypoRule(rule)).filter(Boolean);
       this.state.reviewMarks = (payload.reviewMarks || []).map((mark) => mark.protectedStore ? mark : this.sanitizeReviewMark(mark)).filter(Boolean);
-      await this.persistImportedProject(payload);
+      await this.persistImportedProject(payload, () => { committed = true; });
       Object.assign(report, this.dumpPreviewStats(dump), { folders: this.state.folders.length, reviewMarks: this.state.reviewMarks.length });
     } else {
-      await this.mergeProjectDumpPayload(payload, report);
+      await this.mergeProjectDumpPayload(payload, report, () => { committed = true; });
     }
     } catch (error) {
+      if (committed) {
+        await this.databaseSync?.work;
+        await this.db.atomicWrite(rollback, { replace: true, raw: true, origin: 'sync' });
+        this.db.trackDocumentVersions(rollback.docs);
+      }
       Object.assign(this.state, original);
+      this.loreById = originalLoreById;
       this.initWorkspace(); this.applySettings(); this.renderAll();
       throw error;
-    }
+    } finally { this.importingProject = false; }
     this.validateLoadedState();
     this.initWorkspace();
     this.applySettings();
     this.renderAll();
     this.toast(mode === 'replace' ? 'Проект заменён из dump.' : 'Dump проекта объединён.');
+    this.scheduleDatabaseSync();
     return report;
   }
 
-  async persistImportedProject(payload = {}) {
+  async persistImportedProject(payload = {}, onCommit = () => {}) {
     const settingsRecords = payload.settingsRecords || [];
     const protectedPreferences = settingsRecords.find(record => record.id === 'app' && record.protectedStore);
     const localSettings = (await this.db.getAllRaw('settings')).filter(record => ['sync-identity', 'sync-connection', 'backup-directory'].includes(record.id));
@@ -22908,6 +22991,7 @@ ${raw}`;
       snapshots: payload.snapshots || [], stats: payload.stats || [], trash: payload.trash || [], drafts: [],
       syncMappings: payload.syncMappings || [], syncRevisions: payload.syncRevisions || [], syncConflicts: payload.syncConflicts || [],
     }, { replace: true });
+    onCommit();
     this.clearAllLiveDrafts();
     this.state.activeLoreId = payload.activeLoreId || 'world';
     this.state.lore = await this.loadLore();
@@ -22930,7 +23014,7 @@ ${raw}`;
     return next;
   }
 
-  async mergeProjectDumpPayload(payload, report) {
+  async mergeProjectDumpPayload(payload, report, onCommit = () => {}) {
     const idMap = new Map();
     const decode = async (store, records = []) => Promise.all(records.map(async record => {
       const value = await this.db.decodeRecord(store, record);
@@ -22961,7 +23045,8 @@ ${raw}`;
       if (!value || typeof value !== 'object') return value;
       return Object.fromEntries(Object.entries(value).map(([key, child]) => [key,
         ['id', 'docId', 'linkedId', 'loreId', 'folderId', 'parentId'].includes(key) && typeof child === 'string' ? idMap.get(child) || child
-          : ['documentIds', 'characterIds', 'locationIds'].includes(key) && Array.isArray(child) ? child.map(id => idMap.get(id) || id) : remapReferences(child)]));
+          : ['documentIds', 'characterIds', 'locationIds', 'chapterIds', 'noteIds'].includes(key) && Array.isArray(child) ? child.map(id => idMap.get(id) || id)
+          : key === 'characterRoles' && isPlainObject(child) ? Object.fromEntries(Object.entries(child).map(([id, role]) => [idMap.get(id) || id, role])) : remapReferences(child)]));
     };
     const importedWorlds = worlds.map(remapReferences);
     const notes = (await decode('floatingNotes', payload.floatingNotes)).map(note => this.sanitizeFloatingNote({ ...remapReferences(note), id: uid('note') }));
@@ -22972,6 +23057,7 @@ ${raw}`;
     const importedNotes = (await decode('settings', (payload.settingsRecords || []).filter(record => record.id === 'global-notes')))[0];
     const globalNotes = [this.state.globalNotes, payload.globalNotes || importedNotes?.text].filter(Boolean).join('\n\n');
     await this.db.atomicWrite({ folders, docs, lore: importedWorlds, floatingNotes: notes, typoRules, reviewMarks: marks, snapshots, trash, settings: [{ id: 'global-notes', text: globalNotes, updatedAt: Date.now() }] });
+    onCommit();
     this.state.folders.push(...folders); this.state.docs.push(...docs);
     this.state.floatingNotes.push(...notes); this.state.typoRules.push(...typoRules); this.state.reviewMarks.push(...marks);
     this.state.globalNotes = globalNotes; this.state.lore = await this.loadLore();
@@ -23600,7 +23686,13 @@ ${raw}`;
   }
 
   async performResetData() {
-    await Promise.all(['settings', 'folders', 'docs', 'lore', 'snapshots', 'stats', 'floatingNotes', 'typoRules', 'reviewMarks'].map((store) => this.db.clear(store)));
+    this.resettingData = true;
+    clearTimeout(this.databaseSyncTimer);
+    this.syncClient?.disconnect();
+    this.db.onMutation = null;
+    for (const save of this.saveDocDebouncers.values()) save.cancel?.();
+    await Promise.allSettled([...this.docSaves?.values() || [], ...this.draftWrites.values(), this.databaseSync?.work, this.databaseSync?.incomingWork, this.backups?.running]);
+    await this.db.clearAll();
     const localPrefixes = [LIVE_PREFIX, 'goal-done-'];
     const localKeys = [
       'nocturne-global-notes',
@@ -23611,7 +23703,7 @@ ${raw}`;
       'nocturne-writing-animation-choice',
     ];
     safeStorageKeys(localStorage).forEach((key) => {
-      if (localKeys.includes(key) || localPrefixes.some((prefix) => key.startsWith(prefix))) safeRemoveStorageItem(localStorage, key);
+      if (key.startsWith('nocturne-') || key === 'nocturne_settings' || localKeys.includes(key) || localPrefixes.some((prefix) => key.startsWith(prefix))) safeRemoveStorageItem(localStorage, key);
     });
     ['nocturne-master-password'].forEach((key) => safeRemoveStorageItem(sessionStorage, key));
     location.reload();

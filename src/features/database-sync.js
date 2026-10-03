@@ -85,6 +85,7 @@ function reconcileWorld(local, incoming, localValue, remoteValue) {
 export class DatabaseSync {
   constructor({ db, deviceId, onChange = () => {}, onPending = () => {} }) {
     this.db = db; this.deviceId = deviceId; this.onChange = onChange; this.onPending = onPending;
+    this.instanceId = crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     this.work = Promise.resolve(); this.incomingWork = Promise.resolve();
   }
   async start() {
@@ -115,6 +116,25 @@ export class DatabaseSync {
     for (const store of STORES) for (const record of await this.db.getAllRaw(store)) raw.set(keyOf(store, record.id), record);
     const records = (await this.db.getAll('syncJournal')).map(meta => ({ store: meta.store, id: meta.recordId, clock: meta.clock, hash: meta.hash, members: meta.members, deleted: meta.deleted, value: meta.deleted ? null : raw.get(meta.id) })).filter(record => record.deleted || record.value);
     return { protocol: 2, deviceId: this.deviceId, records };
+  }
+
+  async captureDocumentConflict(doc) {
+    await this.work;
+    const raw = await this.db.getRaw('docs', doc.id);
+    const meta = await this.db.get('syncJournal', keyOf('docs', doc.id));
+    const decoded = raw ? await this.db.decodeRecord('docs', raw) : null;
+    const localHash = await contentHash(doc), remoteHash = await contentHash(decoded);
+    const id = `conflict:docs:${doc.id}:local:${this.instanceId}`;
+    const clock = { ...meta?.clock };
+    const local = { clock: { ...clock, [this.deviceId]: (clock[this.deviceId] || 0) + 1 }, hash: localHash, deleted: false, value: await this.db.encodeRecord('docs', doc) };
+    const remote = { clock, hash: remoteHash, deleted: !raw, value: raw || null };
+    await this.db.put('syncConflicts', { id, type: 'database-record', origin: 'local-tab', store: 'docs', recordId: doc.id, local, remote, createdAt: Date.now() });
+    const draft = await this.db.getRaw('drafts', doc.id);
+    if (draft && await contentHash(await this.db.decodeRecord('drafts', draft)) === localHash) {
+      try { await this.db.atomicWrite({}, { deletes: { drafts: [doc.id] }, expect: { drafts: [{ id: doc.id, value: draft }] }, origin: 'sync' }); }
+      catch (error) { if (error.code !== 'SYNC_RETRY') throw error; }
+    }
+    return id;
   }
   receiveState(state) {
     this.incomingWork = this.incomingWork.catch(() => {}).then(() => this.reconcileState(state));

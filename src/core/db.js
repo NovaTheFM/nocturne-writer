@@ -4,7 +4,7 @@ import { localDateKey } from './utils.js';
 
 const DB_NAME = 'nocturne-writer-es6-v3-clean';
 const DB_VERSION = 5;
-const STORES = [
+export const DATABASE_STORES = [
   'settings',
   'folders',
   'docs',
@@ -42,13 +42,21 @@ function transactionDone(tx) {
 }
 
 export class Database {
+  constructor() {
+    this.documentVersions = new Map();
+  }
+
+  trackDocumentVersions(records) {
+    this.documentVersions = new Map(records.map(record => [record.id, structuredClone(record)]));
+  }
+
   async open() {
     if (this.db) return this.db;
     this.db = await new Promise((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
       request.onupgradeneeded = () => {
         const db = request.result;
-        STORES.forEach((store) => {
+        DATABASE_STORES.forEach((store) => {
           if (!db.objectStoreNames.contains(store)) db.createObjectStore(store, { keyPath: 'id' });
         });
       };
@@ -87,18 +95,31 @@ export class Database {
   }
 
   async get(name, id) {
-    await this.open();
-    const record = await requestToPromise(this.store(name).get(id));
+    const record = await this.getRaw(name, id);
     return revealRecord(name, record, this.protection?.().password);
+  }
+
+  async getRaw(name, id) {
+    await this.open();
+    return requestToPromise(this.store(name).get(id));
+  }
+
+  encodeRecord(name, record) {
+    return protectRecord(name, record, this.protection?.());
   }
 
   async put(name, value, { origin } = {}) {
     await this.open();
     value = await protectRecord(name, value, this.protection?.());
+    if (name === 'docs' && origin !== 'sync' && this.documentVersions.has(value.id)) {
+      await this.atomicWrite({ docs: [value] }, { raw: true, origin, expect: { docs: [{ id: value.id, value: this.documentVersions.get(value.id) }] } });
+      return value.id;
+    }
     const tx = this.db.transaction(name, 'readwrite');
     const done = transactionDone(tx);
     const result = await requestToPromise(tx.objectStore(name).put(value));
     await done;
+    if (name === 'docs' && origin !== 'sync') this.documentVersions.set(value.id, structuredClone(value));
     this.onMutation?.({ store: name, id: value.id, action: 'put', origin });
     return result;
   }
@@ -109,6 +130,7 @@ export class Database {
     const done = transactionDone(tx);
     const result = await requestToPromise(tx.objectStore(name).delete(id));
     await done;
+    if (name === 'docs' && origin !== 'sync') this.documentVersions.delete(id);
     this.onMutation?.({ store: name, id, action: 'delete', origin });
     return result;
   }
@@ -119,7 +141,17 @@ export class Database {
     const done = transactionDone(tx);
     const result = await requestToPromise(tx.objectStore(name).clear());
     await done;
+    if (name === 'docs') this.documentVersions.clear();
     return result;
+  }
+
+  async clearAll() {
+    await this.open();
+    const tx = this.db.transaction(DATABASE_STORES, 'readwrite');
+    const done = transactionDone(tx);
+    for (const name of DATABASE_STORES) tx.objectStore(name).clear();
+    await done;
+    this.documentVersions.clear();
   }
 
   async atomicWrite(recordsByStore, { replace = false, raw = false, origin, deletes = {}, expect = {} } = {}) {
@@ -159,6 +191,11 @@ export class Database {
       }
     } catch (error) { tx.abort(); await done.catch(() => {}); throw error; }
     await done.catch(error => { if (concurrentWrite) error.code = 'SYNC_RETRY'; throw error; });
+    if (origin !== 'sync') {
+      if (replace && recordsByStore.docs) this.documentVersions.clear();
+      for (const [name, records] of entries) if (name === 'docs') for (const record of records) this.documentVersions.set(record.id, structuredClone(record));
+      for (const id of deletes.docs || []) this.documentVersions.delete(id);
+    }
     for (const { store, id } of removed) this.onMutation?.({ store, id, action: 'delete', origin });
     for (const [store, records] of entries) for (const record of records) this.onMutation?.({ store, id: record.id, action: 'put', origin });
     for (const [store, ids] of Object.entries(deletes)) for (const id of ids) this.onMutation?.({ store, id, action: 'delete', origin });

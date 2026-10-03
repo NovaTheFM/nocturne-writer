@@ -17,6 +17,16 @@ export function escapeHtml(value = '') {
     .replaceAll("'", '&#039;');
 }
 
+export function safeImageUrl(value = '') {
+  if (typeof value !== 'string' || !value.trim()) return '';
+  const url = value.trim();
+  if (/^data:/iu.test(url)) return /^data:image\/(?:png|jpe?g|gif|webp|avif|svg\+xml);base64,[a-z\d+/=\s]+$/iu.test(url) ? url : '';
+  try {
+    const parsed = new URL(url, globalThis.location?.href || 'http://localhost/');
+    return ['http:', 'https:', 'blob:', 'file:', 'capacitor:'].includes(parsed.protocol) ? url : '';
+  } catch { return ''; }
+}
+
 export function stripAnalysisMarkup(root) {
   root.querySelectorAll('br[data-soft-empty-line],[data-soft-caret],.soft-caret,.soft-empty-line').forEach((node) => node.remove());
   root.querySelectorAll('.entity-link,.syntax-dialogue,.syntax-thought,.weak-word,.sentence-long,.sentence-short,.sentence-current,.ai-suggestion,.search-hit,.mention-hit,[data-search-hit],[data-analysis],[data-suggestion-id]').forEach((node) => {
@@ -155,8 +165,7 @@ export function cleanAnalysisResidue(value = '') {
     .replace(/\uFEFF/g, '')
     .replace(/\s(?:class|data-analysis|data-suggestion-id|data-search-hit|data-soft-caret|data-soft-empty-line)=["'][^"']*(?:sentence-|syntax-|weak-word|entity-link|ai-suggestion|search-hit|mention-hit|soft-caret|soft-empty-line)[^"']*["']/giu, '')
     .replace(/<\/?span\b[^>]*(?:sentence-short|sentence-long|sentence-current|syntax-dialogue|syntax-thought|weak-word|entity-link|ai-suggestion|search-hit|mention-hit|data-analysis|data-suggestion-id|data-search-hit)[^>]*>/giu, '')
-    .replace(/<span\b[^>]*>\s*<\/span>/giu, '')
-    .replace(/^\s*(?:&gt;|>)(?=\s|$)/gm, '');
+    .replace(/<span\b[^>]*>\s*<\/span>/giu, '');
 }
 
 export const CLEAN_ANALYSIS_RESIDUE_EXAMPLES = [
