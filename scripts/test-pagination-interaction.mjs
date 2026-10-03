@@ -89,6 +89,13 @@ try {
     assert.ok(result.rects.every(rect => rect.height < 50), JSON.stringify(result.rects));
     await page.screenshot({ path: 'release/qa/pagination-interaction/selection-across-pages-fixed.png' }); return result;
   });
+  await check('review mode container cannot suppress selection of the editable manuscript', async (page, data) => {
+    await page.evaluate(() => window.nocturneApp.applyReviewMode());
+    const points = await boundary(page, data.pos);
+    await page.mouse.move(points.before.x, points.before.y); await page.mouse.down(); await page.mouse.move(points.after.x, points.after.y, { steps: 12 }); await page.mouse.up(); await page.waitForTimeout(100);
+    const result = await snapshot(page);
+    assert.ok(result.to > result.from); assert.ok(result.rects.length > 0 && result.rects.every(rect => rect.height < 50)); return result;
+  });
   await check('clicking the middle of a page gap never creates a tall caret', async (page, data) => {
     const points = await boundary(page, data.pos);
     await page.mouse.click(points.gap.x, (points.gap.top + points.gap.bottom) / 2); await page.waitForTimeout(120);
