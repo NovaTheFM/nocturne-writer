@@ -161,6 +161,27 @@ try {
     });
     assert.equal(await page.evaluate(() => window.nocturneApp.state.settings.autoPaginate), false);
   });
+  await check('divider consumes the latest pointer position during the next render before mouseup', async page => {
+    await splitDocuments(page, false);
+    const divider = await page.locator('#workspace-divider').boundingBox();
+    await page.mouse.move(divider.x + divider.width / 2, divider.y + 40); await page.mouse.down();
+    let result;
+    try {
+      result = await page.evaluate(() => new Promise(resolve => {
+        const stage = document.getElementById('workspace-stage').getBoundingClientRect();
+        const move = ratio => window.dispatchEvent(new PointerEvent('pointermove', { clientX: stage.left + stage.width * ratio, clientY: stage.top + 40, buttons: 1, pointerType: 'mouse' }));
+        requestAnimationFrame(() => {
+          move(.41);
+          requestAnimationFrame(() => {
+            move(.64);
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve({ ratio: window.nocturneApp.state.workspace.splitRatio, held: document.body.classList.contains('resizing-workspace') })));
+          });
+        });
+      }));
+      assert.equal(result.held, true); assert.ok(Math.abs(result.ratio - .64) < .001, JSON.stringify(result));
+    } finally { await page.mouse.up(); }
+    return result;
+  });
   await check('spellcheck underline follows its text after pagination and font reflow', async page => {
     await enable(page, `<p>${'Reflow underline sentence. '.repeat(650)}</p>`);
     await page.evaluate(() => {

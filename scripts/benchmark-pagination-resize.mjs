@@ -2,23 +2,30 @@ import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
+import path from 'node:path';
 
 const argument = (name, fallback) => process.argv.find(arg => arg.startsWith(`--${name}=`))?.split('=').slice(1).join('=') || fallback;
 const label = argument('label', 'current').replace(/[^a-z0-9_-]/gi, '-');
 const words = Number(argument('words', '50000'));
+const targetPages = Number(argument('pages', '0'));
+const pageMode = argument('page-mode', 'full');
+const budgetMs = Number(argument('budget-ms', '100'));
+const source = path.resolve(argument('source', '.'));
+const shapeFilter = argument('shape', 'all');
 assert.ok(Number.isInteger(words) && words >= 1000 && words <= 500000);
 const url = 'http://localhost:5322';
-const server = spawn(process.execPath, ['server.mjs'], { env: { ...process.env, PORT: '5322', SYNC_PORT: '8922' }, stdio: 'ignore', windowsHide: true });
+const server = spawn(process.execPath, ['server.mjs'], { cwd: source, env: { ...process.env, PORT: '5322', SYNC_PORT: '8922' }, stdio: 'ignore', windowsHide: true });
 const browser = await chromium.launch({ headless: true });
 const results = [];
 await mkdir('release/qa/pagination-performance', { recursive: true });
 const filename = `release/qa/pagination-performance/${label}.json`;
 const percentile = (values, fraction) => [...values].sort((a, b) => a - b)[Math.min(values.length - 1, Math.floor(values.length * fraction))] || 0;
-const metadata = { label, words, commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', windowsHide: true }).trim(), checkedAt: new Date().toISOString() };
+const metadata = { label, words, targetPages, pageMode, budgetMs, source, commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', windowsHide: true }).trim(), checkedAt: new Date().toISOString() };
 try {
   for (let i = 0; i < 60; i++) { try { if ((await fetch(url)).ok) break; } catch {} await new Promise(resolve => setTimeout(resolve, 100)); }
   for (const shape of ['single-paragraph', 'many-paragraphs']) {
-    const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
+    if (shapeFilter !== 'all' && shape !== shapeFilter) continue;
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: process.argv.includes('--animate') ? 'no-preference' : 'reduce' });
     const page = await context.newPage(); const errors = []; page.on('pageerror', error => errors.push(error.message));
     page.setDefaultTimeout(120000);
     try {
@@ -27,17 +34,36 @@ try {
         const a = window.nocturneApp; a.state.settings.automaticBackups = false;
         await a.createDoc(a.defaultFolderId(), 'Large split benchmark', '');
         const sentence = 'The quiet writer watches the distant river and remembers every word. ';
-        const text = sentence.repeat(Math.ceil(words / 12)).split(' ').slice(0, words).join(' ');
-        const parts = shape === 'single-paragraph' ? [text] : text.split(' ').reduce((items, word, index) => {
-          if (index % 50 === 0) items.push([]); items.at(-1).push(word); return items;
-        }, []).map(words => words.join(' '));
-        a.nocturneEditor.get('primary').commands.setContent(parts.map(part => `<p>${part}</p>`).join(''));
-        await a.saveActiveDoc({ silent: true }); a.state.settings.autoPaginate = true; a.applySettings(); a.toggleSplitMode();
+        window.__benchmarkContent = count => {
+          const body = sentence.repeat(Math.ceil(count / 12)).split(' ').slice(0, count).join(' ');
+          const parts = shape === 'single-paragraph' ? [body] : body.split(' ').reduce((items, word, index) => {
+            if (index % 50 === 0) items.push([]); items.at(-1).push(word); return items;
+          }, []).map(words => words.join(' '));
+          a.nocturneEditor.get('primary').commands.setContent(parts.map(part => `<p>${part}</p>`).join(''));
+        };
+        window.__benchmarkContent(words);
+        a.state.settings.autoPaginate = true; a.applySettings();
         await document.fonts.ready;
-        window.__performanceDocument = JSON.stringify(a.nocturneEditor.get('primary').getJSON());
       }, { shape, words });
+      if (pageMode === 'split') await page.evaluate(() => window.nocturneApp.toggleSplitMode());
+      let actualWords = words, initialPages = 0;
+      for (let attempt = 0; attempt < 12; attempt++) {
+        await page.waitForFunction(() => !window.nocturneApp.nocturneEditor.visualPageRaf.has('primary'), null, { polling: 100 });
+        await page.waitForTimeout(80);
+        initialPages = await page.locator('.primary-pane .page-sheet-bg:not(.motion-sheet-exiting)').count();
+        if (!targetPages || initialPages === targetPages) break;
+        actualWords = Math.round(actualWords * (targetPages - .2) / initialPages);
+        await page.evaluate(count => window.__benchmarkContent(count), actualWords);
+      }
+      if (targetPages) assert.equal(initialPages, targetPages, 'fixture must match the reported full-width page count');
+      await page.evaluate(async pageMode => {
+        const a = window.nocturneApp; await a.saveActiveDoc({ silent: true }); if (pageMode !== 'split') a.toggleSplitMode();
+        window.__performanceDocument = JSON.stringify(a.nocturneEditor.get('primary').getJSON());
+      }, pageMode);
       await page.waitForFunction(() => !window.nocturneApp.nocturneEditor.visualPageRaf.has('primary'), null, { polling: 100 });
       await page.waitForTimeout(300);
+      const profiler = process.argv.includes('--profile') ? await context.newCDPSession(page) : null;
+      if (profiler) { await profiler.send('Profiler.enable'); await profiler.send('Profiler.start'); }
       await page.evaluate(() => {
         const metrics = window.__resizeMetrics = { enabled: true, bounds: 0, fragments: 0, layouts: [], frames: [], previousFrame: 0 };
         const bounds = Range.prototype.getBoundingClientRect, fragments = Range.prototype.getClientRects, raf = window.requestAnimationFrame;
@@ -77,22 +103,32 @@ try {
             }
             return { ratio, width, height, sheetHeight: shell.querySelector('.page-sheet-bg:not(.motion-sheet-exiting)').getBoundingClientRect().height, pages: shell.querySelectorAll('.page-sheet-bg:not(.motion-sheet-exiting)').length, held: document.body.classList.contains('resizing-workspace'), misses: misses.slice(0, 8), intact: JSON.stringify(e.getJSON()) === window.__performanceDocument };
           }, ratio);
-          assert.equal(sample.held, true); assert.equal(sample.intact, true); assert.deepEqual(sample.misses, []);
+          assert.equal(sample.held, true); assert.equal(sample.intact, true); assert.deepEqual(sample.misses, [], JSON.stringify(sample));
           assert.ok(Math.abs(sample.sheetHeight - sample.height) < 2);
           samples.push(sample);
         }
       } finally { await page.mouse.up(); }
       const metrics = await page.evaluate(() => { window.__resizeMetrics.enabled = false; return window.__resizeMetrics; });
-      const result = { shape, characters: await page.evaluate(() => window.nocturneApp.nocturneEditor.get('primary').getText().length), samples, layouts: metrics.layouts, layoutP95Ms: percentile(metrics.layouts.map(item => item.durationMs), .95), frameP95Ms: percentile(metrics.frames, .95), frameMaxMs: Math.max(0, ...metrics.frames), rangeReads: metrics.layouts.reduce((sum, item) => sum + item.rangeReads, 0), errors };
+      if (profiler) {
+        const { profile } = await profiler.send('Profiler.stop');
+        await writeFile(`release/qa/pagination-performance/${label}-${shape}-cpu.json`, JSON.stringify(profile));
+        const nodes = new Map(profile.nodes.map(node => [node.id, node])), totals = new Map();
+        for (let index = 0; index < profile.samples.length; index++) {
+          const frame = nodes.get(profile.samples[index]).callFrame, key = `${frame.functionName} (${frame.url.split('/').at(-1)}:${frame.lineNumber + 1})`;
+          totals.set(key, (totals.get(key) || 0) + profile.timeDeltas[index] / 1000);
+        }
+        console.log(JSON.stringify([...totals].sort((a, b) => b[1] - a[1]).slice(0, 15))); await profiler.detach();
+      }
+      const result = { shape, actualWords, initialPages, characters: await page.evaluate(() => window.nocturneApp.nocturneEditor.get('primary').getText().length), samples, layouts: metrics.layouts, layoutP95Ms: percentile(metrics.layouts.map(item => item.durationMs), .95), frameP95Ms: percentile(metrics.frames, .95), frameMaxMs: Math.max(0, ...metrics.frames), rangeReads: metrics.layouts.reduce((sum, item) => sum + item.rangeReads, 0), errors };
       results.push(result); assert.deepEqual(errors, []);
-      console.log(`${shape}, ${words} words: layout p95 ${result.layoutP95Ms.toFixed(1)} ms, frame p95 ${result.frameP95Ms.toFixed(1)} ms, ${result.rangeReads} Range reads; geometry and JSON intact.`);
+      console.log(`${shape}, ${actualWords} words, ${initialPages} initial pages: layout p95 ${result.layoutP95Ms.toFixed(1)} ms, frame p95 ${result.frameP95Ms.toFixed(1)} ms, ${result.rangeReads} Range reads; geometry and JSON intact.`);
       await writeFile(filename, JSON.stringify({ ...metadata, results }, null, 2));
     } finally { await context.close(); }
   }
   if (process.argv.includes('--assert')) {
     for (const result of results) {
       assert.ok(result.layouts.length > 0);
-      assert.ok(result.layoutP95Ms < 100, `${result.shape}: pagination p95 ${result.layoutP95Ms.toFixed(1)} ms exceeds the 100 ms resize budget`);
+      assert.ok(result.layoutP95Ms < budgetMs, `${result.shape}: pagination p95 ${result.layoutP95Ms.toFixed(1)} ms exceeds the ${budgetMs} ms resize budget`);
     }
   }
 } finally { await browser.close(); server.kill(); await writeFile(filename, JSON.stringify({ ...metadata, results }, null, 2)); }
