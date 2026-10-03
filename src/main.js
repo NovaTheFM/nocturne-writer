@@ -270,6 +270,7 @@ class NocturneWriter {
     this.commandPalette = new CommandPalette(this);
     this.nocturneEditor = new NocturneEditorBridge({
       getSettings: () => this.state.settings,
+      getDoc: id => this.state.docs.find(doc => doc.id === id),
       motion: { run: (...args) => this.runMotion(...args), reduce: () => this.shouldReduceSurfaceMotion() },
       getMentionIndex: () => this.buildEntityMentionIndex(),
       getActiveBookmarkId: (paneId) => {
@@ -1838,6 +1839,12 @@ class NocturneWriter {
     const mode = modeLabels[this.state.reviewMode] ? this.state.reviewMode : 'write';
     document.body.dataset.activeReviewMode = mode;
     delete document.body.dataset.reviewMode;
+    document.querySelectorAll('.toolbar-formatting,.toolbar-history').forEach(group => {
+      if (mode === 'editor' && group.contains(document.activeElement)) document.querySelector('.review-mode-trigger')?.focus();
+      group.inert = mode === 'editor';
+      if (mode === 'editor') group.setAttribute('aria-hidden', 'true');
+      else group.removeAttribute('aria-hidden');
+    });
     document.querySelectorAll('[data-review-mode]').forEach((button) => {
       const active = button.dataset.reviewMode === mode;
       button.classList.toggle('active', active);
@@ -8183,6 +8190,10 @@ class NocturneWriter {
     const shell = document.getElementById('app-shell');
     if (!shell) return;
     const enabled = force ?? !this.state.zenActive;
+    if (!enabled && this.state.sprint?.locked && Date.now() < this.state.sprint.endsAt) {
+      this.toast('Дзен-режим заблокирован до завершения спринта.');
+      return;
+    }
     this.state.zenActive = !!enabled;
     shell.classList.toggle('zen', this.state.zenActive);
     document.body.classList.toggle('zen-mode', this.state.zenActive);
@@ -11093,7 +11104,7 @@ class NocturneWriter {
           mode: this.state.settings.smartDictionaryMode || 'local',
           provider: this.state.settings.smartDictionaryProvider || 'languagetool',
           lang: this.state.settings.smartDictionaryLang || 'auto',
-          contextText: (this.getFocusedDoc()?.ast.blocks || []).filter(block => words.some(word => normalizeTypoToken(stripHtml(block.html || '')).includes(word))).map(block => stripHtml(block.html || '')).join('\n').slice(0, 4000),
+          contextText: (this.getFocusedDoc()?.ast.blocks || []).filter(block => words.some(word => normalizeTypoToken(blockText(block)).includes(word))).map(blockText).join('\n').slice(0, 4000),
         });
         
         words.forEach((w) => {
@@ -12518,7 +12529,7 @@ class NocturneWriter {
     const words = ['очень', 'сильно', 'быстро', 'внезапно', 'просто', 'как будто', 'словно бы', 'являлся', 'был сделан'];
     let result = html;
     words.forEach((word) => {
-      result = result.replace(new RegExp(`\\b(${this.escapeRegExp(word)})\\b`, 'giu'), '<span class="weak-word">$1</span>');
+      result = result.replace(new RegExp(`(?<![\\p{L}\\p{N}_])(${this.escapeRegExp(word)})(?![\\p{L}\\p{N}_])`, 'giu'), '<span class="weak-word">$1</span>');
     });
     return result;
   }
@@ -12700,6 +12711,16 @@ class NocturneWriter {
     doc.updatedAt = Date.now();
     this.writeLiveDraft(doc.id);
     this.updateActiveBlock();
+    const suppressed = transaction?.getMeta?.('paste') || transaction?.getMeta?.('uiEvent') === 'paste'
+      || Object.keys(transaction?.meta || {}).some(key => key.startsWith('history$'))
+      || transaction?.getMeta?.('preventUpdate') !== undefined;
+    if (suppressed) {
+      const current = countWords(docText(doc.ast));
+      const previous = this.docWordBaselines.get(doc.id) ?? current;
+      const high = this.docHighWatermarks.get(doc.id) ?? previous;
+      this.docHighWatermarks.set(doc.id, Math.max(current, high + current - previous));
+      this.docWordBaselines.set(doc.id, current);
+    } else this.collectWritingProgress(doc);
     this.renderGoal();
     this.saveDocByIdDebounced(doc.id);
     this.scheduleSyncForDoc(doc.id, { inputType: transaction?.getMeta?.('uiEvent') || 'prosemirrorTransaction' });
@@ -15449,11 +15470,6 @@ class NocturneWriter {
     const pct = Math.min(100, Math.round((words / goal) * 100));
     fillEl.style.width = `${pct}%`;
     
-    // Save completion state in stats db row if reached
-    if (pct >= 100 && this.todayStatsCache && !this.todayStatsCache.completed) {
-      this.todayStatsCache.completed = true;
-      this.db.put('stats', this.todayStatsCache);
-    }
   }
 
   async updateTodayStats(docId = this.getFocusedDoc()?.id || null) {
@@ -15466,47 +15482,33 @@ class NocturneWriter {
     const doc = this.state.docs.find((item) => item.id === docId);
     if (!doc) return;
     
-    const current = countWords(docText(doc.ast));
-    
-    // Initialize high watermark if not set for this document session
-    if (!this.docHighWatermarks.has(docId)) {
-      this.docHighWatermarks.set(docId, current);
-    }
-    
-    let highWatermark = this.docHighWatermarks.get(docId);
-    const previous = this.docWordBaselines.has(docId) ? this.docWordBaselines.get(docId) : current;
-    const diff = previous - current;
-    
-    // If user deletes a whole paragraph (15+ words in a single check), reset watermark
-    if (diff >= 15) {
-      highWatermark = current;
-      this.docHighWatermarks.set(docId, current);
-    }
-    
-    let delta = 0;
-    if (current - previous >= 15) {
-      // Large jump (Paste/Undo): adjust watermark without counting progress
-      highWatermark = current;
-      this.docHighWatermarks.set(docId, current);
-    } else if (current > highWatermark) {
-      delta = current - highWatermark;
-      this.docHighWatermarks.set(docId, current);
-    }
-    
-    this.docWordBaselines.set(docId, current);
-    
+    this.collectWritingProgress(doc);
+    const delta = this.pendingWritingProgress?.get(docId) || 0;
+    this.pendingWritingProgress?.delete(docId);
     if (delta > 0) {
-      const existing = (await this.db.get('stats', id)) || { id, words: 0, completed: false };
-      const next = { 
-        id, 
-        words: Math.max(0, Number(existing.words || 0) + delta), 
-        completed: existing.completed || false, 
-        updatedAt: Date.now() 
-      };
-      await this.db.put('stats', next);
-      this.todayStatsCache = next;
+      try {
+        this.todayStatsCache = await this.db.updateStats(id, existing => {
+          const words = Math.max(0, Number(existing?.words || 0) + delta);
+          return { id, words, completed: !!existing?.completed || words >= Number(this.state.settings.dailyGoal), updatedAt: Date.now() };
+        });
+      } catch (error) {
+        this.pendingWritingProgress.set(docId, (this.pendingWritingProgress.get(docId) || 0) + delta);
+        throw error;
+      }
       this.renderGoal();
     }
+  }
+
+  collectWritingProgress(doc) {
+    const current = countWords(docText(doc.ast));
+    const previous = this.docWordBaselines.get(doc.id) ?? current;
+    let high = this.docHighWatermarks.get(doc.id) ?? previous;
+    if (previous - current >= 15) high = current;
+    const delta = Math.max(0, current - high);
+    this.docHighWatermarks.set(doc.id, Math.max(high, current));
+    this.docWordBaselines.set(doc.id, current);
+    this.pendingWritingProgress ||= new Map();
+    if (delta) this.pendingWritingProgress.set(doc.id, (this.pendingWritingProgress.get(doc.id) || 0) + delta);
   }
 
   smartPunctuationKey(event) {
@@ -20211,7 +20213,6 @@ class NocturneWriter {
         if (infoNotice) infoNotice.classList.toggle('active', !isLocal);
       }
     }
-    if (['writerSyntax', 'showDontTell', 'dialogueLens'].includes(key)) this.renderWorkspace();
     if (key === 'autoPaginate') this.repaginateSettingsDebounced();
     if (key === 'showZenButton' && !this.state.settings.showZenButton && this.state.zenActive) this.toggleZen(false, { persist: false });
   }
@@ -20454,6 +20455,7 @@ class NocturneWriter {
     shell.classList.toggle('reduce-mobile-animations', !!s.reduceMobileAnimations);
     shell.classList.toggle('lens-dialogues', s.dialogueLens === 'dialogues');
     shell.classList.toggle('lens-descriptions', s.dialogueLens === 'descriptions');
+    this.nocturneEditor?.updateAnalysis();
     const caret = document.getElementById('custom-caret');
     caret?.classList.toggle('block', s.caretStyle === 'block');
     caret?.classList.toggle('underline', s.caretStyle === 'underline');
@@ -21661,22 +21663,27 @@ ${raw}`;
       this.toast('Спринт уже идёт.');
       return;
     }
-    const minutes = Number(this.state.settings.sprintMinutes);
+    const minutes = Math.max(1, Math.min(180, Number(this.state.settings.sprintMinutes) || 25));
     const endsAt = Date.now() + minutes * 60_000;
     this.state.sprint = { endsAt, locked: this.state.settings.sprintLock };
     this.toggleZen(true);
+    let lastMinute = null;
     const tick = () => {
       const left = Math.max(0, endsAt - Date.now());
       if (!left) {
         clearInterval(this.sprintTimer);
-                this.state.sprint = null;
+        this.sprintTimer = null;
+        this.state.sprint = null;
         this.toast('Спринт завершен. Дзен-режим остаётся включённым.');
         this.confetti();
         return;
       }
-      this.toast(`Спринт: осталось ${Math.ceil(left / 60000)} мин.`, 900);
+      const remaining = Math.ceil(left / 60000);
+      if (remaining !== lastMinute) this.toast(`Спринт: осталось ${remaining} мин.`, 900);
+      lastMinute = remaining;
     };
-        tick();
+    this.sprintTimer = setInterval(tick, 1000);
+    tick();
   }
 
   async showHistory() {

@@ -1,6 +1,7 @@
 import { Editor, Extension, StarterKit, TextAlign, Underline, Placeholder, Plugin, PluginKey, Decoration, DecorationSet, HorizontalRule, TextSelection } from '../vendor/tiptap/nocturne-tiptap.bundle.js';
 import { ensureTiptapBlockIds, legacyAstToHtml, tiptapJsonToLegacyAst } from './document-adapter.js';
 import { calculateVisualPages, updateActivePageHighlight } from './visual-pagination.js';
+import { NocturneWriterAnalysis, writerAnalysisKey } from './writer-analysis.js';
 import { normalizeTypoToken } from '../core/typos.js';
 import { uid, buildSummary } from '../core/utils.js';
 
@@ -464,12 +465,11 @@ const NocturneAutoformat = Extension.create({
             const settings = extension.options.getSettings() || {};
             const state = view.state;
             const $from = state.selection.$from;
-            if ($from.depth === 0) return false;
+            if ($from.depth === 0 || view.composing || from !== to || $from.parent.type.name === 'codeBlock' || state.storedMarks?.some(mark => mark.type.name === 'code') || $from.marks().some(mark => mark.type.name === 'code')) return false;
             const parent = $from.parent;
             const textBefore = parent.textBetween(0, $from.parentOffset, null, '\0');
 
-            // 1. Convert -- to — (Em-dash)
-            if (settings.autoReplaceDoubleDash && text === '-' && textBefore.endsWith('-')) {
+            if ((settings.autoReplaceDoubleDash || settings.smartPunctuation) && text === '-' && textBefore.endsWith('-')) {
               const start = $from.pos - 1;
               const tr = state.tr.insertText('—', start, $from.pos);
               view.dispatch(tr);
@@ -481,7 +481,16 @@ const NocturneAutoformat = Extension.create({
               return true; // handled
             }
 
-            // 2. Convert space-hyphen-space to space-en-dash-space
+            if (settings.smartPunctuation && text === '.' && textBefore.endsWith('..')) {
+              view.dispatch(state.tr.insertText('…', from - 2, to));
+              return true;
+            }
+            if (settings.smartPunctuation && text === '"') {
+              const opening = !textBefore || /[\s([{—–-]$/u.test(textBefore);
+              view.dispatch(state.tr.insertText(opening ? '«' : '»', from, to));
+              return true;
+            }
+
             if (settings.autoReplaceEnDash && text === ' ' && textBefore.endsWith(' -')) {
               const start = $from.pos - 1; // position of '-'
               const tr = state.tr.insertText('–', start, $from.pos);
@@ -667,12 +676,13 @@ function executeRuleAction(view, rule, from, to, isEnter = false) {
 }
 
 export class NocturneEditorBridge {
-  constructor({ onChange, onFocus, onSelectionUpdate, getSettings, getMentionIndex, onKeydown, getActiveBookmarkId, motion }) {
+  constructor({ onChange, onFocus, onSelectionUpdate, getSettings, getDoc, getMentionIndex, onKeydown, getActiveBookmarkId, motion }) {
     this.instances = new Map();
     this.onChange = onChange;
     this.onFocus = onFocus;
     this.onSelectionUpdate = onSelectionUpdate;
     this.getSettings = getSettings;
+    this.getDoc = getDoc;
     this.getMentionIndex = getMentionIndex;
     this.onKeydown = onKeydown;
     this.getActiveBookmarkId = getActiveBookmarkId;
@@ -718,6 +728,7 @@ export class NocturneEditorBridge {
         TextAlign.configure({ types: ['heading', 'paragraph'] }),
         Placeholder.configure({ placeholder: '' }),
         NocturneActiveBlock,
+        NocturneWriterAnalysis.configure({ getSettings: () => this.getSettings?.() || {} }),
         BlockIdentity,
         NocturnePagination.configure({ bridge: this }),
         NocturneEntityMentions.configure({
@@ -789,7 +800,7 @@ export class NocturneEditorBridge {
   syncDocFromEditor(paneId) {
     const instance = this.instances.get(paneId);
     if (!instance?.editor) return null;
-    const doc = (window.nocturneApp?.state?.docs || []).find(d => d.id === instance.docId);
+    const doc = this.getDoc?.(instance.docId);
     if (doc) {
       doc.pmJson = ensureTiptapBlockIds(instance.editor.getJSON());
       doc.ast = tiptapJsonToLegacyAst(doc.pmJson);
@@ -798,6 +809,10 @@ export class NocturneEditorBridge {
       return doc;
     }
     return null;
+  }
+
+  updateAnalysis() {
+    for (const { editor } of this.instances.values()) editor.view.dispatch(editor.state.tr.setMeta(writerAnalysisKey, true).setMeta('addToHistory', false));
   }
 
   syncDocFromEditorByDocId(docId) {

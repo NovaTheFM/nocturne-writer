@@ -108,6 +108,21 @@ export class Database {
     return protectRecord(name, record, this.protection?.());
   }
 
+  async updateStats(id, update) {
+    await this.open();
+    const tx = this.db.transaction('stats', 'readwrite');
+    const done = transactionDone(tx), store = tx.objectStore('stats');
+    let next, updateError;
+    const request = store.get(id);
+    request.onsuccess = () => {
+      try { next = update(request.result); store.put(next); }
+      catch (error) { updateError = error; tx.abort(); }
+    };
+    await done.catch(error => { throw updateError || error; });
+    this.onMutation?.({ store: 'stats', id, action: 'put' });
+    return next;
+  }
+
   async put(name, value, { origin } = {}) {
     await this.open();
     value = await protectRecord(name, value, this.protection?.());

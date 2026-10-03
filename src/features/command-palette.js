@@ -162,7 +162,7 @@ export class CommandPalette {
   }
 
   runSelected() {
-    const command = this.visibleCommands()[this.selected];
+    const command = [...this.groupedCommands().values()].flat()[this.selected];
     if (command) this.run(command.id);
   }
 
@@ -263,4 +263,3 @@ export class CommandPalette {
     return [...base, ...docs, ...characters, ...locations, ...events, ...subtimelines];
   }
 }
-

@@ -214,7 +214,17 @@ try {
       for (const mode of ['write', 'editor', 'finalization']) {
         await page.evaluate(mode => window.nocturneApp.setReviewMode(mode), mode); await page.waitForTimeout(650);
         const sample = await page.evaluate(() => {
-          const boxes = [...document.querySelectorAll('.toolbar button')].map(button => ({ label: button.getAttribute('title') || button.textContent, rect: button.getBoundingClientRect() })).filter(({rect}) => rect.width > 1 && rect.height > 1);
+          const boxes = [...document.querySelectorAll('.toolbar button')].filter(button => {
+            if (button.closest('[inert],[aria-hidden="true"]')) return false;
+            for (let parent = button; parent; parent = parent.parentElement) {
+              const style = getComputedStyle(parent);
+              if (style.visibility === 'hidden' || style.display === 'none' || Number(style.opacity) < .01) return false;
+              const box = parent.getBoundingClientRect(), rect = button.getBoundingClientRect();
+              if (style.overflowX !== 'visible' && Math.min(box.right, rect.right) - Math.max(box.left, rect.left) < 1) return false;
+              if (style.overflowY !== 'visible' && Math.min(box.bottom, rect.bottom) - Math.max(box.top, rect.top) < 1) return false;
+            }
+            return true;
+          }).map(button => ({ label: button.getAttribute('title') || button.textContent, rect: button.getBoundingClientRect() })).filter(({rect}) => rect.width > 1 && rect.height > 1);
           const overlaps = [];
           boxes.forEach((a, index) => boxes.slice(index + 1).forEach(b => { if (Math.min(a.rect.right, b.rect.right) - Math.max(a.rect.left, b.rect.left) > 2 && Math.min(a.rect.bottom, b.rect.bottom) - Math.max(a.rect.top, b.rect.top) > 2) overlaps.push([a.label, b.label]); }));
           const saved = document.getElementById('save-indicator').getBoundingClientRect();

@@ -1904,6 +1904,8 @@ body.ctrl-pressed .entity-family-link:hover {
   transition: opacity 280ms cubic-bezier(0.16, 1, 0.3, 1), color 280ms cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 .lens-dialogues .page-content p { opacity: .22; }
+.lens-dialogues .page-content-prosemirror p { opacity: 1; }
+.lens-dialogues .page-content-prosemirror .syntax-description { opacity: .22; }
 .lens-dialogues .syntax-dialogue { opacity: 1; color: white; }
 .lens-descriptions .syntax-dialogue { opacity: .18; }
 

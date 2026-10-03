@@ -46,14 +46,17 @@ try {
   });
   await check('F14 punctuation converts typed quotes ellipsis and dash and respects disabling', async page => {
     await page.evaluate(() => { const a = window.nocturneApp; a.state.settings.smartPunctuation = true; a.state.settings.autoReplaceDoubleDash = false; a.nocturneEditor.get('primary').commands.setContent('<p></p>'); a.nocturneEditor.get('primary').commands.focus('end'); });
+    await page.waitForTimeout(80);
     await page.keyboard.type('"Text" ... --', { delay: 5 });
     assert.equal(await page.evaluate(() => window.nocturneApp.nocturneEditor.get('primary').getText()), '«Text» … —');
     await page.evaluate(() => { const a = window.nocturneApp; a.state.settings.smartPunctuation = false; a.nocturneEditor.get('primary').commands.setContent('<p></p>'); a.nocturneEditor.get('primary').commands.focus('end'); });
+    await page.waitForTimeout(80);
     await page.keyboard.type('"Text" ... --', { delay: 5 });
     assert.equal(await page.evaluate(() => window.nocturneApp.nocturneEditor.get('primary').getText()), '"Text" ... --');
   });
   await check('F15 fifteen continuously typed words count as writing', async page => {
     await page.evaluate(async () => { const a = window.nocturneApp; const e = a.nocturneEditor.get('primary'); e.commands.setContent('<p></p>'); await a.db.clear('stats'); a.docWordBaselines.set(a.getFocusedDoc().id, 0); a.docHighWatermarks.set(a.getFocusedDoc().id, 0); e.commands.focus('end'); });
+    await page.waitForTimeout(80);
     await page.keyboard.type(Array.from({ length: 15 }, (_, i) => `word${i}`).join(' '));
     await page.evaluate(async () => { const a = window.nocturneApp; await a.saveActiveDoc({ silent: true }); });
     const words = await page.evaluate(async () => (await window.nocturneApp.db.getAll('stats')).reduce((sum, row) => sum + row.words, 0));
@@ -67,6 +70,19 @@ try {
       return (await a.db.getAll('stats')).reduce((sum, row) => sum + row.words, 0);
     });
     assert.equal(words, 6);
+  });
+  await check('F15 paste preserves writing counted before and after it', async page => {
+    await page.evaluate(async () => {
+      const a = window.nocturneApp, e = a.nocturneEditor.get('primary'); e.commands.setContent('<p></p>'); await a.db.clear('stats'); e.commands.focus('end');
+    });
+    await page.waitForTimeout(80); await page.keyboard.type('first second ');
+    await page.evaluate(() => {
+      const e = window.nocturneApp.nocturneEditor.get('primary');
+      e.view.dispatch(e.state.tr.insertText(Array.from({ length: 20 }, (_, i) => `paste${i} `).join('')).setMeta('paste', true).setMeta('uiEvent', 'paste'));
+    });
+    await page.keyboard.type('third fourth');
+    await page.evaluate(() => window.nocturneApp.saveActiveDoc({ silent: true }));
+    assert.equal(await page.evaluate(async () => (await window.nocturneApp.db.getAll('stats')).reduce((sum, row) => sum + row.words, 0)), 4);
   });
   await check('F19 Enter executes the visibly selected grouped command', async page => {
     const result = await page.evaluate(() => {
