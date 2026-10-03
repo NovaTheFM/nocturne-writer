@@ -295,6 +295,10 @@ class NocturneWriter {
       },
       onVisualPagesCalculated: () => {
         this.renderTypoSvgOverlays();
+        if (this.state.settings.autoPaginate) {
+          this.renderNocturneSelectionLayer();
+          this.updateCustomCaret();
+        }
       },
       onChange: ({ paneId, doc, transaction }) => this.handleRichEditorChange(paneId, doc, transaction),
       onKeydown: (event) => {
@@ -4504,6 +4508,8 @@ class NocturneWriter {
   }
 
   rangeFromPoint(x, y) {
+    const boundary = this.state.settings.autoPaginate ? this.nocturneEditor.rangeAtPaginationGap(x, y) : null;
+    if (boundary) return boundary;
     if (document.caretRangeFromPoint) return document.caretRangeFromPoint(x, y);
     const pos = document.caretPositionFromPoint?.(x, y);
     if (!pos) return null;
@@ -4646,6 +4652,10 @@ class NocturneWriter {
     const editable = event.target.closest?.('.page-content');
     if (!editable) return;
     this.mobileSelectionTimer && clearTimeout(this.mobileSelectionTimer);
+    if (this.state.settings.autoPaginate && this.nocturneEditor.rangeAtPaginationGap(event.clientX, event.clientY)) {
+      this.mobileSelectionTimer = null;
+      return;
+    }
     const start = { x: event.clientX, y: event.clientY, pointerId: event.pointerId };
     this.mobileSelectionStart = start;
     this.mobileSelectionTimer = window.setTimeout(() => {
@@ -5315,6 +5325,21 @@ class NocturneWriter {
     }
   }
 
+  textSelectionRects(range, editable) {
+    const walker = document.createTreeWalker(editable, NodeFilter.SHOW_TEXT);
+    const rects = [], probe = document.createRange();
+    let node;
+    while ((node = walker.nextNode())) {
+      if (!node.length || !range.intersectsNode(node) || node.parentElement.closest('[contenteditable="false"]')) continue;
+      const start = range.startContainer === node ? range.startOffset : 0;
+      const end = range.endContainer === node ? range.endOffset : node.length;
+      if (start >= end) continue;
+      probe.setStart(node, start); probe.setEnd(node, end);
+      rects.push(...probe.getClientRects());
+    }
+    return rects;
+  }
+
   renderNocturneSelectionLayer() {
     const layer = this.ensureNocturneSelectionLayer();
     const custom = !!(this.selectionController?.active && this.selectionController.range && this.selectionController.editable);
@@ -5326,7 +5351,8 @@ class NocturneWriter {
       return;
     }
 
-    const rawRects = range.getClientRects();
+    const rawRects = this.state.settings.autoPaginate && this.nocturneEditor.getByElement(editable)
+      ? this.textSelectionRects(range, editable) : range.getClientRects();
     if (!rawRects || !rawRects.length) {
       this.hideNocturneSelectionLayer(layer);
       return;
@@ -15597,6 +15623,19 @@ class NocturneWriter {
   }
 
   rangeRect(range) {
+    if (range.collapsed && this.state.settings.autoPaginate) {
+      const element = range.startContainer.nodeType === Node.ELEMENT_NODE ? range.startContainer : range.startContainer.parentElement;
+      const editor = this.nocturneEditor.getByElement(element);
+      if (editor?.view.dom.contains(range.startContainer)) {
+        if (range.startContainer.nodeType === Node.TEXT_NODE) {
+          const direct = range.getBoundingClientRect();
+          if (direct.height > 0) return direct;
+        }
+        const pos = editor.view.posAtDOM(range.startContainer, range.startOffset);
+        const rect = editor.view.coordsAtPos(pos);
+        return this.rectLike(rect.left, rect.top, rect.bottom - rect.top);
+      }
+    }
     const softEmptyLineRect = this.softEmptyLineCaretRect(range);
     if (softEmptyLineRect) return softEmptyLineRect;
     const emptyBlockRect = this.emptyBlockCaretRect(range);

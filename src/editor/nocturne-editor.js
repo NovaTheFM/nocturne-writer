@@ -749,6 +749,8 @@ export class NocturneEditorBridge {
           'data-doc-id': doc.id,
         },
         handleDOMEvents: {
+          mousedown: (view, event) => this.handlePaginationGapPress(view, event),
+          touchstart: (view, event) => this.handlePaginationGapPress(view, event),
           keydown: (view, event) => {
             this.onKeydown?.(event);
             return false;
@@ -956,6 +958,43 @@ export class NocturneEditorBridge {
     const host = element?.closest?.('.page-content');
     if (!host) return null;
     return [...this.instances.values()].find((instance) => instance.host === host)?.editor || null;
+  }
+
+  paginationGapAtCoords(view, x, y) {
+    if (!this.getSettings?.()?.autoPaginate) return null;
+    const bounds = view.dom.getBoundingClientRect();
+    if (x < bounds.left || x > bounds.right) return null;
+    for (const item of paginationPluginKey.getState(view.state)?.pageBreaks || []) {
+      const after = view.coordsAtPos(item.pos, 1), top = after.top - item.height;
+      if (y >= top && y < after.top) return { pos: item.pos, side: y < (top + after.top) / 2 ? -1 : 1 };
+    }
+    return null;
+  }
+
+  rangeAtPaginationGap(x, y) {
+    const editor = this.getByElement(document.elementFromPoint(x, y));
+    if (!editor || editor.isDestroyed) return null;
+    const boundary = this.paginationGapAtCoords(editor.view, x, y);
+    if (!boundary) return null;
+    const selection = TextSelection.findFrom(editor.state.doc.resolve(boundary.pos), boundary.side, true);
+    if (!selection) return null;
+    const point = editor.view.domAtPos(selection.head, boundary.side), range = document.createRange();
+    range.setStart(point.node, point.offset); range.collapse(true);
+    return range;
+  }
+
+  handlePaginationGapPress(view, event) {
+    if (event.type === 'mousedown' && event.button !== 0) return false;
+    const point = event.touches?.[0] || event;
+    const boundary = this.paginationGapAtCoords(view, point.clientX, point.clientY);
+    if (!boundary) return false;
+    const selection = TextSelection.findFrom(view.state.doc.resolve(boundary.pos), boundary.side, true);
+    if (!selection) return false;
+    event.preventDefault();
+    view.dispatch(view.state.tr.setSelection(selection)); view.focus();
+    const dom = view.domAtPos(selection.head, boundary.side);
+    view.dom.ownerDocument.getSelection().setBaseAndExtent(dom.node, dom.offset, dom.node, dom.offset);
+    return true;
   }
 
   scheduleVisualPages(paneId) {

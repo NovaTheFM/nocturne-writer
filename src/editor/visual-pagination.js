@@ -81,7 +81,7 @@ function blockLines(element, node, pos, origin) {
   if (!lines.length) {
     const rect = element.getBoundingClientRect();
     const height = Math.min(rect.height, parseFloat(getComputedStyle(element).lineHeight) || rect.height);
-    lines.push({ pos: node.isTextblock ? pos + 1 : pos, top: rect.top - origin, bottom: rect.top - origin + height, type: node.isTextblock ? 'inline' : 'block' });
+    lines.push({ pos: node.isTextblock ? pos + 1 : pos, top: rect.top - origin, bottom: rect.top - origin + height, type: node.isTextblock ? 'inline' : 'block', marginTop: parseFloat(getComputedStyle(element).marginTop) || 0 });
   }
   return lines;
 }
@@ -96,6 +96,12 @@ function measureLines(view, pageShell) {
     return false;
   });
   copy.querySelectorAll('.ProseMirror-widget').forEach(widget => widget.remove());
+  copy.querySelectorAll('[data-pagination-break]').forEach(element => {
+    element.removeAttribute('data-pagination-break');
+    element.classList.remove('pm-page-start-inline', 'pm-page-start-empty', 'pm-page-start-atom', 'pm-page-end-empty');
+    element.style.removeProperty('--page-spacer-height');
+    element.style.removeProperty('--page-original-margin');
+  });
   for (const element of [copy, ...copy.querySelectorAll('*')]) element.style.contentVisibility = 'visible';
   Object.assign(copy.style, { minHeight: '0', height: 'auto', width: `${width}px` });
   Object.assign(wrapper.style, { position: 'fixed', left: '-100000px', top: '0', width: `${width}px`, minHeight: '0', height: 'auto', margin: '0', padding: '0', visibility: 'hidden', pointerEvents: 'none', overflow: 'visible' });
@@ -108,15 +114,33 @@ function measureLines(view, pageShell) {
 }
 
 function setBreaks(view, pageBreaks) {
-  const current = paginationPluginKey.getState(view.state)?.pageBreaks || [];
-  if (current.length === pageBreaks.length && current.every((item, index) => item.pos === pageBreaks[index].pos && item.type === pageBreaks[index].type && Math.abs(item.height - pageBreaks[index].height) < .5)) return;
-  const decorations = pageBreaks.map(item => Decoration.widget(item.pos, () => {
-    const spacer = document.createElement('span'); spacer.className = 'pm-page-break-widget';
-    spacer.contentEditable = 'false'; spacer.setAttribute('aria-hidden', 'true');
-    spacer.style.setProperty('--spacer-height', `${item.height}px`);
-    return spacer;
-  }, { key: `page-break-${item.pos}-${item.height}`, side: -1, ignoreSelection: true }));
-  view.dispatch(view.state.tr.setMeta(paginationPluginKey, { decorations: DecorationSet.create(view.state.doc, decorations), pageBreaks }).setMeta('addToHistory', false));
+  const current = paginationPluginKey.getState(view.state);
+  const decorations = pageBreaks.map(item => {
+    const attrs = { 'data-pagination-break': '', style: `--page-spacer-height:${item.height}px;` };
+    const $pos = view.state.doc.resolve(item.pos);
+    if (item.type === 'block') {
+      attrs.class = 'pm-page-start-atom';
+      attrs.style += `--page-original-margin:${item.marginTop || 0}px;`;
+      return Decoration.node(item.pos, item.pos + $pos.nodeAfter.nodeSize, attrs);
+    }
+    if (!$pos.nodeAfter) {
+      if ($pos.nodeBefore) {
+        attrs.class = 'pm-page-end-empty';
+        attrs.nodeName = 'span';
+        return Decoration.inline(item.pos - $pos.nodeBefore.nodeSize, item.pos, attrs);
+      }
+      attrs.class = 'pm-page-start-empty';
+      return Decoration.node($pos.before(), $pos.after(), attrs);
+    }
+    const next = $pos.nodeAfter;
+    const length = next.isText ? String.fromCodePoint(next.text.codePointAt(0)).length : next.nodeSize;
+    attrs.class = 'pm-page-start-inline';
+    attrs.nodeName = 'span';
+    return Decoration.inline(item.pos, item.pos + length, attrs);
+  });
+  const set = DecorationSet.create(view.state.doc, decorations);
+  if (current && current.decorations.eq(set) && current.pageBreaks.length === pageBreaks.length && current.pageBreaks.every((item, index) => item.pos === pageBreaks[index].pos && item.type === pageBreaks[index].type && Math.abs(item.height - pageBreaks[index].height) < .5)) return;
+  view.dispatch(view.state.tr.setMeta(paginationPluginKey, { decorations: set, pageBreaks }).setMeta('addToHistory', false));
 }
 
 export function calculateVisualPages({ editor, pageShell, overlay, flexible = false, motion }) {
@@ -142,7 +166,7 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
     if (bottom > pageIndex * stride + pageHeight - paddingBottom + .5) {
       pageIndex++;
       const height = Math.max(0, pageIndex * stride + paddingTop - origin - line.top - shift);
-      if (height > .5) { pageBreaks.push({ pos: line.pos, type: line.type, height }); shift += height; }
+      if (height > .5) { pageBreaks.push({ pos: line.pos, type: line.type, height, ...(line.type === 'block' ? { marginTop: line.marginTop } : {}) }); shift += height; }
     }
   }
   setBreaks(view, pageBreaks);

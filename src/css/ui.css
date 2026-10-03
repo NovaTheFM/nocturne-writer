@@ -9682,12 +9682,18 @@ input:-webkit-autofill:active {
 .app-shell:not(.flexible-pages) .page-content-prosemirror * {
   content-visibility: visible;
 }
-.pm-page-break-widget {
+.pm-page-start-inline::before,
+.pm-page-start-empty::before,
+.pm-page-end-empty::after {
+  content: '';
   display: block;
-  height: var(--spacer-height);
+  height: var(--page-spacer-height);
   pointer-events: none;
   user-select: none;
   line-height: 0;
+}
+.pm-page-start-atom {
+  margin-top: calc(var(--page-original-margin) + var(--page-spacer-height));
 }
 /* Disable transitions on currently dragged/ghost elements for instant cursor tracking */
 .sortable-drag,
