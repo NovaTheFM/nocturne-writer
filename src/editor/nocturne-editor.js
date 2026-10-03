@@ -1000,7 +1000,6 @@ export class NocturneEditorBridge {
   scheduleVisualPages(paneId) {
     const instance = this.instances.get(paneId);
     if (!instance) return;
-    if (document.body.classList.contains('resizing-workspace')) return;
     cancelAnimationFrame(this.visualPageRaf.get(paneId));
     const raf = requestAnimationFrame(() => {
       this.visualPageRaf.delete(paneId);
