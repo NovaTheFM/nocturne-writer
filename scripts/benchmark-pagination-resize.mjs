@@ -13,6 +13,10 @@ const budgetMs = Number(argument('budget-ms', '100'));
 const source = path.resolve(argument('source', '.'));
 const shapeFilter = argument('shape', 'all');
 assert.ok(Number.isInteger(words) && words >= 1000 && words <= 500000);
+assert.ok(Number.isInteger(targetPages) && targetPages >= 0 && targetPages <= 1000);
+assert.ok(['full', 'split'].includes(pageMode));
+assert.ok(['all', 'single-paragraph', 'many-paragraphs'].includes(shapeFilter));
+assert.ok(Number.isFinite(budgetMs) && budgetMs > 0);
 const url = 'http://localhost:5322';
 const server = spawn(process.execPath, ['server.mjs'], { cwd: source, env: { ...process.env, PORT: '5322', SYNC_PORT: '8922' }, stdio: 'ignore', windowsHide: true });
 const browser = await chromium.launch({ headless: true });
@@ -20,7 +24,7 @@ const results = [];
 await mkdir('release/qa/pagination-performance', { recursive: true });
 const filename = `release/qa/pagination-performance/${label}.json`;
 const percentile = (values, fraction) => [...values].sort((a, b) => a - b)[Math.min(values.length - 1, Math.floor(values.length * fraction))] || 0;
-const metadata = { label, words, targetPages, pageMode, budgetMs, source, commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', windowsHide: true }).trim(), checkedAt: new Date().toISOString() };
+const metadata = { label, words, targetPages, pageMode, budgetMs, source, commit: argument('revision', execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', windowsHide: true }).trim()), animations: process.argv.includes('--animate'), browser: browser.version(), checkedAt: new Date().toISOString() };
 try {
   for (let i = 0; i < 60; i++) { try { if ((await fetch(url)).ok) break; } catch {} await new Promise(resolve => setTimeout(resolve, 100)); }
   for (const shape of ['single-paragraph', 'many-paragraphs']) {
@@ -46,6 +50,7 @@ try {
         await document.fonts.ready;
       }, { shape, words });
       if (pageMode === 'split') await page.evaluate(() => window.nocturneApp.toggleSplitMode());
+      await page.waitForTimeout(650);
       let actualWords = words, initialPages = 0;
       for (let attempt = 0; attempt < 12; attempt++) {
         await page.waitForFunction(() => !window.nocturneApp.nocturneEditor.visualPageRaf.has('primary'), null, { polling: 100 });
@@ -76,9 +81,11 @@ try {
           if (metrics.enabled && calls > 20) metrics.layouts.push({ durationMs: performance.now() - start, rangeReads: calls });
         });
         const tick = time => {
-          if (!metrics.enabled) return;
-          if (metrics.previousFrame) metrics.frames.push(time - metrics.previousFrame);
-          metrics.previousFrame = time; raf.call(window, tick);
+          if (metrics.enabled) {
+            if (metrics.previousFrame) metrics.frames.push(time - metrics.previousFrame);
+            metrics.previousFrame = time;
+          } else metrics.previousFrame = 0;
+          raf.call(window, tick);
         };
         raf.call(window, tick);
       });
@@ -90,6 +97,7 @@ try {
           await page.mouse.move(stage.x + stage.width * ratio, divider.y + 40, { steps: 4 });
           await page.waitForFunction(() => !window.nocturneApp.nocturneEditor.visualPageRaf.has('primary'), null, { polling: 100 });
           await page.waitForTimeout(80);
+          await page.evaluate(() => { window.__resizeMetrics.enabled = false; window.__resizeMetrics.previousFrame = 0; });
           const sample = await page.evaluate(ratio => {
             const a = window.nocturneApp, instance = a.nocturneEditor.instances.get('primary'), e = instance.editor, shell = instance.pageShell;
             const style = getComputedStyle(shell), origin = shell.getBoundingClientRect().top, width = shell.getBoundingClientRect().width;
@@ -106,6 +114,7 @@ try {
           assert.equal(sample.held, true); assert.equal(sample.intact, true); assert.deepEqual(sample.misses, [], JSON.stringify(sample));
           assert.ok(Math.abs(sample.sheetHeight - sample.height) < 2);
           samples.push(sample);
+          await page.evaluate(() => { window.__resizeMetrics.enabled = true; });
         }
       } finally { await page.mouse.up(); }
       const metrics = await page.evaluate(() => { window.__resizeMetrics.enabled = false; return window.__resizeMetrics; });

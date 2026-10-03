@@ -6676,16 +6676,17 @@ class NocturneWriter {
       this.state.workspace.splitRatio = Math.min(.78, Math.max(.32, ratio));
       stage.style.setProperty('--split-primary', `${this.state.workspace.splitRatio * 100}%`);
       stage.style.setProperty('--split-secondary', `${(1 - this.state.workspace.splitRatio) * 100}%`);
+      for (const paneId of this.nocturneEditor?.instances.keys() || []) this.nocturneEditor.scheduleVisualPages(paneId);
     };
 
     const move = (moveEvent) => {
       pendingX = moveEvent.clientX;
       if (!rafId) {
         rafId = requestAnimationFrame(() => {
+          rafId = null;
           if (pendingX !== null) {
             updateRatio(pendingX);
           }
-          requestAnimationFrame(() => { rafId = null; });
         });
       }
     };
@@ -12879,14 +12880,16 @@ class NocturneWriter {
     return `${node.tagName}:${key}`;
   }
 
-  runMotion(element, frames, { channel = 'content', duration = 260, easing = 'cubic-bezier(.16, 1, .3, 1)' } = {}) {
+  runMotion(element, frames, { channel = 'content', duration = 260, easing = 'cubic-bezier(.16, 1, .3, 1)', startFromCurrent = true } = {}) {
     if (!element?.isConnected) return { finished: Promise.resolve(false) };
     const motions = element.__nocturneMotions ||= new Map();
     const previous = motions.get(channel);
     const first = { ...frames[0] };
     if (previous) {
-      const visible = getComputedStyle(element);
-      for (const key of ['opacity', 'transform']) if (key in first) first[key] = visible[key];
+      if (startFromCurrent) {
+        const visible = getComputedStyle(element);
+        for (const key of ['opacity', 'transform']) if (key in first) first[key] = visible[key];
+      }
       previous.animation.cancel();
     }
     if (this.shouldReduceSurfaceMotion()) { motions.delete(channel); return { finished: Promise.resolve(true) }; }
@@ -15840,6 +15843,8 @@ class NocturneWriter {
   updateCustomCaret() {
     const caret = document.getElementById('custom-caret');
     if (!caret || !document.getElementById('app-shell')?.classList.contains('custom-caret-enabled')) return;
+    // Pagination refreshes the caret after its layout; reading sooner lays out the stale breaks.
+    if (this.state.settings.autoPaginate && this.nocturneEditor?.visualPageRaf.has(this.state.workspace?.focusedPaneId || 'primary')) return;
     if (!document.hasFocus()) {
       if (caret.style.display !== 'none') caret.style.display = 'none';
       return;

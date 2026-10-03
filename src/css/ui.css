@@ -8835,9 +8835,13 @@ body.theme-paper .accent-preset.active {
 .page-sheet-bg {
   position: absolute;
   left: 0;
+  top: calc(var(--paper-index, 0) * var(--paper-stride, 0px));
+  height: var(--paper-height, 1123px);
+  width: var(--paper-width, 100%);
+  border-radius: var(--paper-radius, 4px);
   background: var(--bg-page);
   border: 1px solid var(--border);
-  box-shadow: var(--shadow-float);
+  box-shadow: var(--paper-shadow, var(--shadow-float));
   box-sizing: border-box;
   contain: layout style paint;
   content-visibility: auto;

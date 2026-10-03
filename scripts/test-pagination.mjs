@@ -182,6 +182,29 @@ try {
     } finally { await page.mouse.up(); }
     return result;
   });
+  await check('cached pagination reflows edits undo and font changes while the divider is held', async page => {
+    await enable(page, `<p>${'Пересчёт длинного абзаца 🙂 при изменении ширины. '.repeat(650)}</p>`);
+    await page.evaluate(() => window.nocturneApp.toggleSplitMode()); await page.waitForTimeout(650);
+    const original = (await geometry(page)).text, measurements = [];
+    let step = 0;
+    await dragSplit(page, async ratio => {
+      if (step === 0) {
+        await page.evaluate(() => window.nocturneApp.nocturneEditor.get('primary').commands.focus('end'));
+        await page.waitForTimeout(100);
+        await page.keyboard.insertText(' Дополнение 🙂');
+      } else if (step === 1) {
+        await page.evaluate(() => { const a = window.nocturneApp; a.state.settings.fontSize = 21; a.applySettings(); });
+      } else if (step === 2) await page.evaluate(() => window.nocturneApp.nocturneEditor.get('primary').commands.undo());
+      else if (step === 3) await page.evaluate(() => window.nocturneApp.nocturneEditor.get('primary').commands.redo());
+      await page.waitForTimeout(300);
+      const result = await geometry(page);
+      assert.deepEqual(result.misses, [], JSON.stringify({ ratio, step, misses: result.misses }));
+      const expected = original + (step === 2 ? '' : ' Дополнение 🙂');
+      assert.ok(result.text === expected, JSON.stringify({ step, actualLength: result.text.length, expectedLength: expected.length, tail: result.text.slice(-80) }));
+      measurements.push({ ratio, pages: result.pages, fontSize: await page.evaluate(() => window.nocturneApp.state.settings.fontSize) }); step++;
+    });
+    assert.deepEqual((await geometry(page)).misses, []); return measurements;
+  });
   await check('spellcheck underline follows its text after pagination and font reflow', async page => {
     await enable(page, `<p>${'Reflow underline sentence. '.repeat(650)}</p>`);
     await page.evaluate(() => {

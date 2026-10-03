@@ -10,6 +10,7 @@ const checks = [
   ['audit-platform', ['scripts/test-audit-platform.mjs']],
   ['pagination', ['scripts/test-pagination.mjs']],
   ['pagination-interaction', ['scripts/test-pagination-interaction.mjs']],
+  ['pagination-performance', ['scripts/benchmark-pagination-resize.mjs', '--pages=53', '--page-mode=split', '--shape=single-paragraph', '--animate', '--label=verification', '--assert']],
   ['release-tools', ['scripts/test-release-tools.py'], 'python'],
   ['editor-adapter', ['scripts/test-editor-adapter.mjs']],
   ['ai-context', ['scripts/test-ai-context.mjs']],

@@ -1,8 +1,19 @@
 import { Decoration, DecorationSet } from '../vendor/tiptap/nocturne-tiptap.bundle.js';
 import { paginationPluginKey, PAGE_GAP, PAGE_RATIO } from './pagination-state.js';
 
+const measurementCache = new WeakMap();
+
 function updatePaperSheets(container, count, { pageHeight, gap, pageStyle, motion } = {}) {
   const sheets = [...container.querySelectorAll('.page-sheet-bg')];
+  const animate = motion?.run && !motion.reduce();
+  const opacity = new Map(animate ? sheets.flatMap((sheet, index) => {
+    const exiting = sheet.classList.contains('motion-sheet-exiting');
+    return (index >= count && !exiting) || (index < count && exiting) ? [[sheet, getComputedStyle(sheet).opacity]] : [];
+  }) : []);
+  if (pageStyle) {
+    const values = { '--paper-height': `${pageHeight}px`, '--paper-stride': `${pageHeight + gap}px`, '--paper-width': pageStyle.width, '--paper-radius': pageStyle.borderRadius || '4px', '--paper-shadow': pageStyle.boxShadow || 'var(--shadow-float)' };
+    for (const [property, value] of Object.entries(values)) if (container.style.getPropertyValue(property) !== value) container.style.setProperty(property, value);
+  }
   for (let index = 0; index < Math.max(sheets.length, count); index++) {
     let sheet = sheets[index];
     if (index >= count) {
@@ -10,7 +21,7 @@ function updatePaperSheets(container, count, { pageHeight, gap, pageStyle, motio
       sheet.classList.add('motion-sheet-exiting');
       const generation = sheet.__paperGeneration = (sheet.__paperGeneration || 0) + 1;
       const finish = () => { if (generation === sheet.__paperGeneration && sheet.classList.contains('motion-sheet-exiting')) sheet.remove(); };
-      if (motion?.run && !motion.reduce()) motion.run(sheet, [{ opacity: getComputedStyle(sheet).opacity }, { opacity: 0 }], { channel: 'paper', duration: 180 }).finished.then(completed => { if (completed) finish(); });
+      if (animate) motion.run(sheet, [{ opacity: opacity.get(sheet) }, { opacity: 0 }], { channel: 'paper', duration: 180, startFromCurrent: false }).finished.then(completed => { if (completed) finish(); });
       else finish();
       continue;
     }
@@ -21,9 +32,9 @@ function updatePaperSheets(container, count, { pageHeight, gap, pageStyle, motio
       sheet.append(number); container.append(sheet);
     }
     sheet.__paperGeneration = (sheet.__paperGeneration || 0) + 1;
-    sheet.classList.remove('motion-sheet-exiting');
-    Object.assign(sheet.style, { top: `${index * (pageHeight + gap)}px`, height: `${pageHeight}px`, width: pageStyle.width, borderRadius: pageStyle.borderRadius || '4px', boxShadow: pageStyle.boxShadow || 'var(--shadow-float)' });
-    if (appearing && motion?.run) motion.run(sheet, [{ opacity: 0 }, { opacity: 1 }], { channel: 'paper', duration: 240 });
+    if (sheet.classList.contains('motion-sheet-exiting')) sheet.classList.remove('motion-sheet-exiting');
+    if (sheet.style.getPropertyValue('--paper-index') !== String(index)) sheet.style.setProperty('--paper-index', String(index));
+    if (appearing && motion?.run) motion.run(sheet, [{ opacity: opacity.get(sheet) ?? 0 }, { opacity: 1 }], { channel: 'paper', duration: 240, startFromCurrent: false });
   }
 }
 
@@ -35,14 +46,10 @@ export function updateActivePageHighlight(editor, pageShell) {
     const y = editor.view.coordsAtPos(editor.state.selection.head).top - pageShell.getBoundingClientRect().top;
     const stride = Math.round(pageShell.getBoundingClientRect().width * PAGE_RATIO) + PAGE_GAP;
     const index = Math.max(0, Math.min(sheets.length - 1, Math.floor(y / stride)));
-    for (let i = 0; i < sheets.length; i++) sheets[i].classList.toggle('active', i === index);
+    const active = sheets[index];
+    for (const sheet of pageShell.querySelectorAll('.page-sheet-bg.active:not(.motion-sheet-exiting)')) if (sheet !== active) sheet.classList.remove('active');
+    if (!active.classList.contains('active')) active.classList.add('active');
   } catch { /* A composition can briefly leave the DOM selection ahead of the model. */ }
-}
-
-function mirroredNode(node, original, copy) {
-  const path = [];
-  for (let current = node; current && current !== original; current = current.parentNode) path.push([...current.parentNode.childNodes].indexOf(current));
-  return path.reverse().reduce((current, index) => current?.childNodes[index], copy);
 }
 
 function blockLines(element, node, pos, origin) {
@@ -56,21 +63,21 @@ function blockLines(element, node, pos, origin) {
   };
   function scan(dom) {
     if (dom.nodeType === Node.TEXT_NODE) {
-      const text = dom.textContent;
-      const rectAt = index => { range.setStart(dom, index); range.setEnd(dom, Math.min(text.length, index + 1)); return range.getBoundingClientRect(); };
-      let start = 0;
-      while (start < text.length) {
-        const rect = rectAt(start);
-        add(pos + 1 + offset + start, rect);
-        let left = start + 1, right = text.length;
-        while (left < right) {
-          const middle = Math.floor((left + right) / 2);
-          if (rectAt(middle).top < rect.bottom - 2) left = middle + 1;
-          else right = middle;
-        }
-        start = left;
+      const length = dom.length, startPos = pos + 1 + offset;
+      range.selectNodeContents(dom);
+      for (const rect of range.getClientRects()) {
+        add(() => {
+          let left = 0, right = length;
+          while (left < right) {
+            const middle = Math.floor((left + right) / 2);
+            range.setStart(dom, middle); range.setEnd(dom, Math.min(length, middle + 1));
+            if (range.getBoundingClientRect().bottom <= rect.top + 2) left = middle + 1;
+            else right = middle;
+          }
+          return startPos + left;
+        }, rect);
       }
-      offset += text.length;
+      offset += length;
     } else if (dom.nodeName === 'BR') {
       range.selectNode(dom);
       add(pos + 1 + offset, range.getBoundingClientRect());
@@ -86,12 +93,14 @@ function blockLines(element, node, pos, origin) {
   return lines;
 }
 
-function measureLines(view, pageShell) {
-  const copy = view.dom.cloneNode(true), wrapper = view.dom.parentElement.cloneNode(false);
-  const width = view.dom.getBoundingClientRect().width, blocks = [];
+function createMeasurement(view) {
+  const copy = view.dom.cloneNode(true), wrapper = view.dom.parentElement.cloneNode(false), blocks = [];
+  const mirrored = new WeakMap([[view.dom, copy]]), originalWalker = document.createTreeWalker(view.dom, NodeFilter.SHOW_ELEMENT), copyWalker = document.createTreeWalker(copy, NodeFilter.SHOW_ELEMENT);
+  let element;
+  while ((element = originalWalker.nextNode())) mirrored.set(element, copyWalker.nextNode());
   view.state.doc.descendants((node, pos) => {
     if (!node.isTextblock && !(node.isBlock && node.isAtom)) return;
-    const original = view.nodeDOM(pos), element = original && mirroredNode(original, view.dom, copy);
+    const original = view.nodeDOM(pos), element = original && mirrored.get(original);
     if (element?.nodeType === Node.ELEMENT_NODE) blocks.push({ element, node, pos });
     return false;
   });
@@ -103,13 +112,27 @@ function measureLines(view, pageShell) {
     element.style.removeProperty('--page-original-margin');
   });
   for (const element of [copy, ...copy.querySelectorAll('*')]) element.style.contentVisibility = 'visible';
+  return { copy, wrapper, blocks };
+}
+
+function measureLines(view, pageShell, consume) {
+  const resizing = document.body.classList.contains('resizing-workspace');
+  // Pagination metadata changes every frame; only content and other decorations invalidate the hidden copy.
+  const pluginStates = view.state.plugins.filter(plugin => plugin.key !== paginationPluginKey.key).map(plugin => plugin.getState(view.state));
+  const signature = [view.dom.className, view.dom.style.cssText, view.dom.parentElement.className, view.dom.parentElement.style.cssText].join('\n');
+  let cached = resizing && measurementCache.get(view);
+  if (cached && (cached.doc !== view.state.doc || cached.signature !== signature || cached.pluginStates.length !== pluginStates.length || cached.pluginStates.some((state, index) => state !== pluginStates[index]))) cached = null;
+  const measurement = cached || createMeasurement(view);
+  if (resizing && !cached) measurementCache.set(view, { ...measurement, doc: view.state.doc, signature, pluginStates });
+  if (!resizing) measurementCache.delete(view);
+  const { copy, wrapper, blocks } = measurement, width = view.dom.getBoundingClientRect().width;
   Object.assign(copy.style, { minHeight: '0', height: 'auto', width: `${width}px` });
   Object.assign(wrapper.style, { position: 'fixed', left: '-100000px', top: '0', width: `${width}px`, minHeight: '0', height: 'auto', margin: '0', padding: '0', visibility: 'hidden', pointerEvents: 'none', overflow: 'visible' });
   wrapper.setAttribute('aria-hidden', 'true'); wrapper.inert = true;
   wrapper.append(copy); pageShell.append(wrapper);
   try {
     const origin = copy.getBoundingClientRect().top;
-    return blocks.flatMap(({ element, node, pos }) => blockLines(element, node, pos, origin));
+    return consume(blocks.flatMap(({ element, node, pos }) => blockLines(element, node, pos, origin)));
   } finally { wrapper.remove(); }
 }
 
@@ -147,8 +170,9 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
   if (!editor || editor.isDestroyed || !pageShell?.isConnected) return [];
   const view = editor.view;
   if (view.composing || !view.dom.getBoundingClientRect().width) return [];
-  const pageStyle = getComputedStyle(pageShell), pageHeight = Math.round(pageShell.getBoundingClientRect().width * PAGE_RATIO);
-  const paddingTop = parseFloat(pageStyle.paddingTop) || 0, paddingBottom = parseFloat(pageStyle.paddingBottom) || 0;
+  const computed = getComputedStyle(pageShell), pageHeight = Math.round(pageShell.getBoundingClientRect().width * PAGE_RATIO);
+  const paddingTop = parseFloat(computed.paddingTop) || 0, paddingBottom = parseFloat(computed.paddingBottom) || 0;
+  const pageStyle = { width: computed.width, borderRadius: computed.borderRadius, boxShadow: computed.boxShadow };
   let backgrounds = pageShell.querySelector('.page-sheets-bg');
   const number = pageShell.querySelector('.page-number');
   if (flexible) {
@@ -159,17 +183,18 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
     return [{ page: 1, y: 0 }];
   }
   const origin = view.dom.getBoundingClientRect().top - pageShell.getBoundingClientRect().top;
-  const stride = pageHeight + PAGE_GAP, lines = measureLines(view, pageShell), pageBreaks = [];
+  const stride = pageHeight + PAGE_GAP, pageBreaks = [];
   let shift = 0, pageIndex = 0;
-  for (const line of lines) {
-    const bottom = origin + line.bottom + shift;
-    if (bottom > pageIndex * stride + pageHeight - paddingBottom + .5) {
-      pageIndex++;
-      const height = Math.max(0, pageIndex * stride + paddingTop - origin - line.top - shift);
-      if (height > .5) { pageBreaks.push({ pos: line.pos, type: line.type, height, ...(line.type === 'block' ? { marginTop: line.marginTop } : {}) }); shift += height; }
+  measureLines(view, pageShell, lines => {
+    for (const line of lines) {
+      const bottom = origin + line.bottom + shift;
+      if (bottom > pageIndex * stride + pageHeight - paddingBottom + .5) {
+        pageIndex++;
+        const height = Math.max(0, pageIndex * stride + paddingTop - origin - line.top - shift);
+        if (height > .5) { pageBreaks.push({ pos: typeof line.pos === 'function' ? line.pos() : line.pos, type: line.type, height, ...(line.type === 'block' ? { marginTop: line.marginTop } : {}) }); shift += height; }
+      }
     }
-  }
-  setBreaks(view, pageBreaks);
+  });
   if (!backgrounds) {
     backgrounds = document.createElement('div'); backgrounds.className = 'page-sheets-bg'; backgrounds.setAttribute('aria-hidden', 'true');
     pageShell.prepend(backgrounds);
@@ -177,6 +202,7 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
   const count = pageIndex + 1;
   pageShell.style.minHeight = `${count * pageHeight + (count - 1) * PAGE_GAP}px`;
   updatePaperSheets(backgrounds, count, { pageHeight, gap: PAGE_GAP, pageStyle, motion });
+  setBreaks(view, pageBreaks);
   updateActivePageHighlight(editor, pageShell);
   if (number) number.style.display = 'none';
   if (overlay) overlay.style.height = '0px';
