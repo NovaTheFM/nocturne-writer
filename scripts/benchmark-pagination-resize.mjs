@@ -70,7 +70,7 @@ try {
       const profiler = process.argv.includes('--profile') ? await context.newCDPSession(page) : null;
       if (profiler) { await profiler.send('Profiler.enable'); await profiler.send('Profiler.start'); }
       await page.evaluate(() => {
-        const metrics = window.__resizeMetrics = { enabled: true, bounds: 0, fragments: 0, layouts: [], frames: [], previousFrame: 0 };
+        const metrics = window.__resizeMetrics = { enabled: true, finishing: false, finishingLayouts: [], bounds: 0, fragments: 0, layouts: [], frames: [], previousFrame: 0 };
         const bounds = Range.prototype.getBoundingClientRect, fragments = Range.prototype.getClientRects, raf = window.requestAnimationFrame;
         Range.prototype.getBoundingClientRect = function () { metrics.bounds++; return bounds.call(this); };
         Range.prototype.getClientRects = function () { metrics.fragments++; return fragments.call(this); };
@@ -79,6 +79,7 @@ try {
           callback(time);
           const calls = metrics.bounds + metrics.fragments - before;
           if (metrics.enabled && calls > 20) metrics.layouts.push({ durationMs: performance.now() - start, rangeReads: calls });
+          if (metrics.finishing && calls > 20) metrics.finishingLayouts.push(performance.now() - start);
         });
         const tick = time => {
           if (metrics.enabled) {
@@ -98,25 +99,44 @@ try {
           await page.waitForFunction(() => !window.nocturneApp.nocturneEditor.visualPageRaf.has('primary'), null, { polling: 100 });
           await page.waitForTimeout(80);
           await page.evaluate(() => { window.__resizeMetrics.enabled = false; window.__resizeMetrics.previousFrame = 0; });
-          const sample = await page.evaluate(ratio => {
+          const sample = await page.evaluate(async ratio => {
             const a = window.nocturneApp, instance = a.nocturneEditor.instances.get('primary'), e = instance.editor, shell = instance.pageShell;
+            const { paginationPluginKey } = await import('/src/editor/pagination-state.js');
+            const viewport = paginationPluginKey.getState(e.state)?.viewport;
             const style = getComputedStyle(shell), origin = shell.getBoundingClientRect().top, width = shell.getBoundingClientRect().width;
-            const height = Math.round(width * 1123 / 794), stride = height + 60, positions = [], misses = [];
+            const height = Math.round(width * 1123 / 794), stride = height + 60, positions = [], misses = []; let deferred = 0;
             e.state.doc.descendants((node, pos) => { if (node.isTextblock) { positions.push(pos + 1, pos + 1 + node.content.size); return false; } });
             const end = e.state.doc.content.size - 1;
             for (let index = 0; index < 100; index++) positions.push(Math.max(1, Math.round(end * index / 99)));
             for (const pos of positions.filter((_, index, rows) => index % Math.max(1, Math.floor(rows.length / 160)) === 0)) {
+              if (viewport && (pos < viewport.from || (pos >= viewport.to && viewport.to < e.state.doc.content.size - 1))) { deferred++; continue; }
+              const dom = e.view.domAtPos(pos).node;
+              if ((dom.nodeType === Node.ELEMENT_NODE ? dom : dom.parentElement)?.closest('[data-viewport-hidden]')) { deferred++; continue; }
               const c = e.view.coordsAtPos(pos), within = ((c.top - origin) % stride + stride) % stride;
               if (within < parseFloat(style.paddingTop) - 3 || within + c.bottom - c.top > height - parseFloat(style.paddingBottom) + 3) misses.push(pos);
             }
-            return { ratio, width, height, sheetHeight: shell.querySelector('.page-sheet-bg:not(.motion-sheet-exiting)').getBoundingClientRect().height, pages: shell.querySelectorAll('.page-sheet-bg:not(.motion-sheet-exiting)').length, held: document.body.classList.contains('resizing-workspace'), misses: misses.slice(0, 8), intact: JSON.stringify(e.getJSON()) === window.__performanceDocument };
+            return { ratio, width, height, sheetHeight: shell.querySelector('.page-sheet-bg:not(.motion-sheet-exiting)').getBoundingClientRect().height, pages: shell.querySelectorAll('.page-sheet-bg:not(.motion-sheet-exiting)').length, held: document.body.classList.contains('resizing-workspace'), deferred, misses: misses.slice(0, 8), intact: JSON.stringify(e.getJSON()) === window.__performanceDocument };
           }, ratio);
           assert.equal(sample.held, true); assert.equal(sample.intact, true); assert.deepEqual(sample.misses, [], JSON.stringify(sample));
           assert.ok(Math.abs(sample.sheetHeight - sample.height) < 2);
           samples.push(sample);
           await page.evaluate(() => { window.__resizeMetrics.enabled = true; });
         }
-      } finally { await page.mouse.up(); }
+      } finally { await page.evaluate(() => { window.__resizeMetrics.enabled = false; window.__resizeMetrics.finishing = true; }); await page.mouse.up(); }
+      await page.waitForFunction(() => !window.nocturneApp.nocturneEditor.visualPageRaf.has('primary'));
+      await page.evaluate(() => { window.__resizeMetrics.finishing = false; });
+      const final = await page.evaluate(() => {
+        const a = window.nocturneApp, instance = a.nocturneEditor.instances.get('primary'), e = instance.editor, shell = instance.pageShell, style = getComputedStyle(shell), origin = shell.getBoundingClientRect().top;
+        const height = Math.round(shell.getBoundingClientRect().width * 1123 / 794), stride = height + 60, positions = [], misses = [];
+        e.state.doc.descendants((node, pos) => { if (node.isTextblock) { positions.push(pos + 1, pos + 1 + node.content.size); return false; } });
+        for (let index = 0; index < 150; index++) positions.push(Math.max(1, Math.round((e.state.doc.content.size - 1) * index / 149)));
+        for (const pos of positions) {
+          const c = e.view.coordsAtPos(pos), within = ((c.top - origin) % stride + stride) % stride;
+          if (within < parseFloat(style.paddingTop) - 3 || within + c.bottom - c.top > height - parseFloat(style.paddingBottom) + 3) misses.push(pos);
+        }
+        return { misses: misses.slice(0, 8), intact: JSON.stringify(e.getJSON()) === window.__performanceDocument, hidden: e.view.dom.querySelectorAll('[data-viewport-hidden]').length };
+      });
+      assert.deepEqual(final.misses, []); assert.equal(final.intact, true); assert.equal(final.hidden, 0);
       const metrics = await page.evaluate(() => { window.__resizeMetrics.enabled = false; return window.__resizeMetrics; });
       if (profiler) {
         const { profile } = await profiler.send('Profiler.stop');
@@ -128,7 +148,7 @@ try {
         }
         console.log(JSON.stringify([...totals].sort((a, b) => b[1] - a[1]).slice(0, 15))); await profiler.detach();
       }
-      const result = { shape, actualWords, initialPages, characters: await page.evaluate(() => window.nocturneApp.nocturneEditor.get('primary').getText().length), samples, layouts: metrics.layouts, layoutP95Ms: percentile(metrics.layouts.map(item => item.durationMs), .95), frameP95Ms: percentile(metrics.frames, .95), frameMaxMs: Math.max(0, ...metrics.frames), rangeReads: metrics.layouts.reduce((sum, item) => sum + item.rangeReads, 0), errors };
+      const result = { shape, actualWords, initialPages, characters: await page.evaluate(() => window.nocturneApp.nocturneEditor.get('primary').getText().length), samples, final, finalLayoutMs: Math.max(0, ...metrics.finishingLayouts), layouts: metrics.layouts, layoutP95Ms: percentile(metrics.layouts.map(item => item.durationMs), .95), frameP95Ms: percentile(metrics.frames, .95), frameMaxMs: Math.max(0, ...metrics.frames), rangeReads: metrics.layouts.reduce((sum, item) => sum + item.rangeReads, 0), errors };
       results.push(result); assert.deepEqual(errors, []);
       console.log(`${shape}, ${actualWords} words, ${initialPages} initial pages: layout p95 ${result.layoutP95Ms.toFixed(1)} ms, frame p95 ${result.frameP95Ms.toFixed(1)} ms, ${result.rangeReads} Range reads; geometry and JSON intact.`);
       await writeFile(filename, JSON.stringify({ ...metadata, results }, null, 2));

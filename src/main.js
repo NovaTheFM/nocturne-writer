@@ -6667,6 +6667,7 @@ class NocturneWriter {
     if (!stage || this.state.workspace.mode !== 'split') return;
     const rect = stage.getBoundingClientRect();
     document.body.classList.add('resizing-workspace');
+    this.nocturneEditor?.beginWorkspaceResize();
 
     let rafId = null;
     let pendingX = null;
@@ -6676,7 +6677,7 @@ class NocturneWriter {
       this.state.workspace.splitRatio = Math.min(.78, Math.max(.32, ratio));
       stage.style.setProperty('--split-primary', `${this.state.workspace.splitRatio * 100}%`);
       stage.style.setProperty('--split-secondary', `${(1 - this.state.workspace.splitRatio) * 100}%`);
-      for (const paneId of this.nocturneEditor?.instances.keys() || []) this.nocturneEditor.scheduleVisualPages(paneId);
+      for (const paneId of this.nocturneEditor?.instances.keys() || []) this.nocturneEditor.flushVisualPages(paneId);
     };
 
     const move = (moveEvent) => {
@@ -6700,6 +6701,7 @@ class NocturneWriter {
         updateRatio(pendingX);
       }
       document.body.classList.remove('resizing-workspace');
+      this.nocturneEditor?.endWorkspaceResize();
       this.persistWorkspaceState();
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
@@ -15866,6 +15868,10 @@ class NocturneWriter {
 
     const paneId = this.state.workspace?.focusedPaneId || 'primary';
     const activePaneEl = activeEditable?.closest(`.workspace-pane[data-pane-id="${paneId}"]`);
+    if (!this.nocturneEditor?.isSelectionRendered(paneId)) {
+      if (caret.style.display !== 'none') caret.style.display = 'none';
+      return;
+    }
     if (!sel.rangeCount || !activeEditable || !activePaneEl) {
       if (caret.style.display !== 'none') caret.style.display = 'none';
       return;

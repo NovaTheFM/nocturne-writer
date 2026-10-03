@@ -1,8 +1,9 @@
 import { Editor, Extension, StarterKit, TextAlign, Underline, Placeholder, Plugin, PluginKey, Decoration, DecorationSet, HorizontalRule, TextSelection } from '../vendor/tiptap/nocturne-tiptap.bundle.js';
 import { ensureTiptapBlockIds, legacyAstToHtml, tiptapJsonToLegacyAst } from './document-adapter.js';
-import { calculateVisualPages, updateActivePageHighlight } from './visual-pagination.js';
+import { beginVisualResize, calculateVisualPages, disposeVisualPagination, updateActivePageHighlight } from './visual-pagination.js';
 import { NocturneWriterAnalysis, writerAnalysisKey } from './writer-analysis.js';
 import { paginationPluginKey } from './pagination-state.js';
+import { revealViewportSelection, viewportPaginationActive } from './viewport-pagination.js';
 import { normalizeTypoToken } from '../core/typos.js';
 import { uid, buildSummary } from '../core/utils.js';
 
@@ -61,12 +62,20 @@ const NocturnePagination = Extension.create({
               }
             });
             return {
+              ...value,
               decorations: value.decorations.map(tr.mapping, tr.doc),
               pageBreaks: mappedBreaks,
+              viewport: value.viewport ? { from: tr.mapping.map(value.viewport.from), to: tr.mapping.map(value.viewport.to) } : null,
             };
           },
         },
         props: {
+          handleScrollToSelection(view) {
+            if (!viewportPaginationActive(view)) return false;
+            const paneId = view.dom.getAttribute('data-pane-id'), instance = bridge.instances.get(paneId);
+            if (instance && revealViewportSelection(view, instance.pageShell)) bridge.flushVisualPages(paneId);
+            return true;
+          },
           decorations(state) {
             const paginationState = paginationPluginKey.getState(state);
             return paginationState.decorations;
@@ -75,6 +84,10 @@ const NocturnePagination = Extension.create({
         view(editorView) {
           return {
             update(view, prevState) {
+              if (view.state.selection !== prevState.selection) {
+                const paneId = view.dom.getAttribute('data-pane-id'), instance = bridge.instances.get(paneId);
+                if (instance && revealViewportSelection(view, instance.pageShell)) bridge.flushVisualPages(paneId);
+              }
               if (view.state.doc !== prevState.doc) bridge.scheduleVisualPages(view.dom.getAttribute('data-pane-id'));
             },
           };
@@ -931,8 +944,10 @@ export class NocturneEditorBridge {
   destroy(paneId) {
     const instance = this.instances.get(paneId);
     if (!instance) return;
-    if (this.visualPageRaf.has(paneId)) return;
+    cancelAnimationFrame(this.visualPageRaf.get(paneId));
     this.visualPageRaf.delete(paneId);
+    disposeVisualPagination(instance.editor);
+    instance.pageShell.closest('.editor-scroll-area')?.removeEventListener('scroll', instance.onResizeScroll);
     instance.resizeObserver?.disconnect();
     document.fonts.removeEventListener('loadingdone', instance.onFontsLoaded);
     instance.editor.destroy();
@@ -948,6 +963,12 @@ export class NocturneEditorBridge {
 
   get(paneId) {
     return this.instances.get(paneId)?.editor || null;
+  }
+
+  isSelectionRendered(paneId) {
+    const editor = this.get(paneId);
+    const viewport = editor && paginationPluginKey.getState(editor.state)?.viewport;
+    return !viewport || (editor.state.selection.head >= viewport.from && (editor.state.selection.head < viewport.to || viewport.to === editor.state.doc.content.size - 1));
   }
 
   getByDocId(docId) {
@@ -1000,21 +1021,34 @@ export class NocturneEditorBridge {
   scheduleVisualPages(paneId) {
     const instance = this.instances.get(paneId);
     if (!instance) return;
-    cancelAnimationFrame(this.visualPageRaf.get(paneId));
+    if (this.visualPageRaf.has(paneId)) return;
     const raf = requestAnimationFrame(() => {
-      this.visualPageRaf.delete(paneId);
-      if (instance.editor.isDestroyed || instance.editor.view.composing) return;
-      const settings = this.getSettings?.() || {};
-      calculateVisualPages({
-        editor: instance.editor,
-        pageShell: instance.pageShell,
-        overlay: instance.overlay,
-        flexible: !settings.autoPaginate,
-        motion: this.motion,
-      });
-      this.onVisualPagesCalculated?.({ paneId, editor: instance.editor });
+      this.flushVisualPages(paneId);
     });
     this.visualPageRaf.set(paneId, raf);
+  }
+
+  flushVisualPages(paneId) {
+    const instance = this.instances.get(paneId);
+    if (!instance) return;
+    cancelAnimationFrame(this.visualPageRaf.get(paneId)); this.visualPageRaf.delete(paneId);
+    if (instance.editor.isDestroyed || instance.editor.view.composing) return;
+    calculateVisualPages({ editor: instance.editor, pageShell: instance.pageShell, overlay: instance.overlay, flexible: !this.getSettings?.()?.autoPaginate, motion: this.motion });
+    this.onVisualPagesCalculated?.({ paneId, editor: instance.editor });
+  }
+
+  beginWorkspaceResize() {
+    if (!this.getSettings?.()?.autoPaginate) return;
+    for (const [paneId, instance] of this.instances) {
+      beginVisualResize(instance.editor, instance.pageShell);
+      instance.onResizeScroll = () => this.flushVisualPages(paneId);
+      instance.pageShell.closest('.editor-scroll-area')?.addEventListener('scroll', instance.onResizeScroll, { passive: true });
+      this.flushVisualPages(paneId);
+    }
+  }
+
+  endWorkspaceResize() {
+    for (const instance of this.instances.values()) instance.pageShell.closest('.editor-scroll-area')?.removeEventListener('scroll', instance.onResizeScroll);
   }
 
   runCommand(paneId, command, value = null) {

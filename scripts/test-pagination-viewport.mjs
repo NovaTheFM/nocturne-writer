@@ -4,13 +4,14 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
 
 const server = spawn(process.execPath, ['server.mjs'], { env: { ...process.env, PORT: '5326', SYNC_PORT: '8926' }, stdio: 'ignore', windowsHide: true });
-const browser = await chromium.launch({ headless: true }), results = [];
+const browser = await chromium.launch({ headless: true }), results = [], coverage = [];
 const shape = process.argv.find(arg => arg.startsWith('--shape='))?.slice(8);
 try {
   for (let attempt = 0; attempt < 60; attempt++) { try { if ((await fetch('http://localhost:5326')).ok) break; } catch {} await new Promise(resolve => setTimeout(resolve, 100)); }
-  for (const kind of ['single-paragraph', 'many-paragraphs']) {
+  for (const kind of ['single-paragraph', 'many-paragraphs', 'formatted-paragraph']) {
     if (shape && kind !== shape) continue;
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } }), page = await context.newPage(), errors = [];
+    const profiler = await context.newCDPSession(page); await profiler.send('Profiler.enable'); await profiler.send('Profiler.startPreciseCoverage', { callCount: true, detailed: true });
     page.on('pageerror', error => errors.push(error.message));
     try {
       await page.goto('http://localhost:5326'); await page.waitForSelector('#preloader.hidden', { state: 'attached' });
@@ -18,7 +19,7 @@ try {
         const a = window.nocturneApp; a.state.settings.automaticBackups = false;
         await a.createDoc(a.defaultFolderId(), 'Viewport pagination', '');
         const sentence = 'Ночной писатель продолжает очень длинную рукопись 🙂 и проверяет переносы страниц. ';
-        const paragraphs = kind === 'single-paragraph' ? [sentence.repeat(2200)] : Array.from({ length: 500 }, (_, index) => `${index} ${sentence.repeat(4)}`);
+        const paragraphs = kind === 'formatted-paragraph' ? [`<strong>${sentence.repeat(600)}</strong><em>${'абвгдеёж🙂'.repeat(2200)}</em><br>${sentence.repeat(350)}`] : kind === 'single-paragraph' ? [sentence.repeat(2200)] : Array.from({ length: 500 }, (_, index) => `${index} ${sentence.repeat(4)}`);
         a.nocturneEditor.get('primary').commands.setContent(paragraphs.map(text => `<p>${text}</p>`).join(''));
         await a.saveActiveDoc({ silent: true }); a.state.settings.autoPaginate = true; a.applySettings(); a.toggleSplitMode(); await document.fonts.ready;
       }, kind);
@@ -26,7 +27,7 @@ try {
       const original = await page.evaluate(() => JSON.stringify(window.nocturneApp.nocturneEditor.get('primary').getJSON()));
       const samples = [];
       for (const location of [0, .5, 1]) {
-        await page.evaluate(location => { const scroll = document.querySelector('.primary-pane .editor-scroll-area'); scroll.scrollTop = (scroll.scrollHeight - scroll.clientHeight) * location; }, location);
+        await page.evaluate(location => { const scroll = document.querySelector('.primary-pane .editor-scroll-area'), behavior = scroll.style.scrollBehavior; scroll.style.scrollBehavior = 'auto'; scroll.scrollTop = (scroll.scrollHeight - scroll.clientHeight) * location; scroll.style.scrollBehavior = behavior; }, location);
         await page.waitForTimeout(100);
         const divider = await page.locator('#workspace-divider').boundingBox(), stage = await page.locator('#workspace-stage').boundingBox();
         await page.mouse.move(divider.x + divider.width / 2, divider.y + 40); await page.mouse.down();
@@ -34,7 +35,8 @@ try {
           const metrics = window.__viewportResize = { active: true, longestRange: 0, frames: 0, misses: [] };
           const rects = Range.prototype.getClientRects;
           Range.prototype.getClientRects = function () {
-            if (metrics.active) metrics.longestRange = Math.max(metrics.longestRange, this.startContainer === this.endContainer && this.startContainer.nodeType === Node.TEXT_NODE ? this.endOffset - this.startOffset : this.toString().length);
+            const element = this.startContainer.nodeType === Node.TEXT_NODE ? this.startContainer.parentElement : this.startContainer;
+            if (metrics.active && element.closest?.('.pagination-measure')) metrics.longestRange = Math.max(metrics.longestRange, this.startContainer === this.endContainer && this.startContainer.nodeType === Node.TEXT_NODE ? this.endOffset - this.startOffset : this.toString().length);
             return rects.call(this);
           };
           const tick = () => {
@@ -58,6 +60,17 @@ try {
         for (const ratio of [.38, .65, .44, .7, .5]) await page.mouse.move(stage.x + stage.width * ratio, divider.y + 40, { steps: 5 });
         await page.waitForTimeout(70);
         const held = await page.evaluate(() => { window.__viewportResize.active = false; return { ...window.__viewportResize, held: document.body.classList.contains('resizing-workspace'), virtual: document.querySelectorAll('.primary-pane [data-viewport-hidden]').length, json: JSON.stringify(window.nocturneApp.nocturneEditor.get('primary').getJSON()) }; });
+        if (kind === 'single-paragraph' && location === 0) {
+          await page.evaluate(() => window.nocturneApp.nocturneEditor.get('primary').chain().focus().selectAll().run()); await page.waitForTimeout(100);
+          const copied = await page.evaluate(() => {
+            const e = window.nocturneApp.nocturneEditor.get('primary'), clipboard = new DataTransfer();
+            e.view.dom.dispatchEvent(new ClipboardEvent('copy', { clipboardData: clipboard, bubbles: true, cancelable: true }));
+            return { actual: clipboard.getData('text/plain'), expected: e.getText() };
+          }); assert.equal(copied.actual, copied.expected);
+          await page.keyboard.press('Backspace'); await page.waitForTimeout(120);
+          assert.equal(await page.evaluate(() => window.nocturneApp.nocturneEditor.get('primary').getText()), '');
+          await page.evaluate(() => window.nocturneApp.nocturneEditor.get('primary').commands.undo()); await page.waitForTimeout(180);
+        }
         await page.mouse.up();
         await page.waitForFunction(() => !window.nocturneApp.nocturneEditor.visualPageRaf.has('primary') && !document.querySelector('.primary-pane [data-viewport-hidden]'));
         const final = await page.evaluate(() => {
@@ -79,9 +92,24 @@ try {
         assert.ok(held.longestRange < 15000, `Measured ${held.longestRange} characters at once instead of a viewport-sized range`);
         samples.push({ location, frames: held.frames, longestRange: held.longestRange, virtual: held.virtual });
       }
+      const divider = await page.locator('#workspace-divider').boundingBox(); await page.mouse.move(divider.x + 2, divider.y + 40); await page.mouse.down();
+      await page.evaluate(() => { const a = window.nocturneApp; a.state.settings.autoPaginate = false; a.applySettings(); }); await page.waitForTimeout(100);
+      assert.equal(await page.locator('[data-viewport-hidden], .pm-viewport-placeholder, .pagination-measure').count(), 0); await page.mouse.up();
+      const { result } = await profiler.send('Profiler.takePreciseCoverage'); coverage.push(...result.filter(script => script.url.endsWith('/src/editor/viewport-pagination.js')));
       assert.deepEqual(errors, []); results.push({ kind, passed: true, samples }); console.log(`PASS ${kind}: viewport-only measurement, no frame with text in page gaps, full layout restored after drag.`);
     } catch (error) { results.push({ kind, passed: false, error: error.message }); console.error(`FAIL ${kind}: ${error.message}`); }
     finally { await context.close(); }
   }
-} finally { await browser.close(); server.kill(); await mkdir('release/qa', { recursive: true }); await writeFile('release/qa/pagination-viewport.json', JSON.stringify(results, null, 2)); }
+} finally {
+  await browser.close(); server.kill(); await mkdir('release/qa', { recursive: true });
+  const size = Math.max(0, ...coverage.flatMap(script => script.functions.flatMap(fn => fn.ranges.map(range => range.endOffset)))), covered = new Uint8Array(size);
+  for (const script of coverage) {
+    const run = new Uint8Array(size);
+    for (const range of script.functions.flatMap(fn => fn.ranges).sort((a, b) => (b.endOffset - b.startOffset) - (a.endOffset - a.startOffset))) run.fill(range.count > 0 ? 1 : 0, range.startOffset, range.endOffset);
+    for (let index = 0; index < size; index++) covered[index] |= run[index];
+  }
+  const percent = size ? covered.reduce((sum, byte) => sum + byte, 0) / size * 100 : 0;
+  await writeFile('release/qa/pagination-viewport.json', JSON.stringify({ results, coverage: { module: 'src/editor/viewport-pagination.js', v8BytePercent: percent } }, null, 2));
+  console.log(`Viewport pagination V8 byte coverage: ${percent.toFixed(1)}%`);
+}
 if (results.some(result => !result.passed)) process.exitCode = 1;

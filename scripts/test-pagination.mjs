@@ -30,10 +30,14 @@ async function geometry(page, paneId = 'primary') {
     const page = instance.pageShell, style = getComputedStyle(page), shellTop = page.getBoundingClientRect().top;
     const height = Math.round(page.getBoundingClientRect().width * 1.4143577), gap = 60;
     const top = parseFloat(style.paddingTop), bottom = parseFloat(style.paddingBottom);
-    const misses = [], blockCount = e.state.doc.childCount;
+    const misses = [], blockCount = e.state.doc.childCount; let deferredPositions = 0;
+    const viewport = paginationPluginKey.getState(e.state).viewport;
     e.state.doc.descendants((node, pos) => {
       if (!node.isTextblock) return;
       for (let offset = 0; offset <= node.content.size; offset += 9) {
+        if (viewport && (pos + 1 + offset < viewport.from || (pos + 1 + offset >= viewport.to && viewport.to < e.state.doc.content.size - 1))) { deferredPositions++; continue; }
+        const dom = e.view.domAtPos(pos + 1 + offset).node;
+        if ((dom.nodeType === Node.ELEMENT_NODE ? dom : dom.parentElement)?.closest('[data-viewport-hidden]')) { deferredPositions++; continue; }
         const coords = e.view.coordsAtPos(pos + 1 + offset), y = coords.top - shellTop;
         const within = y - Math.floor(y / (height + gap)) * (height + gap);
         if (within < top - 3 || within + coords.bottom - coords.top > height - bottom + 3) misses.push({ pos: pos + 1 + offset, y, within });
@@ -41,7 +45,7 @@ async function geometry(page, paneId = 'primary') {
       return false;
     });
     const sheets = [...page.querySelectorAll('.page-sheet-bg:not(.motion-sheet-exiting)')];
-    return { breaks: paginationPluginKey.getState(e.state).pageBreaks.map(({ pos, height, type }) => ({ pos, height, type })), pages: sheets.length, width: page.getBoundingClientRect().width, expectedHeight: height, sheetHeights: sheets.map(sheet => sheet.getBoundingClientRect().height), misses: misses.slice(0, 8), blockCount, text: e.getText(), json: e.getJSON() };
+    return { breaks: paginationPluginKey.getState(e.state).pageBreaks.map(({ pos, height, type }) => ({ pos, height, type })), pages: sheets.length, width: page.getBoundingClientRect().width, expectedHeight: height, sheetHeights: sheets.map(sheet => sheet.getBoundingClientRect().height), misses: misses.slice(0, 8), deferredPositions, blockCount, text: e.getText(), json: e.getJSON() };
   }, paneId);
 }
 async function splitDocuments(page, paginated) {
@@ -217,11 +221,12 @@ try {
     const measurements = [];
     await dragSplit(page, async ratio => {
       const result = await geometry(page);
-      assert.deepEqual(result.misses, []); assert.equal(result.text, text); assert.ok(result.pages > 1);
+      assert.deepEqual(result.misses, [], JSON.stringify({ phase: 'held unicode', ratio, ...result.misses })); assert.equal(result.text, text); assert.ok(result.pages > 1);
       for (const boundary of result.breaks) assert.ok(!/[\uDC00-\uDFFF]/.test(text[boundary.pos - 1]), `break at the middle of an emoji: ${boundary.pos}`);
       measurements.push({ ratio, pages: result.pages });
     });
     await page.waitForFunction(() => !window.nocturneApp.nocturneEditor.visualPageRaf.has('primary'));
+    const final = await geometry(page); assert.equal(final.deferredPositions, 0); assert.deepEqual(final.misses, []);
     assert.equal(await page.locator('.pagination-measure').count(), 0); return measurements;
   });
   await check('spellcheck underline follows its text after pagination and font reflow', async page => {

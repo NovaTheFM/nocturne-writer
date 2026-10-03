@@ -1,5 +1,6 @@
 import { Decoration, DecorationSet } from '../vendor/tiptap/nocturne-tiptap.bundle.js';
 import { paginationPluginKey, PAGE_GAP, PAGE_RATIO } from './pagination-state.js';
+import { beginViewportPagination, calculateViewportPagination, clearViewportPagination, normalizePaginationCopy, viewportPaginationActive } from './viewport-pagination.js';
 
 const measurementCache = new WeakMap();
 
@@ -47,6 +48,8 @@ function updatePaperSheets(container, count, { pageHeight, gap, pageStyle, motio
 
 export function updateActivePageHighlight(editor, pageShell) {
   if (!editor || editor.isDestroyed || !pageShell) return;
+  const viewport = paginationPluginKey.getState(editor.state)?.viewport;
+  if (viewport && (editor.state.selection.head < viewport.from || editor.state.selection.head > viewport.to)) return;
   const sheets = [...pageShell.querySelectorAll('.page-sheet-bg:not(.motion-sheet-exiting)')];
   if (!sheets.length) return;
   try {
@@ -111,14 +114,8 @@ function createMeasurement(view) {
     if (element?.nodeType === Node.ELEMENT_NODE) blocks.push({ element, node, pos });
     return false;
   });
-  copy.querySelectorAll('.ProseMirror-widget').forEach(widget => widget.remove());
-  copy.querySelectorAll('[data-pagination-break]').forEach(element => {
-    element.removeAttribute('data-pagination-break');
-    element.classList.remove('pm-page-start-inline', 'pm-page-start-empty', 'pm-page-start-atom', 'pm-page-end-empty');
-    element.style.removeProperty('--page-spacer-height');
-    element.style.removeProperty('--page-original-margin');
-  });
-  for (const element of [copy, ...copy.querySelectorAll('*')]) element.style.contentVisibility = 'visible';
+  normalizePaginationCopy(copy);
+  for (const element of copy.querySelectorAll('[style]')) if (element.style.textIndent === '0px' && view.dom.closest('.indent-paragraphs')) element.style.removeProperty('text-indent');
   return { copy, wrapper, blocks };
 }
 
@@ -160,7 +157,7 @@ function clearMeasurement(view) {
   measurementCache.delete(view);
 }
 
-function setBreaks(view, pageBreaks) {
+function setBreaks(view, pageBreaks, extra = [], viewport = null) {
   const current = paginationPluginKey.getState(view.state);
   const decorations = pageBreaks.map(item => {
     const attrs = { 'data-pagination-break': '', style: `--page-spacer-height:${item.height}px;` };
@@ -185,10 +182,14 @@ function setBreaks(view, pageBreaks) {
     attrs.nodeName = 'span';
     return Decoration.inline(item.pos, item.pos + length, attrs);
   });
-  const set = DecorationSet.create(view.state.doc, decorations);
+  const set = DecorationSet.create(view.state.doc, [...decorations, ...extra]);
   if (current && current.decorations.eq(set) && current.pageBreaks.length === pageBreaks.length && current.pageBreaks.every((item, index) => item.pos === pageBreaks[index].pos && item.type === pageBreaks[index].type && Math.abs(item.height - pageBreaks[index].height) < .5)) return;
-  view.dispatch(view.state.tr.setMeta(paginationPluginKey, { decorations: set, pageBreaks }).setMeta('addToHistory', false));
+  view.dispatch(view.state.tr.setMeta(paginationPluginKey, { decorations: set, pageBreaks, viewport }).setMeta('addToHistory', false));
 }
+
+export function beginVisualResize(editor, pageShell) { if (editor && !editor.isDestroyed) beginViewportPagination(editor.view, pageShell); }
+
+export function disposeVisualPagination(editor) { if (editor && !editor.isDestroyed) { clearMeasurement(editor.view); clearViewportPagination(editor.view); } }
 
 export function calculateVisualPages({ editor, pageShell, overlay, flexible = false, motion }) {
   if (!editor || editor.isDestroyed || !pageShell?.isConnected) return [];
@@ -201,6 +202,7 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
   const number = pageShell.querySelector('.page-number');
   if (flexible) {
     clearMeasurement(view);
+    clearViewportPagination(view);
     setBreaks(view, []); pageShell.style.minHeight = '';
     if (backgrounds) updatePaperSheets(backgrounds, 0, { motion });
     if (number) { number.textContent = '1'; number.style.display = 'block'; }
@@ -209,8 +211,18 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
   }
   const origin = view.dom.getBoundingClientRect().top - pageShell.getBoundingClientRect().top;
   const stride = pageHeight + PAGE_GAP, pageBreaks = [];
+  const resizing = document.body.classList.contains('resizing-workspace');
+  const partial = resizing ? calculateViewportPagination(view, pageShell, { pageHeight, paddingTop, paddingBottom }, blockLines) : null;
+  let anchor;
+  if (!partial && paginationPluginKey.getState(view.state)?.viewport) {
+    const scroll = pageShell.closest('.editor-scroll-area'), bounds = scroll.getBoundingClientRect();
+    const point = view.posAtCoords({ left: view.dom.getBoundingClientRect().left + 12, top: bounds.top + 15 });
+    const viewport = paginationPluginKey.getState(view.state).viewport;
+    if (point && point.pos >= viewport.from && point.pos <= viewport.to) anchor = { scroll, pos: point.pos, top: view.coordsAtPos(point.pos).top };
+  }
+  if (!resizing) clearViewportPagination(view);
   let shift = 0, pageIndex = 0;
-  measureLines(view, pageShell, lines => {
+  if (!partial) measureLines(view, pageShell, lines => {
     for (const line of lines) {
       const bottom = origin + line.bottom + shift;
       if (bottom > pageIndex * stride + pageHeight - paddingBottom + .5) {
@@ -224,12 +236,21 @@ export function calculateVisualPages({ editor, pageShell, overlay, flexible = fa
     backgrounds = document.createElement('div'); backgrounds.className = 'page-sheets-bg'; backgrounds.setAttribute('aria-hidden', 'true');
     pageShell.prepend(backgrounds);
   }
-  const count = pageIndex + 1;
+  const count = partial ? partial.count : pageIndex + 1;
   pageShell.style.minHeight = `${count * pageHeight + (count - 1) * PAGE_GAP}px`;
   updatePaperSheets(backgrounds, count, { pageHeight, gap: PAGE_GAP, pageStyle, motion });
-  setBreaks(view, pageBreaks);
+  setBreaks(view, partial ? partial.pageBreaks : pageBreaks, partial?.decorations, partial?.viewport);
+  if (anchor) {
+    const behavior = anchor.scroll.style.scrollBehavior; anchor.scroll.style.scrollBehavior = 'auto';
+    anchor.scroll.scrollTop += view.coordsAtPos(anchor.pos).top - anchor.top;
+    anchor.scroll.style.scrollBehavior = behavior;
+  }
   updateActivePageHighlight(editor, pageShell);
   if (number) number.style.display = 'none';
   if (overlay) overlay.style.height = '0px';
+  if (resizing && !partial && !viewportPaginationActive(view)) {
+    beginViewportPagination(view, pageShell);
+    if (viewportPaginationActive(view)) return calculateVisualPages({ editor, pageShell, overlay, flexible, motion });
+  }
   return Array.from({ length: count }, (_, index) => ({ page: index + 1, y: index * stride }));
 }

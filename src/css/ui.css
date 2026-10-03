@@ -9704,6 +9704,15 @@ input:-webkit-autofill:active {
 .pm-page-start-atom {
   margin-top: calc(var(--page-original-margin) + var(--page-spacer-height));
 }
+.page-content-prosemirror .pm-viewport-hidden {
+  display: none !important;
+}
+.pm-viewport-placeholder {
+  display: block;
+  pointer-events: none;
+  user-select: none;
+  line-height: 0;
+}
 /* Disable transitions on currently dragged/ghost elements for instant cursor tracking */
 .sortable-drag,
 .sortable-fallback-drag,
