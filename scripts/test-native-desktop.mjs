@@ -88,7 +88,7 @@ try {
     await pc.screenshot({ path: 'release/qa/pagination-interaction/electron-after-delete.png' });
     await pc.waitForFunction(() => !window.nocturneApp.nocturneEditor.visualPageRaf.has('primary'), null, { polling: 100, timeout: 3000 });
     assert.equal(await pc.evaluate(() => window.nocturneApp.nocturneEditor.get('primary').getText()), points.text.slice(0, selected.from - 1) + points.text.slice(selected.to - 1));
-    const misses = await pc.evaluate(() => {
+    const measurePage = () => pc.evaluate(() => {
       const a = window.nocturneApp, instance = a.nocturneEditor.instances.get('primary'), e = instance.editor, shell = instance.pageShell, style = getComputedStyle(shell);
       const origin = shell.getBoundingClientRect().top, height = Math.round(shell.getBoundingClientRect().width * 1123 / 794), stride = height + 60, misses = [];
       e.state.doc.descendants((node, pos) => {
@@ -98,12 +98,39 @@ try {
           if (within < parseFloat(style.paddingTop) - 3 || within + c.bottom - c.top > height - parseFloat(style.paddingBottom) + 3) misses.push({ pos: pos + 1 + offset, within, height: c.bottom - c.top, top: c.top });
         }
         return false;
-      }); return { misses: misses.slice(0, 8), origin, height, width: shell.getBoundingClientRect().width, padding: [style.paddingTop, style.paddingBottom], pendingFrame: a.nocturneEditor.visualPageRaf.has('primary'), breaks: window.__nativePaginationKey.getState(e.state).pageBreaks.slice(0, 3), decorations: [...e.view.dom.querySelectorAll('[data-pagination-break]')].slice(0, 3).map(el => ({ cls: el.className, height: el.style.getPropertyValue('--page-spacer-height'), top: el.getBoundingClientRect().top })) };
+      }); return { misses: misses.slice(0, 8), origin, height, width: shell.getBoundingClientRect().width, sheetHeight: shell.querySelector('.page-sheet-bg:not(.motion-sheet-exiting)')?.getBoundingClientRect().height, padding: [style.paddingTop, style.paddingBottom], pendingFrame: a.nocturneEditor.visualPageRaf.has('primary'), breaks: window.__nativePaginationKey.getState(e.state).pageBreaks.slice(0, 3), decorations: [...e.view.dom.querySelectorAll('[data-pagination-break]')].slice(0, 3).map(el => ({ cls: el.className, height: el.style.getPropertyValue('--page-spacer-height'), top: el.getBoundingClientRect().top })) };
     });
+    const misses = await measurePage();
     await writeFile('release/qa/native-pagination.json', JSON.stringify({ selected, geometry: misses }, null, 2));
     assert.deepEqual(misses.misses, [], JSON.stringify(misses));
+    await pc.evaluate(async () => {
+      const a = window.nocturneApp;
+      a.nocturneEditor.get('primary').commands.setContent(`<p>${'Native live split resizing. '.repeat(120)}</p>`);
+      await a.saveActiveDoc({ silent: true }); a.toggleSplitMode();
+    });
+    await pc.waitForTimeout(400);
+    await pc.screenshot({ path: 'release/qa/pagination-interaction/electron-split-before-input.png' });
+    const divider = await pc.locator('#workspace-divider').boundingBox(), stage = await pc.locator('#workspace-stage').boundingBox();
+    const originalJson = await pc.evaluate(() => window.nocturneApp.nocturneEditor.get('primary').getJSON()), split = [];
+    await pc.mouse.move(divider.x + divider.width / 2, divider.y + 40); await pc.mouse.down();
+    try {
+      for (const ratio of [.38, .65, .48]) {
+        await pc.mouse.move(stage.x + stage.width * ratio, divider.y + 40, { steps: 6 });
+        await pc.screenshot({ path: 'release/qa/pagination-interaction/electron-split-during-resize.png' });
+        await pc.waitForFunction(() => !window.nocturneApp.nocturneEditor.visualPageRaf.has('primary'), null, { polling: 100, timeout: 3000 });
+        assert.equal(await pc.evaluate(() => document.body.classList.contains('resizing-workspace')), true);
+        const current = await measurePage();
+        assert.deepEqual(current.misses, [], JSON.stringify({ ratio, ...current }));
+        assert.ok(Math.abs(current.sheetHeight - current.height) < 2, JSON.stringify(current));
+        assert.deepEqual(await pc.evaluate(() => window.nocturneApp.nocturneEditor.get('primary').getJSON()), originalJson);
+        split.push({ ratio, ...current });
+      }
+    } finally { await pc.mouse.up(); }
+    assert.ok(new Set(split.map(item => item.width)).size === 3, JSON.stringify(split));
+    await writeFile('release/qa/native-pagination.json', JSON.stringify({ selected, geometry: misses, split }, null, 2));
     await nativeInput.detach();
     console.log('Packaged Electron pagination: native mouse selection excludes the gap; Backspace removes only selected text and pages recover without another input.');
+    console.log('Packaged Electron split resizing: page margins and paper height follow three divider positions while the mouse remains held; document JSON stays intact.');
   }
   await pc.evaluate(async () => { const a = window.nocturneApp; a.openSyncPanel(); a.state.sync.optionsOpen = true; a.renderSyncSurfaces(); document.querySelector('[data-action="sync-server-stop"]').click(); });
   await pc.waitForFunction(() => !window.nocturneApp.state.sync.server.running);
