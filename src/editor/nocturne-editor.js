@@ -677,11 +677,12 @@ function executeRuleAction(view, rule, from, to, isEnter = false) {
 }
 
 export class NocturneEditorBridge {
-  constructor({ onChange, onFocus, onSelectionUpdate, getSettings, getDoc, getMentionIndex, onKeydown, getActiveBookmarkId, motion }) {
+  constructor({ onChange, onFocus, onSelectionUpdate, onVisualPagesCalculated, getSettings, getDoc, getMentionIndex, onKeydown, getActiveBookmarkId, motion }) {
     this.instances = new Map();
     this.onChange = onChange;
     this.onFocus = onFocus;
     this.onSelectionUpdate = onSelectionUpdate;
+    this.onVisualPagesCalculated = onVisualPagesCalculated;
     this.getSettings = getSettings;
     this.getDoc = getDoc;
     this.getMentionIndex = getMentionIndex;

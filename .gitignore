@@ -15,6 +15,7 @@ android/local.properties
 
 # Electron build output
 .electron_build/
+/Nocturne Writer.exe
 
 # Python cache
 __pycache__/
