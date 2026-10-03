@@ -23,7 +23,7 @@ async function fixture(page) {
     const a = window.nocturneApp, e = a.nocturneEditor.get('primary');
     const { paginationPluginKey } = await import('/src/editor/pagination-state.js');
     const pos = paginationPluginKey.getState(e.state).pageBreaks[0].pos;
-    const top = e.view.coordsAtPos(pos - 5), bottom = e.view.coordsAtPos(pos + 5);
+    const top = e.view.coordsAtPos(pos - 5);
     const scroll = e.view.dom.closest('.editor-scroll-area');
     scroll.style.scrollBehavior = 'auto'; scroll.scrollTop += top.top - scroll.getBoundingClientRect().top - 95;
     return { pos, text: e.getText(), json: e.getJSON() };
@@ -44,8 +44,25 @@ async function snapshot(page) {
     a.renderNocturneSelectionLayer(); a.updateCustomCaret();
     const rects = [...document.querySelectorAll('.nocturne-selection-rect')].filter(el => getComputedStyle(el).display !== 'none').map(el => ({ width: el.getBoundingClientRect().width, height: el.getBoundingClientRect().height }));
     const caret = document.getElementById('custom-caret'), r = caret.getBoundingClientRect();
-    return { text: e.getText(), json: e.getJSON(), from: e.state.selection.from, to: e.state.selection.to, nativeText: selection.toString(), focusNode: selection.focusNode?.nodeName, rects, caret: { visible: getComputedStyle(caret).display !== 'none', top: r.top, bottom: r.bottom, height: r.height }, breaks: paginationPluginKey.getState(e.state).pageBreaks, widgets: e.view.dom.querySelectorAll('.pm-page-break-widget').length };
+    const instance = a.nocturneEditor.instances.get('primary'), shell = instance.pageShell, style = getComputedStyle(shell);
+    const shellTop = shell.getBoundingClientRect().top, height = Math.round(shell.getBoundingClientRect().width * 1123 / 794), stride = height + 60;
+    const misses = [];
+    e.state.doc.descendants((node, pos) => {
+      if (!node.isTextblock) return;
+      for (let offset = 0; offset <= node.content.size; offset += 37) {
+        const c = e.view.coordsAtPos(pos + 1 + offset), within = (c.top - shellTop) % stride;
+        if (within < parseFloat(style.paddingTop) - 3 || within + c.bottom - c.top > height - parseFloat(style.paddingBottom) + 3) misses.push(pos + 1 + offset);
+      }
+      return false;
+    });
+    return { text: e.getText(), json: e.getJSON(), from: e.state.selection.from, to: e.state.selection.to, nativeText: selection.toString(), focusNode: selection.focusNode?.nodeName, rects, caret: { visible: getComputedStyle(caret).display !== 'none', top: r.top, bottom: r.bottom, height: r.height }, breaks: paginationPluginKey.getState(e.state).pageBreaks, misses: misses.slice(0, 8) };
   });
+}
+
+function evidence(value) {
+  if (!value || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map(evidence);
+  return Object.fromEntries(Object.entries(value).filter(([key]) => !['text', 'json'].includes(key)).map(([key, item]) => [key, evidence(item)]));
 }
 
 async function check(name, run, options = {}) {
@@ -54,7 +71,7 @@ async function check(name, run, options = {}) {
   try {
     const data = await fixture(page); await page.waitForTimeout(150);
     const measurements = await run(page, data); assert.deepEqual(errors, []);
-    results.push({ name, passed: true, measurements }); console.log(`PASS ${name}`);
+    results.push({ name, passed: true, measurements: evidence(measurements) }); console.log(`PASS ${name}`);
   } catch (error) {
     await page.screenshot({ path: `release/qa/pagination-interaction/${name.replace(/[^a-z0-9]+/gi, '-')}.png` });
     results.push({ name, passed: false, error: error.message }); console.error(`FAIL ${name}: ${error.message}`);
@@ -75,19 +92,21 @@ try {
     const points = await boundary(page, data.pos);
     await page.mouse.click(points.gap.x, (points.gap.top + points.gap.bottom) / 2); await page.waitForTimeout(120);
     const result = await snapshot(page);
-    assert.ok(!result.caret.visible || result.caret.height < 50, JSON.stringify(result.caret));
-    assert.ok(!result.caret.visible || result.caret.bottom <= points.gap.top || result.caret.top >= points.gap.bottom, JSON.stringify(result.caret));
+    assert.equal(result.from, data.pos); assert.equal(result.to, data.pos);
+    assert.ok(result.caret.visible && result.caret.height < 50, JSON.stringify(result.caret));
+    assert.ok(result.caret.bottom <= points.gap.top || result.caret.top >= points.gap.bottom, JSON.stringify(result.caret));
     assert.deepEqual(result.json, data.json); return result;
   });
   await check('a gap-only drag and Backspace cannot remove the page layout', async (page, data) => {
     const points = await boundary(page, data.pos);
     await page.mouse.move(points.gap.x, points.gap.top + 15); await page.mouse.down(); await page.mouse.move(points.gap.x, points.gap.bottom - 15, { steps: 12 }); await page.mouse.up(); await page.waitForTimeout(100);
     const before = await snapshot(page);
+    assert.equal(before.from, before.to); assert.equal(before.nativeText, '');
     await page.keyboard.press('Backspace'); await page.waitForTimeout(200);
     const after = await snapshot(page);
-    assert.ok(after.widgets === after.breaks.length, JSON.stringify({ before, after }));
+    assert.deepEqual(after.misses, []);
     assert.ok(after.breaks.length > 0);
-    if (before.from === before.to && !before.nativeText) assert.ok(after.text.length >= data.text.length - 1);
+    assert.equal(after.text.length, data.text.length - 1);
     return { before, after };
   });
 } finally {
