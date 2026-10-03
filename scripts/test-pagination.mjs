@@ -104,10 +104,32 @@ try {
     await page.evaluate(() => window.nocturneApp.toggleSplitMode()); await page.waitForTimeout(650);
     const split = await geometry(page); assert.deepEqual(split.misses, []); assert.ok(split.pages >= large.pages); return { before: before.pages, large: large.pages, split: split.pages };
   });
+  await check('spellcheck underline follows its text after pagination and font reflow', async page => {
+    await enable(page, `<p>${'Reflow underline sentence. '.repeat(650)}</p>`);
+    await page.evaluate(() => {
+      const a = window.nocturneApp, block = document.querySelector('.page-content-prosemirror p[data-block-id]');
+      const text = block.firstChild, range = document.createRange(); range.setStart(text, 90); range.setEnd(text, 99);
+      const blockId = block.dataset.blockId;
+      a.state.settings.strictSpellcheck = true;
+      a._typoHighlightRangesMap = new Map([[`${blockId}:90:99`, { range, blockId, startOffset: 90, endOffset: 99 }]]);
+      a.renderTypoSvgOverlays();
+      a.state.settings.fontSize = 23; a.applySettings();
+    });
+    await page.waitForTimeout(350);
+    const result = await page.evaluate(() => {
+      const a = window.nocturneApp, [key, item] = [...a._typoHighlightRangesMap][0];
+      const svg = document.querySelector(`.typo-svg-overlay[data-key="${CSS.escape(key)}"]`);
+      const rect = item.range.getBoundingClientRect(), overlay = svg.parentElement.getBoundingClientRect();
+      return { top: parseFloat(svg.style.top), expectedTop: rect.bottom - overlay.top - 1.5, left: parseFloat(svg.style.left), expectedLeft: rect.left - overlay.left };
+    });
+    assert.ok(Math.abs(result.top - result.expectedTop) < 1, JSON.stringify(result));
+    assert.ok(Math.abs(result.left - result.expectedLeft) < 1, JSON.stringify(result)); return result;
+  });
   await check('mobile pagination uses current viewport width without horizontal overflow', async page => {
     await enable(page, `<p>${'Mobile paragraph content '.repeat(550)}</p>`);
     const result = await geometry(page); assert.deepEqual(result.misses, []);
-    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false); return { pages: result.pages };
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
+    await page.screenshot({ path: 'release/qa/pagination-mobile.png' }); return { pages: result.pages };
   }, { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 } finally { await browser.close(); server.kill(); await mkdir('release/qa', { recursive: true }); await writeFile('release/qa/pagination-regressions.json', JSON.stringify(results, null, 2)); }
 if (results.some(result => !result.passed)) process.exitCode = 1;

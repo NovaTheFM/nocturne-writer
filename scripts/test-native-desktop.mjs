@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { _electron, chromium } from 'playwright';
+import WebSocket from 'ws';
 
 const port = 5285, syncPort = 8885, url = `http://localhost:${port}`;
 const packaged = process.argv.includes('--packaged');
@@ -27,6 +28,12 @@ try {
   await pc.waitForFunction(() => window.nocturneApp.state.sync.server.running && window.nocturneApp.syncClient.isOpen(), null, { timeout: 12000 });
   const connection = await pc.evaluate(() => ({ host: '127.0.0.1', port: String(window.nocturneApp.state.sync.server.port), token: window.nocturneApp.state.sync.server.token }));
   assert.equal(Number(connection.port), syncPort); assert.ok(connection.token);
+  for (const payload of ['null', Buffer.alloc(33 * 1024 * 1024, 65)]) {
+    const ws = new WebSocket(`ws://localhost:${syncPort}`); ws.on('error', () => {});
+    await new Promise((resolve, reject) => { ws.once('open', resolve); ws.once('error', reject); });
+    ws.send(payload); await new Promise(resolve => setTimeout(resolve, 150)); ws.terminate();
+    assert.equal((await fetch(`http://localhost:${syncPort}/health`)).ok, true, 'Malformed input stopped the native broker');
+  }
   browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const phone = await context.newPage(); await phone.goto(url); await phone.waitForFunction(() => window.nocturneApp?.databaseSync);
