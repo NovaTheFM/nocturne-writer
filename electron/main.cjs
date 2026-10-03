@@ -1,5 +1,6 @@
 const { app, BrowserWindow, dialog, ipcMain, shell, Menu } = require('electron');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const { existsSync } = require('node:fs');
 const fs = require('node:fs/promises');
 const { createServer } = require('node:http');
@@ -83,13 +84,13 @@ ipcMain.handle('nocturne:git-commit', async (_event, dataStr, projectName) => {
     return false;
   }
 });
-const SYNC_PROTOCOL_VERSION = 2;
+const SYNC_PROTOCOL_VERSION = 3;
 let syncHttpServer = null;
 let syncWss = null;
 let syncStartedAt = null;
 let syncBonjour = null;
 let syncPort = Number(process.env.SYNC_PORT || 8787);
-let syncToken = randomBytes(9).toString('hex').toUpperCase();
+let syncToken = randomBytes(16).toString('hex').toUpperCase();
 const syncDeviceId = process.env.NOCTURNE_SYNC_DEVICE_ID || randomBytes(16).toString('hex');
 const syncPublicDeviceId = `nd-${createHash('sha256').update(syncDeviceId).digest('hex').slice(0, 12)}`;
 const syncClients = new Map();
@@ -176,6 +177,8 @@ function syncStatusPayload(extra = {}) {
 
 async function startSyncServer() {
   if (syncHttpServer) return syncStatusPayload();
+  const sourceRoot = existsSync(path.join(root, 'src')) ? root : path.join(root, 'app_src');
+  const { pairingNonce, pairingProof, verifyPairingProof } = await import(pathToFileURL(path.join(sourceRoot, 'src/core/sync-auth.js')).href);
   syncStartedAt = Date.now();
   syncHttpServer = createServer((req, res) => {
     const url = new URL(req.url || '/', `http://${req.headers.host || `127.0.0.1:${syncPort}`}`);
@@ -212,7 +215,14 @@ async function startSyncServer() {
   syncWss = new WebSocketServer({ server: syncHttpServer, maxPayload: 32 * 1024 * 1024 });
   syncWss.on('connection', (ws, req) => {
     let paired = false;
-    ws.on('message', (raw) => {
+    const challenge = pairingNonce();
+    const createdAt = Date.now();
+    const deadline = setTimeout(() => ws.close(1008, 'Pairing timed out'), 10000);
+    let work = Promise.resolve();
+    ws.on('error', () => ws.terminate());
+    sendWs(ws, { type: 'pair-challenge', protocolVersion: SYNC_PROTOCOL_VERSION, challenge });
+    ws.on('message', raw => { work = work.then(() => handleMessage(raw)).catch(() => ws.close(1008, 'Invalid message')); });
+    async function handleMessage(raw) {
       let message;
       try {
         message = JSON.parse(String(raw));
@@ -221,17 +231,21 @@ async function startSyncServer() {
         return;
       }
 
+      if (!message || typeof message !== 'object' || Array.isArray(message) || typeof message.type !== 'string') {
+        sendWs(ws, { type: 'error', message: 'Некорректное JSON-сообщение.' }); ws.close(1008, 'Invalid message'); return;
+      }
       if (!paired) {
         if (Number(message.protocolVersion || 0) !== SYNC_PROTOCOL_VERSION) {
           sendWs(ws, { type: 'error', message: 'Версия протокола локальной связи не совпадает.' });
           ws.close(1008, 'Invalid protocol version');
           return;
         }
-        if (message.type !== 'pair' || String(message.token || '').toUpperCase() !== syncToken) {
+        if (message.type !== 'pair' || Date.now() - createdAt > 10000 || !await verifyPairingProof(message.proof, syncToken, 'client', challenge, message.clientNonce, message.deviceId)) {
           sendWs(ws, { type: 'error', message: 'Неверный код подключения.' });
           ws.close(1008, 'Invalid pairing token');
           return;
         }
+        clearTimeout(deadline);
         paired = true;
         const client = {
           ws,
@@ -245,7 +259,7 @@ async function startSyncServer() {
         };
         syncClients.set(ws, client);
         const peers = [...syncClients.values()].filter((item) => item.ws !== ws).map(pairedPeer);
-        sendWs(ws, { type: 'paired', peer: peers[0] || null, peers, server: syncDiscoveryPayload() });
+        sendWs(ws, { type: 'paired', peer: peers[0] || null, peers, server: syncDiscoveryPayload(), proof: await pairingProof(syncToken, 'server', challenge, message.clientNonce, message.deviceId) });
         broadcastWs(ws, { type: 'peer-joined', peer: pairedPeer(client), from: client.deviceId });
         return;
       }
@@ -262,9 +276,10 @@ async function startSyncServer() {
         return;
       }
       broadcastWs(ws, { ...message, from: sender.deviceId, deviceName: sender.deviceName });
-    });
+    }
 
     ws.on('close', () => {
+      clearTimeout(deadline);
       const client = syncClients.get(ws);
       syncClients.delete(ws);
       if (client) broadcastWs(ws, { type: 'peer-left', peer: pairedPeer(client), from: client.deviceId });
@@ -310,7 +325,7 @@ function stopSyncServer() {
 }
 
 function refreshSyncToken() {
-  syncToken = randomBytes(9).toString('hex').toUpperCase();
+  syncToken = randomBytes(16).toString('hex').toUpperCase();
   return syncStatusPayload();
 }
 

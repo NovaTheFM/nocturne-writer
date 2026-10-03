@@ -103,7 +103,7 @@ export class DatabaseSync {
     const decoded = action === 'delete' ? null : await this.db.get(store, id);
     if (decoded?.locked && previous && !previous.deleted) return;
     const deleted = !decoded;
-    const hash = await contentHash(decoded?.locked ? (await this.db.getAllRaw(store)).find(row => row.id === id) : decoded);
+    const hash = await contentHash(decoded?.locked ? await this.db.getRaw(store, id) : decoded);
     if (previous?.hash === hash && previous.deleted === deleted) return;
     const clock = { ...(previous?.clock || {}) };
     clock[this.deviceId] = (clock[this.deviceId] || 0) + 1;
@@ -151,7 +151,7 @@ export class DatabaseSync {
         const pendingWork = this.work;
         const key = keyOf(incoming.store, incoming.id);
         const local = await this.db.get('syncJournal', key);
-        const raw = (await this.db.getAllRaw(incoming.store)).find(record => record.id === incoming.id);
+        const raw = await this.db.getRaw(incoming.store, incoming.id);
         await this.work;
         if (pendingWork !== this.work) continue;
         const expect = { [incoming.store]: [{ id: incoming.id, value: raw }], syncJournal: [{ id: key, value: local }] };

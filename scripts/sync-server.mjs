@@ -4,10 +4,11 @@ import { networkInterfaces, hostname } from 'node:os';
 import { randomBytes, createHash } from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import Bonjour from 'bonjour-service';
+import { SYNC_PROTOCOL_VERSION, pairingNonce, pairingProof, verifyPairingProof } from '../src/core/sync-auth.js';
 
-const PROTOCOL_VERSION = 2;
+const PROTOCOL_VERSION = SYNC_PROTOCOL_VERSION;
 const port = Number(process.env.SYNC_PORT || 8787);
-const token = String(process.env.SYNC_TOKEN || randomBytes(9).toString('hex')).toUpperCase();
+const token = String(process.env.SYNC_TOKEN || randomBytes(16).toString('hex')).trim().toUpperCase();
 const deviceName = String(process.env.NOCTURNE_SYNC_DEVICE_NAME || hostname() || 'Nocturne Desktop').slice(0, 80);
 const deviceType = String(process.env.NOCTURNE_SYNC_DEVICE_TYPE || 'computer').slice(0, 40);
 const privateDeviceId = process.env.NOCTURNE_SYNC_DEVICE_ID || randomBytes(16).toString('hex');
@@ -110,13 +111,26 @@ const wss = new WebSocketServer({ server, maxPayload: 32 * 1024 * 1024 });
 wss.on('connection', (ws, req) => {
   let paired = false;
   let attempts = 0;
-  ws.on('message', (raw) => {
+  const challenge = pairingNonce();
+  const deadline = setTimeout(() => ws.close(1008, 'Pairing timed out'), 10000);
+  const connectionCreated = Date.now();
+  let work = Promise.resolve();
+  ws.on('error', () => { ws.terminate(); });
+  send(ws, { type: 'pair-challenge', protocolVersion: PROTOCOL_VERSION, challenge });
+  ws.on('message', raw => {
+    work = work.then(() => handleMessage(raw)).catch(() => ws.close(1008, 'Invalid message'));
+  });
+  async function handleMessage(raw) {
     let message;
     try {
       message = JSON.parse(String(raw));
     } catch {
       send(ws, { type: 'error', message: 'Некорректное JSON-сообщение.' });
       return;
+    }
+    if (!message || typeof message !== 'object' || Array.isArray(message) || typeof message.type !== 'string') {
+      send(ws, { type: 'error', message: 'Некорректное JSON-сообщение.' });
+      ws.close(1008, 'Invalid message'); return;
     }
     if (!paired) {
       if (++attempts > 3) { ws.close(1008, 'Too many pairing attempts'); return; }
@@ -126,11 +140,12 @@ wss.on('connection', (ws, req) => {
         ws.close(1008, 'Invalid protocol version');
         return;
       }
-      if (message.type !== 'pair' || String(message.token || '').toUpperCase() !== token) {
+      if (message.type !== 'pair' || Date.now() - connectionCreated > 10000 || !await verifyPairingProof(message.proof, token, 'client', challenge, message.clientNonce, message.deviceId)) {
         send(ws, { type: 'error', message: 'Неверный pairing code.' });
         ws.close(1008, 'Invalid pairing token');
         return;
       }
+      clearTimeout(deadline);
       paired = true;
       const client = {
         ws,
@@ -144,7 +159,7 @@ wss.on('connection', (ws, req) => {
       };
       clients.set(ws, client);
       const peers = [...clients.values()].filter((item) => item.ws !== ws).map(pairedPeer);
-      send(ws, { type: 'paired', peer: peers[0] || null, peers, server: discoveryPayload() });
+      send(ws, { type: 'paired', peer: peers[0] || null, peers, server: discoveryPayload(), proof: await pairingProof(token, 'server', challenge, message.clientNonce, message.deviceId) });
       broadcast(ws, { type: 'peer-joined', peer: pairedPeer(client), from: client.deviceId });
       console.log(`[sync] paired ${client.deviceName} (${client.publicDeviceId || client.deviceId}) from ${client.ip}`);
       return;
@@ -161,9 +176,10 @@ wss.on('connection', (ws, req) => {
       return;
     }
     broadcast(ws, { ...message, from: sender.deviceId, deviceName: sender.deviceName });
-  });
+  }
 
   ws.on('close', () => {
+    clearTimeout(deadline);
     const client = clients.get(ws);
     clients.delete(ws);
     if (client) {

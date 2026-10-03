@@ -1,7 +1,8 @@
 import { uid } from '../core/utils.js';
 import { encryptJson, decryptJson } from '../core/crypto.js';
+import { SYNC_PROTOCOL_VERSION, pairingNonce, pairingProof, verifyPairingProof } from '../core/sync-auth.js';
 
-export const SYNC_PROTOCOL_VERSION = 2;
+export { SYNC_PROTOCOL_VERSION };
 
 export function createDeviceId() {
   try {
@@ -82,6 +83,9 @@ export class LocalSyncClient {
   connect({ host, port, token, trusted = false }) {
     this.disconnect(false);
     this.connection = { host, port, token, trusted };
+    this.authenticated = false;
+    this.pairChallenge = null;
+    this.pairClientNonce = pairingNonce();
     this.manuallyDisconnected = false;
     const sequence = ++this.sequence;
     const url = buildSyncUrl(host, port);
@@ -105,22 +109,11 @@ export class LocalSyncClient {
       this.ws.onopen = () => {
         opened = true;
         this.setStatus('waiting', 'Этап pair: проверяю pairing code...', 'pair');
-        this.send({
-          type: 'pair',
-          token,
-          trusted: !!trusted,
-          protocolVersion: SYNC_PROTOCOL_VERSION,
-          deviceId: this.app.state.sync.deviceId,
-          publicDeviceId: publicDeviceId(this.app.state.sync.deviceId),
-          deviceName: this.app.state.sync.deviceName,
-          deviceType: this.app.runtime?.isAndroid ? 'phone' : 'computer',
-          runtime: this.app.runtime?.platform || 'browser',
-        });
       };
 
       this.ws.onmessage = (event) => {
         if (sequence !== this.sequence) return;
-        try { if (JSON.parse(event.data).type === 'paired') window.clearTimeout(timeout); }
+        try { if (JSON.parse(event.data)?.type === 'paired') window.clearTimeout(timeout); }
         catch { this.fail('protocol', 'Сервер прислал некорректный ответ.'); return; }
         this.handleMessage(event.data).catch(error => this.fail('protocol', error.message));
       };
@@ -241,6 +234,18 @@ export class LocalSyncClient {
       this.fail('protocol', 'Сервер прислал некорректное JSON-сообщение.');
       return;
     }
+    if (!message || typeof message !== 'object' || Array.isArray(message) || typeof message.type !== 'string') throw new Error('Некорректный ответ сервера.');
+    if (message.type === 'pair-challenge') {
+      if (message.protocolVersion !== SYNC_PROTOCOL_VERSION || this.pairChallenge) throw new Error('Версия протокола локальной связи не совпадает.');
+      this.pairChallenge = message.challenge;
+      const clientNonce = this.pairClientNonce, deviceId = this.app.state.sync.deviceId;
+      this.send({ type: 'pair', protocolVersion: SYNC_PROTOCOL_VERSION, clientNonce, deviceId,
+        proof: await pairingProof(this.connection.token, 'client', message.challenge, clientNonce, deviceId),
+        publicDeviceId: publicDeviceId(deviceId), deviceName: this.app.state.sync.deviceName,
+        deviceType: this.app.runtime?.isAndroid ? 'phone' : 'computer', runtime: this.app.runtime?.platform || 'browser' });
+      return;
+    }
+    if (!this.authenticated && !['paired', 'error'].includes(message.type)) throw new Error('Сервер ещё не подтвердил подключение.');
     if (message.type === 'pong') {
       const pending = this.pendingPings.get(message.id);
       if (pending) {
@@ -251,6 +256,8 @@ export class LocalSyncClient {
       return;
     }
     if (message.type === 'paired') {
+      if (!await verifyPairingProof(message.proof, this.connection.token, 'server', this.pairChallenge, this.pairClientNonce, this.app.state.sync.deviceId)) throw new Error('Сервер не подтвердил код подключения.');
+      this.authenticated = true;
       await this.verifyAfterPair(message);
       return;
     }
