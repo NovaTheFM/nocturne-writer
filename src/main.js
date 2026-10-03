@@ -5330,7 +5330,7 @@ class NocturneWriter {
     const rects = [], probe = document.createRange();
     let node;
     while ((node = walker.nextNode())) {
-      if (!node.length || !range.intersectsNode(node) || node.parentElement.closest('[contenteditable="false"]')) continue;
+      if (!node.length || !range.intersectsNode(node) || node.parentElement.closest('.ProseMirror-widget')) continue;
       const start = range.startContainer === node ? range.startOffset : 0;
       const end = range.endContainer === node ? range.endOffset : node.length;
       if (start >= end) continue;

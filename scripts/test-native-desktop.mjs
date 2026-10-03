@@ -47,6 +47,7 @@ try {
   assert.equal(copy.copy.external, true); assert.equal(copy.chapters, 2);
   assert.match(await readFile(copy.copy.path, 'utf8'), /Electron document persisted externally/);
   if (packaged) {
+    await mkdir('release/qa/pagination-interaction', { recursive: true });
     await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.setBackgroundThrottling(false));
     const nativeInput = await pc.context().newCDPSession(pc);
     await nativeInput.send('Emulation.setFocusEmulationEnabled', { enabled: true });
@@ -84,6 +85,8 @@ try {
     });
     assert.ok(selected.to > selected.from, JSON.stringify({ selected, points: { ...points, text: undefined } })); assert.ok(selected.heights.length > 0 && selected.heights.every(height => height < 50), JSON.stringify(selected));
     await pc.keyboard.press('Backspace'); await pc.waitForTimeout(180);
+    await pc.screenshot({ path: 'release/qa/pagination-interaction/electron-after-delete.png' });
+    await pc.waitForFunction(() => !window.nocturneApp.nocturneEditor.visualPageRaf.has('primary'), null, { polling: 100, timeout: 3000 });
     assert.equal(await pc.evaluate(() => window.nocturneApp.nocturneEditor.get('primary').getText()), points.text.slice(0, selected.from - 1) + points.text.slice(selected.to - 1));
     const misses = await pc.evaluate(() => {
       const a = window.nocturneApp, instance = a.nocturneEditor.instances.get('primary'), e = instance.editor, shell = instance.pageShell, style = getComputedStyle(shell);
@@ -92,12 +95,13 @@ try {
         if (!node.isTextblock) return;
         for (let offset = 0; offset <= node.content.size; offset += 37) {
           const c = e.view.coordsAtPos(pos + 1 + offset), within = (c.top - origin) % stride;
-          if (within < parseFloat(style.paddingTop) - 3 || within + c.bottom - c.top > height - parseFloat(style.paddingBottom) + 3) misses.push(pos + 1 + offset);
+          if (within < parseFloat(style.paddingTop) - 3 || within + c.bottom - c.top > height - parseFloat(style.paddingBottom) + 3) misses.push({ pos: pos + 1 + offset, within, height: c.bottom - c.top, top: c.top });
         }
         return false;
-      }); return misses.slice(0, 8);
+      }); return { misses: misses.slice(0, 8), origin, height, width: shell.getBoundingClientRect().width, padding: [style.paddingTop, style.paddingBottom], pendingFrame: a.nocturneEditor.visualPageRaf.has('primary'), breaks: window.__nativePaginationKey.getState(e.state).pageBreaks.slice(0, 3), decorations: [...e.view.dom.querySelectorAll('[data-pagination-break]')].slice(0, 3).map(el => ({ cls: el.className, height: el.style.getPropertyValue('--page-spacer-height'), top: el.getBoundingClientRect().top })) };
     });
-    assert.deepEqual(misses, []);
+    await writeFile('release/qa/native-pagination.json', JSON.stringify({ selected, geometry: misses }, null, 2));
+    assert.deepEqual(misses.misses, [], JSON.stringify(misses));
     await nativeInput.detach();
     console.log('Packaged Electron pagination: native mouse selection excludes the gap; Backspace removes only selected text and pages recover without another input.');
   }
