@@ -9674,6 +9674,21 @@ input:-webkit-autofill:active {
              new-item-glow-anim 1.2s cubic-bezier(0.16, 1, 0.3, 1) both;
   will-change: transform, opacity, border-color, box-shadow;
 }
+
+.app-shell:not(.flexible-pages) .page-content-prosemirror,
+.app-shell:not(.flexible-pages) .pm-editor-host {
+  min-height: 0;
+}
+.app-shell:not(.flexible-pages) .page-content-prosemirror * {
+  content-visibility: visible;
+}
+.pm-page-break-widget {
+  display: block;
+  height: var(--spacer-height);
+  pointer-events: none;
+  user-select: none;
+  line-height: 0;
+}
 /* Disable transitions on currently dragged/ghost elements for instant cursor tracking */
 .sortable-drag,
 .sortable-fallback-drag,

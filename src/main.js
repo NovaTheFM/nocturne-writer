@@ -264,7 +264,9 @@ class NocturneWriter {
     this.docHighWatermarks = new Map();
     this.settingsTooltipTimer = null;
     this.settingsTooltipHideTimer = null;
-    this.repaginateSettingsDebounced = debounce(() => this.renderWorkspace(), 260);
+    this.repaginateSettingsDebounced = debounce(() => {
+      for (const paneId of this.nocturneEditor.instances.keys()) this.nocturneEditor.scheduleVisualPages(paneId);
+    }, 260);
     this.persistSettingsDebounced = debounce(() => this.persistSettings(), 300);
     this.typoMatchIndex = [];
     this.commandPalette = new CommandPalette(this);
@@ -19197,7 +19199,7 @@ class NocturneWriter {
         <div class="tab-content active">
           ${row('Показывать кнопку «Дзен» в верхней панели', 'Добавляет кнопку быстрого входа в режим концентрации. При выключении кнопка скрывается из toolbar.', toggle('showZenButton'))}
           ${row('Фокус на предложении / абзаце', 'Приглушает соседний текст и помогает вычитывать текущий фрагмент.', toggle('sentenceFocus'))}
-          ${row('Пагинация MS Word (Экспериментально)', 'Разбивает ваш текст на страницы визуально, симулируя печатный лист. Может вызывать баги при быстром наборе текста на стыке страниц.', toggle('autoPaginate'))}
+          ${row('Пагинация MS Word', 'Показывает текст на отдельных листах с полями. Содержимое и экспорт не меняются. По умолчанию выключена.', toggle('autoPaginate'))}
           ${row('Линейки страниц', 'Показывает тонкие направляющие полей и рабочей области страницы.', toggle('showPageRulers'))}
           ${row('Анимация письма', 'Искры, волна, туман или отключение анимации ввода.', select('writingAnimation', [['sparkles', 'Искры'], ['ripple', 'Волна'], ['mist', 'Туман'], ['off', 'Выключено']]))}
           ${row('Дневная цель слов', 'Количество слов, к которому стремится дневной прогресс в нижней части sidebar.', range('dailyGoal', 100, 10000, 100))}
@@ -19367,7 +19369,7 @@ class NocturneWriter {
       { tab: 'editor', label: 'Типографская сетка', note: 'Показывает ритмическую направляющую строк для оценки вертикального набора.', key: 'baselineGrid', type: 'toggle' },
       { tab: 'focus', label: 'Показывать кнопку «Дзен» в верхней панели', note: 'Добавляет кнопку быстрого входа в режим концентрации.', key: 'showZenButton', type: 'toggle' },
       { tab: 'focus', label: 'Фокус на предложении / абзаце', note: 'Приглушает соседний текст и помогает вычитывать текущий фрагмент.', key: 'sentenceFocus', type: 'toggle' },
-      { tab: 'focus', label: 'Пагинация MS Word (Экспериментально)', note: 'Разбивает ваш текст на страницы визуально, симулируя печатный лист.', key: 'autoPaginate', type: 'toggle' },
+      { tab: 'focus', label: 'Пагинация MS Word', note: 'Показывает текст на отдельных листах с полями; по умолчанию выключена.', key: 'autoPaginate', type: 'toggle' },
       { tab: 'focus', label: 'Линейки страниц', note: 'Показывает тонкие направляющие полей и рабочей области страницы.', key: 'showPageRulers', type: 'toggle' },
       { tab: 'focus', label: 'Анимация письма', note: 'Искры, волна, туман или отключение анимации ввода.', key: 'writingAnimation', type: 'select', options: [['sparkles', 'Искры'], ['ripple', 'Волна'], ['mist', 'Туман'], ['off', 'Выключено']] },
       { tab: 'focus', label: 'Дневная цель слов', note: 'Количество слов, к которому стремится дневной прогресс в нижней части sidebar.', key: 'dailyGoal', type: 'range', min: 100, max: 10000, step: 100 },

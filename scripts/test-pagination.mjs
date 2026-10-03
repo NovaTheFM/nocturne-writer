@@ -71,6 +71,20 @@ try {
     });
     assert.equal(result.actual, result.expected); assert.ok(result.actual > 0); return result;
   });
+  await check('hard breaks blank lines formatting and Unicode paginate without changing text', async page => {
+    await enable(page, `<h2>Unicode heading</h2><p><strong>${'«Диалог 🙂» '.repeat(500)}</strong>${'<br>'.repeat(140)}<em>Последняя строка</em></p>`);
+    const result = await geometry(page); assert.deepEqual(result.misses, []); assert.ok(result.pages > 4); assert.match(result.text, /Последняя строка/); return { pages: result.pages, breaks: result.breaks.length };
+  });
+  await check('typing and backspace at a page boundary never insert or delete a spacer from the model', async page => {
+    await enable(page, `<p>${'Page boundary sentence. '.repeat(1000)}</p>`);
+    const result = await geometry(page), boundary = result.breaks[0].pos;
+    await page.evaluate(pos => window.nocturneApp.nocturneEditor.get('primary').commands.setTextSelection(pos), boundary);
+    await page.locator('.page-content-prosemirror').focus(); await page.keyboard.type('Boundary!'); await page.waitForTimeout(500);
+    assert.equal(await page.evaluate(() => window.nocturneApp.nocturneEditor.get('primary').getText()), result.text.slice(0, boundary - 1) + 'Boundary!' + result.text.slice(boundary - 1));
+    for (let i = 0; i < 9; i++) await page.keyboard.press('Backspace'); await page.waitForTimeout(400);
+    assert.equal(await page.evaluate(() => window.nocturneApp.nocturneEditor.get('primary').getText()), result.text);
+    assert.deepEqual((await geometry(page)).misses, []);
+  });
   await check('pagination preserves typing selection history saves and dump text', async page => {
     await enable(page, `<p>${'Boundary writing text '.repeat(650)}</p>`);
     await page.evaluate(() => window.nocturneApp.nocturneEditor.get('primary').commands.focus('end')); await page.waitForTimeout(80);

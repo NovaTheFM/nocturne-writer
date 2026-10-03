@@ -2,10 +2,11 @@ import { Editor, Extension, StarterKit, TextAlign, Underline, Placeholder, Plugi
 import { ensureTiptapBlockIds, legacyAstToHtml, tiptapJsonToLegacyAst } from './document-adapter.js';
 import { calculateVisualPages, updateActivePageHighlight } from './visual-pagination.js';
 import { NocturneWriterAnalysis, writerAnalysisKey } from './writer-analysis.js';
+import { paginationPluginKey } from './pagination-state.js';
 import { normalizeTypoToken } from '../core/typos.js';
 import { uid, buildSummary } from '../core/utils.js';
 
-export const paginationPluginKey = new PluginKey('nocturnePagination');
+export { paginationPluginKey };
 export const activeBlockPluginKey = new PluginKey('nocturneActiveBlock');
 
 const NocturneActiveBlock = Extension.create({
@@ -74,7 +75,7 @@ const NocturnePagination = Extension.create({
         view(editorView) {
           return {
             update(view, prevState) {
-              bridge.scheduleVisualPages(view.dom.getAttribute('data-pane-id'));
+              if (view.state.doc !== prevState.doc) bridge.scheduleVisualPages(view.dom.getAttribute('data-pane-id'));
             },
           };
         },
@@ -794,6 +795,15 @@ export class NocturneEditorBridge {
 
     const instance = { paneId, docId: doc.id, editor, host, pageShell, overlay };
     this.instances.set(paneId, instance);
+    let measuredWidth = pageShell.getBoundingClientRect().width;
+    instance.resizeObserver = new ResizeObserver(() => {
+      const width = pageShell.getBoundingClientRect().width;
+      if (Math.abs(width - measuredWidth) > .5) { measuredWidth = width; this.scheduleVisualPages(paneId); }
+    });
+    instance.resizeObserver.observe(pageShell);
+    instance.onFontsLoaded = () => this.scheduleVisualPages(paneId);
+    document.fonts.addEventListener('loadingdone', instance.onFontsLoaded);
+    document.fonts.ready.then(() => { if (this.instances.get(paneId) === instance) this.scheduleVisualPages(paneId); });
     return instance;
   }
 
@@ -812,7 +822,10 @@ export class NocturneEditorBridge {
   }
 
   updateAnalysis() {
-    for (const { editor } of this.instances.values()) editor.view.dispatch(editor.state.tr.setMeta(writerAnalysisKey, true).setMeta('addToHistory', false));
+    for (const { editor, paneId } of this.instances.values()) {
+      editor.view.dispatch(editor.state.tr.setMeta(writerAnalysisKey, true).setMeta('addToHistory', false));
+      this.scheduleVisualPages(paneId);
+    }
   }
 
   syncDocFromEditorByDocId(docId) {
@@ -917,6 +930,8 @@ export class NocturneEditorBridge {
     if (!instance) return;
     cancelAnimationFrame(this.visualPageRaf.get(paneId));
     this.visualPageRaf.delete(paneId);
+    instance.resizeObserver?.disconnect();
+    document.fonts.removeEventListener('loadingdone', instance.onFontsLoaded);
     instance.editor.destroy();
     this.instances.delete(paneId);
   }
@@ -948,6 +963,8 @@ export class NocturneEditorBridge {
     if (document.body.classList.contains('resizing-workspace')) return;
     cancelAnimationFrame(this.visualPageRaf.get(paneId));
     const raf = requestAnimationFrame(() => {
+      this.visualPageRaf.delete(paneId);
+      if (instance.editor.isDestroyed || instance.editor.view.composing) return;
       const settings = this.getSettings?.() || {};
       calculateVisualPages({
         editor: instance.editor,
