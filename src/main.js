@@ -3675,6 +3675,8 @@ class NocturneWriter {
 
   bindGlobalEvents() {
     document.addEventListener('click', (event) => this.handleClick(event));
+    document.addEventListener('mousedown', (event) => this.handleMobileSelectionCompatibilityEvent(event), true);
+    document.addEventListener('click', (event) => this.handleMobileSelectionCompatibilityEvent(event), true);
     document.addEventListener('pointerdown', (event) => this.handleGlobalPointerDownCapture(event), true);
     document.addEventListener('pointerdown', (event) => this.handleMobileEditorSelectionPointerDown(event), { capture: true, passive: false });
     document.addEventListener('pointermove', (event) => this.handleMobileEditorSelectionPointerMove(event), { capture: true, passive: false });
@@ -4891,6 +4893,7 @@ class NocturneWriter {
 
   handleMobileEditorSelectionPointerDown(event) {
     if (!this.isMobileEditorCustomSelectionEnabled()) return;
+    this.mobileSelectionSuppressClickUntil = 0;
     const handle = event.target.closest?.('[data-selection-handle]');
     if (handle && this.selectionController?.active) {
       event.preventDefault();
@@ -4914,7 +4917,7 @@ class NocturneWriter {
     this.mobileSelectionStart = start;
     this.mobileSelectionTimer = window.setTimeout(() => {
       const range = this.wordRangeFromPoint(start.x, start.y, editable);
-      if (range) this.setMobileEditorSelection(range, editable);
+      if (range) start.longPressed = this.setMobileEditorSelection(range, editable);
     }, 360);
   }
 
@@ -4937,12 +4940,16 @@ class NocturneWriter {
       ? Math.hypot((event.clientX || 0) - start.x, (event.clientY || 0) - start.y)
       : Math.hypot(event.movementX || 0, event.movementY || 0);
     if (moved > 8) {
+      start.moved = true;
       clearTimeout(this.mobileSelectionTimer);
       this.mobileSelectionTimer = null;
     }
   }
 
-  handleMobileEditorSelectionPointerUp() {
+  handleMobileEditorSelectionPointerUp(event) {
+    const start = this.mobileSelectionStart;
+    const finishedTouch = event?.type === 'pointerup' && event.pointerId === start?.pointerId;
+    if (finishedTouch && start.longPressed && event.pointerType === 'touch') this.mobileSelectionSuppressClickUntil = Date.now() + 600;
     this.nocturneSelectionLayer?.classList.remove('dragging');
     if (this.mobileSelectionTimer) {
       clearTimeout(this.mobileSelectionTimer);
@@ -4953,6 +4960,15 @@ class NocturneWriter {
     cancelAnimationFrame(this.mobileSelectionScrollFrame);
     this.mobileSelectionScrollFrame = null;
     this.mobileSelectionScrollTime = 0;
+    if (finishedTouch && !start.longPressed && !start.moved && this.selectionController?.active) this.clearMobileEditorSelection();
+  }
+
+  handleMobileSelectionCompatibilityEvent(event) {
+    if (!this.selectionController?.active || Date.now() >= (this.mobileSelectionSuppressClickUntil || 0) || event.detail === 0 || !event.target.closest?.('.page-content')) return;
+    // The mouse events generated after a touch hold must not collapse the selected word.
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    this.nocturneEditor?.setSelectionFromRange(this.selectionController.paneId, this.selectionController.range);
   }
 
   mobileSelectionDragBounds() {
@@ -19509,10 +19525,10 @@ class NocturneWriter {
           <span class="accent-swatch-orb"></span>
         </label>
         <div class="accent-picker-main">
-          <div class="accent-hex-shell">
+          <label class="accent-hex-shell">
             <span>#</span>
             <input value="${escapeHtml(accent.slice(1))}" maxlength="6" spellcheck="false" data-accent-hex aria-label="HEX акцентного цвета">
-          </div>
+          </label>
           <div class="accent-presets" aria-label="Пресеты акцентного цвета">
             ${this.accentPresets().map((color) => `<button type="button" class="accent-preset ${color.toUpperCase() === accent ? 'active' : ''}" style="--preset:${escapeHtml(color)}" data-action="set-accent-preset" data-accent-value="${escapeHtml(color)}" aria-label="Акцент ${escapeHtml(color)}"></button>`).join('')}
             <button type="button" class="accent-reset" data-action="reset-accent">Сброс</button>

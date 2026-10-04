@@ -108,7 +108,18 @@ try {
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] });
     await page.waitForTimeout(430);
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await app(page, () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     assert.equal(await app(page, () => window.nocturneApp.nocturneEditor.get('primary').state.selection.empty), false);
+    assert.equal(await app(page, () => {const a=window.nocturneApp,e=a.nocturneEditor.get('primary'),s=e.state.selection;return e.state.doc.textBetween(s.from,s.to)===a.selectionController.text;}), true, 'Native touch release preserves the same model and custom selection');
+    const nextWord = await app(page, () => {const n=document.querySelector('.ProseMirror p').firstChild,r=document.createRange();r.setStart(n,8);r.setEnd(n,12);const b=r.getBoundingClientRect();return{x:b.left+b.width/2,y:b.top+b.height/2};});
+    await cdp.send('Input.dispatchTouchEvent', {type:'touchStart',touchPoints:[nextWord]});
+    await cdp.send('Input.dispatchTouchEvent', {type:'touchEnd',touchPoints:[]});
+    await app(page, () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await app(page, () => window.nocturneApp.selectionController.active), false, 'A fresh tap clears the previous custom selection');
+    assert.equal(await app(page, () => window.nocturneApp.nocturneEditor.get('primary').state.selection.empty), true);
+    await cdp.send('Input.dispatchTouchEvent', {type:'touchStart',touchPoints:[point]});
+    await page.waitForTimeout(430);
+    await cdp.send('Input.dispatchTouchEvent', {type:'touchEnd',touchPoints:[]});
     const handleRect = await page.locator('[data-selection-handle="start"]').boundingBox();
     await cdp.send('Input.dispatchTouchEvent', { type:'touchStart', touchPoints:[{x:handleRect.x+handleRect.width/2,y:handleRect.y+handleRect.height/2}] });
     for (const offset of [13, 10, 2]) {

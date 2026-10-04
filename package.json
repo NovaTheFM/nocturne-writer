@@ -10,6 +10,8 @@
     "build": "npm run build:editor && node scripts/build-web.mjs",
     "check": "node scripts/check-source.mjs && node scripts/test-editor-adapter.mjs",
     "test": "node scripts/verify-project.mjs",
+    "qa": "node scripts/test-app.mjs",
+    "qa:smoke": "node scripts/test-app.mjs --mode=smoke --artifacts=off",
     "smoke:desktop": "node scripts/desktop-smoke.mjs",
     "electron:dev": "cross-env ELECTRON_DEV_URL=http://localhost:5173 electron electron/main.cjs",
     "electron:start": "electron electron/main.cjs",

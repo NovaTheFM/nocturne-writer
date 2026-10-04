@@ -53,6 +53,8 @@ scripts/
   build-android-apk.mjs
   sync-server.mjs     ← LAN sync server
   desktop-smoke.mjs   ← Playwright smoke test
+  test-app.mjs        ← unified Android / PC tester, logs and reports
+  qa/                ← check catalog, logging, journeys and report modules
 
 server.mjs            ← dev HTTP server (serves project root, no bundler)
 capacitor.config.json ← Capacitor / Android config
@@ -136,6 +138,28 @@ Export format: `.nocturnedump` (JSON, optionally AES-GCM encrypted).
 ---
 
 ## Testing
+
+**Unified entry point: `scripts/test-app.mjs`.** Use this file to run and systematize the application checks instead of launching independent suites by hand:
+
+```bash
+npm run qa                          # complete registered checks for Android + PC
+npm run qa:smoke                    # quicker working-scenario check
+npm run qa -- --platform=android    # Android interface, data and native probe
+npm run qa -- --platform=desktop    # PC interface, data and real Electron
+node scripts/test-app.mjs --list    # selected suites and covered areas
+```
+
+The shared catalog is `scripts/qa/checks.mjs`; add new automated application suites there. The entry point runs suites sequentially with isolated profiles, a run lock, port checks, individual timeouts and cleanup of its own process trees. It preserves existing processes and never clears Android app data. It records console/errors/requests/actions, screenshots, traces for failures, a source fingerprint, observed commands/settings and unobserved features. Performance measurements run without the tracing observer.
+
+Keep application/test sources unchanged during a run; the final `source-integrity` check rejects mixed revisions. `--output=PATH` requires an empty directory inside the workspace. The `tester-contract` suite checks failure reporting, timeout cleanup, occupied ports, report escaping, source fingerprints and evidence isolation.
+
+Reports are stored per run in `release/qa/app-tester/<UTC timestamp>/`: `index.html` (searchable report), `results.json`, `junit.xml`, `inventory.json`, `features.json`, and each suite's logs/evidence. `release/qa/app-tester/latest.json` points to the latest completed run. Read the failures and coverage gaps before claiming completion. `OBSERVED` is an execution observation, not proof that a feature works. `SKIP`, `PARTIAL` and `NOT_SELECTED` must remain visible in reports.
+
+Options: `--mode=smoke|full`, `--platform=all|android|desktop`, `--only=id,id`, `--seed=20261004`, `--steps=6`, `--repeat=2`, `--trace=failures|all|off`, `--artifacts=auto|required|off`, `--native-android=auto|required|off`, `--android-serial=SERIAL`, `--fail-fast`. The same seed reproduces the writing-model operations. Required native/artifact gaps yield exit code 2; failed checks/timeouts yield 1; interruption yields 130. An automatic run may return 0 with `PASS_WITH_GAPS`; never describe it as full native verification.
+
+Real Android checks require an authorized online adb device, an installed debug APK and available WebView DevTools. They probe native runtime/plugins, viewport geometry, system keyboard input and Android Back through the command palette, without editing manuscripts. Browser touch/IME tests do not substitute for these checks. Physical LAN, Share and system file-picker interactions remain separate validation requirements.
+
+See [reports/APP_TESTER.md](reports/APP_TESTER.md) for commands, modules and limitations.
 
 Automated Node unit tests and Playwright regression suites use isolated profiles. Run the complete verification pipeline:
 

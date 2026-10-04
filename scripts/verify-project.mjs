@@ -1,40 +1,9 @@
 import { spawnSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
+import { PROJECT_CHECKS, ARTIFACT_CHECKS } from './qa/checks.mjs';
 
-const checks = [
-  ['syntax', ['scripts/check-source.mjs']],
-  ['unit', ['--test', 'scripts/test-database-sync.mjs', 'scripts/test-project-backups.mjs', 'scripts/test-smart-speller.mjs', 'scripts/test-sync-auth.mjs']],
-  ['audit-data', ['scripts/test-audit-data.mjs']],
-  ['audit-editor', ['scripts/test-audit-editor.mjs']],
-  ['audit-sync', ['scripts/test-audit-sync.mjs']],
-  ['audit-platform', ['scripts/test-audit-platform.mjs']],
-  ['pagination', ['scripts/test-pagination.mjs']],
-  ['pagination-interaction', ['scripts/test-pagination-interaction.mjs']],
-  ['pagination-viewport', ['scripts/test-pagination-viewport.mjs']],
-  ['pagination-performance', ['scripts/benchmark-pagination-resize.mjs', '--pages=53', '--page-mode=split', '--shape=single-paragraph', '--animate', '--label=verification', '--assert', '--budget-ms=32']],
-  ['release-tools', ['scripts/test-release-tools.py'], 'python'],
-  ['editor-adapter', ['scripts/test-editor-adapter.mjs']],
-  ['ai-context', ['scripts/test-ai-context.mjs']],
-  ['reliability', ['scripts/test-reliability.mjs']],
-  ['workflow-tools', ['scripts/test-workflow-tools.mjs']],
-  ['lan-integration', ['scripts/test-lan-sync.mjs']],
-  ['native-desktop', ['scripts/test-native-desktop.mjs']],
-  ['offline-assets', ['scripts/test-offline-assets.mjs']],
-  ['platform-contract', ['scripts/test-sync-platform.mjs']],
-  ['production-assets', ['scripts/test-build.mjs']],
-  ['desktop-smoke', ['scripts/desktop-smoke.mjs']],
-  ['responsive-ui', ['scripts/ui-qa.mjs']],
-  ['mobile-behavior', ['scripts/test-mobile-behavior.mjs']],
-  ['android-polish', ['scripts/test-android-polish.mjs'], process.execPath, 240_000],
-  ['interface-revision', ['scripts/test-interface-revision.mjs']],
-  ['surface-motion', ['scripts/test-surface-motion.mjs']],
-  ['app-motion', ['scripts/test-app-motion.mjs']],
-];
-if (process.argv.includes('--artifacts')) checks.push(
-  ['packaged-desktop', ['scripts/test-native-desktop.mjs', '--packaged']],
-  ['android-artifact', ['scripts/inspect-android-artifact.py'], 'python'],
-  ['desktop-artifact', ['scripts/inspect-desktop-artifact.mjs']],
-);
+const selected = [...PROJECT_CHECKS, ...(process.argv.includes('--artifacts') ? ARTIFACT_CHECKS : [])];
+const checks = selected.map(({ id, args, executable, timeout }) => [id, args, executable, timeout]);
 const results = [];
 await mkdir('release/qa', { recursive: true });
 for (const [name, args, executable = process.execPath, timeout = 120_000] of checks) {
