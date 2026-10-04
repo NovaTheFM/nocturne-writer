@@ -24,7 +24,7 @@ import { stripSecrets } from './core/record-protection.js';
 import { TYPO_LOOKUP, normalizeTypoToken } from './core/typos.js';
 import { getSmartSpellerMatches } from './core/smart-speller.js';
 import { platformFiles } from './platform/file-adapter.js';
-import { detectRuntime, configureNativeBars, bindNativeLifecycle, discoverNativeLan } from './platform/runtime.js';
+import { detectRuntime, configureNativeBars, bindNativeLifecycle, discoverNativeLan, minimizeNativeApp } from './platform/runtime.js';
 import { CommandPalette } from './features/command-palette.js';
 import { buildAiContext, serializeAiContextSafe } from './features/ai-context.js';
 import { LocalSyncClient, buildHttpBase, SYNC_PROTOCOL_VERSION } from './features/local-sync.js';
@@ -335,7 +335,7 @@ class NocturneWriter {
   async init() {
     this.setStartupProgress(20);
     this.clearLegacyStorage();
-    await this.db.open();
+    await this.db.open({ initialSettings: this.validateSettings({}) });
     this.state.sessionPassword = safeGetStorageItem(sessionStorage, 'nocturne-master-password', '');
     const settings = await this.db.get('settings', 'app');
     this.state.settings = this.validateSettings(settings?.value || {});
@@ -489,6 +489,10 @@ class NocturneWriter {
   validateSettings(raw = {}) {
     const source = isPlainObject(raw) ? raw : {};
     const merged = { ...defaultSettings, ...source };
+    if (this.isMobileLayout()) {
+      if (!Object.hasOwn(source, 'fontSize')) merged.fontSize = 18;
+      if (!Object.hasOwn(source, 'lineHeight')) merged.lineHeight = 1.7;
+    }
     if (!Object.hasOwn(source, 'compactKbSidebar')) merged.compactKbSidebar = !!source.compactPanels;
     const clamp = (key, min, max, fallback = defaultSettings[key]) => {
       const value = Number(merged[key]);
@@ -645,11 +649,11 @@ class NocturneWriter {
       if (!password) return { ...doc, locked: true, ast: { type: 'doc', blocks: [{ id: uid('block'), type: 'paragraph', html: 'Документ зашифрован. Введите мастер-пароль в настройках данных.' }] } };
       try {
         const decoded = { ...doc, ...(await decryptJson(doc.encrypted, password)), encrypted: doc.encrypted };
-        return { ...decoded, description: decoded.description || decoded.summary || 'Без описания' };
+        return decoded;
       } catch {
         return { ...doc, locked: true, ast: { type: 'doc', blocks: [{ id: uid('block'), type: 'paragraph', html: 'Не удалось расшифровать документ: неверный пароль.' }] } };
       }
-    })).then((docs) => docs.map((doc) => this.sanitizeDoc(this.mergeLiveDraft({ ...doc, description: doc.description || doc.summary || 'Без описания' }))));
+    })).then((docs) => docs.map((doc) => this.sanitizeDoc(this.mergeLiveDraft({ ...doc }))));
   }
 
   sanitizeDoc(doc) {
@@ -657,7 +661,7 @@ class NocturneWriter {
     doc.id = String(doc.id || uid('doc'));
     doc.folderId = this.state.folders.some((folder) => folder.id === doc.folderId) ? doc.folderId : this.defaultFolderId();
     doc.title = String(doc.title || 'Без названия');
-    doc.description = String(doc.description || doc.summary || 'Без описания');
+    doc.description = String(doc.description ?? '');
     doc.notes = String(doc.notes || '');
     doc.order = Number.isFinite(Number(doc.order)) ? Number(doc.order) : 0;
     doc.createdAt = Number(doc.createdAt || now);
@@ -729,7 +733,7 @@ class NocturneWriter {
     else this.state.typoRules.unshift(clean);
     await this.db.put('typoRules', clean);
     this.updateTypoHighlights();
-    if (this.state.activeSettingsTab === 'dictionary') this.renderSettings();
+    if (this.state.activeSettingsTab === 'dictionary' || this.state.mobile.settingsTab === 'dictionary') this.renderSettings();
     return clean;
   }
 
@@ -737,7 +741,7 @@ class NocturneWriter {
     this.state.typoRules = this.state.typoRules.filter((rule) => rule.id !== id);
     await this.db.delete('typoRules', id);
     this.updateTypoHighlights();
-    if (this.state.activeSettingsTab === 'dictionary') this.renderSettings();
+    if (this.state.activeSettingsTab === 'dictionary' || this.state.mobile.settingsTab === 'dictionary') this.renderSettings();
   }
 
   async loadReviewMarks() {
@@ -1241,10 +1245,10 @@ class NocturneWriter {
   setAssistantOutput(message, tone = 'idle') {
     this.assistantPanelMessage = message || '';
     this.assistantState = tone || 'idle';
-    const output = document.getElementById('ai-output');
-    if (!output) return;
-    output.dataset.tone = tone;
-    this.updateSurfaceHTML(output, escapeHtml(message || ''), { resize: true });
+    for (const output of document.querySelectorAll('#ai-output, .mobile-ai-output')) {
+      output.dataset.tone = tone;
+      this.updateSurfaceHTML(output, escapeHtml(message || ''), { resize: true });
+    }
   }
 
   assistantBusyMessage(kind = this.assistantBusyKind) {
@@ -1318,6 +1322,7 @@ class NocturneWriter {
   openSecondaryPane(descriptor = {}) {
     this.state.workspace.mode = 'split';
     this.openInPane('secondary', descriptor.type ? descriptor : { type: null });
+    if (this.isMobileLayout()) this.closeMobileToEditor();
   }
 
   closeSecondaryPane() {
@@ -1380,6 +1385,8 @@ class NocturneWriter {
 
   floatingMenuElement(key) {
     return {
+      empty: document.getElementById('empty-project-menu'),
+      folder: document.getElementById('mobile-folder-menu'),
       library: document.getElementById('library-menu'),
       kb: document.getElementById('kb-menu'),
       mode: document.getElementById('review-mode-menu'),
@@ -1407,19 +1414,22 @@ class NocturneWriter {
 
   floatingMenuAnchor(key) {
     return {
+      empty: this.emptyProjectMenuAnchor?.isConnected ? this.emptyProjectMenuAnchor : document.querySelector('[data-action="toggle-empty-project-menu"]'),
+      folder: this.mobileFolderMenuAnchor?.isConnected ? this.mobileFolderMenuAnchor : null,
       library: document.querySelector('[data-action="toggle-library-menu"]'),
       kb: document.querySelector('#kb-dropdown [data-action="toggle-kb-menu"]'),
       mode: document.querySelector('#review-mode-dropdown [data-action="toggle-review-mode-menu"]'),
-      format: document.querySelector('#format-dropdown [data-action="toggle-format-menu"]'),
+      format: this.isMobileLayout() ? document.querySelector('.mobile-format-bar [data-action="toggle-format-menu"]') : document.querySelector('#format-dropdown [data-action="toggle-format-menu"]'),
       split: document.querySelector('#split-menu-wrap [data-action="toggle-split-menu"]'),
       notes: document.querySelector('#floating-note-menu-wrap [data-floating-note-menu-anchor]'),
-      search: document.querySelector('#search-menu-wrap [data-action="toggle-search-menu"]'),
-      review: document.querySelector('.review-issue-dropdown [data-action="toggle-review-issue-menu"]'),
+      search: this.isMobileLayout() ? document.querySelector('.mobile-format-bar [data-action="toggle-search-menu"]') : document.querySelector('#search-menu-wrap [data-action="toggle-search-menu"]'),
+      review: this.isMobileLayout() ? document.querySelector('#mobile-review-toolbar [data-action="toggle-review-issue-menu"]') : document.querySelector('.review-issue-dropdown [data-action="toggle-review-issue-menu"]'),
     }[key] || null;
   }
 
   floatingMenuAnchorWrapper(key) {
     return {
+      empty: this.floatingMenuAnchor('empty')?.closest('.empty-project-actions'),
       library: document.querySelector('.sidebar-header-actions'),
       kb: document.getElementById('kb-dropdown'),
       mode: document.getElementById('review-mode-dropdown'),
@@ -1433,13 +1443,13 @@ class NocturneWriter {
 
   positionFloatingToolbarMenu(key, anchor = this.floatingMenuAnchor(key)) {
     const surface = this.floatingMenuSurface(key);
-    if (!surface || !anchor || !['library', 'kb', 'mode', 'format', 'split', 'notes', 'search', 'review'].includes(key)) return;
+    if (!surface || !anchor || !['empty', 'folder', 'library', 'kb', 'mode', 'format', 'split', 'notes', 'search', 'review'].includes(key)) return;
     const anchorRect = anchor.getBoundingClientRect();
     const menuRect = surface.getBoundingClientRect();
     const margin = 10;
     const gap = 10;
     const alignLeft = ['library', 'kb', 'mode', 'format', 'review'].includes(key);
-    let left = alignLeft ? anchorRect.left : anchorRect.right - menuRect.width;
+    let left = key === 'empty' ? anchorRect.left + (anchorRect.width - menuRect.width) / 2 : alignLeft ? anchorRect.left : anchorRect.right - menuRect.width;
     left = Math.max(margin, Math.min(left, window.innerWidth - menuRect.width - margin));
     const below = anchorRect.bottom + gap;
     const above = anchorRect.top - menuRect.height - gap;
@@ -1478,7 +1488,7 @@ class NocturneWriter {
     if (surface && surface !== el) surface.style.pointerEvents = '';
     this.activeFloatingMenuKey = key;
     this.floatingMenuAnchor(key)?.setAttribute('aria-expanded', 'true');
-    if (key === 'library' || key === 'mode') el.querySelector('button')?.focus({ preventScroll: true });
+    if (['empty', 'folder', 'library', 'mode'].includes(key)) el.querySelector('button')?.focus({ preventScroll: true });
     if (key === 'split') this.splitMenuOpen = true;
     this.syncFloatingMenuPortalState();
     requestAnimationFrame(() => this.positionFloatingToolbarMenu(key));
@@ -1524,7 +1534,7 @@ class NocturneWriter {
 
   closeAllFloatingMenus(options = '') {
     const except = typeof options === 'string' ? options : (options?.except || '');
-    ['library', 'kb', 'mode', 'format', 'split', 'notes', 'search', 'review', 'doc', 'context'].forEach((key) => {
+    ['empty', 'folder', 'library', 'kb', 'mode', 'format', 'split', 'notes', 'search', 'review', 'doc', 'context'].forEach((key) => {
       if (key !== except) this.closeFloatingMenu(key, { animate: key !== 'doc' && key !== 'context' });
     });
   }
@@ -1830,12 +1840,12 @@ class NocturneWriter {
   }
 
   emptyStateMarkup(icon, title, text, action = '', actionLabel = '', extraAttrs = '') {
-    return `<div class="empty-card">
+    return `<div class="empty-card ${action === 'new-doc' ? 'empty-project-card' : ''}">
       <i class="bx ${icon}"></i>
       <h3>${escapeHtml(title)}</h3>
       <p>${escapeHtml(text)}</p>
-      ${action ? `<button class="pill-btn ai-btn" data-action="${action}" ${extraAttrs}>${escapeHtml(actionLabel)}</button>` : ''}
-      ${action === 'new-doc' ? '<div class="empty-project-actions"><button class="pill-btn" data-action="import-doc"><i class="bx bx-import"></i> Импорт текста</button><button class="pill-btn" data-action="import-project-dump"><i class="bx bx-archive-in"></i> Восстановить проект</button></div>' : ''}
+      ${action ? `<button class="pill-btn ai-btn ${action === 'new-doc' ? 'empty-project-create' : ''}" data-action="${action}" ${extraAttrs}>${action === 'new-doc' ? '<i class="bx bx-plus" aria-hidden="true"></i>' : ''}${escapeHtml(actionLabel)}</button>` : ''}
+      ${action === 'new-doc' ? '<div class="empty-project-actions"><button class="pill-btn empty-project-more" type="button" data-action="toggle-empty-project-menu" aria-haspopup="menu" aria-controls="empty-project-menu" aria-expanded="false"><span>Другое</span><i class="bx bx-chevron-down" aria-hidden="true"></i></button></div>' : ''}
     </div>`;
   }
 
@@ -1909,6 +1919,7 @@ class NocturneWriter {
     this.updateReviewHighlights();
     this.renderReviewNavigator();
     this.renderReviewToolbarSlot();
+    this.renderMobileTopbarStatus();
     this.toast(mode === 'editor' ? 'Режим редактора: текст защищён от ввода.' : mode === 'finalization' ? 'Режим финализации: правки видны и доступны.' : 'Режим письма.', 950);
     
     if (this.state.workspace?.panes) Object.keys(this.state.workspace.panes).forEach((paneId) => this.renderBookmarksMenu(paneId));
@@ -2025,12 +2036,20 @@ class NocturneWriter {
   }
 
   handleMobileViewportChange() {
+    const viewport = window.visualViewport;
+    const viewportHeight = viewport?.height || window.innerHeight;
+    const orientation = `${window.screen.orientation?.angle || 0}:${window.innerWidth}`;
+    if (this.mobileViewportOrientation !== orientation) {
+      this.mobileViewportOrientation = orientation;
+      this.mobileViewportFullHeight = window.innerHeight;
+    }
+    this.mobileViewportFullHeight = Math.max(this.mobileViewportFullHeight || 0, window.innerHeight);
+    document.documentElement.style.setProperty('--mobile-viewport-height', `${viewportHeight}px`);
+    document.documentElement.style.setProperty('--mobile-viewport-top', `${viewport?.offsetTop || 0}px`);
     const focusedEditor = !!document.activeElement?.closest?.('.page-content');
     const focusedEditable = !!document.activeElement?.closest?.('.page-content, [data-mobile-notes-input], #notes-input, input, textarea, [contenteditable="true"]');
     const previousKeyboardOpen = !!this.state.mobile.keyboardOpen;
-    const keyboardOpen = this.isMobileLayout() && focusedEditable
-      ? (window.visualViewport ? window.visualViewport.height < window.innerHeight * 0.82 : true)
-      : false;
+    const keyboardOpen = this.isMobileLayout() && focusedEditable && (viewport?.scale || 1) < 1.05 && (this.mobileViewportFullHeight - viewportHeight > 140);
     const changed = this.state.mobile.keyboardOpen !== keyboardOpen;
     this.state.mobile.keyboardOpen = keyboardOpen;
     const customSelection = !!this.selectionController?.active;
@@ -2048,7 +2067,7 @@ class NocturneWriter {
         this.state.mobile.formatBarVisible = false;
       } else {
         this.state.mobile.formatBarMode = focusedEditor ? 'typing' : 'hidden';
-        this.state.mobile.formatBarVisible = focusedEditor && keyboardOpen;
+        this.state.mobile.formatBarVisible = focusedEditor;
       }
     }
     this.updateRuntimeClasses();
@@ -2059,7 +2078,11 @@ class NocturneWriter {
   scrollCaretIntoMobileView() {
     const editable = document.activeElement?.closest?.('.page-content, .mobile-notes-editor');
     if (!editable || !this.isMobileLayout()) return;
-    window.setTimeout(() => editable.scrollIntoView({ block: 'nearest', inline: 'nearest' }), 80);
+    window.setTimeout(() => {
+      const editor = this.nocturneEditor?.getByElement(editable);
+      if (editor) editor.commands.scrollIntoView();
+      else editable.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }, 80);
   }
 
   renderMobileTopbarStatus() {
@@ -2068,9 +2091,11 @@ class NocturneWriter {
     const doc = this.getFocusedDoc();
     const status = doc ? (this.state.saveStatusByDoc[doc.id]?.state || 'saved') : 'idle';
     const icon = status === 'saving' ? 'bx-cloud-upload' : status === 'error' ? 'bx-error-circle' : 'bx-check-circle';
-    const newClass = `mobile-save-dot ${status}`;
-    const newHtml = `<i class="bx ${icon}"></i>`;
+    const newClass = `mobile-save-status ${status}`;
+    const label = !doc ? 'Локальный проект' : doc.locked ? 'Документ защищён' : this.state.reviewMode === 'editor' ? 'Чтение и пометки' : status === 'saving' ? 'Сохраняется…' : status === 'error' ? 'Не удалось сохранить' : 'Сохранено на устройстве';
+    const newHtml = `${doc ? `<i class="bx ${doc.locked ? 'bx-lock-alt' : icon}" aria-hidden="true"></i>` : ''}<span>${label}</span>`;
     if (el.className !== newClass) el.className = newClass;
+    el.title = this.state.saveStatusByDoc[doc?.id]?.message || label;
     this.updateSurfaceHTML(el, newHtml);
   }
 
@@ -2078,20 +2103,20 @@ class NocturneWriter {
     const doc = this.getFocusedDoc() || this.state.docs.find((item) => item.id === this.state.activeDocId);
     return `
       <header class="mobile-topbar">
-        <button class="mobile-icon-btn" data-action="mobile-open-docs" aria-label="Документы"><i class="bx bx-menu-alt-left"></i></button>
-        <button class="mobile-title-zone" data-action="mobile-open-docs">
-          <span>Документ</span>
-          <strong>${escapeHtml(doc?.title || 'Нет главы')}</strong>
+        <button class="mobile-title-zone" data-action="mobile-open-docs" aria-label="${escapeHtml(doc ? `Открыть главы. ${doc.title}` : 'Открыть главы')}">
+          <span class="mobile-document-symbol"><i class="bx bx-file" aria-hidden="true"></i></span>
+          <span class="mobile-document-heading"><strong>${escapeHtml(doc?.title || 'Новая рукопись')}</strong><span id="mobile-save-status" class="mobile-save-status idle">Локальный проект</span></span>
+          <i class="bx bx-chevron-down mobile-document-chevron" aria-hidden="true"></i>
         </button>
         <div class="mobile-topbar-actions">
-          <button class="mobile-icon-btn" data-action="open-command-palette" aria-label="Команды" title="Команды"><i class="bx bx-command"></i></button>
-          <span id="mobile-save-status" class="mobile-save-dot saved"><i class="bx bx-check-circle"></i></span>
+          <button class="mobile-icon-btn" data-action="open-command-palette" aria-label="Поиск и команды" title="Поиск и команды"><i class="bx bx-search"></i></button>
           <button class="mobile-icon-btn" data-action="mobile-open-actions" aria-label="Действия"><i class="bx bx-dots-vertical-rounded"></i></button>
         </div>
       </header>`;
   }
 
   renderMobileSystemBar() {
+    if (this.isCapacitorRuntime()) return '';
     const battery = this.state.mobile.batteryLevel === null ? '—' : `${this.state.mobile.batteryLevel}%`;
     return `
       <div class="mobile-system-bar" aria-hidden="true">
@@ -2103,14 +2128,14 @@ class NocturneWriter {
 
   renderMobileBottomNav() {
     const items = [
-      ['write', 'bx-edit-alt', 'Писать', 'mobile-tab-write'],
+      ['write', 'bx-edit-alt', 'Письмо', 'mobile-tab-write'],
       ['docs', 'bx-file', 'Главы', 'mobile-open-docs'],
       ['lore', 'bx-book-bookmark', 'База', 'mobile-open-lore'],
       ['ai', 'nocturne-ai-icon', 'AI', 'mobile-open-ai'],
       ['more', 'bx-grid-alt', 'Ещё', 'mobile-open-more'],
     ];
     return `<nav class="mobile-bottom-nav" data-active-tab="${escapeHtml(this.state.mobile.activeTab || 'write')}" aria-label="Мобильная навигация">
-      ${items.map(([id, icon, label, action]) => `<button class="${this.state.mobile.activeTab === id ? 'active' : ''}" data-action="${action}">${id === 'ai' ? aiIcon('mobile-nav-svg') : `<i class="bx ${icon}"></i>`}<span>${label}</span></button>`).join('')}
+      ${items.map(([id, icon, label, action]) => `<button class="${this.state.mobile.activeTab === id ? 'active' : ''}" data-action="${action}" ${this.state.mobile.activeTab === id ? 'aria-current="page"' : ''}>${id === 'ai' ? aiIcon('mobile-nav-svg') : `<i class="bx ${icon}" aria-hidden="true"></i>`}<span>${label}</span></button>`).join('')}
     </nav>`;
   }
 
@@ -2150,14 +2175,25 @@ class NocturneWriter {
       <div class="mobile-overlay ${this.state.mobile.panel ? 'active' : ''} mobile-overlay-${panelMode}" id="mobile-overlay" aria-hidden="${this.state.mobile.panel ? 'false' : 'true'}">
         <section class="mobile-panel mobile-panel-${panelMode}" id="mobile-panel">${this.renderMobilePanel()}</section>
       </div>
-      <div class="mobile-format-bar" id="mobile-format-bar">
+      <div class="mobile-format-bar" id="mobile-format-bar" role="toolbar" aria-label="Инструменты письма">
+        <button class="mobile-edit-done" data-action="mobile-finish-editing" aria-label="Закончить ввод и показать навигацию" title="Закончить ввод"><i class="bx bx-chevron-down"></i></button>
+        <div class="mobile-format-scroll">
+        <button data-command="undo" aria-label="Отменить" title="Отменить"><i class="bx bx-undo"></i></button>
+        <button data-command="redo" aria-label="Повторить" title="Повторить"><i class="bx bx-redo"></i></button>
+        <span class="mobile-format-divider" aria-hidden="true"></span>
         <button data-command="bold" aria-label="Жирный"><i class="bx bx-bold"></i></button>
         <button data-command="italic" aria-label="Курсив"><i class="bx bx-italic"></i></button>
         <button data-command="underline" aria-label="Подчеркнуть"><i class="bx bx-underline"></i></button>
         <button data-command="strikeThrough" aria-label="Зачеркнуть"><i class="bx bx-strikethrough"></i></button>
-        <button data-format-block="heading" aria-label="Заголовок"><i class="bx bx-heading"></i></button>
+        <button data-action="toggle-format-menu" aria-label="Стиль абзаца" aria-haspopup="menu" aria-controls="format-menu" aria-expanded="false"><i class="bx bx-heading"></i></button>
         <button data-format-block="quote" aria-label="Цитата"><i class="bx bxs-quote-left"></i></button>
+        <span class="mobile-format-divider" aria-hidden="true"></span>
+        <button data-command="justifyLeft" aria-label="По левому краю"><i class="bx bx-align-left"></i></button>
+        <button data-command="justifyCenter" aria-label="По центру"><i class="bx bx-align-middle"></i></button>
+        <button data-command="justifyFull" aria-label="По ширине"><i class="bx bx-align-justify"></i></button>
         <button data-action="toggle-search-menu" aria-label="Поиск"><i class="bx bx-search"></i></button>
+        </div>
+        <div class="mobile-format-review review-toolbar-slot" id="mobile-review-toolbar"></div>
       </div>`;
   }
 
@@ -2170,6 +2206,7 @@ class NocturneWriter {
       lore: 'База знаний',
       ai: 'Nocturne AI',
       notes: 'Заметки',
+      bookmarks: 'Закладки',
       export: 'Экспорт / резервная копия',
       sync: 'Связь с компьютером',
     }[panel] || 'Nocturne';
@@ -2177,7 +2214,7 @@ class NocturneWriter {
 
   mobilePanelMode(panel = this.state.mobile.panel) {
     if (!panel) return 'screen';
-    if (['docs', 'more', 'settings', 'export', 'ai', 'notes', 'lore'].includes(panel)) return 'fullscreen';
+    if (['docs', 'more', 'settings', 'export', 'ai', 'notes', 'bookmarks', 'lore', 'sync'].includes(panel)) return 'fullscreen';
     return panel === 'actions' ? 'sheet' : 'screen';
   }
 
@@ -2201,6 +2238,7 @@ class NocturneWriter {
     if (panel === 'lore') return this.renderMobileKb();
     if (panel === 'ai') return this.renderMobileAi();
     if (panel === 'notes') return this.renderMobileNotes();
+    if (panel === 'bookmarks') return this.renderMobileBookmarks();
     if (panel === 'export') return this.renderMobileExport();
     if (panel === 'sync') return this.renderMobileSync();
     return '';
@@ -2212,8 +2250,9 @@ class NocturneWriter {
     return `
       ${header}
       <div class="mobile-panel-body">
-        <div class="mobile-search-field"><i class="bx bx-search"></i><input data-mobile-doc-search placeholder="Поиск глав" value="${escapeHtml(this.state.mobile.docsSearch || '')}"></div>
-        <div class="mobile-panel-actions"><button class="pill-btn ai-btn" data-action="new-doc"><i class="bx bx-plus"></i> Новая глава</button><button class="pill-btn" data-action="new-folder"><i class="bx bx-folder-plus"></i> Папка</button></div>
+        <div class="mobile-search-field"><i class="bx bx-search" aria-hidden="true"></i><input data-mobile-doc-search aria-label="Поиск глав" type="search" placeholder="Поиск глав" value="${escapeHtml(this.state.mobile.docsSearch || '')}"></div>
+        <div class="mobile-panel-actions"><button class="pill-btn ai-btn" data-action="new-doc"><i class="bx bx-plus"></i> Новая глава</button><button class="pill-btn" data-action="new-folder"><i class="bx bx-folder-plus"></i> Папка</button><button class="pill-btn" data-action="import-doc" aria-label="Импортировать текст"><i class="bx bx-import"></i> Импорт</button></div>
+        ${this.state.docs.length && !q ? '<p class="mobile-drag-hint">Удерживайте главу, чтобы изменить порядок или перенести в другую папку.</p>' : ''}
         <div class="mobile-doc-folders">
           ${this.state.folders.map((folder) => {
             const collapsed = this.state.collapsedFolders.includes(folder.id);
@@ -2223,12 +2262,12 @@ class NocturneWriter {
             if (q) docs = docs.filter((doc) => `${doc.title} ${doc.description || ''} ${doc.summary || ''}`.toLowerCase().includes(q));
             return `
               <section class="mobile-folder" data-folder-id="${escapeHtml(folder.id)}">
-                <button class="mobile-folder-head" data-action="toggle-folder" data-folder="${escapeHtml(folder.id)}">
+                <div class="mobile-folder-toolbar"><button class="mobile-folder-head" data-action="toggle-folder" data-folder="${escapeHtml(folder.id)}" aria-expanded="${!collapsed}">
                   <span><i class="bx bx-chevron-${collapsed ? 'right' : 'down'}"></i>${escapeHtml(folder.title)}</span>
                   <small>${docs.length}</small>
-                </button>
+                </button><button class="mini-icon-btn mobile-folder-menu" data-action="mobile-folder-menu" data-folder-id="${escapeHtml(folder.id)}" aria-label="Действия папки ${escapeHtml(folder.title)}" aria-haspopup="menu" aria-expanded="false"><i class="bx bx-dots-horizontal-rounded"></i></button></div>
                 <div class="mobile-folder-docs ${collapsed ? 'collapsed' : ''}">
-                  ${docs.length ? docs.map((doc) => this.mobileDocCard(doc)).join('') : `<div class="mobile-empty-card"><i class="bx bx-file-blank"></i><span>${q ? 'Совпадений нет' : 'Документов пока нет'}</span><button class="mini-text-btn" data-action="new-doc" data-folder-id="${escapeHtml(folder.id)}">Создать</button></div>`}
+                  ${docs.length ? docs.map((doc) => this.mobileDocCard(doc)).join('') : `<div class="mobile-empty-card"><i class="bx ${q ? 'bx-search' : 'bx-file-blank'}" aria-hidden="true"></i><span>${q ? 'Совпадений нет' : 'Документов пока нет'}</span>${q ? '' : `<button class="mini-text-btn" data-action="new-doc" data-folder-id="${escapeHtml(folder.id)}">Создать</button>`}</div>`}
                 </div>
               </section>`;
           }).join('')}
@@ -2274,17 +2313,24 @@ class NocturneWriter {
     return `
       ${this.mobilePanelHeader('Действия', doc?.title || 'Нет активной главы')}
       <div class="mobile-panel-body mobile-action-list">
+        <div class="mobile-segmented mobile-work-modes" aria-label="Режим работы">${[['write', 'Письмо'], ['editor', 'Редактор'], ['finalization', 'Финализация']].map(([mode, title]) => `<button data-review-mode="${mode}" class="${this.state.reviewMode === mode ? 'active' : ''}" aria-pressed="${this.state.reviewMode === mode}">${title}</button>`).join('')}</div>
         <h3>Документ</h3>
         ${item('bx-edit', 'Переименовать', 'Название и описание главы', 'edit-doc', `data-ctx-doc="${escapeHtml(doc?.id || '')}" ${disabled}`)}
         ${item('bx-plus', 'Новая глава', 'Создать новую главу', 'new-doc')}
         ${item('bx-copy', 'Дублировать', 'Копия текущей главы', 'duplicate-doc', `data-ctx-doc="${escapeHtml(doc?.id || '')}" ${disabled}`)}
         ${item('bx-camera', 'Снапшот', 'Снимок текущего состояния', 'manual-snapshot', disabled)}
-        ${item('bx-save', 'Сохранить сейчас', 'Сохранить в IndexedDB', 'mobile-save-now', disabled)}
+        ${item('bx-save', 'Сохранить сейчас', 'Сохранить изменения на устройстве', 'mobile-save-now', disabled)}
         <h3>Письмо</h3>
         ${item('bx-undo', 'Отменить', 'Отменить ввод', 'mobile-command', 'data-mobile-command="undo"')}
         ${item('bx-redo', 'Повторить', 'Повторить ввод', 'mobile-command', 'data-mobile-command="redo"')}
         ${item('bx-search', 'Поиск / замена', 'Найти и заменить текст', 'open-search-chooser')}
+        ${item('bx-bookmark', 'Закладки', 'Места, к которым хочется вернуться', 'mobile-open-bookmarks', disabled)}
         ${item('bx-target-lock', 'Фокус', 'Дзен-режим', 'toggle-zen')}
+        ${this.state.workspace?.mode === 'split' ? `
+          <h3>Открытые области</h3>
+          ${item('bx-transfer-alt', 'Другая область', escapeHtml(this.paneTitle(this.getPane(this.state.workspace.focusedPaneId === 'primary' ? 'secondary' : 'primary'))), 'mobile-switch-pane')}
+          ${item('bx-x', 'Закрыть вторую область', 'Вернуться к одному документу', 'close-secondary-pane')}
+        ` : ''}
         <h3>Проект</h3>
         ${item('bx-archive-out', 'Экспорт .nocturnedump', 'Резервная копия всего проекта', 'export-project-dump')}
         ${item('bx-archive-in', 'Импорт .nocturnedump', 'Загрузить резервную копию', 'import-project-dump')}
@@ -2297,62 +2343,84 @@ class NocturneWriter {
   }
 
   renderMobileMorePanel(options = {}) {
-    const rows = [
-      ['nocturne-sync', 'Связь с компьютером', 'Сверить главы, заметки и базу по Wi-Fi', 'open-sync-panel'],
-      ['bx-book-open', 'Собрать книгу', 'Выбранные главы в одном DOCX', 'export-book'],
-      ['bx-message-square-edit', 'Все правки', 'Нерешённые пометки во всех главах', 'open-review-queue'],
-      ['bx-archive', 'Резервные копии', 'Копии и восстановление', 'open-backups'],
-      ['bx-trash', 'Корзина', 'Восстановить удалённые главы', 'open-trash'],
-      ['bx-cog', 'Настройки', 'Визуал, редактор, AI, данные', 'mobile-open-settings'],
-      ['bx-export', 'Экспорт / импорт', '.nocturnedump, PDF, DOCX', 'mobile-open-export'],
-      ['bx-search-alt', 'Поиск / замена', 'Найти или заменить текст', 'open-search-chooser'],
-      ['bx-camera', 'Снапшоты', 'Машина времени текущей главы', 'show-history'],
-      ['bx-note', 'Заметки', 'Документные, общие и плавающие заметки', 'mobile-open-notes'],
-            ['bx-command', 'Палитра команд', 'Быстрый поиск действий', 'open-command-palette'],
-      ['bx-info-circle', 'О приложении', 'Nocturne Writer · мобильная оболочка', 'mobile-about'],
-      ['bx-reset', 'Сброс настроек UI', 'Документы не удаляются', 'reset-settings'],
+    const groups = [
+      ['Рабочее пространство', [
+        ['bx-cog', 'Настройки', 'Оформление, письмо и данные', 'mobile-open-settings'],
+        ['bx-note', 'Заметки', 'Идеи к главе и общие записи', 'mobile-open-notes'],
+        ['nocturne-sync', 'Связь с компьютером', 'Продолжить работу на другом устройстве', 'open-sync-panel'],
+      ]],
+      ['Проект и сохранение', [
+        ['bx-export', 'Экспорт / импорт', 'Текст, PDF, DOCX и проект целиком', 'mobile-open-export'],
+        ['bx-book-open', 'Собрать книгу', 'Объединить выбранные главы', 'export-book'],
+        ['bx-archive', 'Резервные копии', 'Сохранить или восстановить проект', 'open-backups'],
+        ['bx-camera', 'История главы', 'Вернуться к предыдущему тексту', 'show-history'],
+        ['bx-trash', 'Корзина', 'Восстановить удалённые главы', 'open-trash'],
+      ]],
+      ['Работа с текстом', [
+        ['bx-search-alt', 'Поиск / замена', 'В главе или во всём проекте', 'open-search-chooser'],
+        ['bx-message-square-edit', 'Все правки', 'Пометки во всех главах', 'open-review-queue'],
+        ['bx-search', 'Поиск команд', 'Все действия приложения', 'open-command-palette'],
+      ]],
+      ['Приложение', [
+        ['bx-info-circle', 'О Nocturne', 'Версия и сведения', 'mobile-about'],
+        ['bx-reset', 'Сбросить настройки', 'Вернуть исходное оформление', 'reset-settings'],
+      ]],
     ];
     return `
-      ${options.asTab ? this.mobileTabHeader('Ещё', 'Главное мобильное меню') : this.mobilePanelHeader('Ещё', 'Главное мобильное меню')}
-      <div class="mobile-panel-body mobile-action-list">
-        ${rows.map(([icon, title, subtitle, action]) => `
-          <button class="mobile-action-row" data-action="${action}">
-            <span class="mobile-action-icon">${icon === 'nocturne-sync' ? iconSvg('sync', 'mobile-action-svg') : `<i class="bx ${icon}"></i>`}</span><span><strong>${title}</strong><small>${subtitle}</small></span>
-          </button>`).join('')}
+      ${options.asTab ? this.mobileTabHeader('Ещё', 'Ваш проект и инструменты') : this.mobilePanelHeader('Ещё', 'Ваш проект и инструменты')}
+      <div class="mobile-panel-body mobile-menu-groups">
+        ${groups.map(([title, rows]) => `<section class="mobile-menu-group"><h3>${title}</h3>${rows.map(row => this.mobileMenuRow(...row)).join('')}</section>`).join('')}
       </div>`;
+  }
+
+  mobileMenuRow(icon, title, subtitle, action, extra = '') {
+    return `<button class="mobile-action-row" ${action ? `data-action="${action}"` : ''} ${extra}>
+      <span class="mobile-action-icon">${icon === 'nocturne-sync' ? iconSvg('sync', 'mobile-action-svg') : icon === 'nocturne-ai' ? aiIcon('mobile-action-svg') : `<i class="bx ${icon}" aria-hidden="true"></i>`}</span>
+      <span class="mobile-action-copy"><strong>${escapeHtml(title)}</strong>${subtitle ? `<small>${escapeHtml(subtitle)}</small>` : ''}</span>
+      <i class="bx bx-chevron-right mobile-row-chevron" aria-hidden="true"></i>
+    </button>`;
   }
 
   renderMobileSettings() {
     const tabs = [
-      ['visual', 'bx-palette', 'Визуал и UI'],
-      ['editor', 'bx-text', 'Редактор'],
-      ['dictionary', 'bx-book-content', 'Словарь'],
-      ['review', 'bx-edit-alt', 'Редактура'],
-      ['focus', 'bx-target-lock', 'Фокус'],
-      ['ai', 'bx-bot', 'AI'],
-      ['data', 'bx-shield-quarter', 'Данные'],
-            ['export', 'bx-export', 'Экспорт'],
-      ['misc', 'bx-slider-alt', 'Прочее'],
+      ['visual', 'bx-palette', 'Оформление', 'Темы, акцент и каретка'],
+      ['editor', 'bx-text', 'Рукопись', 'Шрифт, интервалы и типографика'],
+      ['focus', 'bx-target-lock', 'Концентрация', 'Дзен, страницы и фокус на тексте'],
+      ['review', 'bx-edit-alt', 'Редактура', 'Пометки и проверка рукописи'],
+      ['dictionary', 'bx-book-content', 'Словарь', 'Исключения и исправления'],
+      ['macros', 'bx-keyboard', 'Макросы', 'Свои текстовые сокращения'],
+      ['formatting', 'bx-list-check', 'Автозамена', 'Правила автоматического оформления'],
+      ['ai', 'nocturne-ai', 'Ассистент', 'Модели, персоны и контекст мира'],
+      ['data', 'bx-shield-quarter', 'Сохранение и защита', 'Копии, история и шифрование'],
+      ['export', 'bx-export', 'Экспорт', 'Параметры PDF и DOCX'],
+      ['misc', 'bx-slider-alt', 'Дополнительно', 'Цель дня, спринты и поведение'],
     ];
     const active = this.state.mobile.settingsTab;
     if (!active) {
       return `
         ${this.mobilePanelHeader('Настройки', 'Выберите раздел')}
-        <div class="mobile-panel-body mobile-action-list">
-          ${tabs.map(([id, icon, label]) => `<button class="mobile-action-row" data-mobile-settings-tab="${id}"><span class="mobile-action-icon">${id === 'ai' ? aiIcon('mobile-action-svg') : icon === 'nocturne-sync' ? iconSvg('sync', 'mobile-action-svg') : `<i class="bx ${icon}"></i>`}</span><span><strong>${label}</strong><small>Открыть настройки раздела</small></span></button>`).join('')}
+        <div class="mobile-panel-body mobile-menu-groups">
+          ${tabs.map(([id, icon, label, note]) => this.mobileMenuRow(icon, label, note, '', `data-mobile-settings-tab="${id}"`)).join('')}
         </div>`;
     }
     const label = tabs.find(([id]) => id === active)?.[2] || 'Настройки';
-    const row = (name, note, control) => `<div class="setting-row"><div class="setting-info"><span>${name}</span>${note ? `<small>${note}</small>` : ''}</div><div class="setting-control">${control}</div></div>`;
-    const toggle = (key) => `<div class="toggle ${this.state.settings[key] ? 'on' : ''}" data-setting="${key}" data-kind="toggle"></div>`;
-    const input = (key, type = 'text') => `<input class="form-control" type="${type}" value="${escapeHtml(this.state.settings[key] || '')}" data-setting="${key}">`;
+    const content = document.createElement('template');
+    content.innerHTML = this.settingsContent(active).replace('tab-content active', 'tab-content active mobile-settings-tab-content');
+    content.content.querySelectorAll('[id]').forEach(element => { element.dataset.settingsId = element.id; element.id = `mobile-settings-${element.id}`; });
+    const macroKeys = content.content.querySelector('[data-settings-id="new-macro-keys"]');
+    if (macroKeys) { macroKeys.removeAttribute('readonly'); macroKeys.placeholder = 'Например, Ctrl + Alt + G'; macroKeys.setAttribute('autocapitalize', 'off'); macroKeys.spellcheck = false; }
+    content.content.querySelectorAll('[for], [aria-controls], [aria-labelledby], [aria-describedby]').forEach(element => {
+      for (const attribute of ['for', 'aria-controls', 'aria-labelledby', 'aria-describedby']) {
+        if (element.hasAttribute(attribute)) element.setAttribute(attribute, element.getAttribute(attribute).split(/\s+/).map(id => `mobile-settings-${id}`).join(' '));
+      }
+    });
     return `
       <header class="mobile-panel-header">
         <button class="mobile-icon-btn" data-action="mobile-settings-back" aria-label="Назад"><i class="bx bx-left-arrow-alt"></i></button>
         <div><h2>${escapeHtml(label)}</h2><p>Настройки применяются сразу</p></div>
         <button class="mobile-icon-btn" data-action="mobile-close-all" aria-label="Закрыть"><i class="bx bx-x"></i></button>
       </header>
-      <div class="mobile-panel-body mobile-settings-content">${this.settingsContent(active).replace('tab-content active', 'tab-content active mobile-settings-tab-content')}</div>`;
+      <div class="mobile-panel-body mobile-settings-content">${content.innerHTML}</div>`;
   }
 
   renderMobileKb(options = {}) {
@@ -2365,13 +2433,14 @@ class NocturneWriter {
     const chars = [...this.state.lore.characters].sort((a, b) => a.order - b.order).filter(filter);
     const locs = [...this.state.lore.locations].sort((a, b) => a.order - b.order).filter(filter);
     const time = [...this.state.lore.timeline].sort((a, b) => (a.order - b.order) || parseTimelineRank(a.date) - parseTimelineRank(b.date)).filter(filter);
-    const notes = [...(this.state.lore.notes || [])].sort((a, b) => a.order - b.order).filter(filter);
-    const list = active === 'characters'
+    const notes = [...(this.state.lore.notes || [])].sort((a, b) => Number(!!a.completed) - Number(!!b.completed) || a.order - b.order).filter(filter);
+    let list = active === 'characters'
       ? (chars.length ? chars.map((item, index) => this.mobileLoreCard('characters', item, index, chars.length)).join('') : this.emptyStateMarkup('bx-user-pin', 'Персонажей пока нет.', 'Создайте первый профиль.', 'new-lore', 'Создать', 'data-lore-type="characters"'))
       : active === 'locations'
         ? (locs.length ? locs.map((item, index) => this.mobileLoreCard('locations', item, index, locs.length)).join('') : this.emptyStateMarkup('bx-map-alt', 'Локаций пока нет.', 'Добавьте место.', 'new-lore', 'Добавить', 'data-lore-type="locations"'))
         : active === 'notes' ? (notes.length ? notes.map(item => this.mobileLoreCard('notes', item)).join('') : this.emptyStateMarkup('bx-note', 'Записей пока нет.', 'Сохраните идеи для своего мира.', 'new-lore', 'Добавить', 'data-lore-type="notes"'))
           : (time.length ? time.map((item, i, arr) => this.timelineCard(item, { isLast: i === arr.length - 1, draggable: true })).join('') : this.emptyStateMarkup('bx-git-commit', 'Таймлайн пуст.', 'Добавьте событие.', 'new-lore', 'Добавить', 'data-lore-type="timeline"'));
+    if (q && !({ characters: chars, locations: locs, notes, timeline: time }[active]?.length)) list = this.emptyStateMarkup('bx-search', 'Совпадений нет', 'Попробуйте другое имя или очистите поиск.');
     const zone = active === 'timeline' ? 'timeline' : active;
     return `
       ${options.asTab ? this.mobileTabHeader('База знаний', 'Персонажи, локации и таймлайн') : this.mobilePanelHeader('База знаний', 'Персонажи, локации и таймлайн')}
@@ -2405,7 +2474,7 @@ class NocturneWriter {
           ${[['characters', 'Персонажи'], ['locations', 'Локации'], ['timeline', 'Таймлайн'], ['notes', 'Записи']].map(([id, label]) => `<button class="${active === id ? 'active' : ''}" data-mobile-kb-tab="${id}">${label}</button>`).join('')}
         </div>
         ${this.kbViewTools()}
-        <div class="mobile-search-field"><i class="bx bx-search"></i><input data-mobile-lore-search placeholder="Поиск в базе" value="${escapeHtml(this.state.mobile.loreSearch || '')}"></div>
+        <div class="mobile-search-field"><i class="bx bx-search" aria-hidden="true"></i><input data-mobile-lore-search aria-label="Поиск в базе знаний" type="search" placeholder="Поиск в базе" value="${escapeHtml(this.state.mobile.loreSearch || '')}"></div>
         <div class="mobile-panel-actions"><button class="pill-btn ai-btn" data-action="new-lore" data-lore-type="${active}"><i class="bx bx-plus"></i> Добавить</button><span class="mobile-drag-hint"><i class="bx bx-grid-vertical"></i> Удерживайте карточку, чтобы перенести</span></div>
         <div class="mobile-kb-list ${active === 'timeline' ? 'timeline-container timeline-mobile-list' : ''}" data-dnd-zone="${escapeHtml(zone)}">${list}</div>
       </div>`;
@@ -2416,7 +2485,9 @@ class NocturneWriter {
     const surface = document.querySelector('#mobile-tab-surface[data-mobile-tab="lore"] .mobile-tab-content, #mobile-panel .mobile-tab-content, #mobile-panel');
     if (!surface) return false;
     surface.classList.add('mobile-kb-switching');
-    this.updateSurfaceHTML(surface, this.renderMobileKb({ asTab: !!document.querySelector('#mobile-tab-surface[data-mobile-tab="lore"]') }), { key: this.state.activeLoreId });
+    const asTab = !!document.querySelector('#mobile-tab-surface[data-mobile-tab="lore"]');
+    const scrollRoot = asTab ? document.getElementById('mobile-tab-surface') : surface;
+    this.preserveMobileViewScroll(scrollRoot, this.mobileViewScrollKey('lore'), () => this.updateSurfaceHTML(surface, this.renderMobileKb({ asTab }), { key: this.state.activeLoreId }));
     requestAnimationFrame(() => surface.classList.remove('mobile-kb-switching'));
     this.setupMobileKbSortables();
     return true;
@@ -2426,16 +2497,17 @@ class NocturneWriter {
     const isTimeline = type === 'timeline';
     const title = isTimeline ? (item.title || 'Событие') : this.entityDisplayName(item);
     const subtitle = isTimeline ? [item.date, item.body].filter(Boolean).join(' · ') : (item.role || item.body || 'Карточка базы знаний');
-    const icon = isTimeline ? 'bx-git-commit' : type === 'locations' ? (item.icon || 'bx-map-alt') : (item.icon || 'bx-user');
+    const icon = isTimeline ? 'bx-git-commit' : type === 'notes' ? 'bx-note' : type === 'locations' ? (item.icon || 'bx-map-alt') : (item.icon || 'bx-user');
     const sub = isTimeline && item.subEvents?.length ? `<button class="mini-text-btn" data-action="open-subtimeline" data-parent-id="${escapeHtml(item.id)}">Сабтаймлайн · ${item.subEvents.length}</button>` : '';
     return `
-      <article class="mobile-lore-card ${isTimeline ? 'mobile-timeline-card' : ''}" data-lore-type="${escapeHtml(type)}" data-lore-id="${escapeHtml(item.id)}">
+      <article class="mobile-lore-card ${isTimeline ? 'mobile-timeline-card' : ''} ${type === 'notes' && item.completed ? 'note-card-completed' : ''}" data-lore-type="${escapeHtml(type)}" data-lore-id="${escapeHtml(item.id)}">
         <div class="mobile-lore-main" role="button" tabindex="0" data-lore-type="${escapeHtml(type)}" data-lore-id="${escapeHtml(item.id)}">
           <span class="mobile-lore-icon"><i class="bx ${escapeHtml(icon)}"></i></span>
           <span><strong>${escapeHtml(title || 'Без названия')}</strong><small>${escapeHtml(subtitle || '')}</small></span>
         </div>
         <div class="mobile-lore-actions">
           ${sub}
+          ${type === 'notes' ? `<button class="mini-icon-btn ${item.completed ? 'active' : ''}" data-action="toggle-note-completed" data-lore-id="${escapeHtml(item.id)}" aria-label="${item.completed ? 'Вернуть запись в работу' : 'Отметить запись исполненной'}" aria-pressed="${!!item.completed}"><i class="bx ${item.completed ? 'bx-check-double' : 'bx-check'}"></i></button>` : ''}
           <button class="mini-icon-btn" data-action="edit-lore" data-lore-type="${escapeHtml(type)}" data-lore-id="${escapeHtml(item.id)}" aria-label="Редактировать"><i class="bx bx-pencil"></i></button>
         </div>
       </article>`;
@@ -2453,12 +2525,12 @@ class NocturneWriter {
     const title = item.title || this.entityDisplayName(item) || defTitle;
     return `
       <header class="mobile-panel-header">
-        <button class="mobile-icon-btn" data-action="mobile-lore-back" aria-label="Назад"><i class="bx bx-left-arrow-alt"></i></button>
+        <button class="mobile-icon-btn" data-action="${this.state.kbReadMode ? 'toggle-note-read-mode' : 'mobile-lore-back'}" aria-label="${this.state.kbReadMode ? 'Вернуться к досье' : 'Назад'}"><i class="bx bx-left-arrow-alt"></i></button>
         <div><h2>${escapeHtml(title)}</h2><p>${defSub}</p></div>
         <button class="mobile-icon-btn" data-action="mobile-close-all" aria-label="Закрыть"><i class="bx bx-x"></i></button>
       </header>
       <div class="mobile-panel-body mobile-lore-detail">
-        ${this.renderLoreDetail(type, item)}
+        ${this.renderLoreDetail(type, item, this.state.kbReadMode)}
       </div>`;
   }
 
@@ -2480,18 +2552,29 @@ class NocturneWriter {
   }
 
   renderMobileAi(options = {}) {
+    const doc = this.getFocusedDoc();
+    const providerProblem = this.assistantProviderProblem();
+    const cloudDisabled = !doc || doc.locked || !!providerProblem ? 'disabled' : '';
     return `
-      ${options.asTab ? this.mobileTabHeader('Nocturne AI', this.assistantProviderProblem() || 'Проверка, продолжение и стиль') : this.mobilePanelHeader('Nocturne AI', this.assistantProviderProblem() || 'Проверка, продолжение и стиль')}
+      ${options.asTab ? this.mobileTabHeader('Ассистент', doc?.title || 'Инструменты для вашей рукописи') : this.mobilePanelHeader('Ассистент', doc?.title || 'Инструменты для вашей рукописи')}
       <div class="mobile-panel-body">
-        <section class="mobile-ai-hero">${aiIcon('mobile-ai-hero-icon')}<div><strong>Ассистент Nocturne</strong><span>Локальные действия и контекст базы знаний</span></div></section>
+        ${!doc ? `<section class="mobile-ai-setup"><i class="bx bx-file"></i><div><strong>Откройте главу</strong><p>Ассистент работает с открытым текстом и вашим миром.</p><button class="pill-btn ai-btn" data-action="mobile-open-docs">Выбрать главу</button></div></section>` : providerProblem ? `<section class="mobile-ai-setup">${aiIcon('mobile-action-svg')}<div><strong>Подключите модель</strong><p>Выберите AI-провайдера в настройках, чтобы проверять и дополнять рукопись.</p><button class="pill-btn ai-btn" data-action="mobile-open-ai-settings"><i class="bx bx-cog"></i> Настроить ассистента</button></div></section>` : ''}
+        <h3 class="mobile-ai-section-title">Проверка текста</h3>
         <div class="mobile-ai-grid">
-          <button class="ai-card ai-card-primary" data-ai="proofread"><h4><i class="bx bx-check-shield"></i> Корректура</h4><p>Проверить текущий документ.</p></button>
-          <button class="ai-card ai-card-primary" data-ai="lore-check"><h4><i class="bx bx-shield-quarter"></i> Проверка лора</h4><p>Сверить с базой знаний.</p></button>
-          <button class="ai-card ai-card-secondary" data-ai="continue"><h4><i class="bx bx-brain"></i> Продолжить сцену</h4><p>Продолжить сцену у каретки.</p></button>
-          <button class="ai-card ai-card-secondary" data-ai="style"><h4><i class="bx bx-brush"></i> Улучшить стиль</h4><p>Улучшить выделение или абзац.</p></button>
+          <button class="ai-card ai-card-primary" data-ai="proofread" ${cloudDisabled}><h4><i class="bx bx-check-shield"></i> Корректура</h4><p>Ошибки и неточные формулировки</p></button>
+          <button class="ai-card ai-card-primary" data-ai="lore-check" ${cloudDisabled}><h4><i class="bx bx-shield-quarter"></i> Проверка лора</h4><p>Согласованность с вашим миром</p></button>
         </div>
+        <h3 class="mobile-ai-section-title">Работа над сценой</h3>
+        <div class="mobile-ai-grid">
+          <button class="ai-card ai-card-secondary" data-ai="continue" ${cloudDisabled}><h4><i class="bx bx-brain"></i> Продолжить</h4><p>С места, где стоит каретка</p></button>
+          <button class="ai-card ai-card-secondary" data-ai="style" ${cloudDisabled}><h4><i class="bx bx-brush"></i> Улучшить стиль</h4><p>Выделение или текущий абзац</p></button>
+        </div>
+        <h3 class="mobile-ai-section-title">Анализ на устройстве</h3>
+        <button class="mobile-action-row" data-ai="sentiment" ${doc && !doc.locked ? '' : 'disabled'}><span class="mobile-action-icon"><i class="bx bx-line-chart"></i></span><span class="mobile-action-copy"><strong>Тональность сцены</strong><small>Эмоциональный ритм текста · без AI-модели</small></span><i class="bx bx-chevron-right mobile-row-chevron"></i></button>
+        <canvas class="sentiment-graph mobile-sentiment" data-mobile-sentiment width="360" height="72" aria-label="График эмоционального ритма сцены" ${this.mobileSentimentVisible || this.state.settings.sentimentTimeline ? '' : 'hidden'}></canvas>
         <section class="ai-context-box">
           <div class="ai-context-head"><div><strong>Контекст базы знаний</strong><span>Без вставки в документ</span></div><div class="toggle ${this.state.settings.aiKnowledgeContext ? 'on' : ''}" data-setting="aiKnowledgeContext" data-kind="toggle"></div></div>
+          <div class="ai-context-toggles">${[['aiContextCharacters', 'Персонажи'], ['aiContextLocations', 'Локации'], ['aiContextTimeline', 'Таймлайн'], ['aiContextSubtimelines', 'Подсобытия'], ['aiContextNotes', 'Записи']].map(([key, label]) => `<button class="context-chip ${this.state.settings[key] ? 'active' : ''}" data-setting="${key}" data-kind="toggle" aria-pressed="${!!this.state.settings[key]}">${label}</button>`).join('')}</div>
           <button class="pill-btn" data-action="preview-ai-context"><i class="bx bx-show"></i> Предпросмотр контекста</button>
           <button class="pill-btn" data-action="mobile-open-ai-settings"><i class="bx bx-cog"></i> Настройки AI</button>
         </section>
@@ -2501,24 +2584,50 @@ class NocturneWriter {
   }
 
   renderMobileNotes() {
-    const mode = this.state.mobile.notesMode || this.state.noteMode || 'document';
     const doc = this.getFocusedDoc();
+    const mode = doc ? (this.state.mobile.notesMode || this.state.noteMode || 'document') : 'global';
+    this.state.mobile.notesMode = mode;
     const text = mode === 'global' ? this.state.globalNotes : (doc?.notes || '');
+    const disabled = mode === 'document' && (!doc || doc.locked) ? 'disabled' : '';
     return `
       ${this.mobilePanelHeader('Заметки', doc?.title || 'Общие записи')}
       <div class="mobile-panel-body mobile-notes-body">
         <div class="mobile-notes-toolbar">
           <div class="mobile-segmented">
-            <button class="${mode === 'document' ? 'active' : ''}" data-mobile-notes-mode="document">Документ</button>
-            <button class="${mode === 'global' ? 'active' : ''}" data-mobile-notes-mode="global">Общие</button>
+            <button class="${mode === 'document' ? 'active' : ''}" data-mobile-notes-mode="document" aria-pressed="${mode === 'document'}" ${doc ? '' : 'disabled'}>Документ</button>
+            <button class="${mode === 'global' ? 'active' : ''}" data-mobile-notes-mode="global" aria-pressed="${mode === 'global'}">Общие</button>
           </div>
           <div class="mobile-panel-actions mobile-notes-actions">
-            <button class="pill-btn ai-btn" data-action="mobile-save-notes"><i class="bx bx-save"></i> Сохранить</button>
+            <button class="pill-btn ai-btn" data-action="mobile-save-notes" ${disabled}><i class="bx bx-save"></i> Сохранить</button>
             <button class="pill-btn" data-action="open-floating-notes-manager"><i class="bx bx-list-ul"></i> Все окна</button>
             <button class="pill-btn" data-action="new-floating-note"><i class="bx bx-note"></i> Новая</button>
           </div>
         </div>
-        <textarea class="mobile-notes-editor form-control" data-mobile-notes-input placeholder="Заметки...">${escapeHtml(text)}</textarea>
+        <textarea class="mobile-notes-editor form-control" data-mobile-notes-input aria-label="${mode === 'global' ? 'Общие заметки' : 'Заметки к документу'}" placeholder="Заметки..." ${disabled}>${escapeHtml(text)}</textarea>
+        <div class="mobile-notes-format" role="toolbar" aria-label="Оформление заметок">
+          <button class="tool-btn" data-action="mobile-note-tool" data-note-tool="heading" aria-label="Добавить заголовок" ${disabled}><i class="bx bx-heading"></i></button>
+          <button class="tool-btn" data-action="mobile-note-tool" data-note-tool="checklist" aria-label="Добавить пункт списка" ${disabled}><i class="bx bx-list-check"></i></button>
+          <button class="tool-btn" data-action="mobile-note-tool" data-note-tool="toggle" aria-label="Отметить текущий пункт" ${disabled}><i class="bx bx-check"></i></button>
+          <button class="tool-btn" data-action="mobile-note-tool" data-note-tool="divider" aria-label="Добавить разделитель" ${disabled}><i class="bx bx-minus"></i></button>
+        </div>
+      </div>`;
+  }
+
+  renderMobileBookmarks() {
+    const paneId = this.state.workspace.focusedPaneId;
+    const pane = this.getFocusedPane();
+    const doc = this.getFocusedDoc();
+    const source = doc || (this.state.lore.notes || []).find(note => pane?.type === 'note-detail' && note.id === pane.entityId);
+    const bookmarks = [...(source?.bookmarks || [])];
+    const blocks = new Map((doc?.ast?.blocks || []).map((block, index) => [block.id, index]));
+    bookmarks.sort(this.state.settings.bookmarkBehavior === 'time' ? (a, b) => a.createdAt - b.createdAt : (a, b) => (blocks.get(a.start?.blockId) ?? 0) - (blocks.get(b.start?.blockId) ?? 0) || (a.start?.offset ?? a.offset ?? 0) - (b.start?.offset ?? b.offset ?? 0));
+    return `${this.mobilePanelHeader('Закладки', source?.title || 'Текущий текст')}
+      <div class="mobile-panel-body">
+        <button class="pill-btn ai-btn" data-action="mobile-add-bookmark" ${source ? '' : 'disabled'}><i class="bx bx-plus"></i> В текущем месте</button>
+        <div class="mobile-bookmarks-list">${bookmarks.length ? bookmarks.map((bookmark, index) => `<div class="mobile-bookmark-row">
+          <button data-action="mobile-jump-bookmark" data-bookmark-id="${escapeHtml(bookmark.id)}" data-bookmark-pane="${escapeHtml(paneId)}"><i class="bx bx-bookmark" aria-hidden="true"></i><span><small>Закладка ${index + 1}</small><strong>${escapeHtml(bookmark.quote || 'Место в тексте')}</strong></span></button>
+          <button class="mini-icon-btn" data-action="mobile-delete-bookmark" data-bookmark-id="${escapeHtml(bookmark.id)}" aria-label="Удалить закладку ${index + 1}"><i class="bx bx-trash"></i></button>
+        </div>`).join('') : this.emptyStateMarkup('bx-bookmark', 'Сохраните место в тексте', 'Закладка поможет быстро вернуться к нужной сцене.')}</div>
       </div>`;
   }
 
@@ -2532,7 +2641,7 @@ class NocturneWriter {
   }
 
   async applyAndroidSystemBars() {
-    return configureNativeBars();
+    return configureNativeBars({ light: this.state.settings.theme === 'paper', color: getComputedStyle(document.querySelector('.mobile-topbar') || document.body).backgroundColor });
   }
 
   startMobileSystemBar() {
@@ -3185,6 +3294,11 @@ class NocturneWriter {
       <div class="floating-notes-layer" id="floating-notes-layer"></div>
       <div class="floating-notes-modal" id="floating-notes-modal"></div>
       <div class="floating-menu-portal" id="floating-menu-portal" aria-hidden="true">
+        <div class="dropdown-menu popover-surface portal-floating-menu library-menu" id="mobile-folder-menu" data-floating-menu="folder" role="menu" aria-label="Действия папки" aria-hidden="true"></div>
+        <div class="dropdown-menu popover-surface portal-floating-menu library-menu empty-project-menu" id="empty-project-menu" data-floating-menu="empty" role="menu" aria-label="Другие способы начать" aria-hidden="true">
+          <button class="floating-menu-item" type="button" role="menuitem" data-action="import-doc"><i class="bx bx-import" aria-hidden="true"></i><span>Импорт текста</span></button>
+          <button class="floating-menu-item" type="button" role="menuitem" data-action="import-project-dump"><i class="bx bx-archive-in" aria-hidden="true"></i><span>Восстановить проект</span></button>
+        </div>
         <div class="dropdown-menu popover-surface portal-floating-menu library-menu" id="library-menu" data-floating-menu="library" role="menu" aria-label="Инструменты рукописи" aria-hidden="true">
           ${[['export-book', 'bx-book-open', 'Экспорт книги'], ['open-review-queue', 'bx-message-square-edit', 'Все правки'], ['open-backups', 'bx-archive', 'Резервные копии'], ['open-trash', 'bx-trash', 'Корзина'], ['manual-snapshot', 'bx-camera', 'Сохранить версию'], ['open-command-palette', 'bx-command', 'Палитра команд']].map(([action, icon, label]) => `<button class="floating-menu-item" role="menuitem" data-action="${action}"><i class="bx ${icon}"></i><span>${label}</span></button>`).join('')}
         </div>
@@ -3328,8 +3442,29 @@ class NocturneWriter {
     this.renderMobileShell();
   }
 
+  mobileViewScrollKey(tab) {
+    return tab === 'lore' ? `lore:${this.state.activeLoreId}:${this.state.mobile.kbTab}:${this.state.activeLoreDetail?.id || ''}:${this.state.activeSubtimelineId || ''}:${this.state.mobile.loreSearch || ''}` : `${tab}:${tab === 'docs' ? this.state.mobile.docsSearch || '' : ''}`;
+  }
+
+  preserveMobileViewScroll(root, view, update) {
+    if (!root) return update();
+    const changed = root.__mobileScrollView !== view;
+    this.mobileViewScrollPositions ||= new Map();
+    if (changed && root.__mobileScrollView) this.mobileViewScrollPositions.set(root.__mobileScrollView, root.querySelector('.mobile-panel-body')?.scrollTop || 0);
+    update();
+    if (changed) {
+      root.__mobileScrollView = view;
+      const body = root.querySelector('.mobile-panel-body');
+      if (body) body.scrollTop = this.mobileViewScrollPositions.get(view) || 0;
+    }
+  }
+
   renderMobileShell() {
     this.updateRuntimeClasses();
+    if (this.isMobileLayout() && this.macroRecordingState && (this.state.mobile.panel !== 'settings' || this.state.mobile.settingsTab !== 'macros')) {
+      this.macroRecordingState = false;
+      this.recordedHeldKeys?.clear();
+    }
     const activeMobileField = document.activeElement?.matches?.('[data-mobile-doc-search], [data-mobile-lore-search], [data-mobile-notes-input]')
       ? {
         selector: document.activeElement.matches('[data-mobile-doc-search]') ? '[data-mobile-doc-search]' : document.activeElement.matches('[data-mobile-lore-search]') ? '[data-mobile-lore-search]' : '[data-mobile-notes-input]',
@@ -3349,7 +3484,8 @@ class NocturneWriter {
     const tabSurface = document.getElementById('mobile-tab-surface');
     const nextTabSurface = this.renderMobileTabSurface();
     if (tabSurface && tabSurface.outerHTML !== nextTabSurface) {
-      this.updateSurfaceRoot(tabSurface, nextTabSurface);
+      this.preserveMobileViewScroll(tabSurface, this.mobileViewScrollKey(this.state.mobile.activeTab), () => this.updateSurfaceRoot(tabSurface, nextTabSurface));
+      this.setupMobileDocSortables();
       this.setupMobileKbSortables();
     }
     const overlay = document.getElementById('mobile-overlay');
@@ -3364,12 +3500,28 @@ class NocturneWriter {
         panel.classList.remove('mobile-panel-screen', 'mobile-panel-sheet', 'mobile-panel-fullscreen');
         panel.classList.add(`mobile-panel-${panelMode}`);
         if (this.state.mobile.panel === 'sync' && panel.querySelector('.mobile-sync-body')) this.renderMobileSyncSurface(panel);
-        else if (this.state.mobile.panel) { this.updateSurfaceHTML(panel, this.renderMobilePanel(), { key: `${this.state.mobile.panel}:${this.state.mobile.settingsTab || ''}:${this.state.activeLoreDetail?.id || ''}:${this.state.activeSubtimelineId || ''}` }); panel.__syncMarkup = null; }
+        else if (this.state.mobile.panel) {
+          const view = `${this.state.mobile.panel}:${this.state.mobile.settingsTab || ''}:${this.state.activeLoreDetail?.id || ''}:${this.state.activeSubtimelineId || ''}`;
+          const viewChanged = panel.__motionView !== view;
+          this.mobilePanelScrollPositions ||= new Map();
+          if (viewChanged && panel.__motionView) this.mobilePanelScrollPositions.set(panel.__motionView, panel.querySelector('.mobile-panel-body')?.scrollTop || 0);
+          this.updateSurfaceHTML(panel, this.renderMobilePanel(), { key: view });
+          if (viewChanged) {
+            const body = panel.querySelector('.mobile-panel-body');
+            if (body) body.scrollTop = this.mobilePanelScrollPositions.get(view) || 0;
+          }
+          panel.__syncMarkup = null;
+        }
+        this.setupMobileDocSortables();
         this.setupMobileKbSortables();
       }
     }
     this.renderMobileTopbarStatus();
     this.updateRangeControls();
+    if (this.state.mobile.activeTab === 'ai' || this.state.mobile.panel === 'ai') {
+      this.updateAssistantPanelState();
+      if (this.mobileSentimentVisible || this.state.settings.sentimentTimeline) this.drawSentiment(true);
+    }
     if (activeMobileField) {
       requestAnimationFrame(() => {
         const field = document.querySelector(activeMobileField.selector);
@@ -3408,7 +3560,7 @@ class NocturneWriter {
   }
 
   pushMobileRoute(route = this.mobileRouteSnapshot()) {
-    if (!route.panel && !route.activeLoreDetail && !route.activeSubtimelineId && !route.settingsTab) return;
+    if (!route.panel && !route.activeLoreDetail && !route.activeSubtimelineId && !route.settingsTab && (!route.activeTab || route.activeTab === 'write')) return;
     const stack = Array.isArray(this.state.mobile.routeStack) ? this.state.mobile.routeStack : [];
     const last = stack.at(-1);
     if (last && JSON.stringify(last) === JSON.stringify(route)) return;
@@ -3419,6 +3571,8 @@ class NocturneWriter {
   switchMobileTab(tab = 'write', options = {}) {
     const valid = ['write', 'docs', 'lore', 'ai', 'more'];
     if (!valid.includes(tab)) return;
+    this.blurMobileEditorFocus();
+    this.clearMobileEditorSelection({ keepNative: false });
     if (tab === 'lore') this.captureManuscriptPosition();
     const current = this.state.mobile.activeTab || 'write';
     const order = new Map(valid.map((item, index) => [item, index]));
@@ -3441,12 +3595,14 @@ class NocturneWriter {
     const { replace = false, resetDetail = true } = options;
     if (replace) this.state.mobile.routeStack = [];
     else this.pushMobileRoute();
+    this.blurMobileEditorFocus();
     this.state.mobile.previousPanel = this.state.mobile.panel;
     this.state.mobile.panel = panelName;
     this.state.mobile.panelMode = this.mobilePanelMode(panelName);
     if (activeTab) this.state.mobile.activeTab = activeTab;
     else if (['docs', 'lore', 'ai', 'more'].includes(panelName)) this.state.mobile.activeTab = panelName === 'lore' ? 'lore' : panelName;
-    if (resetDetail && panelName !== 'settings') this.state.mobile.settingsTab = null;
+    if (options.settingsTab !== undefined) this.state.mobile.settingsTab = options.settingsTab;
+    else if (resetDetail) this.state.mobile.settingsTab = null;
     if (resetDetail && panelName !== 'lore') {
       this.state.activeLoreDetail = null;
       this.state.activeSubtimelineId = null;
@@ -3492,6 +3648,11 @@ class NocturneWriter {
       this.renderMobileShell();
       return true;
     }
+    if (this.state.activeLoreDetail && this.state.kbReadMode) {
+      this.state.kbReadMode = false;
+      this.renderMobileShell();
+      return true;
+    }
     if (this.state.activeLoreDetail) {
       this.state.activeLoreDetail = null;
       this.renderMobileShell();
@@ -3518,7 +3679,8 @@ class NocturneWriter {
     document.addEventListener('pointerdown', (event) => this.handleMobileEditorSelectionPointerDown(event), { capture: true, passive: false });
     document.addEventListener('pointermove', (event) => this.handleMobileEditorSelectionPointerMove(event), { capture: true, passive: false });
     document.addEventListener('pointerup', (event) => this.handleMobileEditorSelectionPointerUp(event), true);
-    document.addEventListener('touchstart', (event) => this.handleFormatBarPress(event), { capture: true, passive: false });
+    document.addEventListener('pointercancel', () => { this.handleMobileEditorSelectionPointerUp(); this.mobileFormatAction = null; }, true);
+    document.addEventListener('pointerdown', (event) => this.handleFormatBarPress(event), { capture: true, passive: false });
     document.addEventListener('pointerup', (event) => this.handleFormatBarPointerUp(event), true);
     document.addEventListener('pointerup', (event) => this.handleDocPointerUpCapture(event), true);
     document.addEventListener('beforeinput', (event) => this.handleBeforeInput(event));
@@ -3592,7 +3754,7 @@ class NocturneWriter {
         });
       }
     });
-    window.addEventListener('visibilitychange', () => {
+    document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') {
         Object.values(this.state.workspace?.panes || {}).forEach((pane) => {
           if (pane.type === 'document' && pane.docId) this.writeLiveDraft(pane.docId);
@@ -3732,6 +3894,12 @@ class NocturneWriter {
   }
 
   closeTopMobileOverlay() {
+    const openSelect = document.querySelector('.nocturne-select.open, .kb-project-switcher.open');
+    if (openSelect) {
+      openSelect.classList.remove('open');
+      openSelect.querySelector('[aria-expanded]')?.setAttribute('aria-expanded', 'false');
+      return true;
+    }
     if (this.activeFloatingMenuKey || document.querySelector('.portal-floating-menu.active, #doc-menu-portal.open, #app-context-menu.active')) {
       this.closeAllFloatingMenus();
       this.closeContextMenu();
@@ -3742,17 +3910,19 @@ class NocturneWriter {
       this.commandPalette.close({ restoreFocus: false });
       return true;
     }
-    const activeModal = document.querySelector('#form-overlay.active, #settings-overlay.active, #kb-modal.active, #shortcuts-overlay.active, .floating-notes-modal.active');
+    const activeModal = [...document.querySelectorAll('#form-overlay.active, #settings-overlay.active, #kb-modal.active, #shortcuts-overlay.active, .floating-notes-modal.active')]
+      .sort((a, b) => (Number(getComputedStyle(a).zIndex) || 0) - (Number(getComputedStyle(b).zIndex) || 0)).at(-1);
     if (activeModal) {
-      activeModal.classList.remove('active');
+      if (activeModal.classList.contains('floating-notes-modal')) this.state.floatingNotesManagerOpen = false;
+      this.closeOverlay(activeModal);
       return true;
     }
-    if (this.isMobileLayout() && this.mobileBack()) return true;
     const openSidePanel = document.querySelector('.side-panel.open');
     if (openSidePanel) {
       openSidePanel.classList.remove('open');
       return true;
     }
+    if (this.isMobileLayout() && this.mobileBack()) return true;
     const focused = document.activeElement?.closest?.('.page-content, input, textarea, [contenteditable="true"]');
     if (focused && this.isMobileLayout()) {
       this.blurMobileEditorFocus();
@@ -3778,7 +3948,7 @@ class NocturneWriter {
   }
 
   handleClick(event) {
-    if (this.isMobileLayout?.() && event.target.closest?.('.mobile-format-bar')) {
+    if (this.isMobileLayout?.() && event.detail > 0 && event.target.closest?.('.mobile-format-bar')) {
       event.preventDefault();
       event.stopPropagation();
       return;
@@ -3860,7 +4030,7 @@ class NocturneWriter {
       input?.dispatchEvent(new Event('change', { bubbles: true }));
       return;
     }
-    const insideFloatingMenu = event.target.closest?.('#floating-menu-portal, .sidebar-header-actions, #floating-note-menu-wrap, #split-menu-wrap, #kb-dropdown, #review-mode-dropdown, #format-dropdown, #search-menu-wrap, .review-issue-dropdown, #app-context-menu, #doc-search-panel, #search-navigator, .doc-context-menu, .doc-menu-btn');
+    const insideFloatingMenu = event.target.closest?.('#floating-menu-portal, .empty-project-actions, .sidebar-header-actions, #floating-note-menu-wrap, #split-menu-wrap, #kb-dropdown, #review-mode-dropdown, #format-dropdown, #search-menu-wrap, .review-issue-dropdown, #app-context-menu, #doc-search-panel, #search-navigator, .doc-context-menu, .doc-menu-btn');
     if (!insideFloatingMenu) {
       this.closeAllFloatingMenus();
     }
@@ -3904,6 +4074,7 @@ class NocturneWriter {
       const fromMenu = !!reviewModeButton.closest('#review-mode-menu');
       if (fromMenu) this.closeFloatingMenu('mode');
       this.setReviewMode(reviewModeButton.dataset.reviewMode);
+      if (this.isMobileLayout() && reviewModeButton.closest('.mobile-work-modes')) this.closeMobileToEditor();
       if (fromMenu) this.floatingMenuAnchor('mode')?.focus({ preventScroll: true });
       return;
     }
@@ -4004,7 +4175,8 @@ class NocturneWriter {
         }
       } else {
         this.state.kbReadMode = !this.state.kbReadMode;
-        this.renderKb();
+        if (this.isMobileLayout()) this.renderMobileShell();
+        else this.renderKb();
       }
       return;
     }
@@ -4029,6 +4201,7 @@ class NocturneWriter {
     if (action === 'close-secondary-pane') {
       this.closeSecondaryPane();
       this.hideSplitMenu();
+      if (this.isMobileLayout()) this.closeMobileToEditor();
       return;
     }
     if (action === 'swap-panes') {
@@ -4272,6 +4445,12 @@ class NocturneWriter {
       this.selectDoc(docItem.dataset.docId);
       if (docItem.closest('#mobile-panel, #mobile-tab-surface')) this.closeMobileToEditor();
     }
+    const dossierDoc = event.target.closest('.dossier-doc-list [data-doc-id]');
+    if (dossierDoc) {
+      this.selectDoc(dossierDoc.dataset.docId);
+      if (this.isMobileLayout()) this.closeMobileToEditor();
+      else this.closeOverlay(document.getElementById('kb-modal'));
+    }
     const kbOpen = event.target.closest('[data-kb-open]')?.dataset.kbOpen;
     if (kbOpen) this.openKb(kbOpen);
     const kbTab = event.target.closest('[data-kb-tab]')?.dataset.kbTab;
@@ -4368,11 +4547,56 @@ class NocturneWriter {
     };
     const map = {
       'mobile-tab-write': () => this.switchMobileTab('write'),
+      'mobile-finish-editing': () => {
+        document.activeElement?.blur?.();
+        this.clearMobileEditorSelection({ keepNative: false });
+        this.state.mobile.editorFocused = false;
+        this.state.mobile.formatBarVisible = false;
+        this.state.mobile.formatBarMode = 'hidden';
+        this.updateRuntimeClasses();
+        this.closeAllFloatingMenus();
+        this.flushOpenDocuments().catch(error => this.toast(error.message));
+      },
       'mobile-open-docs': () => this.switchMobileTab('docs'),
+      'mobile-folder-menu': () => {
+        const anchor = event.target.closest('[data-folder-id]');
+        if (!anchor) return;
+        if (this.isFloatingMenuOpen('folder') && this.mobileFolderMenuAnchor === anchor) { this.closeFloatingMenu('folder'); return; }
+        this.mobileFolderMenuAnchor = anchor;
+        const id = escapeHtml(anchor.dataset.folderId);
+        this.updateSurfaceHTML(this.floatingMenuElement('folder'), [['new-doc', 'bx-plus', 'Новая глава'], ['rename-folder', 'bx-edit-alt', 'Переименовать'], ['delete-folder', 'bx-trash', 'Удалить папку']].map(([action, icon, title]) => `<button class="floating-menu-item" role="menuitem" data-action="mobile-folder-action" data-folder-action="${action}" data-folder-id="${id}"><i class="bx ${icon}"></i><span>${title}</span></button>`).join(''));
+        this.openFloatingMenu('folder');
+      },
+      'mobile-folder-action': () => {
+        const button = event.target.closest('[data-folder-action]');
+        this.closeFloatingMenu('folder');
+        if (!button) return;
+        if (button.dataset.folderAction === 'rename-folder') this.openFolderForm(button.dataset.folderId);
+        else if (button.dataset.folderAction === 'delete-folder') this.confirmDeleteFolder(button.dataset.folderId);
+        else this.runAction(button.dataset.folderAction, event);
+      },
+      'mobile-open-bookmarks': () => {
+        const paneId = this.state.workspace.focusedPaneId;
+        const range = this.nocturneEditor.selectionRange(paneId);
+        this.mobileBookmarkContext = { paneId, docId: this.getFocusedDoc()?.id, range, selectedText: range?.toString() || '' };
+        open('bookmarks', 'write');
+      },
+      'mobile-add-bookmark': () => {
+        const context = this.mobileBookmarkContext;
+        const add = context?.docId === this.getFocusedDoc()?.id ? this.addBookmarkFromContext(context) : this.addBookmarkAtCurrentPosition(this.state.workspace.focusedPaneId);
+        Promise.resolve(add).then(() => this.renderMobileShell()).catch(error => this.toast(error.message));
+      },
+      'mobile-jump-bookmark': () => {
+        const button = event.target.closest('[data-bookmark-id]');
+        if (!button) return;
+        this.closeMobileToEditor();
+        this.activateBookmark(button.dataset.bookmarkPane, button.dataset.bookmarkId);
+      },
+      'mobile-delete-bookmark': () => this.confirmDeleteBookmark(event.target.closest('[data-bookmark-id]')?.dataset.bookmarkId),
       'mobile-open-actions': () => open('actions', 'write'),
       'mobile-open-more': () => this.switchMobileTab('more'),
       'mobile-open-settings': () => open('settings', 'more'),
-      'mobile-open-ai-settings': () => { this.state.mobile.settingsTab = 'ai'; this.openMobilePanel('settings', 'more'); },
+      'mobile-open-ai-settings': () => this.openMobilePanel('settings', 'more', { settingsTab: 'ai' }),
       'mobile-open-lore': () => this.switchMobileTab('lore'),
       'mobile-open-ai': () => this.switchMobileTab('ai'),
       'mobile-open-notes': () => open('notes', 'more'),
@@ -4385,17 +4609,40 @@ class NocturneWriter {
       'mobile-subtimeline-back': () => { this.state.activeSubtimelineId = null; this.renderMobileShell(); },
       'mobile-save-now': () => this.saveActiveDoc({ silent: false }),
       'mobile-save-notes': () => this.saveMobileNote(),
+      'mobile-note-tool': () => {
+        const field = document.querySelector('[data-mobile-notes-input]');
+        if (!field || field.disabled) return;
+        const tool = event.target.closest('[data-note-tool]')?.dataset.noteTool;
+        const start = field.selectionStart, end = field.selectionEnd;
+        if (tool === 'toggle') {
+          const lineStart = field.value.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+          const lineEnd = field.value.indexOf('\n', start);
+          const line = field.value.slice(lineStart, lineEnd < 0 ? field.value.length : lineEnd);
+          const next = /^- \[[ x]\] /i.test(line) ? line.replace(/^- \[([ x])\] /i, (_, checked) => checked.toLowerCase() === 'x' ? '- [ ] ' : '- [x] ') : `- [ ] ${line}`;
+          field.setRangeText(next, lineStart, lineStart + line.length, 'end');
+        } else {
+          const snippet = { heading: '\n## ', checklist: '\n- [ ] ', divider: '\n\n---\n\n' }[tool];
+          if (!snippet) return;
+          field.setRangeText(snippet, start, end, 'end');
+        }
+        field.focus({ preventScroll: true });
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+      },
       'mobile-toggle-reorder': () => { this.state.mobile.reorderMode = !this.state.mobile.reorderMode; this.renderMobileShell(); },
       'mobile-reorder-lore': () => this.mobileReorderLore(event.target.closest('[data-lore-type][data-lore-id]')),
       'open-kb-desktop-modal': () => this.toast('Полный desktop-вид базы доступен на широком экране.'),
       'mobile-about': () => this.openAboutModal(),
       'mobile-background-app': () => {
         document.getElementById('form-overlay')?.classList.remove('active');
-        window.Capacitor?.Plugins?.App?.minimizeApp?.();
+        this.flushOpenDocuments().then(() => minimizeNativeApp()).catch(error => this.toast(error.message));
       },
       'mobile-command': () => {
         const command = event.target.closest('[data-mobile-command]')?.dataset.mobileCommand;
         if (command) this.runEditorCommand(command);
+      },
+      'mobile-switch-pane': () => {
+        this.setFocusedPane(this.state.workspace.focusedPaneId === 'primary' ? 'secondary' : 'primary');
+        this.closeMobileToEditor();
       },
     };
     if (!map[action]) return false;
@@ -4591,6 +4838,7 @@ class NocturneWriter {
   setMobileEditorSelection(range, editable, mode = 'custom') {
     if (!range || !editable) return false;
     const paneId = editable.dataset.paneId || editable.closest('.workspace-pane')?.dataset.paneId || 'primary';
+    this.nocturneEditor?.setSelectionFromRange(paneId, range);
     this.selectionController = {
       active: true,
       mode,
@@ -4621,13 +4869,14 @@ class NocturneWriter {
     // Blur is removed to prevent keyboard from closing on mobile when making custom selection
     this.updateRuntimeClasses();
     this.renderNocturneSelectionLayer();
+    this.renderReviewToolbarSlot();
     return true;
   }
 
   clearMobileEditorSelection({ keepNative = true } = {}) {
     this.mobileSelectionTimer && clearTimeout(this.mobileSelectionTimer);
     this.mobileSelectionTimer = null;
-    this.mobileSelectionDrag = null;
+    this.handleMobileEditorSelectionPointerUp();
     if (!keepNative) window.getSelection()?.removeAllRanges();
     this.selectionController = { active: false, mode: 'native', range: null, docId: null, paneId: null, text: '', editable: null };
     this.state.editorSelection = { active: false, text: '', docId: null, paneId: null };
@@ -4637,6 +4886,7 @@ class NocturneWriter {
     }
     this.renderNocturneSelectionLayer();
     this.updateRuntimeClasses();
+    this.renderReviewToolbarSlot();
   }
 
   handleMobileEditorSelectionPointerDown(event) {
@@ -4645,7 +4895,11 @@ class NocturneWriter {
     if (handle && this.selectionController?.active) {
       event.preventDefault();
       event.stopPropagation();
-      this.mobileSelectionDrag = { handle: handle.dataset.selectionHandle, pointerId: event.pointerId };
+      const anchor = this.selectionController.range.cloneRange();
+      anchor.collapse(handle.dataset.selectionHandle !== 'start');
+      this.mobileSelectionDrag = { handle: handle.dataset.selectionHandle, pointerId: event.pointerId, anchor };
+      handle.setPointerCapture?.(event.pointerId);
+      this.nocturneSelectionLayer?.classList.add('dragging');
       return;
     }
     if (event.target.closest?.('.mobile-format-bar, input, textarea, button, select, .mobile-bottom-nav, .mobile-overlay')) return;
@@ -4666,29 +4920,15 @@ class NocturneWriter {
 
   handleMobileEditorSelectionPointerMove(event) {
     if (this.mobileSelectionDrag && this.selectionController?.active) {
+      if (event.pointerId !== this.mobileSelectionDrag.pointerId) return;
       event.preventDefault();
       event.stopPropagation();
-      const editable = this.selectionController.editable;
-      const point = this.rangeFromPoint(event.clientX, event.clientY);
-      const current = this.selectionController.range;
-      if (!point || !current || !editable?.contains(point.startContainer)) return;
-      const next = document.createRange();
-      if (this.mobileSelectionDrag.handle === 'start') {
-        next.setStart(point.startContainer, point.startOffset);
-        next.setEnd(current.endContainer, current.endOffset);
-        if (next.collapsed || next.toString() === '') {
-          next.setStart(current.endContainer, current.endOffset);
-          next.setEnd(point.startContainer, point.startOffset);
-        }
-      } else {
-        next.setStart(current.startContainer, current.startOffset);
-        next.setEnd(point.startContainer, point.startOffset);
-        if (next.collapsed || next.toString() === '') {
-          next.setStart(point.startContainer, point.startOffset);
-          next.setEnd(current.startContainer, current.startOffset);
-        }
+      this.mobileSelectionDrag.point = { x: event.clientX, y: event.clientY };
+      this.updateMobileSelectionDragRange();
+      if (!this.mobileSelectionScrollFrame) {
+        this.mobileSelectionScrollTime = 0;
+        this.mobileSelectionScrollFrame = requestAnimationFrame(time => this.scrollMobileSelectionDrag(time));
       }
-      if (!next.collapsed) this.setMobileEditorSelection(next, editable);
       return;
     }
     if (!this.mobileSelectionTimer) return;
@@ -4703,12 +4943,60 @@ class NocturneWriter {
   }
 
   handleMobileEditorSelectionPointerUp() {
+    this.nocturneSelectionLayer?.classList.remove('dragging');
     if (this.mobileSelectionTimer) {
       clearTimeout(this.mobileSelectionTimer);
       this.mobileSelectionTimer = null;
     }
     this.mobileSelectionDrag = null;
     this.mobileSelectionStart = null;
+    cancelAnimationFrame(this.mobileSelectionScrollFrame);
+    this.mobileSelectionScrollFrame = null;
+    this.mobileSelectionScrollTime = 0;
+  }
+
+  mobileSelectionDragBounds() {
+    const scroller = this.selectionController?.editable?.closest('.editor-scroll-area');
+    if (!scroller) return null;
+    const rect = scroller.getBoundingClientRect();
+    const viewport = window.visualViewport;
+    const top = Math.max(rect.top, viewport?.offsetTop || 0, document.querySelector('.mobile-topbar')?.getBoundingClientRect().bottom || 0);
+    const toolbar = document.querySelector('.mobile-format-bar');
+    const bottom = Math.min(rect.bottom, (viewport?.offsetTop || 0) + (viewport?.height || innerHeight), toolbar?.getBoundingClientRect().top || innerHeight);
+    return bottom > top ? { scroller, left: rect.left, right: rect.right, top, bottom } : null;
+  }
+
+  updateMobileSelectionDragRange() {
+    const drag = this.mobileSelectionDrag, editable = this.selectionController?.editable;
+    const bounds = this.mobileSelectionDragBounds();
+    if (!drag?.point || !bounds || !editable?.contains(drag.anchor.startContainer)) return;
+    const x = Math.max(bounds.left + 2, Math.min(drag.point.x, bounds.right - 2));
+    const y = Math.max(bounds.top + 2, Math.min(drag.point.y, bounds.bottom - 2));
+    const point = this.rangeFromPoint(x, y);
+    if (!point || !editable.contains(point.startContainer)) return;
+    const next = document.createRange(), anchor = drag.anchor;
+    const before = point.compareBoundaryPoints(Range.START_TO_START, anchor) < 0;
+    next.setStart(before ? point.startContainer : anchor.startContainer, before ? point.startOffset : anchor.startOffset);
+    next.setEnd(before ? anchor.startContainer : point.startContainer, before ? anchor.startOffset : point.startOffset);
+    drag.handle = before ? 'start' : 'end';
+    if (!next.collapsed) this.setMobileEditorSelection(next, editable);
+  }
+
+  scrollMobileSelectionDrag(time) {
+    this.mobileSelectionScrollFrame = null;
+    const bounds = this.mobileSelectionDragBounds(), point = this.mobileSelectionDrag?.point;
+    if (!bounds || !point) return;
+    const zone = Math.min(48, (bounds.bottom - bounds.top) / 4);
+    const speed = point.y < bounds.top + zone ? -Math.min(1, (bounds.top + zone - point.y) / zone)
+      : point.y > bounds.bottom - zone ? Math.min(1, (point.y - bounds.bottom + zone) / zone) : 0;
+    if (!speed) return;
+    const elapsed = this.mobileSelectionScrollTime ? Math.min(32, time - this.mobileSelectionScrollTime) : 16;
+    this.mobileSelectionScrollTime = time;
+    const previous = bounds.scroller.scrollTop;
+    bounds.scroller.scrollTop += speed * elapsed * 0.65;
+    if (bounds.scroller.scrollTop === previous) return;
+    this.updateMobileSelectionDragRange();
+    this.mobileSelectionScrollFrame = requestAnimationFrame(nextTime => this.scrollMobileSelectionDrag(nextTime));
   }
 
   handleGlobalPointerDownCapture(event) {
@@ -4735,7 +5023,9 @@ class NocturneWriter {
     event.preventDefault();
     event.stopPropagation();
     this.captureSelectionSnapshot();
+    if (event.target.closest('#mobile-review-toolbar')) this.reviewToolbarSelectionSnapshot = this.selectionSnapshot;
     this.mobileFormatAction = {
+      x: event.clientX, y: event.clientY,
       command: event.target.closest('[data-command]')?.dataset.command || '',
       block: event.target.closest('[data-format-block]')?.dataset.formatBlock || '',
       action: event.target.closest('[data-action]')?.dataset.action || '',
@@ -4747,12 +5037,14 @@ class NocturneWriter {
   handleFormatBarPointerUp(event) {
     const bar = event.target.closest?.('.mobile-format-bar');
     if (!bar) return;
-    const command = event.target.closest('[data-command]')?.dataset.command || this.mobileFormatAction?.command;
-    const formatBlock = event.target.closest('[data-format-block]')?.dataset.formatBlock || this.mobileFormatAction?.block;
-    const action = event.target.closest('[data-action]')?.dataset.action || this.mobileFormatAction?.action;
+    const press = this.mobileFormatAction;
+    this.mobileFormatAction = null;
+    if (!press || Math.hypot(event.clientX - press.x, event.clientY - press.y) > 8) return;
+    const command = press.command;
+    const formatBlock = press.block;
+    const action = press.action;
     event.preventDefault();
     event.stopPropagation();
-    this.mobileFormatAction = null;
     if (command) {
       this.runEditorCommand(command);
       return;
@@ -4761,7 +5053,7 @@ class NocturneWriter {
       this.setCurrentBlockType(formatBlock);
       return;
     }
-    if (action) this.handleMobileAction(action, event) || this.handleAction(action, event);
+    if (action && !this.handleReviewToolbarAction(action, event) && !this.handleReviewAction(action) && !this.handleMobileAction(action, event)) this.runAction(action, event);
   }
 
   handleDocPointerUpCapture(event) {
@@ -4777,12 +5069,18 @@ class NocturneWriter {
     event.preventDefault();
     event.stopPropagation();
     this.selectDoc(candidate.id);
+    if (docItem.closest('#mobile-panel, #mobile-tab-surface')) this.closeMobileToEditor();
   }
 
   runEditorCommand(command) {
     if (this.state.reviewMode === 'editor') return;
     const paneId = this.selectionSnapshot?.paneId || this.state.workspace?.focusedPaneId || 'primary';
-    if (this.nocturneEditor?.runCommand(paneId, command)) {
+    if (this.nocturneEditor?.runCommand(paneId, command, null, this.selectionController?.active ? this.selectionController.range : null)) {
+      if (this.selectionController?.active) {
+        const range = this.nocturneEditor.selectionRange(paneId);
+        if (range && !range.collapsed) this.setMobileEditorSelection(range, this.selectionController.editable);
+        else this.clearMobileEditorSelection();
+      }
       this.nocturneEditor.scheduleVisualPages(paneId);
       this.updateToolbarState();
       return;
@@ -5448,7 +5746,12 @@ class NocturneWriter {
   setCurrentBlockType(type) {
     if (this.state.reviewMode === 'editor') return;
     const paneId = this.selectionSnapshot?.paneId || this.state.workspace?.focusedPaneId || 'primary';
-    if (this.nocturneEditor?.runCommand(paneId, 'formatBlock', type)) {
+    if (this.nocturneEditor?.runCommand(paneId, 'formatBlock', type, this.selectionController?.active ? this.selectionController.range : null)) {
+      if (this.selectionController?.active) {
+        const range = this.nocturneEditor.selectionRange(paneId);
+        if (range && !range.collapsed) this.setMobileEditorSelection(range, this.selectionController.editable);
+        else this.clearMobileEditorSelection();
+      }
       this.closeFloatingMenu('format');
       this.updateFormatLabel(type);
       this.updateToolbarState();
@@ -5550,6 +5853,13 @@ class NocturneWriter {
   }
 
   handleInput(event) {
+    if (event.target.matches?.('[data-settings-id="new-macro-keys"]')) {
+      this.macroRecordedKeys = event.target.value;
+      const warning = this.settingsControl('macro-conflict-warning');
+      const conflict = this.checkMacroConflict(this.macroRecordedKeys);
+      if (warning) { warning.textContent = conflict || ''; warning.style.display = conflict ? 'block' : 'none'; }
+      return;
+    }
     const editable = event.target.closest?.('.page-content');
     if (editable) {
       if (this.nocturneEditor?.getByElement(event.target)) return;
@@ -5615,7 +5925,7 @@ class NocturneWriter {
       this.state.dictionarySearch = event.target.value;
       this.updateDictionarySearchList();
     }
-    if (event.target.id === 'settings-search-field') {
+    if (event.target.matches('#settings-search-field, [data-settings-id="settings-search-field"]')) {
       this.state.settingsSearchQuery = event.target.value;
       this.updateSettingsSearchList();
     }
@@ -5799,12 +6109,12 @@ class NocturneWriter {
     if (event.target.matches('[data-setting]')) this.updateSettingFromControl(event.target);
     if (event.target.matches('.range-value-input')) this.handleRangeValueChange(event.target);
     if (event.target.id === 'import-input') this.importDocuments(event.target.files);
-        if (event.target.id === 'custom-font-uploader') {
+    if (event.target.matches('#custom-font-uploader, [data-settings-id="custom-font-uploader"]')) {
       const file = event.target.files[0];
       if (file) {
         const reader = new FileReader();
         reader.onload = () => {
-          const fontName = file.name.split('.')[0].replace(/[^a-zA-Z0-9\s-_]/g, '').trim();
+          const fontName = file.name.replace(/\.[^.]+$/u, '').replace(/[\u0000-\u001f\u007f]/g, '').trim() || 'Мой шрифт';
           this.state.settings.customFonts = this.state.settings.customFonts || [];
           if (this.state.settings.customFonts.some(f => f.name === fontName)) {
             this.toast('Шрифт с таким именем уже загружен.');
@@ -5819,6 +6129,7 @@ class NocturneWriter {
           this.renderSettings();
           this.toast(`Шрифт "${fontName}" загружен.`);
         };
+        reader.onerror = () => this.toast('Не удалось прочитать шрифт. Попробуйте выбрать файл ещё раз.');
         reader.readAsDataURL(file);
       }
     }
@@ -5868,7 +6179,8 @@ class NocturneWriter {
         options[next].focus(); return;
       }
     }
-    const keyboardMenu = ['library', 'mode'].find(key => this.isFloatingMenuOpen(key));
+    if (event.key === 'Tab' && this.isFloatingMenuOpen('empty')) { this.closeFloatingMenu('empty'); this.floatingMenuAnchor('empty')?.focus(); return; }
+    const keyboardMenu = ['empty', 'folder', 'library', 'mode'].find(key => this.isFloatingMenuOpen(key));
     if (keyboardMenu && ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Escape'].includes(event.key)) {
       event.preventDefault();
       if (event.key === 'Escape') { this.closeFloatingMenu(keyboardMenu); this.floatingMenuAnchor(keyboardMenu)?.focus(); return; }
@@ -5916,11 +6228,11 @@ class NocturneWriter {
       });
       this.macroRecordedKeys = parts.join(' + ');
       
-      const inputEl = document.getElementById('new-macro-keys');
+      const inputEl = this.settingsControl('new-macro-keys');
       if (inputEl) {
         inputEl.value = this.macroRecordedKeys;
       }
-      const warningEl = document.getElementById('macro-conflict-warning');
+      const warningEl = this.settingsControl('macro-conflict-warning');
       if (warningEl) {
         const conflict = this.checkMacroConflict(this.macroRecordedKeys);
         warningEl.textContent = conflict || '';
@@ -6143,8 +6455,9 @@ class NocturneWriter {
     if (event.target.closest?.('input, textarea, select, .form-modal, .settings-modal, .floating-note')) return;
     event.preventDefault();
     const sel = getSelection();
-    const selectedText = sel?.rangeCount && !sel.isCollapsed ? sel.toString().trim() : '';
-    const range = sel?.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+    const customRange = this.selectionController?.active && editable?.contains(this.selectionController.range?.commonAncestorContainer) ? this.selectionController.range : null;
+    const range = customRange?.cloneRange() || (sel?.rangeCount ? sel.getRangeAt(0).cloneRange() : null);
+    const selectedText = range && !range.collapsed ? range.toString().trim() : '';
     this.contextSelectionRange = range;
     this.closeAllFloatingMenus('context');
     const surface = editable || entity?.closest('.page-content');
@@ -6554,13 +6867,14 @@ class NocturneWriter {
     if (action === 'context-copy') {
       await this.copyTextToClipboard(ctx.selectedText);
     } else if (action === 'context-cut') {
-      await this.copyTextToClipboard(ctx.selectedText);
+      if (!await this.copyTextToClipboard(ctx.selectedText)) { this.closeContextMenu(); return; }
       const range = this.restoreContextRange();
       if (range && this.state.reviewMode !== 'editor') {
         range.deleteContents();
         const editable = range.commonAncestorContainer?.parentElement?.closest?.('.page-content')
           || document.querySelector(`.workspace-pane[data-pane-id="${CSS.escape(ctx.paneId || 'primary')}"] .page-content[data-doc-id="${CSS.escape(ctx.docId || '')}"]`);
         if (editable) this.editorInput(editable, { inputType: 'deleteByCut' });
+        if (this.selectionController?.active) this.clearMobileEditorSelection();
       }
     } else if (action === 'context-paste') {
       await this.pasteClipboardAtContext();
@@ -6616,8 +6930,10 @@ class NocturneWriter {
   async copyTextToClipboard(text) {
     try {
       await navigator.clipboard.writeText(text || '');
+      return true;
     } catch {
       this.toast('Буфер обмена недоступен — используйте Ctrl+C.');
+      return false;
     }
   }
 
@@ -7437,8 +7753,14 @@ class NocturneWriter {
   }
 
   runAction(action, event = { target: document.body }) {
+    if (action !== 'toggle-empty-project-menu') this.closeFloatingMenu('empty');
     if (action !== 'toggle-library-menu') this.closeFloatingMenu('library');
     const map = {
+      'toggle-empty-project-menu': () => {
+        const anchor = event.target.closest('[data-action="toggle-empty-project-menu"]');
+        if (this.isFloatingMenuOpen('empty') && this.emptyProjectMenuAnchor === anchor) this.closeFloatingMenu('empty');
+        else { this.closeFloatingMenu('empty', { animate: false }); this.emptyProjectMenuAnchor = anchor; this.openFloatingMenu('empty'); }
+      },
       'macro-record-toggle': () => {
         this.macroRecordingState = !this.macroRecordingState;
         if (this.macroRecordingState) {
@@ -7449,7 +7771,7 @@ class NocturneWriter {
       },
       'macro-save-new': () => {
         const keys = (this.macroRecordedKeys || '').trim();
-        const value = (document.getElementById('new-macro-value')?.value || '').trim();
+        const value = (this.settingsControl('new-macro-value')?.value || '').trim();
         if (!keys || !value) {
           this.toast(!keys ? 'Сначала запишите сочетание клавиш.' : 'Укажите выводимый символ.');
           return;
@@ -7493,9 +7815,9 @@ class NocturneWriter {
         button?.setAttribute('aria-label', collapsed ? 'Показать привязки и ассоциации' : 'Скрыть привязки и ассоциации');
       },
       'formatting-save-new': () => {
-        const trigger = (document.getElementById('new-rule-trigger')?.value || '').trim();
+        const trigger = (this.settingsControl('new-rule-trigger')?.value || '').trim();
         const action = this.state.settings.newRuleAction || 'center';
-        const customText = (document.getElementById('new-rule-custom-text')?.value || '').trim();
+        const customText = (this.settingsControl('new-rule-custom-text')?.value || '').trim();
         if (!trigger) {
           this.toast('Укажите триггер при вводе.');
           return;
@@ -7515,9 +7837,9 @@ class NocturneWriter {
         } else {
           this.state.settings.customInputRules.push(ruleData);
         }
-        const triggerInput = document.getElementById('new-rule-trigger');
+        const triggerInput = this.settingsControl('new-rule-trigger');
         if (triggerInput) triggerInput.value = '';
-        const customTextInput = document.getElementById('new-rule-custom-text');
+        const customTextInput = this.settingsControl('new-rule-custom-text');
         if (customTextInput) customTextInput.value = '';
         this.persistSettings();
         this.renderFormattingListOnly();
@@ -7543,7 +7865,7 @@ class NocturneWriter {
           this.persistSettings();
         }
       },
-      'open-settings': () => { this.closeAllFloatingMenus(); document.getElementById('settings-overlay').classList.add('active'); },
+      'open-settings': () => this.openSettingsTab(this.state.activeSettingsTab),
       'open-command-palette': () => this.commandPalette.open(),
             'close-command-palette': () => this.commandPalette.close(),
       'close-settings': () => document.getElementById('settings-overlay').classList.remove('active'),
@@ -8423,6 +8745,7 @@ class NocturneWriter {
     }
 
     this.updateTitlebarLayout();
+    if (this.isMobileLayout()) this.renderMobileShell();
   }
 
   folderEmptyState(folderId, isSearch = false) {
@@ -9930,6 +10253,13 @@ class NocturneWriter {
     if (idx >= 0) this.state.collapsedFolders.splice(idx, 1);
     else this.state.collapsedFolders.push(folderId);
     safeSetStorageItem(localStorage, 'nocturne-collapsed-folders', JSON.stringify(this.state.collapsedFolders));
+    document.querySelectorAll(`.mobile-folder[data-folder-id="${CSS.escape(folderId)}"]`).forEach(folder => {
+      folder.querySelector('.mobile-folder-head')?.setAttribute('aria-expanded', String(!collapsed));
+      const chevron = folder.querySelector('.mobile-folder-head i');
+      if (chevron) chevron.className = `bx bx-chevron-${collapsed ? 'right' : 'down'}`;
+      const docs = folder.querySelector('.mobile-folder-docs');
+      if (docs) this.animateHeightTransition(docs, () => docs.classList.toggle('collapsed', collapsed));
+    });
 
     const folderTitle = document.querySelector(`.section-title[data-folder-id="${folderId}"]`);
     if (folderTitle) {
@@ -10039,6 +10369,46 @@ class NocturneWriter {
       } else if (hasDocs && emptyPlaceholder) {
         emptyPlaceholder.remove();
       }
+    });
+  }
+
+  setupMobileDocSortables() {
+    this.mobileDocSortables = (this.mobileDocSortables || []).filter(sortable => {
+      if (sortable.el?.isConnected) return true;
+      sortable.destroy();
+      return false;
+    });
+    const root = document.getElementById(this.state.mobile.panel === 'docs' ? 'mobile-panel' : 'mobile-tab-surface');
+    if (!this.isMobileLayout() || !root) return;
+    const searching = !!this.state.mobile.docsSearch?.trim();
+    root.querySelectorAll('.mobile-folder-docs').forEach(zone => {
+      if (zone.__sortable) { zone.__sortable.option('disabled', searching); return; }
+      const sortable = new Sortable(zone, {
+        group: 'mobile-docs', draggable: '.mobile-doc-card', filter: 'button', preventOnFilter: false,
+        disabled: searching, delay: 320, delayOnTouchOnly: true, touchStartThreshold: 8, fallbackTolerance: 6,
+        animation: this.shouldReduceSurfaceMotion() ? 0 : 250, easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+        forceFallback: true, fallbackOnBody: true, ghostClass: 'sortable-ghost', fallbackClass: 'sortable-drag',
+        onStart: () => { this.docClickCandidate = null; document.body.classList.add('sortable-active'); },
+        onEnd: async event => {
+          document.body.classList.remove('sortable-active');
+          this.kbSuppressClickUntil = Date.now() + 360;
+          if (event.from === event.to && event.oldDraggableIndex === event.newDraggableIndex) return;
+          const updates = [];
+          root.querySelectorAll('.mobile-folder-docs').forEach(folderZone => {
+            const folderId = folderZone.closest('.mobile-folder')?.dataset.folderId;
+            [...folderZone.querySelectorAll('.mobile-doc-card')].forEach((card, order) => {
+              const doc = this.state.docs.find(item => item.id === card.dataset.docId);
+              if (!doc || !folderId) return;
+              doc.folderId = folderId; doc.order = order;
+              updates.push(this.db.put('docs', doc));
+            });
+          });
+          try { await Promise.all(updates); this.renderDocs(); }
+          catch (error) { this.toast(`Не удалось сохранить порядок глав: ${error.message}`); }
+        },
+      });
+      zone.__sortable = sortable;
+      this.mobileDocSortables.push(sortable);
     });
   }
 
@@ -11869,6 +12239,7 @@ class NocturneWriter {
       });
     }
     this.updateBookmarkHighlights();
+    if (this.isMobileLayout() && this.state.mobile.panel === 'bookmarks') this.renderMobileShell();
   }
 
   jumpToDocumentBookmark(paneId, bookmark) {
@@ -12307,30 +12678,34 @@ class NocturneWriter {
 
   refreshReviewToolbarSelection() {
     if (this.state.reviewMode !== 'editor') return;
-    const slot = document.getElementById('review-toolbar-slot');
-    if (!slot) return;
     const enabled = this.hasFocusedTextSelection();
-    if (slot.dataset.selectionReady === String(enabled)) return;
-    slot.dataset.selectionReady = String(enabled);
-    const caption = slot.querySelector('.review-toolbar-caption');
-    if (caption?.lastChild) caption.lastChild.textContent = enabled ? 'Пометки к выделению' : 'Выделите текст для пометки';
-    for (const [action, label] of [
-      ['quick-review-comment', 'Комментарий'],
-      ['quick-review-suggestion', 'Замена'],
-      ['toggle-review-issue-menu', 'Проблема'],
-      ['quick-typo-rule', 'В словарь'],
-    ]) {
-      const button = slot.querySelector(`[data-action="${action}"]`);
-      if (!button) continue;
-      button.disabled = !enabled;
-      button.title = enabled ? label : `${label} — выделите текст`;
+    for (const slot of document.querySelectorAll('#review-toolbar-slot, #mobile-review-toolbar')) {
+      if (slot.dataset.selectionReady === String(enabled)) continue;
+      slot.dataset.selectionReady = String(enabled);
+      const caption = slot.querySelector('.review-toolbar-caption');
+      if (caption?.lastChild) caption.lastChild.textContent = enabled ? 'Пометки к выделению' : 'Выделите текст для пометки';
+      for (const [action, label] of [
+        ['quick-review-comment', 'Комментарий'],
+        ['quick-review-suggestion', 'Замена'],
+        ['toggle-review-issue-menu', 'Проблема'],
+        ['quick-typo-rule', 'В словарь'],
+      ]) {
+        const button = slot.querySelector(`[data-action="${action}"]`);
+        if (!button) continue;
+        button.disabled = !enabled;
+        button.title = enabled ? label : `${label} — выделите текст`;
+      }
     }
   }
 
   renderReviewToolbarSlot() {
     const slot = document.getElementById('review-toolbar-slot');
     if (!slot) return;
-    const updateSlot = html => this.animateHeightTransition(slot, () => this.updateSurfaceHTML(slot, html), { width: true });
+    const updateSlot = html => {
+      this.animateHeightTransition(slot, () => this.updateSurfaceHTML(slot, html), { width: true });
+      const mobileSlot = document.getElementById('mobile-review-toolbar');
+      if (mobileSlot) this.updateSurfaceHTML(mobileSlot, html);
+    };
     const mode = this.state.reviewMode || 'write';
     if (mode === 'write') {
       updateSlot('');
@@ -13448,6 +13823,7 @@ class NocturneWriter {
     if (!doc) return;
     document.getElementById('form-overlay')?.classList.remove('active');
     this.selectDoc(docId);
+    if (this.isMobileLayout()) this.closeMobileToEditor();
     setTimeout(() => {
       const matches = this.collectDocMatches(doc, dataset.query || '', this.globalSearchState);
       const index = Math.max(0, matches.findIndex((match) => match.blockId === dataset.blockId && Number(match.start) === Number(dataset.matchStart)));
@@ -14170,6 +14546,7 @@ class NocturneWriter {
       </section>
     `, {});
     clearTimeout(modal.__motionCloseTimer); modal.__motionGeneration = (modal.__motionGeneration || 0) + 1; modal.classList.remove('motion-exiting');
+    modal.removeAttribute('aria-hidden');
     modal.classList.add('active');
   }
 
@@ -14776,7 +15153,7 @@ class NocturneWriter {
   }
 
   updateDictionaryList() {
-    const current = document.querySelector('.dictionary-list');
+    const current = this.settingsSurfaceRoot().querySelector('.dictionary-list');
     if (!current) return;
     const next = document.createElement('div'); next.innerHTML = this.dictionarySettingsContent();
     const list = next.querySelector('.dictionary-list');
@@ -18387,9 +18764,9 @@ class NocturneWriter {
   editLore(type, id = null, parentId = null) {
     const isSubtimeline = type === 'subtimeline';
     const parentEvent = isSubtimeline ? this.timelineEvent(parentId || this.state.activeSubtimelineId) : null;
-    const collection = isSubtimeline ? parentEvent?.subEvents : this.state.lore[type];
+    let collection = isSubtimeline ? parentEvent?.subEvents : this.state.lore[type];
     if (!collection) return;
-    const item = id ? collection.find((entry) => entry.id === id) : {};
+    let item = id ? collection.find((entry) => entry.id === id) : {};
     if (id && !item) return;
     const isTimeline = type === 'timeline' || isSubtimeline;
     const iconOptions = [
@@ -18628,6 +19005,9 @@ class NocturneWriter {
       let image = item.image || '';
       const file = event.target.elements.imageFile?.files?.[0];
       if (file) image = await this.fileToDataUrl(file);
+      collection = isSubtimeline ? this.timelineEvent(parentEvent?.id)?.subEvents : this.state.lore[type];
+      item = id ? collection?.find((entry) => entry.id === id) : {};
+      if (!collection || !item) { this.toast('Карточка уже удалена. Закройте форму и обновите список.'); return; }
       const existingDocs = Array.isArray(item.documentIds) && item.documentIds.length ? item.documentIds : [this.state.activeDocId].filter(Boolean);
       const order = Number.isFinite(Number(item.order)) ? Number(item.order) : collection.length;
       let next;
@@ -18726,7 +19106,9 @@ class NocturneWriter {
         await this.saveLore();
         this.refreshVisibleEntityLinks();
         
-        if (id) {
+        if (this.isMobileLayout()) {
+          this.renderMobileShell();
+        } else if (id) {
           // Edit: update the card in-place in all grids (both modal and pane)
           const existingCards = document.querySelectorAll(`[data-lore-id="${id}"]`);
           existingCards.forEach(card => {
@@ -18880,7 +19262,7 @@ class NocturneWriter {
       ['primary', 'secondary'].forEach((paneId) => {
         const pane = this.getPane(paneId);
         if (pane) {
-          if (pane.type && pane.type.endsWith('-detail') && pane.loreId === id) {
+          if (pane.type && pane.type.endsWith('-detail') && pane.entityId === id) {
             this.renderWorkspacePane(paneId);
           } else if (!localOnly && pane.type === 'kb-tab') {
             this.renderWorkspacePane(paneId);
@@ -18915,6 +19297,7 @@ class NocturneWriter {
       detailActive = true;
     }
     await this.saveLore();
+    if (this.isMobileLayout()) this.renderMobileShell();
     if (!localOnly || detailActive) {
       this.renderKb();
     }
@@ -18922,7 +19305,7 @@ class NocturneWriter {
     ['primary', 'secondary'].forEach((paneId) => {
       const pane = this.getPane(paneId);
       if (pane) {
-        if (pane.type && pane.type.endsWith('-detail') && pane.loreId === id) {
+        if (pane.type && pane.type.endsWith('-detail') && pane.entityId === id) {
           this.renderWorkspacePane(paneId);
         } else if (!localOnly && pane.type === 'kb-tab') {
           this.renderWorkspacePane(paneId);
@@ -18970,6 +19353,7 @@ class NocturneWriter {
     
     note.completed = !note.completed;
     note.updatedAt = Date.now();
+    if (this.isMobileLayout()) this.renderMobileShell();
 
     // Find all grids in the workspace that contain this note card
     const cardEls = document.querySelectorAll(`.note-card[data-lore-id="${id}"]`);
@@ -19026,7 +19410,16 @@ class NocturneWriter {
     this.toast(note.completed ? 'Запись исполнена' : 'Запись возвращена в работу');
   }
 
+  settingsSurfaceRoot() {
+    return (this.isMobileLayout() && this.state.mobile.panel === 'settings' ? document.querySelector('#mobile-panel .mobile-settings-content') : document.getElementById('settings-overlay')) || document;
+  }
+
+  settingsControl(id) {
+    return this.settingsSurfaceRoot().querySelector(`[data-settings-id="${CSS.escape(id)}"], #${CSS.escape(id)}`);
+  }
+
   renderSettings() {
+    if (this.isMobileLayout()) { this.renderMobileShell(); return; }
     const tabs = [
       ['search', 'bx-search', 'Поиск настроек'],
       ['visual', 'bx-palette', 'Визуал и UI'],
@@ -19095,8 +19488,8 @@ class NocturneWriter {
     this.state.activeSettingsTab = tab;
     this.closeAllFloatingMenus();
     if (this.isMobileLayout()) {
-      this.state.mobile.settingsTab = ['visual', 'editor', 'dictionary', 'review', 'focus', 'macros', 'formatting', 'ai', 'data', 'export', 'misc', 'search'].includes(tab) ? tab : null;
-      this.openMobilePanel('settings', 'more');
+      const settingsTab = ['visual', 'editor', 'dictionary', 'review', 'focus', 'macros', 'formatting', 'ai', 'data', 'export', 'misc', 'search'].includes(tab) ? tab : null;
+      this.openMobilePanel('settings', 'more', { settingsTab });
       return;
     }
     document.getElementById('settings-overlay')?.classList.add('active');
@@ -19170,7 +19563,7 @@ class NocturneWriter {
 
   settingsContent(tab) {
     const s = this.state.settings;
-    const row = (label, note, control) => `<div class="setting-row"><div class="setting-info"><span>${label}${note ? `<i class="bx bx-info-circle info-icon" tabindex="0" data-tip="${escapeHtml(note)}"></i>` : ''}</span>${note ? `<small>${note}</small>` : ''}</div><div class="setting-control">${control}</div></div>`;
+    const row = (label, note, control) => `<div class="setting-row ${this.isMobileLayout() && /^<div class="toggle /.test(control) ? 'setting-row-switch' : ''}"><div class="setting-info"><span>${label}${note ? `<i class="bx bx-info-circle info-icon" tabindex="0" data-tip="${escapeHtml(note)}"></i>` : ''}</span>${note ? `<small>${note}</small>` : ''}</div><div class="setting-control">${control}</div></div>`;
     const toggle = (key) => `<div class="toggle ${s[key] ? 'on' : ''}" data-setting="${key}" data-kind="toggle"></div>`;
     const range = (key, min, max, step = 1, suffix = '') => `<div class="range-field" data-range-field><input class="range-control" type="range" min="${min}" max="${max}" step="${step}" value="${s[key]}" data-setting="${key}" data-suffix="${escapeHtml(suffix)}"><input class="range-value-input" type="text" value="${s[key]}${suffix}" data-setting-input="${key}" data-suffix="${escapeHtml(suffix)}" data-min="${min}" data-max="${max}" data-step="${step}"></div>`;
     const select = (key, options) => this.renderSettingsSelect(key, options);
@@ -19180,7 +19573,7 @@ class NocturneWriter {
         <div class="tab-content active">
           ${row('Тема оформления', 'Меняет базовую палитру интерфейса без изменения структуры документов.', select('theme', [['nocturne', 'Nocturne Dark'], ['adaptive', 'Nocturne Adaptive'], ['blazing', 'Blazing Black'], ['midnight', 'Deep Midnight'], ['paper', 'Paper Light'], ['matrix', 'Cyberpunk Matrix'], ['lavender', 'Lavender Bloom'], ['crimson', 'Crimson Flame']]))}
           ${row('Кастомный акцентный цвет', 'Обновляет кнопки, свечения и подсветку сущностей.', this.renderAccentColorControl())}
-          ${row('Прозрачность окна / Blur', 'В веб-версии включает CSS-материал; desktop bridge сможет подключить Mica/Vibrancy.', toggle('windowMaterial'))}
+          ${row(this.isMobileLayout() ? 'Прозрачность панелей' : 'Прозрачность окна / Blur', this.isMobileLayout() ? 'Лёгкое размытие фона под меню и панелями.' : 'В веб-версии включает CSS-материал; desktop bridge сможет подключить Mica/Vibrancy.', toggle('windowMaterial'))}
           ${row('Свечение курсора', 'Добавляет мягкую подсветку вокруг позиции ввода, чтобы легче держать фокус на строке.', toggle('cursorGlow'))}
           ${row('Стиль каретки', 'Выберите форму курсора ввода: тонкая линия, блок или нижнее подчёркивание.', select('caretStyle', [['line', 'Тонкая линия'], ['block', 'Блок'], ['underline', 'Подчеркивание']]))}
           ${row('Скорость мигания', 'Интервал мигания кастомной каретки в миллисекундах.', range('caretBlink', 250, 1400, 10, 'ms'))}
@@ -19572,7 +19965,7 @@ class NocturneWriter {
   }
 
   updateSettingsSearchList() {
-    const listEl = document.querySelector('.settings-search-results-list');
+    const listEl = this.settingsSurfaceRoot().querySelector('.settings-search-results-list');
     if (!listEl) return;
     const query = String(this.state.settingsSearchQuery || '').trim().toLowerCase();
     let resultsHtml = '';
@@ -19779,7 +20172,7 @@ class NocturneWriter {
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('[data-confirm-delete-macro]').onclick = () => {
       overlay.classList.remove('active');
-      const row = [...document.querySelectorAll('.macro-item')][index];
+      const row = [...this.settingsSurfaceRoot().querySelectorAll('.macro-item')][index];
       const remove = () => {
         const current = this.state.settings.macros?.indexOf(macro) ?? -1;
         if (current < 0) return;
@@ -19797,26 +20190,27 @@ class NocturneWriter {
     // Update only the macros list section without triggering a full settings re-render
     const s = this.state.settings;
     const macros = s.macros || [];
+    const root = this.settingsSurfaceRoot();
 
     // Update record button state
-    const recordBtn = document.querySelector('[data-action="macro-record-toggle"]');
+    const recordBtn = root.querySelector('[data-action="macro-record-toggle"]');
     if (recordBtn) {
       const btnText = this.macroRecordingState ? 'Запись...' : 'Записать';
       recordBtn.textContent = btnText;
       recordBtn.classList.toggle('recording', !!this.macroRecordingState);
       recordBtn.classList.toggle('active', !!this.macroRecordingState);
     }
-    const recordInstruct = document.getElementById('macro-record-instructions');
+    const recordInstruct = this.settingsControl('macro-record-instructions');
     if (recordInstruct) {
       recordInstruct.style.display = this.macroRecordingState ? 'block' : 'none';
     }
-    const keysInput = document.getElementById('new-macro-keys');
+    const keysInput = this.settingsControl('new-macro-keys');
     if (keysInput) keysInput.value = this.macroRecordedKeys || '';
 
     // Update the macros list
-    const listEl = document.querySelector('.macros-list');
+    const listEl = root.querySelector('.macros-list');
     if (!listEl) { this.renderSettings(); return; }
-    const countEl = document.querySelector('.macros-list-section h4');
+    const countEl = root.querySelector('.macros-list-section h4');
     if (countEl) countEl.textContent = `Список макросов (${macros.length})`;
     this.updateSurfaceHTML(listEl, macros.length === 0
       ? `<div class="macros-empty-state"><i class="bx bx-keyboard"></i><p>У вас пока нет макросов. Запишите первый макрос выше!</p></div>`
@@ -19910,9 +20304,10 @@ class NocturneWriter {
   renderFormattingListOnly() {
     const s = this.state.settings;
     const rules = s.customInputRules || [];
-    const listEl = document.querySelector('.formatting-list');
+    const root = this.settingsSurfaceRoot();
+    const listEl = root.querySelector('.formatting-list');
     if (!listEl) { this.renderSettings(); return; }
-    const countEl = document.querySelector('.formatting-list-section h4');
+    const countEl = root.querySelector('.formatting-list-section h4');
     if (countEl) countEl.textContent = `Список правил (${rules.length})`;
     this.updateSurfaceHTML(listEl, rules.length === 0
       ? `<div class="formatting-empty-state" style="text-align: center; padding: 40px 20px; border: 1px dashed var(--border); border-radius: var(--radius-md); color: var(--text-muted);"><i class="bx bx-list-check" style="font-size: 48px; margin-bottom: 8px; opacity: 0.4;"></i><p style="margin: 0;">У вас пока нет настроенных правил автозамены. Добавьте первое правило выше!</p></div>`
@@ -20005,7 +20400,7 @@ class NocturneWriter {
     await this.persistSettings();
     this.renderSettings();
     requestAnimationFrame(() => {
-      const keyInput = document.querySelector('[data-setting="aiKey"]');
+      const keyInput = this.settingsSurfaceRoot().querySelector('[data-setting="aiKey"]');
       keyInput?.focus();
       keyInput?.classList.add('input-attention');
       setTimeout(() => keyInput?.classList.remove('input-attention'), 900);
@@ -20171,7 +20566,7 @@ class NocturneWriter {
 
   applySettingSideEffects(key, control = null) {
     if (key === 'newRuleAction') {
-      const wrapper = document.getElementById('custom-text-wrapper');
+      const wrapper = this.settingsControl('custom-text-wrapper');
       if (wrapper) {
         const isCustomText = this.state.settings.newRuleAction === 'custom-text';
         wrapper.classList.toggle('show', isCustomText);
@@ -20235,7 +20630,7 @@ class NocturneWriter {
       this.updateTypoHighlights();
     }
     if (key === 'smartDictionary' || key === 'smartDictionaryMode') {
-      const subpanel = document.querySelector('.smart-dictionary-subpanel');
+      const subpanel = this.settingsSurfaceRoot().querySelector('.smart-dictionary-subpanel');
       if (subpanel) {
         subpanel.classList.toggle('open', Boolean(this.state.settings.smartDictionary));
         const successNotice = subpanel.querySelector('.smart-dictionary-notice.notice-success');
@@ -20469,6 +20864,7 @@ class NocturneWriter {
     document.body.classList.toggle('theme-crimson', s.theme === 'crimson');
     document.body.classList.toggle('theme-adaptive', s.theme === 'adaptive');
     document.body.classList.toggle('theme-blazing', s.theme === 'blazing');
+    if (this.nativeBarsTheme !== s.theme) { this.nativeBarsTheme = s.theme; this.applyAndroidSystemBars(); }
     document.body.classList.toggle('reduce-mobile-animations', !!s.reduceMobileAnimations);
     shell.classList.toggle('compact', s.compactPanels);
     document.body.classList.toggle('compact', s.compactPanels);
@@ -20627,6 +21023,8 @@ class NocturneWriter {
     const context = this.ensureAssistantDocumentContext();
     if (!context.ok) return;
     if (kind === 'sentiment') {
+      this.mobileSentimentVisible = true;
+      document.querySelectorAll('[data-mobile-sentiment]').forEach(canvas => { canvas.hidden = false; });
       this.drawSentiment(true);
       this.setAssistantOutput('График тональности обновлен.');
       return;
@@ -21431,10 +21829,8 @@ ${raw}`;
     const providerMessage = this.assistantProviderProblem();
     const busy = !!this.activeAiRequest;
     for (const button of document.querySelectorAll('[data-action="cancel-ai"]')) button.hidden = !busy;
-    const mobileOutput = document.querySelector('.mobile-ai-output');
-    if (mobileOutput) { mobileOutput.dataset.tone = busy ? 'busy' : this.assistantState; mobileOutput.textContent = this.assistantPanelMessage || this.assistantBusyMessage(); }
     document.querySelectorAll('.ai-card').forEach((card) => {
-      const disabled = !!docMessage || busy;
+      const disabled = !!docMessage || busy || (!!providerMessage && !!card.closest('.mobile-tab-surface, #mobile-panel'));
       card.toggleAttribute('disabled', disabled);
       card.classList.toggle('disabled', disabled);
       card.title = docMessage ? 'Откройте или создайте документ, чтобы использовать ассистента.' : busy ? 'Дождитесь завершения текущего AI-запроса.' : '';
@@ -21464,6 +21860,10 @@ ${raw}`;
     } else {
       output.dataset.tone = this.assistantState || 'idle';
       output.textContent = this.assistantPanelMessage;
+    }
+    for (const mobileOutput of document.querySelectorAll('.mobile-ai-output')) {
+      mobileOutput.dataset.tone = output.dataset.tone;
+      mobileOutput.textContent = this.assistantPanelMessage;
     }
   }
 
@@ -21630,10 +22030,12 @@ ${raw}`;
     return [normalizeHtml(left.innerHTML || '<br>'), normalizeHtml(right.innerHTML || '<br>')];
   }
 
-  drawSentiment(force = false) {
+  drawSentiment(force = false, canvas = null) {
     if (!this.state.settings.sentimentTimeline && !force) return;
-    const canvas = document.getElementById('sentiment-graph');
-    if (!canvas) return;
+    if (!canvas) {
+      document.querySelectorAll('#sentiment-graph, [data-mobile-sentiment]').forEach(chart => this.drawSentiment(force, chart));
+      return;
+    }
     const ctx = canvas.getContext('2d');
     const sentences = (docText(this.getFocusedDoc()?.ast).match(/[^.!?…]+[.!?…]?/g) || []).slice(-24);
     const hot = ['кровь', 'страх', 'удар', 'огонь', 'смерть', 'боль', 'крик', 'опасность'];
@@ -23569,7 +23971,8 @@ ${raw}`;
   }
 
   async setSessionPassword() {
-    const value = document.getElementById('session-password')?.value || '';
+    const value = this.settingsControl('session-password')?.value || '';
+    await this.flushOpenDocuments();
     this.state.sessionPassword = value;
     safeSetStorageItem(sessionStorage, 'nocturne-master-password', value);
     this.state.docs = await this.loadDocs();
@@ -23748,7 +24151,7 @@ ${raw}`;
 
     if (!portal) return;
 
-    const hasOpenMenu = ['library', 'kb', 'mode', 'format', 'split', 'notes', 'search', 'review']
+    const hasOpenMenu = ['empty', 'folder', 'library', 'kb', 'mode', 'format', 'split', 'notes', 'search', 'review']
 
       .some((key) => this.isFloatingMenuOpen(key));
 

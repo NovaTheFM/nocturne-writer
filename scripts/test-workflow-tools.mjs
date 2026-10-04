@@ -78,8 +78,8 @@ try {
       const record = await protectRecord('docs', doc, { enabled: true, password: 'paired-project-password' });
       await a.db.atomicWrite({ docs: [record] }, { raw: true }); a.state.settings.e2e = false; a.state.sessionPassword = '';
       a.state.docs = await a.loadDocs();
-      const input = document.createElement('input'); input.id = 'session-password'; input.value = 'paired-project-password'; document.body.append(input);
-      await a.setSessionPassword(); input.remove();
+      a.openSettingsTab('data'); a.settingsControl('session-password').value = 'paired-project-password';
+      await a.setSessionPassword();
       a.nocturneEditor.get('primary').commands.setContent('<p>Encrypted phone revision</p>'); await a.saveActiveDoc({ silent: true });
       const raw = await a.db.getAllRaw('docs');
       return a.state.settings.e2e && !!raw[0].protectedStore && !JSON.stringify(raw).includes('Encrypted phone revision');

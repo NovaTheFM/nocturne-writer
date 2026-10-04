@@ -1051,10 +1051,31 @@ export class NocturneEditorBridge {
     for (const instance of this.instances.values()) instance.pageShell.closest('.editor-scroll-area')?.removeEventListener('scroll', instance.onResizeScroll);
   }
 
-  runCommand(paneId, command, value = null) {
+  setSelectionFromRange(paneId, range) {
+    const editor = this.get(paneId);
+    if (!editor || !range || !editor.view.dom.contains(range.startContainer) || !editor.view.dom.contains(range.endContainer)) return false;
+    const from = editor.view.posAtDOM(range.startContainer, range.startOffset);
+    const to = editor.view.posAtDOM(range.endContainer, range.endOffset);
+    return editor.commands.setTextSelection({ from, to });
+  }
+
+  selectionRange(paneId) {
+    const editor = this.get(paneId);
+    if (!editor) return null;
+    const { from, to } = editor.state.selection;
+    const start = editor.view.domAtPos(from), end = editor.view.domAtPos(to);
+    const range = document.createRange();
+    range.setStart(start.node, start.offset); range.setEnd(end.node, end.offset);
+    return range;
+  }
+
+  runCommand(paneId, command, value = null, range = null) {
     const editor = this.get(paneId);
     if (!editor) return false;
     const chain = editor.chain().focus();
+    if (range && editor.view.dom.contains(range.startContainer) && editor.view.dom.contains(range.endContainer)) {
+      chain.setTextSelection({ from: editor.view.posAtDOM(range.startContainer, range.startOffset), to: editor.view.posAtDOM(range.endContainer, range.endOffset) });
+    }
     if (command === 'bold') return chain.toggleBold().run();
     if (command === 'italic') return chain.toggleItalic().run();
     if (command === 'underline') return chain.toggleUnderline().run();

@@ -25,6 +25,7 @@ const checks = [
   ['desktop-smoke', ['scripts/desktop-smoke.mjs']],
   ['responsive-ui', ['scripts/ui-qa.mjs']],
   ['mobile-behavior', ['scripts/test-mobile-behavior.mjs']],
+  ['android-polish', ['scripts/test-android-polish.mjs'], process.execPath, 240_000],
   ['interface-revision', ['scripts/test-interface-revision.mjs']],
   ['surface-motion', ['scripts/test-surface-motion.mjs']],
   ['app-motion', ['scripts/test-app-motion.mjs']],
@@ -36,9 +37,9 @@ if (process.argv.includes('--artifacts')) checks.push(
 );
 const results = [];
 await mkdir('release/qa', { recursive: true });
-for (const [name, args, executable = process.execPath] of checks) {
+for (const [name, args, executable = process.execPath, timeout = 120_000] of checks) {
   const started = Date.now();
-  const result = spawnSync(executable, args, { encoding: 'utf8', windowsHide: true, timeout: 120_000 });
+  const result = spawnSync(executable, args, { encoding: 'utf8', windowsHide: true, timeout });
   const output = `${result.stdout || ''}${result.stderr || ''}`;
   await writeFile(`release/qa/${name}.log`, output);
   results.push({ name, passed: result.status === 0, durationMs: Date.now() - started, error: result.error?.message });

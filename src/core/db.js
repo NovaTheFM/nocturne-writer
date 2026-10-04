@@ -50,7 +50,7 @@ export class Database {
     this.documentVersions = new Map(records.map(record => [record.id, structuredClone(record)]));
   }
 
-  async open() {
+  async open({ initialSettings = defaultSettings } = {}) {
     if (this.db) return this.db;
     this.db = await new Promise((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -71,7 +71,7 @@ export class Database {
       };
       request.onerror = () => reject(request.error || new Error('IndexedDB open failed'));
     });
-    await this.seed();
+    await this.seed(initialSettings);
     return this.db;
   }
 
@@ -216,9 +216,9 @@ export class Database {
     for (const [store, ids] of Object.entries(deletes)) for (const id of ids) this.onMutation?.({ store, id, action: 'delete', origin });
   }
 
-  async seed() {
+  async seed(initialSettings = defaultSettings) {
     const seeded = await requestToPromise(this.store('settings').get('app'));
-    if (!seeded) await this.put('settings', { id: 'app', value: defaultSettings });
+    if (!seeded) await this.put('settings', { id: 'app', value: initialSettings });
     const folders = await requestToPromise(this.store('folders').getAll());
     if (!folders.length) await Promise.all(seedFolders.map((folder) => this.put('folders', folder)));
     const lore = await requestToPromise(this.store('lore').get('world'));

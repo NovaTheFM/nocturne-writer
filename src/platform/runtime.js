@@ -24,15 +24,31 @@ export function detectRuntime() {
   };
 }
 
-export async function configureNativeBars() {
+export function nativeBarColor(color = '#08080a') {
+  if (/^#[\da-f]{6}$/i.test(color)) return color;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 1;
+  const context = canvas.getContext('2d');
+  if (!context) return '#08080a';
+  context.fillStyle = '#08080a'; context.fillStyle = color;
+  context.fillRect(0, 0, 1, 1);
+  return '#' + [...context.getImageData(0, 0, 1, 1).data].slice(0, 3).map(channel => channel.toString(16).padStart(2, '0')).join('');
+}
+
+export async function configureNativeBars({ light = false, color = '#08080a' } = {}) {
   if (!Capacitor.isNativePlatform()) return;
+  color = nativeBarColor(color);
   try {
     await nativePlugins.StatusBar.show();
-    await nativePlugins.StatusBar.setStyle({ style: 'DARK' });
-    await nativePlugins.StatusBar.setBackgroundColor({ color: '#101017' });
+    await nativePlugins.StatusBar.setStyle({ style: light ? 'LIGHT' : 'DARK' });
+    await nativePlugins.StatusBar.setBackgroundColor({ color });
     await nativePlugins.NavigationBar.show();
-    await nativePlugins.NavigationBar.setColor({ color: '#101017', darkButtons: false });
+    await nativePlugins.NavigationBar.setColor({ color, darkButtons: light });
   } catch (error) { console.warn('Native system bars:', error.message); }
+}
+
+export async function minimizeNativeApp() {
+  if (Capacitor.isNativePlatform()) await nativePlugins.App.minimizeApp();
 }
 
 export function bindNativeLifecycle({ onBack, onSuspend, onResume }) {

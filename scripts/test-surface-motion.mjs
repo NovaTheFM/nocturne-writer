@@ -27,13 +27,21 @@ try {
       const dialog = document.querySelector('.sync-center-modal'), button = dialog.querySelector('[data-action="sync-toggle-options"]');
       button.focus(); const start = dialog.getBoundingClientRect().height; button.click();
       const frames = [], started = performance.now();
+      let sampledTransition = false;
       while (performance.now() - started < 400) {
         await new Promise(resolve => requestAnimationFrame(resolve));
+        const heightMotion = dialog.getAnimations().find(animation => animation.transitionProperty === 'height');
+        if (heightMotion && !sampledTransition) {
+          // Sampling the transition clock keeps dropped frames from skipping the interpolation assertion.
+          heightMotion.pause(); heightMotion.currentTime = Number(heightMotion.effect.getTiming().duration) / 4;
+          frames.push(dialog.getBoundingClientRect().height);
+          heightMotion.play(); sampledTransition = true;
+        }
         frames.push(dialog.getBoundingClientRect().height);
       }
       const sameDialog = dialog === document.querySelector('.sync-center-modal');
       const sameFocus = button === document.activeElement;
-      return { start, frames, end: dialog.getBoundingClientRect().height, sameDialog, sameFocus };
+      return { start, frames, end: dialog.getBoundingClientRect().height, sameDialog, sameFocus, sampledTransition };
     });
     assert.equal(sample.sameDialog, true, 'Status changes must keep the original dialog');
     assert.equal(sample.sameFocus, true, 'Disclosure trigger must keep keyboard focus');

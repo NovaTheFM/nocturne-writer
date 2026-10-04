@@ -112,8 +112,9 @@ try {
   await check('typing and backspace at a page boundary never insert or delete a spacer from the model', async page => {
     await enable(page, `<p>${'Page boundary sentence. '.repeat(1000)}</p>`);
     const result = await geometry(page), boundary = result.breaks[0].pos;
-    await page.evaluate(pos => window.nocturneApp.nocturneEditor.get('primary').commands.setTextSelection(pos), boundary);
-    await page.locator('.page-content-prosemirror').focus(); await page.keyboard.type('Boundary!'); await page.waitForTimeout(500);
+    await page.evaluate(pos => window.nocturneApp.nocturneEditor.get('primary').chain().focus().setTextSelection(pos).run(), boundary);
+    await page.waitForFunction(pos => { const editor = window.nocturneApp.nocturneEditor.get('primary'); return editor.isFocused && editor.state.selection.from === pos; }, boundary);
+    await page.keyboard.type('Boundary!'); await page.waitForTimeout(500);
     assert.equal(await page.evaluate(() => window.nocturneApp.nocturneEditor.get('primary').getText()), result.text.slice(0, boundary - 1) + 'Boundary!' + result.text.slice(boundary - 1));
     for (let i = 0; i < 9; i++) await page.keyboard.press('Backspace'); await page.waitForTimeout(400);
     assert.equal(await page.evaluate(() => window.nocturneApp.nocturneEditor.get('primary').getText()), result.text);

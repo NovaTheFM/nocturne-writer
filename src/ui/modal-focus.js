@@ -9,10 +9,10 @@ export function manageModalFocus() {
       if (button.classList.contains('kb-close-btn')) button.setAttribute('aria-label', 'Вернуться к рукописи');
     }
     for (const toggle of document.querySelectorAll('[data-kind="toggle"]')) {
-      toggle.setAttribute('role', 'switch'); toggle.tabIndex = 0; toggle.setAttribute('aria-checked', String(toggle.classList.contains('on')));
-      toggle.setAttribute('aria-label', toggle.closest('.setting-row')?.querySelector('.setting-info strong, .setting-info > span')?.textContent || toggle.closest('.ai-context-head')?.querySelector('strong')?.textContent || 'Переключатель');
+      toggle.setAttribute('role', 'switch'); toggle.tabIndex = 0; toggle.setAttribute('aria-checked', String(toggle.classList.contains('on') || toggle.classList.contains('active')));
+      toggle.setAttribute('aria-label', (toggle.tagName === 'BUTTON' ? toggle.textContent.trim() : '') || toggle.closest('.setting-row')?.querySelector('.setting-info strong, .setting-info > span')?.textContent || toggle.closest('.ai-context-head')?.querySelector('strong')?.textContent || 'Переключатель');
     }
-    const overlays = [...document.querySelectorAll('#form-overlay.active, #settings-overlay.active, #kb-modal.active, .command-palette-overlay.active')];
+    const overlays = [...document.querySelectorAll('#form-overlay.active, #settings-overlay.active, #kb-modal.active, #mobile-overlay.active, .floating-notes-modal.active, .command-palette-overlay.active')];
     const overlay = overlays.sort((a, b) => (Number(getComputedStyle(a).zIndex) || 0) - (Number(getComputedStyle(b).zIndex) || 0)).at(-1);
     const modal = overlay?.id === 'kb-modal' ? overlay : overlay?.querySelector('.form-modal, .settings-modal, .kb-modal-dialog, [role="dialog"]') || overlay?.firstElementChild || overlay;
     if (overlay === active && modal === activeModal) return;
@@ -33,11 +33,11 @@ export function manageModalFocus() {
     for (const input of modal.querySelectorAll('input:not([type="hidden"]), textarea, select')) {
       if (!input.labels?.length && !input.hasAttribute('aria-label')) input.setAttribute('aria-label', input.closest('.setting-row')?.querySelector('.setting-info strong, .setting-info > span')?.textContent || input.placeholder || input.name || 'Поле ввода');
     }
-    for (const element of document.querySelectorAll('#app, .mobile-bottom-nav, .mobile-topbar, .mobile-system-bar')) {
+    for (const element of document.querySelectorAll('#app, .main-workspace, .sidebar, .toolbar, .mobile-bottom-nav, .mobile-topbar, .mobile-system-bar, .mobile-tab-surface, #mobile-overlay, .floating-notes-modal')) {
       if (!element.contains(active) && !active.contains(element)) { element.inert = true; element.dataset.modalInert = 'true'; }
     }
     modal.tabIndex = -1;
-    const initial = modal.querySelector('[autofocus], input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), textarea, .nocturne-select-trigger');
+    const initial = overlay.id === 'mobile-overlay' ? null : modal.querySelector('[autofocus], input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), textarea, .nocturne-select-trigger');
     (focusWithinModal ? document.activeElement : initial || modal).focus({ preventScroll: true });
   };
   const observer = new MutationObserver(update);
