@@ -3,6 +3,8 @@ import test from 'node:test';
 import net from 'node:net';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { chromium } from 'playwright';
 import { PROJECT_CHECKS, EXTRA_CHECKS, ARTIFACT_CHECKS, AREA_LABELS } from './checks.mjs';
 import { availablePort, runCheck, archiveEvidence, sourceFingerprint } from './runner.mjs';
 import { reportStatus, writeReports } from './report.mjs';
@@ -124,4 +126,25 @@ test('Evidence archive excludes profiles, old evidence and its own output direct
   const copied = await archiveEvidence(root, output, started);
   assert.deepEqual(copied, [join(output, 'artifacts/fresh.json')]);
   assert.match(await readFile(copied[0], 'utf8'), /fixture/);
+});
+
+test('Report filters work and expanded long feature names fit narrow screens', async () => {
+  const directory=await temporary();
+  await writeReports(directory, {
+    status:'PASS_WITH_GAPS', options:{platform:'all',mode:'full',seed:1},
+    results:[{id:'writing-case',status:'PASS'},{id:'native-case',status:'SKIP',reason:'No device'}],
+    features:{methods:[{name:'handleMobileEditorSelectionPointerDown'.repeat(3),file:'src/main.js',line:1,observed:false}]},
+  });
+  const browser=await chromium.launch({headless:true});
+  try {
+    const page=await browser.newPage();
+    for(const width of [1440,390,320]){
+      await page.setViewportSize({width,height:900});
+      await page.goto(pathToFileURL(join(directory,'index.html')).href);
+      await page.locator('#search').fill('writing-case');assert.equal(await page.locator('article:visible').count(),1);
+      await page.locator('#search').fill('');await page.locator('#status').selectOption('SKIP');assert.equal(await page.locator('article:visible').count(),1);
+      await page.locator('details summary').filter({hasText:'methods:'}).click();
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,`Report overflow at ${width}px`);
+    }
+  }finally{await browser.close();}
 });
