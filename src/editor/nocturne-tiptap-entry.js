@@ -6,3 +6,4 @@ export { default as Placeholder } from '@tiptap/extension-placeholder';
 export { default as HorizontalRule } from '@tiptap/extension-horizontal-rule';
 export { Plugin, PluginKey, TextSelection } from 'prosemirror-state';
 export { Decoration, DecorationSet } from 'prosemirror-view';
+export { closeHistory } from 'prosemirror-history';

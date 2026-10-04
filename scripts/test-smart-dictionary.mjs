@@ -51,6 +51,101 @@ try {
   browser = await chromium.launch({ headless: true });
   for (let i = 0; i < 100; i++) { try { if ((await fetch(url)).ok) break; } catch {} await new Promise(resolve => setTimeout(resolve, 100)); }
   for (const profile of ['desktop', 'android'].filter(value => platform === 'all' || platform === value)) {
+    await check(profile, 'contextual corrections never spread to another occurrence and alternatives remain selectable', async page => {
+      await page.evaluate(() => {
+        const a = window.nocturneApp, e = a.nocturneEditor.get('primary');
+        window.fetch = async (_url, options) => {
+          const text = new URLSearchParams(options.body).get('text'), matches = [];
+          const add = (raw, values, type = 'misspelling') => {
+            const offset = text.indexOf(raw);
+            if (offset >= 0) matches.push({ offset, length: raw.length, replacements: values.map(value => ({ value })), rule: { issueType: type, category: { id: type === 'grammar' ? 'GRAMMAR' : 'TYPOS', name: type } } });
+          };
+          add('are', ['is'], 'grammar'); add('adress', ['address', 'dress']); add('ADRESS', ['ADDRESS', 'DRESS']); add('пришол', ['прешёл', 'пришёл', 'прикол']); add('серебро', ['Ты серебро']);
+          return { ok: true, json: async () => ({ matches }) };
+        };
+        a.state.settings.smartDictionaryMode = 'api';
+        e.commands.setContent('<p>These cat are asleep. We are awake.</p><p>The adress is wrong. ADRESS is wrong.</p><p>Я пришол домой. В руке серебро.</p>'); e.commands.blur(); a.nocturneEditor.syncDocFromEditor('primary'); a.applySettingSideEffects('smartDictionaryMode');
+      });
+      await page.waitForFunction(() => window.nocturneApp.spellerCache.has('пришол'));
+      const matches = await page.evaluate(() => window.nocturneApp.typoMatchIndex.filter(match => match.source === 'smart').map(({ rawText, correct, startOffset }) => ({ rawText, correct, startOffset })));
+      assert.deepEqual(matches, [
+        { rawText: 'are', correct: 'is', startOffset: 10 },
+        { rawText: 'adress', correct: 'address', startOffset: 4 },
+        { rawText: 'ADRESS', correct: 'ADDRESS', startOffset: 21 },
+        { rawText: 'пришол', correct: 'пришёл', startOffset: 2 },
+      ]);
+      await page.evaluate(() => {
+        const a = window.nocturneApp, match = a.typoMatchIndex.find(match => match.rawText === 'пришол');
+        a.state.contextMenu = { x: 40, y: 90, docId: match.docId, paneId: match.paneId, reviewMode: 'write', selectedText: '', typoMatch: match }; a.renderContextMenu();
+      });
+      assert.deepEqual(await page.locator('#app-context-menu [data-typo-suggestion-index]').allTextContents(), ['Заменить на «пришёл»', 'Заменить на «прикол»', 'Заменить на «прешёл»']);
+      const menu = await page.locator('#app-context-menu').boundingBox(), viewport = page.viewportSize();
+      assert.ok(menu && menu.x >= 0 && menu.y >= 0 && menu.x + menu.width <= viewport.width + 1 && menu.y + menu.height <= viewport.height + 1, 'Suggestion menu fits the viewport');
+      await page.locator('#app-context-menu').screenshot({ path: join(directory, `${profile}-smart-alternatives.png`) });
+      await page.locator('#app-context-menu [data-typo-suggestion-index="0"]').click();
+      assert.ok(await page.evaluate(() => window.nocturneApp.nocturneEditor.get('primary').getText().includes('Я пришёл домой. В руке серебро.')));
+      await page.waitForFunction(() => window.nocturneApp.typoMatchIndex.some(match => match.rawText === 'adress'));
+      const stale = await page.evaluate(() => window.nocturneApp.typoMatchIndex.find(match => match.rawText === 'adress'));
+      assert.ok(stale, 'The stale-suggestion check must start with a real suggestion');
+      const edited = await page.evaluate(match => {
+        const a = window.nocturneApp, e = a.nocturneEditor.get('primary');
+        let position;
+        e.state.doc.descendants((node, pos) => { if (node.attrs.blockId === match.blockId) position = pos + node.nodeSize - 1; });
+        e.view.dispatch(e.state.tr.insertText(' New context.', position));
+        const before = e.getText();
+        return { before, applied: a.applyTypoReplacement(match), after: e.getText() };
+      }, stale);
+      assert.equal(edited.applied, false);
+      assert.equal(edited.after, edited.before);
+    });
+    await check(profile, 'local Smart preserves occurrence case, formatting and replacement undo', async page => {
+      await page.evaluate(() => {
+        const a = window.nocturneApp, e = a.nocturneEditor.get('primary');
+        a.state.settings.strictSpellcheck = false; a.state.settings.smartDictionaryMode = 'local';
+        e.commands.setContent('<p><strong>Вообщем</strong> текст. <em>ВООБЩЕМ</em> текст. вообщем текст.</p>');
+        e.commands.blur(); a.nocturneEditor.syncDocFromEditor('primary'); a.applySettingSideEffects('smartDictionaryMode');
+      });
+      await page.waitForFunction(() => window.nocturneApp.typoMatchIndex.filter(match => match.source === 'smart').length === 3);
+      assert.deepEqual(await page.evaluate(() => window.nocturneApp.typoMatchIndex.map(({ rawText, correct }) => ({ rawText, correct }))), [
+        { rawText: 'Вообщем', correct: 'В общем' }, { rawText: 'ВООБЩЕМ', correct: 'В ОБЩЕМ' }, { rawText: 'вообщем', correct: 'в общем' },
+      ]);
+      const result = await page.evaluate(() => {
+        const a = window.nocturneApp, e = a.nocturneEditor.get('primary'), before = e.getHTML();
+        const applied = a.applyTypoReplacement(a.typoMatchIndex.find(match => match.rawText === 'Вообщем'));
+        const after = e.getHTML();
+        e.commands.undo(); const undone = e.getHTML();
+        e.commands.redo(); const redone = e.getHTML();
+        return { applied, before, after, undone, redone };
+      });
+      assert.equal(result.applied, true);
+      assert.match(result.after, /<strong>В общем<\/strong>/u);
+      assert.match(result.after, /<em>ВООБЩЕМ<\/em>/u);
+      assert.equal(result.undone, result.before);
+      assert.equal(result.redone, result.after);
+      await page.evaluate(() => {
+        const a = window.nocturneApp, e = a.nocturneEditor.get('primary');
+        e.commands.setContent('<blockquote><p>Начало цитаты.</p><p><em>вообщем</em> конец.</p></blockquote>'); e.commands.blur();
+        a.nocturneEditor.syncDocFromEditor('primary'); a.updateTypoHighlights();
+      });
+      await page.waitForFunction(() => window.nocturneApp.typoMatchIndex.some(match => match.rawText === 'вообщем'));
+      const quote = await page.evaluate(() => {
+        const a = window.nocturneApp, e = a.nocturneEditor.get('primary');
+        return { applied: a.applyTypoReplacement(a.typoMatchIndex.find(match => match.rawText === 'вообщем')), html: e.getHTML() };
+      });
+      assert.equal(quote.applied, true);
+      assert.match(quote.html, /<blockquote[^>]*><p[^>]*>Начало цитаты\.<\/p><p[^>]*><em>в общем<\/em> конец\.<\/p><\/blockquote>/u);
+    });
+    await check(profile, 'Smart enabled through settings works when the frequent-error checker is off', async page => {
+      await page.evaluate(() => {
+        const a = window.nocturneApp, e = a.nocturneEditor.get('primary');
+        a.state.settings.strictSpellcheck = false; a.state.settings.smartDictionary = false; a.state.settings.smartDictionaryMode = 'local';
+        e.commands.setContent('<p>вообщем текст.</p>'); e.commands.blur(); a.nocturneEditor.syncDocFromEditor('primary'); a.applySettingSideEffects('strictSpellcheck'); a.openSettingsTab('dictionary');
+      });
+      await page.locator('[data-setting="smartDictionary"]:visible').click();
+      await page.waitForFunction(() => window.nocturneApp.typoMatchIndex.some(match => match.rawText === 'вообщем' && match.correct === 'в общем' && match.source === 'smart'));
+      assert.equal(await page.evaluate(() => window.nocturneApp.state.settings.strictSpellcheck), false);
+      assert.ok(await page.evaluate(() => CSS.highlights.get('typo-smart-errors')?.size > 0));
+    });
     await check(profile, 'disabled builtin stays disabled in all modes and survives reload', async page => {
       await page.evaluate(async () => {
         const a = window.nocturneApp, e = a.nocturneEditor.get('primary');

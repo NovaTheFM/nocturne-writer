@@ -2,6 +2,13 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { getSmartSpellerMatches } from '../src/core/smart-speller.js';
 
+const spellingRule = { issueType: 'misspelling', category: { id: 'TYPOS', name: 'Spelling' } };
+async function withSpellerResponse(matches, run) {
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ matches }) });
+  try { await run(); } finally { globalThis.fetch = original; }
+}
+
 test('offline dictionary detects known errors without network requests or invented guesses', async () => {
   const fetchBefore = globalThis.fetch;
   globalThis.fetch = () => { throw new Error('Unexpected network access'); };
@@ -80,4 +87,85 @@ test('a cancelled Smart response cannot populate the shared result cache', async
     assert.equal((await getSmartSpellerMatches(['abortmistype'], options)).get('abortmistype')?.correct, 'current');
     assert.equal(requests, 2);
   } finally { globalThis.fetch = fetchBefore; }
+});
+
+test('online suggestions retain the case and position of each occurrence', async () => {
+  const text = 'The adress is wrong. ADRESS is wrong.';
+  await withSpellerResponse([
+    { offset: text.indexOf('adress'), length: 6, replacements: [{ value: 'address' }], rule: spellingRule },
+    { offset: text.indexOf('ADRESS'), length: 6, replacements: [{ value: 'ADDRESS' }], rule: spellingRule },
+  ], async () => {
+    const matches = await getSmartSpellerMatches(['adress'], { mode: 'api', contextText: text });
+    assert.deepEqual(matches.get('adress')?.occurrences?.map(({ start, correct }) => ({ start, correct })), [{ start: 4, correct: 'address' }, { start: 21, correct: 'ADDRESS' }]);
+  });
+});
+
+test('Smart rejects invented phrases but retains genuine joined-word corrections', async () => {
+  await withSpellerResponse([
+    { offset: 0, length: 7, replacements: [{ value: 'Ты серебро' }], rule: spellingRule },
+    { offset: 8, length: 4, replacements: [{ value: 'a lot' }], rule: spellingRule },
+  ], async () => {
+    const matches = await getSmartSpellerMatches(['серебро', 'alot'], { mode: 'api', contextText: 'серебро alot.' });
+    assert.equal(matches.has('серебро'), false);
+    assert.equal(matches.get('alot')?.correct, 'a lot');
+  });
+});
+
+test('spelling alternatives are ranked without inventing replacements', async () => {
+  await withSpellerResponse([{ offset: 2, length: 6, replacements: [{ value: 'прешёл' }, { value: 'пришёл' }, { value: 'прикол' }], rule: spellingRule }], async () => {
+    const matches = await getSmartSpellerMatches(['пришол'], { mode: 'api', contextText: 'Я пришол домой.' });
+    assert.equal(matches.get('пришол')?.correct, 'пришёл');
+    assert.deepEqual(new Set(matches.get('пришол')?.suggestions), new Set(['прешёл', 'пришёл', 'прикол']));
+  });
+});
+
+test('splitting a typo into unrelated words does not outrank the actual spelling correction', async () => {
+  await withSpellerResponse([
+    { offset: 0, length: 6, replacements: [{ value: 'address' }, { value: 'dress' }, { value: 'a dress' }], rule: spellingRule },
+    { offset: 7, length: 7, replacements: [{ value: 'тетрадь' }, { value: 'те трать' }, { value: 'тет рать' }], rule: spellingRule },
+  ], async () => {
+    const result = await getSmartSpellerMatches(['adress', 'тетрать'], { mode: 'api', contextText: 'adress тетрать.' });
+    assert.equal(result.get('adress')?.correct, 'address');
+    assert.equal(result.get('тетрать')?.correct, 'тетрадь');
+  });
+});
+
+test('cached online responses serve later word batches without another network request', async () => {
+  const original = globalThis.fetch; let requests = 0;
+  globalThis.fetch = async () => { requests++; return { ok: true, json: async () => ({ matches: [
+    { offset: 0, length: 10, replacements: [{ value: 'first' }], rule: spellingRule },
+    { offset: 11, length: 10, replacements: [{ value: 'second' }], rule: spellingRule },
+  ] }) }; };
+  try {
+    const options = { mode: 'api', contextText: 'mistypeone mistypetwo.' };
+    assert.equal((await getSmartSpellerMatches(['mistypeone'], options)).get('mistypeone')?.correct, 'first');
+    assert.equal((await getSmartSpellerMatches(['mistypetwo'], options)).get('mistypetwo')?.correct, 'second');
+    assert.equal(requests, 1);
+  } finally { globalThis.fetch = original; }
+});
+
+test('Smart does not treat unchanged words or style preferences as spelling errors', async () => {
+  assert.equal((await getSmartSpellerMatches(['следующее', 'придешь'], { mode: 'local' })).size, 0);
+  assert.equal((await getSmartSpellerMatches(['росказни'], { mode: 'local' })).get('росказни')?.correct, 'россказни');
+  await withSpellerResponse([{ offset: 0, length: 7, replacements: [{ value: 'золото' }], rule: { issueType: 'style', category: { id: 'STYLE', name: 'Style' } } }], async () => {
+    assert.equal((await getSmartSpellerMatches(['серебро'], { mode: 'api', contextText: 'серебро лежало на столе.' })).size, 0);
+  });
+});
+
+test('repeated typos in distant context windows retain their original positions', async () => {
+  const original = globalThis.fetch, requests = [];
+  const text = `distantmistype. ${'Обычный текст. '.repeat(650)}DISTANTMISTYPE. ${'Обычный текст. '.repeat(650)}distantmistype.`;
+  globalThis.fetch = async (_url, options) => {
+    const chunk = new URLSearchParams(options.body).get('text'); requests.push(chunk);
+    return { ok: true, json: async () => ({ matches: [...chunk.matchAll(/distantmistype/giu)].map(match => ({ offset: match.index, length: match[0].length, replacements: [{ value: match[0] === match[0].toUpperCase() ? 'CORRECTION' : 'correction' }], rule: spellingRule })) }) };
+  };
+  try {
+    const result = await getSmartSpellerMatches(['distantmistype'], { mode: 'api', contextText: text });
+    assert.deepEqual(result.get('distantmistype')?.occurrences.map(({ start, rawText, correct }) => ({ start, rawText, correct })), [
+      { start: 0, rawText: 'distantmistype', correct: 'correction' },
+      { start: text.indexOf('DISTANTMISTYPE'), rawText: 'DISTANTMISTYPE', correct: 'CORRECTION' },
+      { start: text.lastIndexOf('distantmistype'), rawText: 'distantmistype', correct: 'correction' },
+    ]);
+    assert.ok(requests.every(chunk => chunk.length <= 4000));
+  } finally { globalThis.fetch = original; }
 });
