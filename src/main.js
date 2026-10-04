@@ -11376,13 +11376,17 @@ class NocturneWriter {
     this.typoMatchByBlock = new Map();
     this._typoHighlightRangesMap = new Map();
     this.disableBrowserSpellcheck();
+    if (!this.state.settings.strictSpellcheck || !this.state.settings.smartDictionary) {
+      if (this.spellerContext != null || this.spellerTimer || this.spellerRequest) this.resetSmartSpeller();
+    }
     if (!this.state.settings.strictSpellcheck) return;
 
     const protectedLexicon = this.buildProtectedLexicon();
     const active = this.getCaretSnapshot();
     const tokenLookup = this.getEffectiveTypoLookup();
     const phraseRules = this.getEffectiveTypoPhraseRules();
-    const signature = JSON.stringify([tokenLookup, phraseRules, [...protectedLexicon], this.state.settings.smartDictionary, this.state.settings.smartDictionaryMode, [...(this.spellerCache || new Map())]]);
+    if (this.state.settings.smartDictionary) this.syncSmartSpellerContext(tokenLookup, protectedLexicon);
+    const signature = JSON.stringify([tokenLookup, phraseRules, [...protectedLexicon], this.state.settings.smartDictionary, this.spellerGeneration, [...(this.spellerCache || new Map())]]);
     this.typoBlockCache ||= new WeakMap();
     const typoRanges = [];
     const smartRanges = [];
@@ -11484,12 +11488,44 @@ class NocturneWriter {
     this.renderTypoSvgOverlays();
   }
 
+  resetSmartSpeller() {
+    clearTimeout(this.spellerTimer);
+    this.spellerTimer = null;
+    this.spellerRequest?.abort();
+    this.spellerRequest = null;
+    this.spellerGeneration = (this.spellerGeneration || 0) + 1;
+    this.spellerCache = new Map();
+    this.spellerQueue = new Set();
+    this.spellerPending = new Set();
+    this.spellerContext = null;
+    this.spellerDocuments = [];
+  }
+
+  syncSmartSpellerContext(tokenLookup, protectedLexicon) {
+    const settings = this.state.settings;
+    // Immutable editor documents identify edits without serializing the manuscript on every highlight pass.
+    const documents = [...(this.nocturneEditor?.instances?.values() || [])].map(instance => ({ docId: instance.docId, content: instance.editor.state.doc }));
+    const ignoredWords = new Set(Object.keys(TYPO_LOOKUP).filter(word => !tokenLookup[word]));
+    for (const word of protectedLexicon) ignoredWords.add(word);
+    const context = JSON.stringify([settings.strictSpellcheck, settings.smartDictionary, settings.smartDictionaryMode, settings.smartDictionaryProvider, settings.smartDictionaryLang, tokenLookup, [...ignoredWords], documents.map(doc => doc.docId)]);
+    const previous = this.spellerDocuments || [];
+    if (context !== this.spellerContext || documents.length !== previous.length || documents.some((doc, i) => doc.content !== previous[i]?.content)) {
+      this.resetSmartSpeller();
+      this.spellerContext = context;
+      this.spellerDocuments = documents;
+      this.spellerIgnoredWords = ignoredWords;
+      this.spellerLookup = tokenLookup;
+    }
+  }
+
   scheduleSpellerCheck() {
-    if (this.spellerTimer) return;
+    if (this.spellerTimer || this.spellerRequest || !this.state.settings.strictSpellcheck || !this.state.settings.smartDictionary) return;
     this.spellerTimer = setTimeout(async () => {
       this.spellerTimer = null;
       if (!this.spellerQueue || !this.spellerQueue.size) return;
-      
+      const generation = this.spellerGeneration;
+      const controller = new AbortController();
+      this.spellerRequest = controller;
       const words = Array.from(this.spellerQueue).slice(0, 50);
       words.forEach((w) => {
         this.spellerQueue.delete(w);
@@ -11501,11 +11537,17 @@ class NocturneWriter {
           mode: this.state.settings.smartDictionaryMode || 'local',
           provider: this.state.settings.smartDictionaryProvider || 'languagetool',
           lang: this.state.settings.smartDictionaryLang || 'auto',
-          contextText: (this.getFocusedDoc()?.ast.blocks || []).filter(block => words.some(word => normalizeTypoToken(blockText(block)).includes(word))).map(blockText).join('\n').slice(0, 4000),
+          localLookup: this.spellerLookup,
+          ignoredWords: this.spellerIgnoredWords,
+          signal: controller.signal,
+          contextText: this.state.settings.smartDictionaryMode === 'local' ? '' : (this.spellerDocuments || []).map(doc => doc.content.textBetween(0, doc.content.content.size, '\n')).join('\n'),
         });
-        
+        this.syncSmartSpellerContext(this.getEffectiveTypoLookup(), this.buildProtectedLexicon());
+        if (generation !== this.spellerGeneration || controller.signal.aborted) {
+          this.updateTypoHighlights();
+          return;
+        }
         words.forEach((w) => {
-          this.spellerPending.delete(w);
           if (matches.checkedWords && !matches.checkedWords.has(w)) return;
           if (matches.has(w)) {
             const matchData = matches.get(w);
@@ -11522,13 +11564,19 @@ class NocturneWriter {
             this.spellerCache.set(w, null);
           }
         });
-        
-        this.updateTypoHighlights();
       } catch (e) {
-        console.error('Smart Speller error:', e);
-        words.forEach((w) => this.spellerPending.delete(w));
+        if (generation === this.spellerGeneration && !controller.signal.aborted) {
+          this.typoBlockCache = new WeakMap();
+          console.error('Smart Speller error:', e);
+        }
+        return;
+      } finally {
+        if (generation === this.spellerGeneration) words.forEach(w => this.spellerPending.delete(w));
+        if (this.spellerRequest === controller) this.spellerRequest = null;
+        if (generation === this.spellerGeneration && this.spellerQueue.size) this.scheduleSpellerCheck();
       }
-    }, 50);
+      if (generation === this.spellerGeneration) this.updateTypoHighlights();
+    }, this.state.settings.smartDictionaryMode === 'local' ? 50 : 250);
   }
 
   registerTypoMatch({ docId, paneId, blockId, start, end, rawText, rule, source = 'exact', smartConfidence = null }) {
@@ -11574,6 +11622,7 @@ class NocturneWriter {
       if (
         normalized.length >= 3
         && !protectedLexicon.has(normalized)
+        && !this.spellerIgnoredWords?.has(normalized)
         && !tokenLookup[normalized]
         && !this.typoRangeOverlaps(occupied, start, end)
         && this.isCompletedTypoToken(fullText, start, end, active, block.dataset.blockId)
@@ -15108,11 +15157,11 @@ class NocturneWriter {
                     ${this.renderSettingsSelect('smartDictionaryMode', [
                       ['local', 'Офлайн: словарь и правила'],
                       ['hybrid', 'Словарь и LanguageTool'],
-                      ['api', 'Только Онлайн (LanguageTool API)']
+                      ['api', 'Онлайн: LanguageTool']
                     ])}
                   </div>
                   <div class="smart-dictionary-field" style="flex:1; min-width:180px;">
-                    <span class="smart-dictionary-label">Язык:</span>
+                    <span class="smart-dictionary-label">Язык онлайн-проверки:</span>
                     ${this.renderSettingsSelect('smartDictionaryLang', [
                       ['auto', 'Авто-определение'],
                       ['uk', 'Українська'],
@@ -15133,7 +15182,7 @@ class NocturneWriter {
                   <div class="smart-dictionary-notice notice-info ${this.state.settings.smartDictionaryMode !== 'local' ? 'active' : ''}">
                     <i class="bx bx-cloud-upload"></i>
                     <div>
-                      <strong>Внешнее API:</strong> Проверка использует открытый сервис <code>api.languagetool.org</code>. Текст не сохраняется на серверах.
+                      <strong>Внешнее API:</strong> Фрагменты рукописи отправляются в <code>api.languagetool.org</code>. Для проверки без передачи текста выберите офлайн-режим.
                     </div>
                   </div>
                 </div>
@@ -20642,7 +20691,7 @@ class NocturneWriter {
     }
     if (['strictSpellcheck', 'smartDictionary', 'smartDictionaryMode', 'smartDictionaryProvider', 'smartDictionaryLang'].includes(key)) {
       this.disableBrowserSpellcheck();
-      if (this.spellerCache) this.spellerCache.clear();
+      this.resetSmartSpeller();
       this.updateTypoHighlights();
     }
     if (key === 'smartDictionary' || key === 'smartDictionaryMode') {

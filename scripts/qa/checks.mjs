@@ -9,6 +9,7 @@ const check = (id, args, areas, options = {}) => ({ id, args, areas, platforms: 
 export const PROJECT_CHECKS = [
   check('syntax', ['scripts/check-source.mjs'], ['source'], { modes: ['smoke', 'full'] }),
   check('unit', ['--test', 'scripts/test-database-sync.mjs', 'scripts/test-project-backups.mjs', 'scripts/test-smart-speller.mjs', 'scripts/test-sync-auth.mjs'], ['database', 'sync', 'backups', 'dictionary', 'security']),
+  check('smart-dictionary', ['--import', './scripts/qa/observe-playwright.mjs', 'scripts/test-smart-dictionary.mjs'], ['dictionary', 'writing', 'settings'], { ownScenarioReport: 'results.json' }),
   check('audit-data', ['scripts/test-audit-data.mjs'], ['database', 'security', 'import', 'backups'], { ports: [5310, 8910] }),
   check('audit-editor', ['scripts/test-audit-editor.mjs'], ['writing', 'dictionary', 'pagination', 'review'], { ports: [5311, 8911] }),
   check('audit-sync', ['scripts/test-audit-sync.mjs'], ['sync', 'security'], { ports: [5312, 8912, 8913] }),

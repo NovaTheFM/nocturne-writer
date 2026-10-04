@@ -20,7 +20,7 @@ async function check(name, run) {
 try {
   for (let i = 0; i < 60; i++) { try { if ((await fetch(url)).ok) break; } catch {} await new Promise(resolve => setTimeout(resolve, 100)); }
   await check('F12 smart speller checks queued words in the active manuscript', async page => {
-    await page.evaluate(() => { const a = window.nocturneApp; a.nocturneEditor.get('primary').commands.setContent('<p>teh</p>'); a.nocturneEditor.syncDocFromEditor('primary'); a.spellerQueue = new Set(['teh']); a.spellerPending = new Set(); a.spellerCache = new Map(); a.scheduleSpellerCheck(); });
+    await page.evaluate(() => { const a = window.nocturneApp; a.state.settings.smartDictionary = true; a.nocturneEditor.get('primary').commands.setContent('<p>teh</p>'); a.nocturneEditor.syncDocFromEditor('primary'); a.updateTypoHighlights(); a.spellerQueue.add('teh'); a.scheduleSpellerCheck(); });
     await page.waitForTimeout(400);
     assert.equal(await page.evaluate(() => window.nocturneApp.spellerCache.has('teh')), true);
   });
