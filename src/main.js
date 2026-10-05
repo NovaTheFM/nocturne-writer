@@ -1896,12 +1896,16 @@ class NocturneWriter {
     if (trigger) {
       const label = trigger.querySelector('.review-mode-trigger-label');
       const icon = trigger.querySelector('.review-mode-trigger-icon');
-      if (label.textContent !== modeLabels[mode][0]) {
-        this.animateHeightTransition(trigger, () => {
-          label.textContent = modeLabels[mode][0];
-          icon.className = `bx ${modeLabels[mode][1]} review-mode-trigger-icon`;
-          for (const element of [label, icon]) this.runMotion(element, [{ opacity: 0 }, { opacity: 1 }], { duration: 220 });
-        }, { width: true });
+      if (trigger.__reviewTargetMode !== mode) {
+        trigger.__reviewTargetMode = mode;
+        const update = () => {
+          this.animateHeightTransition(trigger, () => {
+            label.textContent = modeLabels[mode][0];
+            icon.className = `bx ${modeLabels[mode][1]} review-mode-trigger-icon`;
+          }, { width: true, duration: 180 });
+        };
+        if (label.textContent === modeLabels[mode][0] && !trigger.querySelector('.review-mode-trigger-content').__reviewModeTransition) update();
+        else this.transitionReviewModeSurface(trigger.querySelector('.review-mode-trigger-content'), update, { key: mode });
       }
       trigger.setAttribute('aria-label', `Режим работы: ${modeLabels[mode][0]}`);
     }
@@ -1923,12 +1927,8 @@ class NocturneWriter {
     if (this.state.reviewMode === mode) return;
     this.state.reviewMode = mode;
     safeSetStorageItem(localStorage, 'nocturne-review-mode', mode);
-    const toolbar = document.querySelector('.toolbar-center');
-    const targets = toolbar ? [...toolbar.querySelectorAll('.toolbar-history > button, .toolbar-formatting > *, .toolbar-center > .tool-divider, #search-menu-wrap')] : [];
-    this.animateLayoutTransition(toolbar, () => {
-      this.applyReviewMode();
-      this.renderReviewToolbarSlot({ resize: false });
-    }, { targets, duration: .28 });
+    this.applyReviewMode();
+    this.renderReviewToolbarSlot();
     this.updateReviewHighlights();
     this.renderReviewNavigator();
     this.renderMobileTopbarStatus();
@@ -3201,7 +3201,7 @@ class NocturneWriter {
                 <button class="pill-btn kb-main-btn" data-action="toggle-kb-menu"><i class="bx bx-book-bookmark"></i> <span>База знаний</span> <i class="bx bx-chevron-down"></i></button>
               </div>
               <div class="dropdown-wrapper review-mode-dropdown" id="review-mode-dropdown">
-                <button class="pill-btn review-mode-trigger" type="button" data-action="toggle-review-mode-menu" aria-label="Режим работы: Письмо" aria-haspopup="menu" aria-controls="review-mode-menu" aria-expanded="false"><i class="bx bx-pen review-mode-trigger-icon" aria-hidden="true"></i><span class="review-mode-trigger-label">Письмо</span><i class="bx bx-chevron-down" aria-hidden="true"></i></button>
+                <button class="pill-btn review-mode-trigger" type="button" data-action="toggle-review-mode-menu" aria-label="Режим работы: Письмо" aria-haspopup="menu" aria-controls="review-mode-menu" aria-expanded="false"><span class="review-mode-trigger-content"><i class="bx bx-pen review-mode-trigger-icon" aria-hidden="true"></i><span class="review-mode-trigger-label">Письмо</span></span><i class="bx bx-chevron-down review-mode-trigger-chevron" aria-hidden="true"></i></button>
               </div>
               <div class="save-indicator" id="save-indicator" aria-live="polite"></div>
             </div>
@@ -12821,17 +12821,21 @@ class NocturneWriter {
   renderReviewToolbarSlot({ resize = true } = {}) {
     const slot = document.getElementById('review-toolbar-slot');
     if (!slot) return;
+    const toolbar = slot.closest('.toolbar-center');
     const mode = this.state.reviewMode || 'write';
+    if (resize && toolbar?.dataset.toolbarReviewMode && toolbar.dataset.toolbarReviewMode !== mode) {
+      this.transitionReviewModeSurface(toolbar, () => this.renderReviewToolbarSlot({ resize: false }), { key: mode, lock: true });
+      return;
+    }
+    if (resize && toolbar?.__reviewModeTransition?.phase === 'out') return;
     const updateSlot = (html, className) => {
-      const modeChanged = slot.__reviewMode !== undefined && slot.__reviewMode !== mode;
       const change = () => {
+        if (toolbar) toolbar.dataset.toolbarReviewMode = mode;
         slot.className = className;
         this.updateSurfaceHTML(slot, html, { animate: false });
       };
-      const update = () => modeChanged ? this.animateViewChange(slot, change, { distance: 4, startOpacity: 0 }) : change();
-      if (resize) this.animateHeightTransition(slot, update, { width: true });
-      else update();
-      slot.__reviewMode = mode;
+      if (resize && !toolbar?.__reviewModeTransition) this.animateHeightTransition(slot, change, { width: true });
+      else change();
       const mobileSlot = document.getElementById('mobile-review-toolbar');
       if (mobileSlot) this.updateSurfaceHTML(mobileSlot, html);
     };
@@ -13324,7 +13328,7 @@ class NocturneWriter {
       || (this.isMobileLayout() && this.state.settings.reduceMobileAnimations);
   }
 
-  animateHeightTransition(element, updateCallback, { width = false, from = null } = {}) {
+  animateHeightTransition(element, updateCallback, { width = false, from = null, duration: requestedDuration = 280 } = {}) {
     if (!element) { updateCallback(); return; }
     const previous = element.__surfaceSizeTransition;
     const startHeight = from?.height ?? element.offsetHeight, startWidth = from?.width ?? element.offsetWidth;
@@ -13340,7 +13344,7 @@ class NocturneWriter {
       return;
     }
     const sameTarget = previous?.targetHeight === targetHeight && (!width || previous.targetWidth === targetWidth);
-    const duration = sameTarget ? Math.max(80, previous.duration - (performance.now() - previous.startedAt)) : 280;
+    const duration = sameTarget ? Math.max(80, previous.duration - (performance.now() - previous.startedAt)) : requestedDuration;
     const state = { targetHeight, targetWidth, startedAt: performance.now(), duration };
     element.__surfaceSizeTransition = state;
     element.style.height = `${startHeight}px`;
@@ -13382,7 +13386,7 @@ class NocturneWriter {
     return `${node.tagName}:${key}`;
   }
 
-  runMotion(element, frames, { channel = 'content', duration = 260, easing = 'cubic-bezier(.16, 1, .3, 1)', startFromCurrent = true } = {}) {
+  runMotion(element, frames, { channel = 'content', duration = 260, easing = 'cubic-bezier(.16, 1, .3, 1)', startFromCurrent = true, fill = 'none' } = {}) {
     if (!element?.isConnected) return { finished: Promise.resolve(false) };
     const motions = element.__nocturneMotions ||= new Map();
     const previous = motions.get(channel);
@@ -13395,7 +13399,7 @@ class NocturneWriter {
       previous.animation.cancel();
     }
     if (this.shouldReduceSurfaceMotion()) { motions.delete(channel); return { finished: Promise.resolve(true) }; }
-    const animation = element.animate([first, ...frames.slice(1)], { duration, easing });
+    const animation = element.animate([first, ...frames.slice(1)], { duration, easing, fill });
     const motion = { animation, finished: null };
     motions.set(channel, motion);
     motion.finished = animation.finished.then(() => {
@@ -13405,11 +13409,58 @@ class NocturneWriter {
     return motion;
   }
 
-  animateViewChange(element, update, { direction = 1, distance = 8, startOpacity = .35 } = {}) {
+  transitionReviewModeSurface(element, update, { key, lock = false } = {}) {
+    if (!element) { update(); return; }
+    const previous = element.__reviewModeTransition;
+    if (previous?.key === key && previous.phase === 'out' && !this.shouldReduceSurfaceMotion()) {
+      previous.update = update;
+      return;
+    }
+    const originalInert = previous?.originalInert ?? element.inert;
+    if (this.shouldReduceSurfaceMotion() || !this.isSurfaceVisible(element)) {
+      element.__reviewModeTransition = null;
+      previous?.motion?.animation?.cancel();
+      element.inert = originalInert;
+      update();
+      return;
+    }
+    const opacity = Number(getComputedStyle(element).opacity);
+    const state = { key, phase: 'out', originalInert, update, motion: null };
+    element.__reviewModeTransition = state;
+    if (lock) {
+      if (element.contains(document.activeElement)) document.querySelector('.review-mode-trigger')?.focus({ preventScroll: true });
+      element.inert = true;
+    }
+    const outgoing = this.runMotion(element, [{ opacity }, { opacity: 0 }], {
+      channel: 'review-mode', duration: Math.max(25, 90 * opacity), easing: 'cubic-bezier(.4, 0, 1, 1)', fill: 'forwards',
+    });
+    previous?.motion?.animation?.cancel();
+    state.motion = outgoing;
+    outgoing.finished.then(finished => {
+      if (!finished || element.__reviewModeTransition !== state) return;
+      if (!element.isConnected) { outgoing.animation?.cancel(); return; }
+      state.phase = 'in';
+      state.update();
+      const incoming = this.runMotion(element, [
+        { opacity: 0 },
+        { opacity: 0, offset: .25, easing: 'cubic-bezier(.4, 0, .2, 1)' },
+        { opacity: 1 },
+      ], { channel: 'review-mode', duration: 220, easing: 'linear', startFromCurrent: false });
+      outgoing.animation?.cancel();
+      state.motion = incoming;
+      incoming.finished.then(() => {
+        if (element.__reviewModeTransition !== state) return;
+        element.inert = originalInert;
+        element.__reviewModeTransition = null;
+      });
+    });
+  }
+
+  animateViewChange(element, update, { direction = 1 } = {}) {
     if (!element) { update(); return; }
     if (this.isSurfaceVisible(element)) this.animateSurfaceContent(element, true);
     update();
-    if (this.isSurfaceVisible(element)) this.runMotion(element, [{ opacity: startOpacity, transform: `translateX(${direction * distance}px)` }, { opacity: 1, transform: 'translateX(0)' }], { channel: 'view', duration: 240 });
+    if (this.isSurfaceVisible(element)) this.runMotion(element, [{ opacity: .35, transform: `translateX(${direction * 8}px)` }, { opacity: 1, transform: 'translateX(0)' }], { channel: 'view', duration: 240 });
   }
 
   isSurfaceVisible(element) {

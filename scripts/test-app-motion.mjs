@@ -198,14 +198,14 @@ try {
     });
     assert.notEqual(result.start, null); assert.ok(result.before < result.start - 2, JSON.stringify(result)); assert.ok(Math.abs(result.before - result.after) < .1, JSON.stringify(result)); assert.ok(Math.abs(result.start - result.end) < .5, JSON.stringify(result)); return result;
   });
-  await check('review tools grow without moving adjacent controls in one frame', async page => {
+  await check('review tools change layout during the invisible part of a continuous fade', async page => {
     const result = await page.evaluate(async () => {
-      const a = window.nocturneApp, slot = document.getElementById('review-toolbar-slot'); await new Promise(resolve => setTimeout(resolve, 400));
-      const start = slot.getBoundingClientRect().width; a.state.reviewMode = 'editor'; a.renderReviewToolbarSlot(); const immediate = slot.getBoundingClientRect().width, frames = [], time = performance.now();
-      while (performance.now() - time < 450) { await new Promise(resolve => requestAnimationFrame(resolve)); frames.push(slot.getBoundingClientRect().width); }
-      return { start, immediate, frames, end: slot.getBoundingClientRect().width, inline: slot.style.width, tools: slot.querySelectorAll('button').length };
+      const a = window.nocturneApp, slot = document.getElementById('review-toolbar-slot'), toolbar = slot.closest('.toolbar-center'); await new Promise(resolve => setTimeout(resolve, 400));
+      const start = slot.getBoundingClientRect().width; a.setReviewMode('editor'); const immediate = slot.getBoundingClientRect().width, frames = [], time = performance.now();
+      while (performance.now() - time < 450) { await new Promise(resolve => requestAnimationFrame(resolve)); frames.push({ width: slot.getBoundingClientRect().width, opacity: Number(getComputedStyle(toolbar).opacity) }); }
+      return { start, immediate, frames, end: slot.getBoundingClientRect().width, inline: slot.style.width, tools: slot.querySelectorAll('button').length, inert: toolbar.inert };
     });
-    assert.ok(Math.abs(result.start - result.immediate) < 2, JSON.stringify(result)); assert.ok(result.end > 80); assert.ok(result.frames.some(value => value > result.start + 2 && value < result.end - 2), JSON.stringify(result)); assert.equal(result.inline, ''); assert.equal(result.tools, 4); return result;
+    assert.ok(Math.abs(result.start - result.immediate) < 2, JSON.stringify(result)); assert.ok(result.end > 80); assert.ok(result.frames.some(frame => frame.opacity > .05 && frame.opacity < .95), JSON.stringify(result)); assert.equal(result.inline, ''); assert.equal(result.tools, 4); assert.equal(result.inert, false); return result;
   });
   await check('toolbar buttons remain separate in all review modes at compact desktop widths', async page => {
     const samples = [];

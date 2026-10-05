@@ -126,7 +126,7 @@ button.utility-row, label.utility-row { cursor: pointer; }
 .review-navigator.active { display: flex; opacity: 1; visibility: visible; transform: translateY(0); animation: none; transition-delay: 0s; }
 .review-navigator:not(.active) * { pointer-events: none !important; }
 .review-toolbar-slot.empty { display: flex; width: 0; gap: 0; margin: 0; padding: 0; overflow: hidden; opacity: 0; pointer-events: none; }
-.review-toolbar-slot { transition: opacity 180ms ease; }
+.review-toolbar-slot { transition: none; }
 .page-sheet-bg { transition: top 240ms cubic-bezier(.16, 1, .3, 1), width 240ms cubic-bezier(.16, 1, .3, 1), height 240ms cubic-bezier(.16, 1, .3, 1), border-color 220ms ease, background-color 220ms ease, box-shadow 220ms ease; }
 .motion-sheet-exiting { pointer-events: none; }
 .resizing-workspace .page-sheet-bg { transition: none; }

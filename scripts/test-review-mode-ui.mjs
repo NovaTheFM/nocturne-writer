@@ -52,13 +52,14 @@ try {
         for (const mode of ['write', 'editor', 'finalization']) {
           await page.evaluate(mode => window.nocturneApp.setReviewMode(mode), mode); await page.waitForTimeout(450);
           const sample = await page.evaluate(() => {
-            const button = document.querySelector('.review-mode-trigger'), label = button.querySelector('span');
+            const button = document.querySelector('.review-mode-trigger'), label = button.querySelector('.review-mode-trigger-label');
             const [icon, chevron] = button.querySelectorAll('i'), b = button.getBoundingClientRect(), text = label.getBoundingClientRect();
             const range = document.createRange(); range.selectNodeContents(label);
-            return { left: icon.getBoundingClientRect().left - b.left, right: b.right - chevron.getBoundingClientRect().right, label: text.width, glyphs: range.getBoundingClientRect().width, overflow: document.documentElement.scrollWidth > innerWidth + 1, height: document.querySelector('.toolbar').getBoundingClientRect().height };
+            return { left: icon.getBoundingClientRect().left - b.left, right: b.right - chevron.getBoundingClientRect().right, chevronGap: chevron.getBoundingClientRect().left - text.right, iconGap: text.left - icon.getBoundingClientRect().right, label: text.width, glyphs: range.getBoundingClientRect().width, overflow: document.documentElement.scrollWidth > innerWidth + 1, height: document.querySelector('.toolbar').getBoundingClientRect().height };
           });
           assert.ok(sample.label >= sample.glyphs - .1, JSON.stringify(sample));
           assert.ok(Math.abs(sample.left - 14) < .1 && Math.abs(sample.right - 14) < .1, JSON.stringify(sample));
+          assert.ok(Math.abs(sample.chevronGap - 8) < 1 && Math.abs(sample.iconGap - 8) < .1, JSON.stringify(sample));
           assert.equal(sample.overflow, false); assert.equal(sample.height, 90);
           samples.push({ theme, width, mode, ...sample });
         }
@@ -99,28 +100,72 @@ try {
     }
     return samples;
   });
-  await check('adjacent search keeps its rendered position at the start of every mode change', async page => {
+  await check('toolbar changes layout only while invisible, with one coordinated fade and no flying copies', async page => {
     await createManuscript(page);
     await page.waitForTimeout(450);
-    await page.evaluate(() => window.nocturneApp.setReviewMode('editor'));
-    await page.waitForTimeout(70);
-    await page.screenshot({ path: join(directory, 'mode-motion-70ms.png'), clip: { x: 260, y: 0, width: 1180, height: 90 } });
-    await page.waitForTimeout(100);
-    await page.screenshot({ path: join(directory, 'mode-motion-170ms.png'), clip: { x: 260, y: 0, width: 1180, height: 90 } });
-    await page.evaluate(() => window.nocturneApp.setReviewMode('write')); await page.waitForTimeout(450);
     const samples = [];
     for (const mode of ['editor', 'finalization', 'write', 'finalization', 'editor', 'write']) {
       const sample = await page.evaluate(async mode => {
-        const button = document.querySelector('#search-menu-wrap button'), a = window.nocturneApp;
+        const button = document.querySelector('#search-menu-wrap button'), a = window.nocturneApp, toolbar = document.querySelector('.toolbar-center');
         const start = button.getBoundingClientRect().left;
+        const swaps = [], observer = new MutationObserver(() => swaps.push({ mode: toolbar.dataset.toolbarReviewMode, opacity: Number(getComputedStyle(toolbar).opacity) }));
+        observer.observe(toolbar, { attributes: true, attributeFilter: ['data-toolbar-review-mode'] });
         a.setReviewMode(mode);
         const immediate = button.getBoundingClientRect().left, frames = [], time = performance.now();
-        while (performance.now() - time < 400) { await new Promise(resolve => requestAnimationFrame(resolve)); frames.push(button.getBoundingClientRect().left); }
-        return { start, immediate, end: button.getBoundingClientRect().left, frames, ghosts: document.querySelectorAll('.surface-exit-ghost').length };
+        while (performance.now() - time < 450) {
+          await new Promise(resolve => requestAnimationFrame(resolve));
+          const alpha = Number(getComputedStyle(toolbar).opacity), content = document.querySelector('.review-mode-trigger-content'), label = content.querySelector('.review-mode-trigger-label');
+          const ghosts = [...document.querySelectorAll('.surface-exit-ghost')].filter(el => el.getBoundingClientRect().top < 90).length;
+          frames.push({ time: performance.now() - time, x: button.getBoundingClientRect().left, alpha, mode: toolbar.dataset.toolbarReviewMode, ghosts, childMotions: [...toolbar.querySelectorAll('*')].reduce((sum, el) => sum + el.getAnimations().length, 0), labelAlpha: Number(getComputedStyle(content).opacity), clipped: Math.max(0, label.getBoundingClientRect().right - content.getBoundingClientRect().right) });
+        }
+        observer.disconnect();
+        return { start, immediate, end: button.getBoundingClientRect().left, frames, swaps, mode: toolbar.dataset.toolbarReviewMode, inert: toolbar.inert };
       }, mode);
       assert.ok(Math.abs(sample.start - sample.immediate) < 2, `${mode}: ${JSON.stringify(sample)}`);
-      assert.ok(sample.frames.some(x => Math.abs(x - sample.start) > 2 && Math.abs(x - sample.end) > 2), `${mode}: no interpolated search position`);
-      assert.equal(sample.ghosts, 0); samples.push({ mode, ...sample });
+      assert.ok(sample.swaps.length > 0 && sample.swaps.every(frame => frame.opacity < .01), `${mode}: layout changed while visible`);
+      assert.ok(sample.frames.some(frame => frame.alpha > .05 && frame.alpha < .95), `${mode}: fade has no intermediate opacity`);
+      assert.ok(sample.frames.every(frame => Math.min(Math.abs(frame.x - sample.start), Math.abs(frame.x - sample.end)) < 1), `${mode}: controls slide across the row`);
+      assert.ok(sample.frames.every(frame => frame.ghosts === 0 && frame.childMotions === 0), `${mode}: independent child motion or overlapping copies`);
+      assert.ok(sample.frames.every(frame => frame.labelAlpha < .1 || frame.clipped < 1), `${mode}: visible label gets clipped: ${JSON.stringify(sample.frames)}`);
+      assert.equal(sample.mode, mode); assert.equal(sample.inert, false); samples.push({ mode, ...sample });
+    }
+    return samples;
+  }, { recordVideo: { dir: join(directory, 'motion-video'), size: { width: 1440, height: 900 } } });
+  await check('rendered transition storyboard contains one soft fade without overlaps', async page => {
+    await createManuscript(page); await page.waitForTimeout(450);
+    const samples = [];
+    for (const mode of ['editor', 'finalization', 'write']) {
+      await page.evaluate(mode => {
+        window.nocturneApp.setReviewMode(mode);
+        for (const el of [document.querySelector('.toolbar-center'), document.querySelector('.review-mode-trigger-content')]) el.__reviewModeTransition.motion.animation.pause();
+      }, mode);
+      for (const time of [0, 45, 89]) {
+        await page.evaluate(time => {
+          for (const el of [document.querySelector('.toolbar-center'), document.querySelector('.review-mode-trigger-content')]) el.__reviewModeTransition.motion.animation.currentTime = time;
+        }, time);
+        await page.screenshot({ path: join(directory, `${mode}-out-${time}.png`), clip: { x: 260, y: 0, width: 1180, height: 90 } });
+      }
+      await page.evaluate(() => {
+        for (const el of [document.querySelector('.toolbar-center'), document.querySelector('.review-mode-trigger-content')]) el.__reviewModeTransition.motion.animation.finish();
+      });
+      await page.waitForFunction(() => document.querySelector('.toolbar-center').__reviewModeTransition?.phase === 'in');
+      await page.evaluate(() => {
+        for (const el of [document.querySelector('.toolbar-center'), document.querySelector('.review-mode-trigger-content')]) el.__reviewModeTransition.motion.animation.pause();
+      });
+      for (const time of [0, 55, 110, 165, 219]) {
+        const sample = await page.evaluate(time => {
+          for (const el of [document.querySelector('.toolbar-center'), document.querySelector('.review-mode-trigger-content')]) el.__reviewModeTransition.motion.animation.currentTime = time;
+          for (const animation of document.querySelector('.review-mode-trigger').getAnimations()) if (animation.transitionProperty === 'width') { animation.pause(); animation.currentTime = Math.min(180, time); }
+          return { opacity: Number(getComputedStyle(document.querySelector('.toolbar-center')).opacity), mode: document.querySelector('.toolbar-center').dataset.toolbarReviewMode };
+        }, time);
+        await page.screenshot({ path: join(directory, `${mode}-in-${time}.png`), clip: { x: 260, y: 0, width: 1180, height: 90 } });
+        samples.push({ time, ...sample });
+      }
+      await page.evaluate(() => {
+        for (const el of [document.querySelector('.toolbar-center'), document.querySelector('.review-mode-trigger-content')]) el.__reviewModeTransition.motion.animation.finish();
+        for (const animation of document.querySelector('.review-mode-trigger').getAnimations()) if (animation.transitionProperty === 'width') animation.finish();
+      });
+      await page.waitForTimeout(450);
     }
     return samples;
   });
@@ -135,11 +180,13 @@ try {
       }
       await new Promise(resolve => setTimeout(resolve, 500));
       const slot = document.getElementById('review-toolbar-slot'), trigger = document.querySelector('.review-mode-trigger');
-      return { jumps, mode: a.state.reviewMode, ghosts: document.querySelectorAll('.surface-exit-ghost').length, flipping: document.querySelectorAll('.toolbar .is-flipping').length, width: trigger.style.width, height: trigger.style.height, empty: slot.children.length === 0 && slot.offsetWidth === 0, text: a.nocturneEditor.get('primary').getText(), same: a.nocturneEditor.get('primary') === window.modeOriginalEditor };
+      const toolbar = document.querySelector('.toolbar-center');
+      return { jumps, mode: a.state.reviewMode, ghosts: document.querySelectorAll('.surface-exit-ghost').length, flipping: document.querySelectorAll('.toolbar .is-flipping').length, width: trigger.style.width, height: trigger.style.height, empty: slot.children.length === 0 && slot.offsetWidth === 0, text: a.nocturneEditor.get('primary').getText(), same: a.nocturneEditor.get('primary') === window.modeOriginalEditor, visualMode: toolbar.dataset.toolbarReviewMode, label: trigger.querySelector('.review-mode-trigger-label').textContent, inert: toolbar.inert, retained: !!toolbar.__reviewModeTransition || !!trigger.querySelector('.review-mode-trigger-content').__reviewModeTransition };
     });
     assert.ok(result.jumps.every(jump => jump < 2), JSON.stringify(result));
     assert.equal(result.mode, 'write'); assert.equal(result.ghosts, 0); assert.equal(result.flipping, 0);
     assert.equal(result.width, ''); assert.equal(result.height, ''); assert.equal(result.empty, true); assert.equal(result.same, true);
+    assert.equal(result.visualMode, 'write'); assert.equal(result.label, 'Письмо'); assert.equal(result.inert, false); assert.equal(result.retained, false);
     assert.equal(result.text, 'Рукопись для проверки режимов и сохранения текста.'); return result;
   });
   await check('reduced motion applies correct modes without retained layout or ghost animations', async page => {

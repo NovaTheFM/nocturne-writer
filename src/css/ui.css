@@ -713,8 +713,10 @@ body.material .floating-menu-portal .popover-surface {
   min-width: 0;
 }
 .review-mode-dropdown { flex: 0 0 auto; }
-.review-mode-trigger { box-sizing: border-box; width: max-content; height: 32px; min-height: 32px; padding: 7px 13px; gap: 8px; border-radius: 20px; }
-.review-mode-trigger > i { flex: 0 0 17px; width: 17px; font-size: 17px; }
+.pill-btn.review-mode-trigger { position: relative; box-sizing: border-box; width: max-content; height: 32px; min-height: 32px; padding: 7px 38px 7px 13px; gap: 0; border-radius: 20px; }
+.review-mode-trigger-content { display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.review-mode-trigger-icon, .review-mode-trigger-chevron { flex: 0 0 17px; width: 17px; font-size: 17px; }
+.review-mode-trigger-chevron { position: absolute; right: 13px; top: 50%; transform: translateY(-50%); }
 .review-mode-trigger-label { flex: 0 0 auto; white-space: nowrap; }
 .review-mode-menu .review-mode-option { width: 100%; min-height: 44px; border: 0; background: transparent; text-align: left; }
 .review-mode-menu .review-mode-option:hover { background: var(--hover-soft); }
@@ -1499,8 +1501,8 @@ body.resizing-workspace .note-card {
 .toolbar-formatting {
   min-width: 0;
 }
-body[data-active-review-mode="editor"] .toolbar-history,
-body[data-active-review-mode="editor"] .toolbar-formatting {
+.toolbar-center[data-toolbar-review-mode="editor"] .toolbar-history,
+.toolbar-center[data-toolbar-review-mode="editor"] .toolbar-formatting {
   display: none;
 }
 
