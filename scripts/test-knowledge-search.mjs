@@ -231,17 +231,59 @@ try {
     await page.screenshot({ path: join(directory, 'split-reading-search.png') });
     return { independentPanes: true };
   });
-  await check('search updates, filters, details and reading controls animate and rapid input keeps the latest result', async page => {
+  await check('search preserves cards and focus, glides layout and filter selection, animates presence and handles rapid input', async page => {
     await openSearch(page);
-    const fade = await page.evaluate(async () => {
+    await query(page, 'Север');
+    const layout = await page.evaluate(async () => {
       const a = window.nocturneApp, output = document.querySelector('.knowledge-search-output'), frames = [];
-      a.knowledgeSearch().query = 'Искра'; a.refreshKnowledgeSearch();
+      const card = output.querySelector('[data-result-id="note-search"]').closest('.knowledge-result'), input = document.querySelector('[data-knowledge-query]');
+      const filters = output.querySelector('.knowledge-search-filters'), selection = filters.querySelector('.knowledge-selection'), button = filters.querySelector('[data-category="notes"]');
+      const before = { top: card.getBoundingClientRect().top, selection: selection.getBoundingClientRect().left, height: output.getBoundingClientRect().height };
+      button.focus(); a.knowledgeSearch().category = 'notes'; a.refreshKnowledgeSearch();
       const started = performance.now();
-      while (performance.now() - started < 380) { await new Promise(resolve => requestAnimationFrame(resolve)); frames.push({ alpha: Number(getComputedStyle(output).opacity), phase: output.__knowledgeTransition?.phase, count: output.querySelectorAll('.knowledge-result').length }); }
+      while (performance.now() - started < 580) {
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        frames.push({ time: performance.now() - started, top: card.getBoundingClientRect().top, transform: getComputedStyle(card).transform, flipping: !!card._isFlippingGrid, scroll: output.closest('.kb-main').scrollTop, alpha: Number(getComputedStyle(output).opacity), selection: selection.getBoundingClientRect().left, height: output.getBoundingClientRect().height, ghosts: document.querySelectorAll('.surface-exit-ghost.knowledge-result').length });
+      }
+      return { before, frames, retained: card === output.querySelector('[data-result-id="note-search"]').closest('.knowledge-result'), retainedFilters: filters === output.querySelector('.knowledge-search-filters'), retainedInput: input === document.querySelector('[data-knowledge-query]'), focused: document.activeElement === button, unlocked: !output.inert };
+    });
+    await writeFile(join(directory, 'layout-motion.json'), JSON.stringify(layout, null, 2));
+    assert.ok(layout.retained && layout.retainedFilters && layout.retainedInput && layout.focused && layout.unlocked);
+    const final = layout.frames.at(-1);
+    assert.ok(Math.abs(layout.before.top - final.top) > 60, JSON.stringify(layout));
+    assert.ok(layout.frames.some(frame => frame.top < layout.before.top - 2 && frame.top > final.top + 2), 'A surviving card travels through intermediate positions');
+    assert.ok(layout.frames.every(frame => frame.alpha === 1), 'The result surface never fades away');
+    assert.ok(layout.frames.some(frame => frame.selection > layout.before.selection + 2 && frame.selection < final.selection - 2), 'The filter highlight glides between buttons');
+    assert.ok(layout.frames.some(frame => frame.height < layout.before.height - 2 && frame.height > final.height + 2), 'The result height changes smoothly');
+    assert.ok(layout.frames.some(frame => frame.ghosts > 0), 'Removed cards retain an outgoing visual');
+    const entrance = await page.evaluate(async () => {
+      const a = window.nocturneApp, frames = [];
+      a.knowledgeSearch().category = 'all'; a.refreshKnowledgeSearch();
+      const card = document.querySelector('[data-result-id="char-search"]').closest('.knowledge-result'), started = performance.now();
+      while (performance.now() - started < 440) { await new Promise(resolve => requestAnimationFrame(resolve)); frames.push({ alpha: Number(getComputedStyle(card).opacity), shift: new DOMMatrix(getComputedStyle(card).transform).m42 }); }
       return frames;
     });
-    assert.ok(fade.some(frame => frame.phase === 'out' && frame.alpha > .01 && frame.alpha < .99));
-    assert.ok(fade.some(frame => frame.phase === 'in' && frame.alpha > .01 && frame.alpha < .99));
+    assert.ok(entrance.some(frame => frame.alpha > .01 && frame.alpha < .99 && frame.shift > .2), 'New cards move into place as they appear');
+    const scopeMotion = await page.evaluate(async () => {
+      const a = window.nocturneApp, selection = document.querySelector('.knowledge-search-scope .knowledge-selection');
+      const before = selection.getBoundingClientRect().left, frames = [];
+      a.knowledgeSearch().scope = 'all'; a.refreshKnowledgeSearch();
+      const started = performance.now();
+      while (performance.now() - started < 430) { await new Promise(resolve => requestAnimationFrame(resolve)); frames.push(selection.getBoundingClientRect().left); }
+      return { before, frames };
+    });
+    assert.ok(scopeMotion.frames.some(left => left > scopeMotion.before + 2 && left < scopeMotion.frames.at(-1) - 2), 'The scope highlight glides between buttons');
+    const retarget = await page.evaluate(async () => {
+      const a = window.nocturneApp, jumps = [];
+      for (const category of ['characters', 'notes', 'all']) {
+        const selection = document.querySelector('.knowledge-search-filters .knowledge-selection'), before = selection.getBoundingClientRect();
+        a.knowledgeSearch().category = category; a.refreshKnowledgeSearch();
+        const after = selection.getBoundingClientRect(); jumps.push(Math.hypot(after.left - before.left, after.top - before.top));
+        await new Promise(resolve => setTimeout(resolve, 45));
+      }
+      return jumps;
+    });
+    assert.ok(retarget.every(jump => jump < 1), `Rapid filter retargets keep their current visual position: ${retarget}`);
     await page.evaluate(async () => {
       const a = window.nocturneApp;
       for (const term of ['Север', 'Сапфировый', 'полынь', 'Лунная']) { a.knowledgeSearch().query = term; a.refreshKnowledgeSearch(); await new Promise(resolve => setTimeout(resolve, 45)); }
@@ -251,7 +293,7 @@ try {
     await query(page, 'Ключ');
     const details = page.locator('.knowledge-result-more').first(); await details.locator('summary').click();
     assert.equal(await details.evaluate(el => !!el.__surfaceSizeTransition), true);
-    await page.waitForTimeout(300); assert.equal(await details.getAttribute('open'), '');
+    await page.waitForTimeout(400); assert.equal(await details.getAttribute('open'), '');
     await details.locator('summary').click(); assert.equal(await details.evaluate(el => !!el.__surfaceSizeTransition), true);
     await readNote(page); await page.locator('[data-action="toggle-note-read-search"]:visible').click();
     const bar = await page.locator('.note-read-search').evaluate(el => ({ content: el.getAnimations().length, height: !!el.parentElement.__surfaceSizeTransition }));
@@ -260,7 +302,7 @@ try {
     assert.ok(await page.locator('.note-read-text').evaluate(el => el.getAnimations().length) > 0);
     await page.waitForTimeout(350);
     assert.equal(await page.locator('.note-read-search-shell').evaluate(el => el.style.height), '');
-    return { fadeFrames: fade, disclosure: true, readingPanel: bar, latestQuery: 'Лунная' };
+    return { layout, entrance, scopeMotion, retarget, disclosure: true, readingPanel: bar, latestQuery: 'Лунная' };
   }, { recordVideo: { dir: join(directory, 'motion-video'), size: { width: 1440, height: 900 } } });
   await check('reduced motion keeps search and reading usable with no retained animated state', async page => {
     await openSearch(page); await query(page, 'янтарная'); assert.equal(await page.locator('.knowledge-result').count(), 1);
@@ -305,6 +347,7 @@ try {
     await page.waitForFunction(() => window.nocturneApp.state.lore.notes[0].completed);
     await page.setViewportSize({ width: 320, height: 740 });
     await page.locator('[data-mobile-kb-tab="search"]').tap();
+    await settleSearch(page); await page.waitForTimeout(350);
     await page.screenshot({ path: join(directory, 'mobile-search-320.png') });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
     return { touch: true, fiveTabs: true, noOverflow: true, menuWithinViewport: bounds };

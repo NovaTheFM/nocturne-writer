@@ -4115,7 +4115,8 @@ class NocturneWriter {
     if (action === 'toggle-knowledge-fields') {
       event.preventDefault();
       const details = event.target.closest('details');
-      this.animateHeightTransition(details, () => details.open = !details.open, { duration: 220 });
+      if (details.open) this.animateSurfaceContent(details.querySelector('.knowledge-more-fields'), true);
+      this.animateHeightTransition(details, () => details.open = !details.open, { duration: 280 });
       if (details.open) this.animateSurfaceContent(details.querySelector('.knowledge-more-fields'));
       return;
     }
@@ -13627,7 +13628,7 @@ class NocturneWriter {
     const busyAttributes = ['disabled', 'aria-busy', 'aria-label', 'data-busy-label'];
     for (const attribute of [...element.attributes]) {
       if (element.__surfaceAction && busyAttributes.includes(attribute.name)) continue;
-      if (!next.hasAttribute(attribute.name) && !['style', 'id', 'role', 'tabindex', 'aria-modal', 'aria-labelledby', 'aria-label'].includes(attribute.name)) element.removeAttribute(attribute.name);
+      if (!next.hasAttribute(attribute.name) && !['style', 'id', 'role', 'tabindex', 'aria-modal', 'aria-labelledby', 'aria-label', 'data-flip-id'].includes(attribute.name)) element.removeAttribute(attribute.name);
     }
     for (const attribute of [...next.attributes]) {
       if (element.__surfaceAction && busyAttributes.includes(attribute.name)) continue;
@@ -16911,11 +16912,12 @@ class NocturneWriter {
 
   renderKnowledgeSearch({ closeButton = false } = {}) {
     const search = this.knowledgeSearch();
+    this.scheduleKnowledgeSelections();
     return `<section class="knowledge-search" aria-label="Поиск по всей базе знаний">
       <header class="knowledge-search-heading"><span class="knowledge-search-symbol"><i class="bx bx-search" aria-hidden="true"></i></span><div><h1>Поиск</h1><p>Найдите деталь, имя или идею в вашем мире.</p></div>${closeButton ? '<button type="button" class="btn-icon knowledge-search-close" data-action="close-kb" aria-label="Вернуться к рукописи"><i class="bx bx-x" aria-hidden="true"></i></button>' : ''}</header>
       <div class="knowledge-search-controls">
         <label class="knowledge-query"><i class="bx bx-search" aria-hidden="true"></i><input type="search" data-knowledge-query aria-label="Слова для поиска по всей базе знаний" placeholder="Имя, псевдоним, фраза из записи…" value="${escapeHtml(search.query)}" autocomplete="off" spellcheck="false"></label>
-        <div class="knowledge-search-scope" role="group" aria-label="Область поиска">${[['current', 'Это произведение'], ['all', 'Все произведения']].map(([scope, label]) => `<button type="button" data-action="knowledge-search-scope" data-scope="${scope}" aria-pressed="${search.scope === scope}">${label}</button>`).join('')}</div>
+        <div class="knowledge-search-scope" role="group" aria-label="Область поиска"><span class="knowledge-selection" data-surface-key="selection" aria-hidden="true"></span>${[['current', 'Это произведение'], ['all', 'Все произведения']].map(([scope, label]) => `<button type="button" data-action="knowledge-search-scope" data-scope="${scope}" aria-pressed="${search.scope === scope}">${label}</button>`).join('')}</div>
         <p class="knowledge-search-hint">Персонажи, псевдонимы, локации, события, подсобытия, записи, закладки и правила мира.</p>
       </div>
       <div class="knowledge-search-output">${this.renderKnowledgeSearchResults()}</div>
@@ -16926,17 +16928,17 @@ class NocturneWriter {
     const search = this.knowledgeSearch(), terms = queryTerms(search.query), worlds = this.knowledgeSearchWorlds();
     const locked = worlds.filter(world => world.locked || world.protectedStore).length;
     const notice = locked ? `<p class="knowledge-locked-notice"><i class="bx bx-lock-alt" aria-hidden="true"></i>Защищённые произведения (${locked}) доступны для поиска после разблокировки.</p>` : '';
-    if (!terms.length) return `${notice}<div class="knowledge-search-empty"><i class="bx bx-search-alt" aria-hidden="true"></i><h2>Всё, что вы записали</h2><p>Введите слово или несколько слов. Поиск проверит все текстовые поля, в том числе скрытые за карточками.</p><div class="knowledge-search-categories">${KNOWLEDGE_SEARCH_TYPES.filter(([type]) => type !== 'world').map(([, icon, label]) => `<span><i class="bx ${icon}" aria-hidden="true"></i>${label}</span>`).join('')}</div></div>`;
+    if (!terms.length) return `${notice}<div class="knowledge-search-empty" data-surface-key="query-empty"><i class="bx bx-search-alt" aria-hidden="true"></i><h2>Всё, что вы записали</h2><p>Введите слово или несколько слов. Поиск проверит все текстовые поля, в том числе скрытые за карточками.</p><div class="knowledge-search-categories">${KNOWLEDGE_SEARCH_TYPES.filter(([type]) => type !== 'world').map(([, icon, label]) => `<span><i class="bx ${icon}" aria-hidden="true"></i>${label}</span>`).join('')}</div></div>`;
     const results = searchKnowledge(worlds, search.query, { docs: this.state.docs, floatingNotes: this.state.floatingNotes });
     const counts = new Map(KNOWLEDGE_SEARCH_TYPES.map(([type]) => [type, results.filter(result => result.type === type).length]));
     const filtered = search.category === 'all' ? results : results.filter(result => result.type === search.category);
     const visible = filtered.slice(0, search.limit);
-    const filters = `<div class="knowledge-search-filters" role="group" aria-label="Категории результатов">${[['all', 'Все', results.length], ...KNOWLEDGE_SEARCH_TYPES.filter(([type]) => counts.get(type) || type === search.category).map(([type, , label]) => [type, label, counts.get(type)])].map(([type, label, count]) => `<button type="button" data-action="knowledge-search-category" data-category="${type}" aria-pressed="${search.category === type}">${label}<span>${count}</span></button>`).join('')}</div>`;
-    const fieldMarkup = field => `<span class="knowledge-result-field"><span class="knowledge-field-label">${escapeHtml(field.label)}</span><span>${highlightSearchText(searchSnippet(field.text, terms), terms)}</span></span>`;
+    const filters = `<div class="knowledge-search-filters" role="group" aria-label="Категории результатов"><span class="knowledge-selection" data-surface-key="selection" aria-hidden="true"></span>${[['all', 'Все', results.length], ...KNOWLEDGE_SEARCH_TYPES.map(([type, , label]) => [type, label, counts.get(type)])].map(([type, label, count]) => `<button type="button" data-surface-key="category:${type}" data-action="knowledge-search-category" data-category="${type}" aria-pressed="${search.category === type}">${label}<span>${count}</span></button>`).join('')}</div>`;
+    const fieldMarkup = field => `<span class="knowledge-result-field" data-surface-key="${escapeHtml(field.label)}"><span class="knowledge-field-label">${escapeHtml(field.label)}</span><span>${highlightSearchText(searchSnippet(field.text, terms), terms)}</span></span>`;
     const groups = KNOWLEDGE_SEARCH_TYPES.map(([type, icon, label]) => {
       const group = visible.filter(result => result.type === type);
       if (!group.length) return '';
-      return `<section class="knowledge-result-group"><h2><i class="bx ${icon}" aria-hidden="true"></i>${label}<span>${counts.get(type)}</span></h2><div class="knowledge-results-list">${group.map(result => `<article class="knowledge-result">
+      return `<section class="knowledge-result-group" data-surface-key="group:${type}"><div class="knowledge-group-heading" data-surface-key="heading:${type}"><h2><i class="bx ${icon}" aria-hidden="true"></i>${label}<span>${counts.get(type)}</span></h2></div><div class="knowledge-results-list">${group.map(result => `<article class="knowledge-result" data-surface-key="${escapeHtml(JSON.stringify([result.worldId, type, result.id]))}">
         <button type="button" class="knowledge-result-open" data-action="open-knowledge-result" data-world-id="${escapeHtml(result.worldId)}" data-result-type="${type}" data-result-id="${escapeHtml(result.id)}">
           <span class="knowledge-result-top"><span><strong>${highlightSearchText(result.title, terms)}</strong><small>${escapeHtml(result.worldTitle)}${result.parentTitle ? ` · ${escapeHtml(result.parentTitle)}` : ''}</small></span><i class="bx bx-right-arrow-alt" aria-hidden="true"></i></span>
           ${result.fields.slice(0, 3).map(fieldMarkup).join('')}
@@ -16944,7 +16946,7 @@ class NocturneWriter {
         ${result.fields.length > 3 ? `<details class="knowledge-result-more"><summary data-action="toggle-knowledge-fields">Ещё совпадения в полях: ${result.fields.length - 3}</summary><div class="knowledge-more-fields">${result.fields.slice(3).map(fieldMarkup).join('')}</div></details>` : ''}
       </article>`).join('')}</div></section>`;
     }).join('');
-    return `${notice}<p class="knowledge-result-status" role="status" aria-live="polite">Найдено карточек: <strong>${results.length}</strong>${search.category !== 'all' ? ` · В категории: ${filtered.length}` : ''}</p>${filters}${groups || `<div class="knowledge-search-empty"><i class="bx bx-search" aria-hidden="true"></i><h2>Совпадений нет</h2><p>Попробуйте сократить запрос или выбрать другую область поиска.</p></div>`}${filtered.length > visible.length ? '<button type="button" class="pill-btn knowledge-search-more" data-action="knowledge-search-more">Показать ещё</button>' : ''}`;
+    return `${notice}<p class="knowledge-result-status" role="status" aria-live="polite">Найдено карточек: <strong>${results.length}</strong>${search.category !== 'all' ? ` · В категории: ${filtered.length}` : ''}</p>${filters}${groups || `<div class="knowledge-search-empty" data-surface-key="no-results"><i class="bx bx-search" aria-hidden="true"></i><h2>Совпадений нет</h2><p>Попробуйте сократить запрос или выбрать другую область поиска.</p></div>`}${filtered.length > visible.length ? '<button type="button" class="pill-btn knowledge-search-more" data-action="knowledge-search-more">Показать ещё</button>' : ''}`;
   }
 
   refreshKnowledgeSearch() {
@@ -16952,36 +16954,99 @@ class NocturneWriter {
     document.querySelectorAll('.knowledge-search-output').forEach(output => this.transitionKnowledgeSearchResults(output, html));
     document.querySelectorAll('[data-knowledge-query]').forEach(input => { if (input !== document.activeElement) input.value = this.knowledgeSearch().query; });
     document.querySelectorAll('[data-action="knowledge-search-scope"]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.scope === this.knowledgeSearch().scope)));
+    document.querySelectorAll('.knowledge-search-scope').forEach(group => this.positionKnowledgeSelection(group));
+  }
+
+  scheduleKnowledgeSelections() {
+    if (this.knowledgeSelectionFrame) return;
+    this.knowledgeSelectionFrame = requestAnimationFrame(() => {
+      this.knowledgeSelectionFrame = null;
+      this.knowledgeSelectionObserver ||= new ResizeObserver(entries => {
+        for (const { target, contentRect } of entries) {
+          if (!target.isConnected) { this.knowledgeSelectionObserver.unobserve(target); this.knowledgeSelectionSurfaces.delete(target); }
+          else if (target.__knowledgeSelectionWidth !== contentRect.width) {
+            target.__knowledgeSelectionWidth = contentRect.width;
+            target.querySelectorAll('.knowledge-search-scope, .knowledge-search-filters').forEach(group => this.positionKnowledgeSelection(group, false));
+          }
+        }
+      });
+      this.knowledgeSelectionSurfaces ||= new Set();
+      for (const surface of this.knowledgeSelectionSurfaces) if (!surface.isConnected) {
+        this.knowledgeSelectionObserver.unobserve(surface); this.knowledgeSelectionSurfaces.delete(surface);
+      }
+      document.querySelectorAll('.knowledge-search').forEach(surface => {
+        surface.querySelectorAll('.knowledge-search-scope, .knowledge-search-filters').forEach(group => this.positionKnowledgeSelection(group, false));
+        if (!this.knowledgeSelectionSurfaces.has(surface)) { surface.__knowledgeSelectionWidth = surface.clientWidth; this.knowledgeSelectionSurfaces.add(surface); this.knowledgeSelectionObserver.observe(surface); }
+      });
+    });
+  }
+
+  positionKnowledgeSelection(group, animate = true) {
+    const selection = group.querySelector('.knowledge-selection'), active = group.querySelector('button[aria-pressed="true"]');
+    if (!selection || !active || !this.isSurfaceVisible(group)) return;
+    const before = selection.__knowledgeSelection ? selection.getBoundingClientRect() : null, bounds = group.getBoundingClientRect();
+    const x = active.offsetLeft, y = active.offsetTop, width = active.offsetWidth, height = active.offsetHeight;
+    const transform = `translate(${x}px, ${y}px)`;
+    Object.assign(selection.style, { width: `${width}px`, height: `${height}px`, transform });
+    group.classList.add('has-selection'); selection.__knowledgeSelection = true;
+    if (!animate || this.shouldReduceSurfaceMotion()) { selection.__nocturneMotions?.get('knowledge-selection')?.animation?.cancel(); return; }
+    if (before && (Math.abs(before.left - bounds.left - x) > .5 || Math.abs(before.top - bounds.top - y) > .5 || Math.abs(before.width - width) > .5 || Math.abs(before.height - height) > .5)) {
+      this.runMotion(selection, [
+        { transform: `translate(${before.left - bounds.left}px, ${before.top - bounds.top}px) scale(${before.width / width}, ${before.height / height})` },
+        { transform },
+      ], { channel: 'knowledge-selection', duration: 340, easing: 'cubic-bezier(.22, 1, .36, 1)', startFromCurrent: false });
+    }
   }
 
   transitionKnowledgeSearchResults(output, html) {
-    const previous = output.__knowledgeTransition;
-    if (previous?.phase === 'out' && !this.shouldReduceSurfaceMotion()) { previous.html = html; return; }
-    const originalInert = previous?.originalInert ?? output.inert;
+    if (output.__motionMarkup === html) return;
+    clearTimeout(output.__knowledgeTransition?.timer);
     if (this.shouldReduceSurfaceMotion() || !this.isSurfaceVisible(output)) {
-      output.__knowledgeTransition = null; previous?.motion?.animation?.cancel(); output.inert = originalInert;
-      this.updateSurfaceHTML(output, html, { animate: false }); return;
+      output.__knowledgeTransition = null;
+      this.updateSurfaceHTML(output, html, { animate: false });
+      output.querySelectorAll('.knowledge-search-filters').forEach(group => this.positionKnowledgeSelection(group, false)); return;
     }
-    const focused = output.contains(document.activeElement) ? document.activeElement : null;
-    const state = { phase: 'out', html, originalInert, motion: null, focus: focused ? { action: focused.dataset.action, category: focused.dataset.category } : previous?.focus };
-    if (focused) output.closest('.knowledge-search').querySelector('[data-knowledge-query]')?.focus({ preventScroll: true });
-    output.__knowledgeTransition = state; output.inert = true;
-    const outgoing = this.runMotion(output, [{ opacity: getComputedStyle(output).opacity }, { opacity: 0 }], { channel: 'knowledge-results', duration: 80, fill: 'forwards' });
-    previous?.motion?.animation?.cancel(); state.motion = outgoing;
-    outgoing.finished.then(finished => {
-      if (!finished || !output.isConnected || output.__knowledgeTransition !== state) return;
-      state.phase = 'in';
-      this.animateHeightTransition(output, () => this.updateSurfaceHTML(output, state.html, { animate: false }), { duration: 220 });
-      const incoming = this.runMotion(output, [{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'translateY(0)' }], { channel: 'knowledge-results', duration: 220, startFromCurrent: false });
-      outgoing.animation?.cancel(); state.motion = incoming;
-      incoming.finished.then(() => {
-        if (output.__knowledgeTransition !== state) return;
-        output.inert = originalInert; output.__knowledgeTransition = null;
-        if (state.focus && document.activeElement === output.closest('.knowledge-search').querySelector('[data-knowledge-query]')) {
-          [...output.querySelectorAll('button')].find(button => button.dataset.action === state.focus.action && button.dataset.category === state.focus.category)?.focus({ preventScroll: true });
-        }
-      });
-    });
+    const selector = '.knowledge-result, .knowledge-group-heading, .knowledge-search-empty, .knowledge-result-status, .knowledge-search-filters, .knowledge-search-more, .knowledge-locked-notice';
+    const next = output.cloneNode(false); next.innerHTML = html;
+    const nextKeys = new Set([...next.querySelectorAll(selector)].map(node => this.surfaceNodeKey(node)));
+    const candidates = [...output.querySelectorAll(selector)], surviving = candidates.filter(node => nextKeys.has(this.surfaceNodeKey(node)));
+    const oldNodes = new Set(surviving), opacity = new Map(surviving.map(node => [node, Number(getComputedStyle(node).opacity)]));
+    const fields = new Map([...output.querySelectorAll('.knowledge-result-field, .knowledge-result-status, .knowledge-search-filters button > span, .knowledge-group-heading h2 > span')].map(node => [node, node.innerHTML]));
+    const viewport = { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+    for (let parent = output.parentElement; parent; parent = parent.parentElement) {
+      const style = getComputedStyle(parent), rect = parent.getBoundingClientRect();
+      if (/auto|scroll|hidden|clip/.test(style.overflowY)) { viewport.top = Math.max(viewport.top, rect.top); viewport.bottom = Math.min(viewport.bottom, rect.bottom); }
+      if (/auto|scroll|hidden|clip/.test(style.overflowX)) { viewport.left = Math.max(viewport.left, rect.left); viewport.right = Math.min(viewport.right, rect.right); }
+    }
+    const visible = node => { const rect = node.getBoundingClientRect(); return rect.bottom > viewport.top && rect.top < viewport.bottom && rect.right > viewport.left && rect.left < viewport.right; };
+    for (const node of candidates) if (!oldNodes.has(node) && visible(node)) {
+      this.animateSurfaceContent(node, true);
+      const ghost = node.__exitGhost, rect = node.getBoundingClientRect();
+      if (ghost) ghost.style.clipPath = `inset(${Math.max(0, viewport.top - rect.top)}px ${Math.max(0, rect.right - viewport.right)}px ${Math.max(0, rect.bottom - viewport.bottom)}px ${Math.max(0, viewport.left - rect.left)}px)`;
+    }
+    const focused = document.activeElement?.closest(selector);
+    if (focused && output.contains(focused) && !oldNodes.has(focused)) output.closest('.knowledge-search').querySelector('[data-knowledge-query]')?.focus({ preventScroll: true });
+    this.animateLayoutTransition(output, () => {
+      this.animateHeightTransition(output, () => this.updateSurfaceHTML(output, html, { animate: false }), { duration: 380 });
+    }, { targets: surviving, duration: .38 });
+    output.querySelectorAll('.knowledge-search-filters').forEach(group => this.positionKnowledgeSelection(group));
+    let stagger = 0;
+    for (const node of output.querySelectorAll(selector)) {
+      if (oldNodes.has(node)) {
+        if (opacity.get(node) < .99) this.runMotion(node, [{ opacity: opacity.get(node) }, { opacity: 1 }], { channel: 'knowledge-presence', duration: 220, startFromCurrent: false });
+      } else if (visible(node)) {
+        const card = node.matches('.knowledge-result'), delay = card ? Math.min(stagger++, 4) * 24 : 0, duration = 320 + delay;
+        const start = { opacity: 0, transform: `translateY(${card ? 14 : 6}px)` };
+        this.runMotion(node, [start, { ...start, offset: delay / duration, easing: 'cubic-bezier(.22, 1, .36, 1)' }, { opacity: 1, transform: 'translateY(0)' }], { channel: 'knowledge-presence', duration, easing: 'linear', startFromCurrent: false });
+      }
+    }
+    for (const [node, before] of fields) if (node.isConnected && node.innerHTML !== before && visible(node)) {
+      this.runMotion(node, [{ opacity: .65 }, { opacity: 1 }], { channel: 'knowledge-text', duration: 200 });
+    }
+    const state = output.__knowledgeTransition = { phase: 'layout', timer: null };
+    state.timer = setTimeout(() => {
+      if (output.__knowledgeTransition === state) output.__knowledgeTransition = null;
+    }, 430);
   }
 
   async openKnowledgeSearchResult(button) {

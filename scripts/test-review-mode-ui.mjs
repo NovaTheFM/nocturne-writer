@@ -83,6 +83,7 @@ try {
   });
   await check('rendered row divider stays visible through every mode fade in both themes and toolbar sizes', async page => {
     await createManuscript(page);
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('.app-shell')).opacity === '1');
     const samples = [];
     for (const theme of ['nocturne', 'paper']) {
       for (const compact of [false, true]) {
