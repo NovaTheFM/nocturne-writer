@@ -1,3 +1,5 @@
+import { BookmarkExtension, BookmarkStep, bookmarkPluginKey } from './bookmark-plugin.js';
+import { normalizeBookmarks, editorIndex } from '../features/bookmark-model.js';
 import { Editor, Extension, StarterKit, TextAlign, Underline, Placeholder, Plugin, PluginKey, Decoration, DecorationSet, HorizontalRule, TextSelection } from '../vendor/tiptap/nocturne-tiptap.bundle.js';
 import { ensureTiptapBlockIds, legacyAstToHtml, tiptapJsonToLegacyAst } from './document-adapter.js';
 import { beginVisualResize, calculateVisualPages, disposeVisualPagination, updateActivePageHighlight } from './visual-pagination.js';
@@ -352,114 +354,6 @@ function bridgeFindBestQuoteOffset(text, quote, prefix = '', suffix = '', oldOff
   return matches[0].index;
 }
 
-const createHouseWidget = (bookmarkId, isActive) => {
-  const element = document.createElement('span');
-  element.className = isActive ? 'nocturne-bookmark-house active' : 'nocturne-bookmark-house';
-  element.setAttribute('data-bookmark-id', bookmarkId);
-  element.innerHTML = `
-    <button class="nocturne-bookmark-house-inner" type="button" aria-label="Перейти к закладке">
-      <svg class="nocturne-bookmark-svg" viewBox="0 0 40 46" aria-hidden="true"><path d="M20 2 37 17v22a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5V17Z" /></svg>
-      <i class="bx bxs-bookmark" aria-hidden="true"></i>
-    </button>
-  `;
-  const button = element.querySelector('button');
-  button.addEventListener('pointerdown', (e) => {
-    e.stopPropagation();
-    e.preventDefault();
-  });
-  button.addEventListener('click', (e) => {
-    e.stopPropagation();
-    e.preventDefault();
-    const paneId = element.closest('.workspace-pane')?.dataset.paneId;
-    if (paneId) window.nocturneApp?.activateBookmark(paneId, bookmarkId);
-  });
-  return element;
-};
-
-const NocturneBookmarks = Extension.create({
-  name: 'nocturneBookmarks',
-  addOptions() {
-    return {
-      getBookmarks: () => [],
-      getActiveBookmarkId: () => null,
-    };
-  },
-  addProseMirrorPlugins() {
-    const extension = this;
-    const key = new PluginKey('nocturneBookmarks');
-    
-    const buildDecos = (doc) => {
-      const decos = [];
-      const bookmarks = extension.options.getBookmarks() || [];
-      if (!bookmarks.length) return DecorationSet.empty;
-      const activeId = extension.options.getActiveBookmarkId() || null;
-      
-      bookmarks.forEach((b) => {
-        let startPos = -1;
-        let endPos = -1;
-        
-        doc.descendants((node, pos) => {
-          if (node.attrs?.blockId === b.start?.blockId) {
-            const text = node.textContent || '';
-            let localOffset = b.start?.offset || 0;
-            if (b.quote) {
-              const found = bridgeFindBestQuoteOffset(text, b.quote, b.prefix, b.suffix);
-              if (found >= 0) localOffset = found;
-            }
-            startPos = pos + 1 + Math.max(0, Math.min(text.length, localOffset));
-            endPos = startPos + (b.quote ? b.quote.length : 0);
-            return false;
-          }
-        });
-        
-        if (startPos >= 0 && endPos >= startPos) {
-          const isActive = b.id === activeId;
-          const rangeClass = isActive ? 'nocturne-bookmark-range active' : 'nocturne-bookmark-range';
-          
-          decos.push(Decoration.inline(startPos, endPos, {
-            class: rangeClass,
-            'data-bookmark-id': b.id
-          }));
-          
-          decos.push(Decoration.widget(startPos, () => createHouseWidget(b.id, isActive), {
-            side: -1,
-            ignoreSelection: true
-          }));
-        }
-      });
-      
-      decos.sort((a, b) => {
-        if (a.from !== b.from) return a.from - b.from;
-        return a.isInline ? -1 : 1;
-      });
-      return DecorationSet.create(doc, decos);
-    };
-
-    return [
-      new Plugin({
-        key,
-        state: {
-          init(config, instance) {
-            return buildDecos(instance.doc);
-          },
-          apply(tr, value, oldState, newState) {
-            const forced = tr.getMeta('nocturneBookmarksForceUpdate');
-            if (forced) {
-              return buildDecos(newState.doc);
-            }
-            return value.map(tr.mapping, newState.doc);
-          }
-        },
-        props: {
-          decorations(state) {
-            return key.getState(state);
-          }
-        }
-      })
-    ];
-  }
-});
-
 const NocturneAutoformat = Extension.create({
   name: 'nocturneAutoformat',
   addOptions() {
@@ -690,7 +584,7 @@ function executeRuleAction(view, rule, from, to, isEnter = false) {
 }
 
 export class NocturneEditorBridge {
-  constructor({ onChange, onFocus, onSelectionUpdate, onVisualPagesCalculated, getSettings, getDoc, getMentionIndex, onKeydown, getActiveBookmarkId, motion }) {
+  constructor({ onChange, onFocus, onSelectionUpdate, onVisualPagesCalculated, getSettings, getDoc, getMentionIndex, onKeydown, getActiveBookmarkId, motion, bookmarkController }) {
     this.instances = new Map();
     this.onChange = onChange;
     this.onFocus = onFocus;
@@ -703,6 +597,7 @@ export class NocturneEditorBridge {
     this.getActiveBookmarkId = getActiveBookmarkId;
     this.visualPageRaf = new Map();
     this.motion = motion;
+    this.bookmarkController = bookmarkController;
   }
 
   mount({ paneId, doc, host, pageShell, overlay, readOnly = false }) {
@@ -749,9 +644,13 @@ export class NocturneEditorBridge {
         NocturneEntityMentions.configure({
           getMentionIndex: () => this.getMentionIndex?.() || [],
         }),
-        NocturneBookmarks.configure({
-          getBookmarks: () => doc.bookmarks || [],
-          getActiveBookmarkId: () => this.getActiveBookmarkId?.(paneId) || null,
+        BookmarkExtension.configure({
+          getBookmarks: () => this.getDoc?.(doc.id)?.bookmarks || [],
+          getSettings: () => this.getSettings?.() || {},
+          onChange: values => this.bookmarkController?.editorValues(paneId, doc, values),
+          confirmDeletion: values => this.bookmarkController?.confirmTextDeletion(values) ?? true,
+          draw: view => this.bookmarkController?.drawEditor(paneId, view),
+          clear: () => this.bookmarkController?.clearEditor({ dom: host.querySelector('.ProseMirror') }),
         }),
       ],
       editorProps: {
@@ -852,13 +751,16 @@ export class NocturneEditorBridge {
     return null;
   }
 
-  applyDocumentContent(doc, { ast = null, pmJson = null } = {}) {
+  applyDocumentContent(doc, { ast = null, pmJson = null, history = false, bookmarks = doc.bookmarks || [], updateContent = true } = {}) {
     if (ast) doc.ast = structuredClone(ast);
     if (pmJson) doc.pmJson = ensureTiptapBlockIds(pmJson);
     else delete doc.pmJson;
     const instances = [...this.instances.values()].filter(instance => instance.docId === doc.id);
     for (const instance of instances) {
-      instance.editor.commands.setContent(doc.pmJson || legacyAstToHtml(doc.ast), { emitUpdate: false });
+      const before = bookmarkPluginKey.getState(instance.editor.state);
+      const chain = instance.editor.chain().command(({ tr }) => { tr.setMeta('bookmarkDeletionApproved', true).setMeta('addToHistory', history); return true; });
+      if (updateContent) chain.setContent(doc.pmJson || legacyAstToHtml(doc.ast), { emitUpdate: false });
+      chain.command(({ tr }) => { tr.step(new BookmarkStep(before, normalizeBookmarks(bookmarks, editorIndex(tr.doc)))); return true; }).run();
       this.scheduleVisualPages(instance.paneId);
     }
     if (instances.length) this.syncDocFromEditor(instances[0].paneId);

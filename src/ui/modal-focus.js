@@ -2,6 +2,9 @@ export function manageModalFocus() {
   let active = null;
   let activeModal = null;
   let previousFocus = null;
+  let restoreFocus = true;
+  const skipRestore = () => { if (active) restoreFocus = false; };
+  document.addEventListener('nocturne:skip-modal-focus-restore', skipRestore);
   const focusables = modal => {
     const ownedMenus = [...document.querySelectorAll('.portal-floating-menu.active')].filter(menu => [...modal.querySelectorAll('[aria-controls]')].some(anchor => anchor.getAttribute('aria-controls') === menu.id));
     return [modal, ...ownedMenus].flatMap(root => [...root.querySelectorAll('button, input, select, textarea, a[href], [tabindex="0"], [contenteditable="true"]')]).filter(element => !element.disabled && !element.closest('[inert]') && element.getClientRects().length && getComputedStyle(element).visibility !== 'hidden');
@@ -25,7 +28,7 @@ export function manageModalFocus() {
     const focusWithinModal = modal?.contains(document.activeElement);
     active = overlay || null;
     activeModal = modal || null;
-    if (!active) { previousFocus?.focus?.({ preventScroll: true }); previousFocus = null; return; }
+    if (!active) { if (restoreFocus) previousFocus?.focus?.({ preventScroll: true }); previousFocus = null; restoreFocus = true; return; }
     previousFocus ||= document.activeElement;
     modal.setAttribute('role', 'dialog'); modal.setAttribute('aria-modal', 'true');
     const title = modal.querySelector('h1,h2,h3');
@@ -58,6 +61,7 @@ export function manageModalFocus() {
   update();
   return () => {
     observer.disconnect();
+    document.removeEventListener('nocturne:skip-modal-focus-restore', skipRestore);
     document.removeEventListener('keydown', onKeydown, true);
     for (const element of document.querySelectorAll('[data-modal-inert]')) { element.inert = false; delete element.dataset.modalInert; }
   };

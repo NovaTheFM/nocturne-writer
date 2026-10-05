@@ -20,6 +20,8 @@ export const PROJECT_CHECKS = [
   check('pagination-performance', ['scripts/benchmark-pagination-resize.mjs', '--pages=53', '--page-mode=split', '--shape=single-paragraph', '--animate', '--label=verification', '--assert', '--budget-ms=32'], ['pagination', 'performance'], { ports: [5322, 8922] }),
   check('release-tools', ['scripts/test-release-tools.py'], ['release'], { executable: 'python' }),
   check('editor-adapter', ['scripts/test-editor-adapter.mjs'], ['writing', 'database'], { modes: ['smoke', 'full'] }),
+  check('bookmark-model', ['--test', 'scripts/test-bookmark-model.mjs'], ['writing', 'database', 'backups']),
+  check('bookmarks-ui', ['scripts/test-bookmarks-ui.mjs'], ['writing', 'lore', 'settings', 'touch', 'navigation', 'selection', 'backups'], { ports: [5333, 8933], scenarioReport: 'bookmarks-ui/results.json', timeout: 180_000 }),
   check('ai-context', ['scripts/test-ai-context.mjs'], ['ai', 'lore']),
   check('reliability', ['scripts/test-reliability.mjs'], ['database', 'writing', 'backups'], { ports: [5276] }),
   check('workflow-tools', ['scripts/test-workflow-tools.mjs'], ['writing', 'security', 'import', 'export', 'backups', 'ai', 'review'], { modes: ['smoke', 'full'], ports: [5282] }),

@@ -43,6 +43,25 @@ async function pair() {
 }
 async function reconcile(a, b) { const sa = await a.buildState(), sb = await b.buildState(); await a.receiveState(sb); await b.receiveState(sa); }
 
+test('bookmark anchors, notes, global notes and trash survive synchronization', async () => {
+  const { makeBookmark, anchorAt, textIndex } = await import('../src/features/bookmark-model.js');
+  const { a, b, left, right } = await pair();
+  const bookmark = makeBookmark(anchorAt(textIndex('Bookmark text'), 3, 8, 'range'));
+  bookmark.parts[0].note = 'Independent note';
+  const records = [
+    ['docs', { id: 'bookmarked-chapter', title: 'Chapter', bookmarks: [bookmark], fieldBookmarks: { notes: [bookmark] } }],
+    ['lore', { id: 'bookmarked-world', notes: [{ id: 'note', body: 'Bookmark text', bookmarks: [bookmark] }] }],
+    ['settings', { id: 'global-notes', text: 'Bookmark text', bookmarks: [bookmark] }],
+    ['trash', { id: 'deleted-bookmark', type: 'bookmark', bookmark, owner: { kind: 'doc', id: 'bookmarked-chapter' } }],
+  ];
+  for (const [store, value] of records) await left.put(store, value);
+  await reconcile(a, b);
+  for (const [store, value] of records) assert.deepEqual(await right.get(store, value.id), value);
+  const changed = await right.get('docs', 'bookmarked-chapter'); changed.bookmarks[0].parts[0].note = 'Phone edit';
+  await right.put('docs', changed); await reconcile(a, b);
+  assert.equal((await left.get('docs', changed.id)).bookmarks[0].parts[0].note, 'Phone edit');
+});
+
 test('receiving a batch reads each manuscript by key instead of rescanning its store', async () => {
   const { a, b, left, right } = await pair();
   for (let i = 0; i < 100; i++) await right.put('docs', { id: `batch-${i}`, title: `Chapter ${i}` });

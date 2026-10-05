@@ -150,7 +150,11 @@ export function clearViewportPagination(view) { sessions.delete(view); }
 export function viewportPaginationActive(view) { return sessions.has(view); }
 
 export function revealViewportSelection(view, shell) {
-  const session = sessions.get(view), window = paginationPluginKey.getState(view.state)?.viewport, pos = Math.max(1, Math.min(view.state.selection.head, view.state.doc.content.size - 1));
+  return revealViewportPosition(view, shell, view.state.selection.head);
+}
+
+export function revealViewportPosition(view, shell, position) {
+  const session = sessions.get(view), window = paginationPluginKey.getState(view.state)?.viewport, pos = Math.max(1, Math.min(position, view.state.doc.content.size - 1));
   if (!session || !window || (pos >= window.from && (pos < window.to || window.to === view.state.doc.content.size - 1))) return false;
   const scroll = shell.closest('.editor-scroll-area'), viewport = scroll.getBoundingClientRect(), origin = view.dom.getBoundingClientRect().top;
   const stride = parseFloat(shell.querySelector('.page-sheets-bg').style.getPropertyValue('--paper-stride'));

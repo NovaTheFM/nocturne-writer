@@ -1,4 +1,7 @@
+import { bookmarkDefaults } from '../features/bookmark-model.js';
+
 export const defaultSettings = {
+  ...bookmarkDefaults,
   automaticBackups: true,
   exportIncludeNotes: false,
   cardView: 'grid',

@@ -31,6 +31,9 @@ import { KNOWLEDGE_SEARCH_TYPES, findTextMatches, queryTerms, highlightSearchTex
 import { LocalSyncClient, buildHttpBase, SYNC_PROTOCOL_VERSION } from './features/local-sync.js';
 import { DatabaseSync } from './features/database-sync.js';
 import { ProjectBackups } from './features/backups.js';
+import { TrashController } from './features/trash-controller.js';
+import { BookmarkController } from './features/bookmark-controller.js';
+import { bookmarkDefaults, cloneBookmarks } from './features/bookmark-model.js';
 import { NocturneEditorBridge } from './editor/nocturne-editor.js';
 import { closeHistory } from './vendor/tiptap/nocturne-tiptap.bundle.js';
 import { legacyAstToHtml } from './editor/document-adapter.js';
@@ -272,7 +275,10 @@ class NocturneWriter {
     this.persistSettingsDebounced = debounce(() => this.persistSettings(), 300);
     this.typoMatchIndex = [];
     this.commandPalette = new CommandPalette(this);
+    this.trash = new TrashController(this);
+    this.bookmarks = new BookmarkController(this);
     this.nocturneEditor = new NocturneEditorBridge({
+      bookmarkController: this.bookmarks,
       getSettings: () => this.state.settings,
       getDoc: id => this.state.docs.find(doc => doc.id === id),
       motion: { run: (...args) => this.runMotion(...args), reduce: () => this.shouldReduceSurfaceMotion() },
@@ -296,6 +302,7 @@ class NocturneWriter {
         this.refreshReviewToolbarSelection();
       },
       onVisualPagesCalculated: () => {
+        this.bookmarks.refresh();
         this.renderTypoSvgOverlays();
         if (this.state.settings.autoPaginate) {
           this.renderNocturneSelectionLayer();
@@ -391,6 +398,8 @@ class NocturneWriter {
     await this.loadTypoRules();
     await this.loadReviewMarks();
     this.validateLoadedState();
+    await this.bookmarks.init();
+    await this.trash.init();
     this.initWorkspace();
     this.renderShell();
     this.initElectronTitlebar();
@@ -501,6 +510,8 @@ class NocturneWriter {
       merged[key] = Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
     };
     const bools = ['windowMaterial', 'cursorGlow', 'compactPanels', 'compactKbSidebar', 'compactToolbar', 'compactSettings', 'compactNotes', 'caretBreath', 'paragraphIndent', 'smartPunctuation', 'writerSyntax', 'baselineGrid', 'readability', 'typewriterMode', 'strictSpellcheck', 'smartDictionary', 'sentenceFocus', 'showDontTell', 'sentimentTimeline', 'sprintLock', 'timeMachine', 'gitVersioning', 'e2e', 'watermark', 'liveSave', 'autoPaginate', 'showPageRulers', 'showZenButton', 'notesAutosave', 'toolbarSticky', 'reduceMobileAnimations', 'aiKnowledgeContext', 'aiContextCharacters', 'aiContextLocations', 'aiContextTimeline', 'aiContextSubtimelines', 'aiContextRules', 'aiContextNotes', 'autoReplaceDoubleDash', 'autoReplaceEnDash'];
+    bools.push(...Object.keys(bookmarkDefaults).filter(key => typeof bookmarkDefaults[key] === 'boolean'));
+    clamp('bookmarkTitleLength', 20, 100);
     bools.forEach((key) => { merged[key] = !!merged[key]; });
     const allowedFonts = ['Lora', 'Manrope', 'Georgia', 'Inter', 'Playfair Display', 'Merriweather', 'Courier New'];
     if (Array.isArray(merged.customFonts)) {
@@ -543,6 +554,10 @@ class NocturneWriter {
     }
 
     const enums = {
+      bookmarkMode: ['point', 'paragraph', 'range'], bookmarkBehavior: ['text', 'time', 'manual'],
+      bookmarkNavigation: ['list', 'caret'], bookmarkDeletedText: ['delete', 'detach', 'nearest'],
+      bookmarkReopen: ['position', 'bookmark', 'start'], bookmarkVisibility: ['hover', 'active', 'always'],
+      bookmarkHighlight: ['jump', 'always', 'off'],
       theme: ['nocturne', 'midnight', 'paper', 'matrix', 'lavender', 'crimson', 'adaptive', 'blazing'],
       caretStyle: ['line', 'block', 'underline'],
       fontFamily: allowedFonts,
@@ -740,6 +755,7 @@ class NocturneWriter {
   }
 
   async deleteTypoRule(id) {
+    await this.trash.store('typoRules', this.state.typoRules.find(value => value.id === id));
     this.state.typoRules = this.state.typoRules.filter((rule) => rule.id !== id);
     await this.db.delete('typoRules', id);
     this.updateTypoHighlights();
@@ -791,6 +807,7 @@ class NocturneWriter {
   }
 
   async deleteReviewMark(id) {
+    await this.trash.store('reviewMarks', this.state.reviewMarks.find(value => value.id === id));
     this.state.reviewMarks = this.state.reviewMarks.filter((mark) => mark.id !== id);
     await this.db.delete('reviewMarks', id);
     this.updateReviewHighlights();
@@ -1803,6 +1820,7 @@ class NocturneWriter {
 
   renderKbPane(paneId, pane) {
     const tab = pane?.kbTab || 'characters';
+    if (tab === 'bookmarks') return this.bookmarks.manager();
     if (tab === 'search') return this.renderKnowledgeSearch();
     if (tab === 'locations') {
       const locs = [...this.state.lore.locations].sort((a, b) => a.order - b.order);
@@ -2416,6 +2434,7 @@ class NocturneWriter {
     const tabs = [
       ['visual', 'bx-palette', 'Оформление', 'Темы, акцент и каретка'],
       ['editor', 'bx-text', 'Рукопись', 'Шрифт, интервалы и типографика'],
+      ['bookmarks', 'bx-bookmark', 'Закладки', 'Привязка, отображение и история'],
       ['focus', 'bx-target-lock', 'Концентрация', 'Дзен, страницы и фокус на тексте'],
       ['review', 'bx-edit-alt', 'Редактура', 'Пометки и проверка рукописи'],
       ['dictionary', 'bx-book-content', 'Словарь', 'Исключения и исправления'],
@@ -2456,6 +2475,7 @@ class NocturneWriter {
 
   renderMobileKb(options = {}) {
     const active = this.state.mobile.kbTab || this.state.activeKbTab || 'characters';
+    if (active === 'bookmarks' && !this.state.activeLoreDetail) return `${options.asTab ? this.mobileTabHeader('База знаний', 'Закладки') : this.mobilePanelHeader('База знаний', 'Закладки')}<div class="mobile-panel-body">${this.bookmarks.manager()}</div>`;
     const detail = this.activeLoreDetailItem();
     if (detail && ['characters', 'locations', 'notes', 'timeline', 'subtimeline'].includes(detail.type)) return this.renderMobileLoreDetail(detail.type, detail.item);
     if (this.state.activeSubtimelineId) return this.renderMobileSubtimeline(this.state.activeSubtimelineId);
@@ -2502,7 +2522,7 @@ class NocturneWriter {
           </div>
         </div>
         <div class="mobile-segmented mobile-lore-tabs">
-          ${[['characters', 'Персонажи'], ['locations', 'Локации'], ['timeline', 'Таймлайн'], ['notes', 'Записи'], ['search', 'Поиск']].map(([id, label]) => `<button class="${active === id ? 'active' : ''}" data-mobile-kb-tab="${id}">${label}</button>`).join('')}
+          ${[['characters', 'Персонажи'], ['locations', 'Локации'], ['timeline', 'Таймлайн'], ['notes', 'Записи'], ['bookmarks', 'Закладки'], ['search', 'Поиск']].map(([id, label]) => `<button class="${active === id ? 'active' : ''}" data-mobile-kb-tab="${id}">${label}</button>`).join('')}
         </div>
         ${active === 'search' ? this.renderKnowledgeSearch() : `
         ${this.kbViewTools()}
@@ -2632,7 +2652,7 @@ class NocturneWriter {
           </div>
           <div class="mobile-panel-actions mobile-notes-actions">
             <button class="pill-btn ai-btn" data-action="mobile-save-notes" ${disabled}><i class="bx bx-save"></i> Сохранить</button>
-            <button class="pill-btn" data-action="open-floating-notes-manager"><i class="bx bx-list-ul"></i> Все окна</button>
+            <button class="pill-btn" data-bookmark-action="add-notes"><i class="bx bx-bookmark"></i> Закладка</button><button class="pill-btn" data-action="open-floating-notes-manager"><i class="bx bx-list-ul"></i> Все окна</button>
             <button class="pill-btn" data-action="new-floating-note"><i class="bx bx-note"></i> Новая</button>
           </div>
         </div>
@@ -2646,23 +2666,7 @@ class NocturneWriter {
       </div>`;
   }
 
-  renderMobileBookmarks() {
-    const paneId = this.state.workspace.focusedPaneId;
-    const pane = this.getFocusedPane();
-    const doc = this.getFocusedDoc();
-    const source = doc || (this.state.lore.notes || []).find(note => pane?.type === 'note-detail' && note.id === pane.entityId);
-    const bookmarks = [...(source?.bookmarks || [])];
-    const blocks = new Map((doc?.ast?.blocks || []).map((block, index) => [block.id, index]));
-    bookmarks.sort(this.state.settings.bookmarkBehavior === 'time' ? (a, b) => a.createdAt - b.createdAt : (a, b) => (blocks.get(a.start?.blockId) ?? 0) - (blocks.get(b.start?.blockId) ?? 0) || (a.start?.offset ?? a.offset ?? 0) - (b.start?.offset ?? b.offset ?? 0));
-    return `${this.mobilePanelHeader('Закладки', source?.title || 'Текущий текст')}
-      <div class="mobile-panel-body">
-        <button class="pill-btn ai-btn" data-action="mobile-add-bookmark" ${source ? '' : 'disabled'}><i class="bx bx-plus"></i> В текущем месте</button>
-        <div class="mobile-bookmarks-list">${bookmarks.length ? bookmarks.map((bookmark, index) => `<div class="mobile-bookmark-row">
-          <button data-action="mobile-jump-bookmark" data-bookmark-id="${escapeHtml(bookmark.id)}" data-bookmark-pane="${escapeHtml(paneId)}"><i class="bx bx-bookmark" aria-hidden="true"></i><span><small>Закладка ${index + 1}</small><strong>${escapeHtml(bookmark.quote || 'Место в тексте')}</strong></span></button>
-          <button class="mini-icon-btn" data-action="mobile-delete-bookmark" data-bookmark-id="${escapeHtml(bookmark.id)}" aria-label="Удалить закладку ${index + 1}"><i class="bx bx-trash"></i></button>
-        </div>`).join('') : this.emptyStateMarkup('bx-bookmark', 'Сохраните место в тексте', 'Закладка поможет быстро вернуться к нужной сцене.')}</div>
-      </div>`;
-  }
+  renderMobileBookmarks() { return this.bookmarks.mobileList(); }
 
   renderMobileExport() {
     const row = (label, note, control) => `<div class="setting-row"><div class="setting-info"><span>${label}</span>${note ? `<small>${note}</small>` : ''}</div><div class="setting-control">${control}</div></div>`;
@@ -2846,16 +2850,18 @@ class NocturneWriter {
       if (local) {
         const changed = JSON.stringify(local.pmJson || local.ast) !== JSON.stringify(incoming.pmJson || incoming.ast);
         Object.assign(local, incoming);
-        if (changed && !local.locked) this.nocturneEditor.applyDocumentContent(local, { ast: local.ast, pmJson: local.pmJson });
+        if (!local.locked) this.nocturneEditor.applyDocumentContent(local, { ast: local.ast, pmJson: local.pmJson, updateContent: changed });
       } else this.state.docs.push(incoming);
     }
     this.state.docs = this.state.docs.filter(doc => docs.some(incoming => incoming.id === doc.id));
     this.state.lore = await this.loadLore();
     await this.loadFloatingNotes(); await this.loadReviewMarks(); await this.loadTypoRules();
     const notes = await this.db.get('settings', 'global-notes');
-    if (notes && !notes.locked) this.state.globalNotes = notes.text || '';
+    if (notes && !notes.locked) { this.state.globalNotes = notes.text || ''; this.state.globalBookmarks = notes.bookmarks || []; }
     const conflicts = await this.db.getAll('syncConflicts');
     for (const id of this.localDocConflicts || []) if (!conflicts.some(conflict => conflict.origin === 'local-tab' && conflict.recordId === id)) this.localDocConflicts.delete(id);
+    await this.bookmarks.init();
+    await this.trash.init();
     this.state.sync.conflicts = conflicts.length;
     this.state.sync.statusDetail = this.state.sync.conflicts ? `Есть ${this.state.sync.conflicts} конфликтов. Обе версии сохранены.` : 'Базы сверены. Все изменения сохранены на обоих устройствах.';
     this.renderDocs(); this.renderKb(); this.renderNotes(); this.updateSyncStatusUi();
@@ -3309,7 +3315,7 @@ class NocturneWriter {
               <button class="notes-tab active" data-notes-mode="document">Документ</button>
               <button class="notes-tab" data-notes-mode="global">Общие</button>
             </div>
-            <div class="notes-tools">
+            <div class="notes-tools"><button type="button" class="tool-btn" data-bookmark-action="add-notes" title="Поставить закладку" aria-label="Поставить закладку"><i class="bx bx-bookmark"></i></button>
               <button class="tool-btn" data-action="note-divider" title="Разделитель"><i class="bx bx-minus"></i></button>
               <button class="tool-btn" data-action="note-checklist" title="Чек-лист"><i class="bx bx-check-square"></i></button>
               <button class="tool-btn" data-action="note-toggle-check" title="Переключить пункт"><i class="bx bx-check"></i></button>
@@ -3341,6 +3347,7 @@ class NocturneWriter {
           <div class="drop-item kb-drop-row" data-kb-open="locations"><i class="bx bx-map-alt"></i><span>Локации</span><button type="button" data-action="open-kb-right" data-kb-tab="locations" title="Открыть справа"><i class="bx bx-columns"></i></button></div>
           <div class="drop-item kb-drop-row" data-kb-open="timeline"><i class="bx bx-git-commit"></i><span>Таймлайн</span><button type="button" data-action="open-kb-right" data-kb-tab="timeline" title="Открыть справа"><i class="bx bx-columns"></i></button></div>
           <div class="drop-item kb-drop-row" data-kb-open="notes"><i class="bx bx-note"></i><span>Записи</span><button type="button" data-action="open-kb-right" data-kb-tab="notes" title="Открыть справа"><i class="bx bx-columns"></i></button></div>
+          <div class="drop-item kb-drop-row" data-kb-open="bookmarks"><i class="bx bx-bookmark"></i><span>Закладки</span><button type="button" data-action="open-kb-right" data-kb-tab="bookmarks" title="Открыть справа"><i class="bx bx-columns"></i></button></div>
           <div class="drop-item kb-drop-row" data-kb-open="search"><i class="bx bx-search"></i><span>Поиск</span><button type="button" data-action="open-kb-right" data-kb-tab="search" title="Открыть справа"><i class="bx bx-columns"></i></button></div>
         </div>
         <div class="dropdown-menu popover-surface portal-floating-menu review-mode-menu" id="review-mode-menu" data-floating-menu="mode" role="menu" aria-label="Режим работы" aria-hidden="true">
@@ -3495,6 +3502,7 @@ class NocturneWriter {
   }
 
   renderMobileShell() {
+    this.bookmarks.refresh();
     this.updateRuntimeClasses();
     if (this.isMobileLayout() && this.macroRecordingState && (this.state.mobile.panel !== 'settings' || this.state.mobile.settingsTab !== 'macros')) {
       this.macroRecordingState = false;
@@ -3988,6 +3996,7 @@ class NocturneWriter {
   }
 
   handleClick(event) {
+    if (this.bookmarks.handleClick(event)) return;
     if (this.isMobileLayout?.() && event.detail > 0 && event.target.closest?.('.mobile-format-bar')) {
       event.preventDefault();
       event.stopPropagation();
@@ -4647,13 +4656,12 @@ class NocturneWriter {
       },
       'mobile-open-bookmarks': () => {
         const paneId = this.state.workspace.focusedPaneId;
-        const range = this.nocturneEditor.selectionRange(paneId);
-        this.mobileBookmarkContext = { paneId, docId: this.getFocusedDoc()?.id, range, selectedText: range?.toString() || '' };
+        this.mobileBookmarkContext = this.bookmarks.capture(paneId);
         open('bookmarks', 'write');
       },
       'mobile-add-bookmark': () => {
         const context = this.mobileBookmarkContext;
-        const add = context?.docId === this.getFocusedDoc()?.id ? this.addBookmarkFromContext(context) : this.addBookmarkAtCurrentPosition(this.state.workspace.focusedPaneId);
+        const add = context ? this.addBookmarkFromContext(context) : this.addBookmarkAtCurrentPosition(this.state.workspace.focusedPaneId);
         Promise.resolve(add).then(() => this.renderMobileShell()).catch(error => this.toast(error.message));
       },
       'mobile-jump-bookmark': () => {
@@ -5940,6 +5948,7 @@ class NocturneWriter {
   }
 
   handleInput(event) {
+    if (this.bookmarks.handleInput(event)) return;
     if (event.target.matches?.('[data-knowledge-query]')) {
       this.knowledgeSearch().query = event.target.value; this.knowledgeSearch().limit = 50;
       document.querySelectorAll('.knowledge-search-output').forEach(output => { if (output.__knowledgeTransition) output.__knowledgeTransition.focus = null; });
@@ -6193,6 +6202,7 @@ class NocturneWriter {
   }
 
   handleChange(event) {
+    if (this.bookmarks.handleInput(event)) return;
     const action = event.target.closest('[data-action]')?.dataset.action;
     if (action) {
       this.runAction(action, event);
@@ -6559,9 +6569,10 @@ class NocturneWriter {
   handleContextMenu(event) {
     const editable = event.target.closest?.('.page-content') || event.target.closest?.('.visual-page-shell, .page')?.querySelector?.('.page-content');
     const entity = event.target.closest?.('.entity-link');
-    const loreDetail = event.target.closest?.('.lore-detail.note-detail');
-    if (!editable && !entity && !loreDetail) return;
-    if (event.target.closest?.('input, textarea, select, .form-modal, .settings-modal, .floating-note')) return;
+    const loreDetail = event.target.closest?.('.lore-detail');
+    const bookmarkSource = this.bookmarks.sourceForElement(event.target);
+    if (!editable && !entity && !loreDetail && !bookmarkSource) return;
+    if (event.target.closest?.('input, textarea, select, .settings-modal, .floating-note') || event.target.closest('.form-modal') && !bookmarkSource) return;
     event.preventDefault();
     const sel = getSelection();
     const customRange = this.selectionController?.active && editable?.contains(this.selectionController.range?.commonAncestorContainer) ? this.selectionController.range : null;
@@ -6575,6 +6586,7 @@ class NocturneWriter {
       x: event.clientX,
       y: event.clientY,
       selectedText,
+      sourceKey: bookmarkSource?.key,
       paneId: surface?.dataset.paneId || loreDetail?.closest('.workspace-pane')?.dataset.paneId || this.state.workspace?.focusedPaneId || 'primary',
       docId: surface?.dataset.docId || null,
       noteId: loreDetail?.dataset.loreId || null,
@@ -6916,7 +6928,7 @@ class NocturneWriter {
       ${item('context-copy', 'bx-copy', 'Копировать', !hasSelection)}
       ${item('context-cut', 'bx-cut', 'Вырезать', !hasSelection || !canEdit)}
       ${item('context-paste', 'bx-clipboard', 'Вставить', !canEdit)}
-      ${(ctx.docId || ctx.noteId) ? item('context-add-bookmark', 'bx-bookmark', 'Поставить закладку') : ''}
+      ${(ctx.docId || ctx.noteId || ctx.sourceKey) ? item('context-add-bookmark', 'bx-bookmark', 'Поставить закладку') : ''}
       ${hasSelection ? item('context-add-typo-rule', 'bx-book-add', 'Добавить в словарь ошибок') : ''}
       ${editorBlock}
     `, { resize: true });
@@ -6976,12 +6988,16 @@ class NocturneWriter {
     event.preventDefault();
     event.stopPropagation();
     if (action === 'context-copy') {
-      await this.copyTextToClipboard(ctx.selectedText);
+      const clipboard = this.bookmarks.captureClipboard(ctx), text = clipboard?.data.getData('text/plain') || ctx.selectedText;
+      if (await this.copyTextToClipboard(text)) this.bookmarks.clipboard = clipboard ? { data: clipboard.data, text, copiedAt: Date.now() } : null;
     } else if (action === 'context-cut') {
-      if (!await this.copyTextToClipboard(ctx.selectedText)) { this.closeContextMenu(); return; }
+      const clipboard = this.bookmarks.captureClipboard(ctx), text = clipboard?.data.getData('text/plain') || ctx.selectedText;
+      if (!await this.copyTextToClipboard(text)) { this.closeContextMenu(); return; }
+      this.bookmarks.clipboard = clipboard ? { data: clipboard.data, text, copiedAt: Date.now() } : null;
       const range = this.restoreContextRange();
       if (range && this.state.reviewMode !== 'editor') {
-        range.deleteContents();
+        if (clipboard?.editor) clipboard.editor.commands.deleteSelection();
+        else range.deleteContents();
         const editable = range.commonAncestorContainer?.parentElement?.closest?.('.page-content')
           || document.querySelector(`.workspace-pane[data-pane-id="${CSS.escape(ctx.paneId || 'primary')}"] .page-content[data-doc-id="${CSS.escape(ctx.docId || '')}"]`);
         if (editable) this.editorInput(editable, { inputType: 'deleteByCut' });
@@ -7045,6 +7061,7 @@ class NocturneWriter {
   }
 
   async copyTextToClipboard(text) {
+    this.bookmarks.clipboard = null;
     try {
       await navigator.clipboard.writeText(text || '');
       return true;
@@ -7059,6 +7076,15 @@ class NocturneWriter {
       const text = await navigator.clipboard.readText();
       const range = this.restoreContextRange();
       if (!range) return;
+      const editor = this.nocturneEditor.getByElement(range.startContainer.parentElement || range.startContainer);
+      if (editor && editor.view.dom.contains(range.endContainer)) {
+        editor.commands.setTextSelection({ from: editor.view.posAtDOM(range.startContainer, range.startOffset), to: editor.view.posAtDOM(range.endContainer, range.endOffset) });
+        const cached = this.bookmarks.clipboard;
+        const data = this.state.settings.bookmarkCopyWithText && cached?.text === text && Date.now() - cached.copiedAt < 300000 ? cached.data : new DataTransfer();
+        if (!data.getData('text/plain')) data.setData('text/plain', text);
+        editor.view.dom.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+        return;
+      }
       range.deleteContents();
       range.insertNode(document.createTextNode(text));
       range.collapse(false);
@@ -8408,7 +8434,7 @@ class NocturneWriter {
           <div class="form-modal confirm-modal">
             <div class="confirm-icon"><i class="bx bx-trash"></i></div>
             <h2>Удалить произведение?</h2>
-            <p>Вы уверены, что хотите удалить произведение «${escapeHtml(project.title)}»? Это действие удалит все его персонажи, локации и события без возможности восстановления.</p>
+            <p>Произведение «${escapeHtml(project.title)}» будет перенесено в корзину вместе с персонажами, локациями, событиями и закладками.</p>
             <div class="form-actions">
               <button class="pill-btn" data-close-form>Отмена</button>
               <button class="pill-btn danger-btn" data-confirm-delete>Удалить</button>
@@ -8419,7 +8445,9 @@ class NocturneWriter {
         overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
         overlay.querySelector('[data-confirm-delete]').onclick = async () => {
           overlay.classList.remove('active');
+          await this.trash.store('lore', { id: activeId, ...this.state.lore }, 'lore');
           await this.db.delete('lore', activeId);
+          this.bookmarks.worldRecords = this.bookmarks.worldRecords.filter(world => world.id !== activeId);
           this.state.kbProjects = (this.state.kbProjects || []).filter(p => p.id !== activeId);
           this.state.settings.kbProjects = this.state.kbProjects;
           this.state.settings.activeLoreId = 'world';
@@ -8515,9 +8543,9 @@ class NocturneWriter {
           danger: true,
         });
         if (ok) {
-          await this.db.clear('docs');
+          for (const doc of [...this.state.docs]) await this.deleteDoc(doc.id, true);
+          for (const folder of this.state.folders) await this.trash.store('folders', folder, 'documents');
           await this.db.clear('folders');
-          await this.db.clear('snapshots');
           safeStorageKeys(localStorage).forEach((key) => {
             if (key.startsWith(LIVE_PREFIX)) safeRemoveStorageItem(localStorage, key);
           });
@@ -8534,7 +8562,7 @@ class NocturneWriter {
       'clear-all-characters': async () => {
         const ok = await this.confirmDialog({
           title: 'Удалить всех персонажей?',
-          message: 'Все персонажи будут навсегда удалены из Базы Знаний.',
+          message: 'Все персонажи будут перемещены в корзину.',
           confirmText: 'Удалить',
           icon: 'bx-user-x',
           danger: true,
@@ -8550,7 +8578,7 @@ class NocturneWriter {
       'clear-all-locations': async () => {
         const ok = await this.confirmDialog({
           title: 'Удалить все локации?',
-          message: 'Все локации и места будут навсегда удалены из Базы Знаний.',
+          message: 'Все локации и места будут перенесены в корзину.',
           confirmText: 'Удалить',
           icon: 'bx-map-x',
           danger: true,
@@ -8566,7 +8594,7 @@ class NocturneWriter {
       'clear-all-timeline': async () => {
         const ok = await this.confirmDialog({
           title: 'Удалить все события?',
-          message: 'Все события хронологии и сабтаймлайны будут навсегда удалены.',
+          message: 'Все события хронологии и сабтаймлайны будут перенесены в корзину.',
           confirmText: 'Удалить',
           icon: 'bx-git-commit',
           danger: true,
@@ -8583,7 +8611,7 @@ class NocturneWriter {
       'clear-all-notes': async () => {
         const ok = await this.confirmDialog({
           title: 'Удалить все записи?',
-          message: 'Все записи и заметки будут навсегда удалены из Базы Знаний.',
+          message: 'Все записи и заметки будут перенесены в корзину.',
           confirmText: 'Удалить',
           icon: 'bx-note',
           danger: true,
@@ -8599,7 +8627,7 @@ class NocturneWriter {
       'clear-all-kb': async () => {
         const ok = await this.confirmDialog({
           title: 'Очистить всю Базу Знаний?',
-          message: 'Все персонажи, локации, события таймлайна и записи будут навсегда удалены.',
+          message: 'Все персонажи, локации, события таймлайна и записи будут перенесены в корзину.',
           confirmText: 'Очистить базу',
           icon: 'bx-book-content',
           danger: true,
@@ -9456,6 +9484,7 @@ class NocturneWriter {
     this.normalizeFolderOrders();
     this.state.collapsedFolders = this.state.collapsedFolders.filter((id) => id !== folderId);
     safeSetStorageItem(localStorage, 'nocturne-collapsed-folders', JSON.stringify(this.state.collapsedFolders));
+    await this.trash.store('folders', folder, 'documents');
     await this.db.delete('folders', folderId);
     await Promise.all(this.state.folders.map((item) => this.db.put('folders', item)));
     if (!localOnly) {
@@ -9739,9 +9768,17 @@ class NocturneWriter {
         blocks: (source.ast?.blocks?.length ? source.ast.blocks : [{ type: 'paragraph', html: '<br>', align: 'left' }])
           .map((block) => ({ ...structuredClone(block), id: uid('block') })),
       },
-      notes: '',
+      notes: source.notes || '',
     };
     delete copy.encrypted;
+    copy.bookmarks = cloneBookmarks(source.bookmarks || [], '');
+    if (source.fieldBookmarks) copy.fieldBookmarks = Object.fromEntries(Object.entries(source.fieldBookmarks).map(([field, values]) => [field, cloneBookmarks(values, '')]));
+    const blockIds = new Map((source.ast?.blocks || []).map((block, index) => [block.id, copy.ast.blocks[index]?.id]));
+    if (copy.pmJson) {
+      const visit = node => { if (node.attrs?.blockId) { const old = node.attrs.blockId; if (!blockIds.has(old)) blockIds.set(old, uid('block')); node.attrs.blockId = blockIds.get(old); } (node.content || []).forEach(visit); };
+      visit(copy.pmJson);
+    }
+    for (const bookmark of copy.bookmarks) for (const part of bookmark.parts) for (const edge of ['start', 'end']) if (part.anchor[edge]?.blockId) part.anchor[edge].blockId = blockIds.get(part.anchor[edge].blockId) || part.anchor[edge].blockId;
     this.state.docs.push(copy);
     this.docWordBaselines.set(copy.id, countWords(docText(copy.ast)));
     await Promise.all([
@@ -10191,7 +10228,7 @@ class NocturneWriter {
     const doomed = this.state.floatingNotes.filter((note) => note.scope === scope && note.linkedId === linkedId);
     if (!doomed.length) return;
     this.state.floatingNotes = this.state.floatingNotes.filter((note) => !(note.scope === scope && note.linkedId === linkedId));
-    await Promise.all(doomed.filter((note) => !note.temporary).map((note) => this.db.delete('floatingNotes', note.id)));
+    for (const note of doomed.filter(note => !note.temporary)) { await this.trash.store('floatingNotes', note); await this.db.delete('floatingNotes', note.id); }
     this.renderFloatingNotes();
     this.renderFloatingNotesModal();
   }
@@ -10215,21 +10252,7 @@ class NocturneWriter {
     this.toast('Документ восстановлен вместе с заметками и историей.');
   }
 
-  async openTrash() {
-    const items = (await this.db.getAll('trash')).sort((a, b) => b.deletedAt - a.deletedAt);
-    const overlay = document.getElementById('form-overlay');
-    this.presentFormModal(`<div class="form-modal utility-modal"><div class="modal-head-row"><div><h2>Корзина</h2><p>Удалённые документы, заметки и история остаются здесь до окончательного удаления.</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div><div class="utility-list">${items.length ? items.map(item => `<div class="utility-row" data-surface-key="openTrash-${escapeHtml(item.id)}"><i class="bx bx-file"></i><div><strong>${escapeHtml(item.title || 'Зашифрованный документ')}</strong><small>${new Date(item.deletedAt || item.createdAt || 0).toLocaleDateString()}</small></div><button class="pill-btn" data-trash-restore="${escapeHtml(item.id)}" ${item.locked ? 'disabled' : ''}>Восстановить</button><button class="btn-icon" data-trash-delete="${escapeHtml(item.id)}" aria-label="Удалить навсегда"><i class="bx bx-trash"></i></button></div>`).join('') : '<div class="utility-empty"><i class="bx bx-trash"></i><p>Корзина пуста</p></div>'}</div></div>`);
-    overlay.classList.add('active');
-    overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
-    overlay.querySelectorAll('[data-trash-restore]').forEach(button => button.onclick = async () => {
-      try { await this.runSurfaceAction(button, 'Восстанавливаем…', async () => { await this.restoreTrashItem(button.dataset.trashRestore); if (overlay.classList.contains('active') && button.isConnected) await this.openTrash(); }); }
-      catch (error) { this.toast(error.message); }
-    });
-    overlay.querySelectorAll('[data-trash-delete]').forEach(button => button.onclick = async () => {
-      if (!await this.confirmDialog({ title: 'Удалить навсегда?', message: 'Документ и его история будут удалены из корзины.', confirmText: 'Удалить навсегда' })) return this.openTrash();
-      await this.db.delete('trash', button.dataset.trashDelete); await this.openTrash();
-    });
-  }
+  async openTrash() { return this.trash.open(); }
 
   pinDoc(id) {
     const doc = this.state.docs.find((d) => d.id === id);
@@ -10256,7 +10279,7 @@ class NocturneWriter {
 
         <div class="form-grid">
           <label><span class="doc-title-label">${isBook ? 'Название главы' : 'Название'}</span> <input class="form-control" name="title" value="${escapeHtml(doc.title)}" required></label>
-          <label>Описание <textarea class="form-control" name="description">${escapeHtml(doc.description || '')}</textarea></label>
+          <label>Описание <textarea class="form-control" name="description" data-bookmark-source="${escapeHtml(this.bookmarks.sources().find(source => source.owner.kind === 'doc' && source.owner.id === doc.id && source.owner.field === 'description')?.key || '')}">${escapeHtml(doc.description || '')}</textarea></label>
           <div class="form-field"><span>База знаний произведения</span>${this.renderFormSelect('loreId', this.state.kbProjects.map(project => [project.id, project.title]), doc.loreId || 'world', { label: 'База знаний произведения' })}</div>
         </div>
 
@@ -11229,6 +11252,8 @@ class NocturneWriter {
       }
     }
 
+    if (this.state.settings.bookmarkReopen === 'start') host.closest('.editor-scroll-area')?.scrollTo({ top: 0 });
+    if (this.state.settings.bookmarkReopen === 'bookmark' && doc.lastBookmarkId) setTimeout(() => this.activateBookmark(paneId, doc.lastBookmarkId), 80);
     this.updateActiveBlock();
     this.disableBrowserSpellcheck();
     this.applyReviewMode();
@@ -12077,658 +12102,13 @@ class NocturneWriter {
     return matches[0].index;
   }
 
-  serializeRangeToBookmarkAnchor(range, paneId, docId) {
-    if (!docId) return null;
-    
-    // 1. Try to get selection from DOM range mapped to editor first (highly accurate for clicks)
-    const editor = this.nocturneEditor?.get(paneId);
-    if (editor && range) {
-      try {
-        const pos = editor.view.posAtDOM(range.startContainer, range.startOffset);
-        let blockNode = null;
-        let blockPos = 0;
-        editor.state.doc.descendants((node, p) => {
-          if (node.attrs?.blockId && p <= pos && p + node.nodeSize >= pos) {
-            blockNode = node;
-            blockPos = p;
-            return false;
-          }
-        });
-        if (blockNode) {
-          const text = blockNode.textContent || '';
-          let offset = Math.max(0, Math.min(text.length, pos - blockPos - 1));
-          
-          let quote = '';
-          if (range.startContainer !== range.endContainer || range.startOffset !== range.endOffset) {
-            quote = range.toString();
-          }
-          if (!quote) {
-            quote = text.slice(offset, offset + 1);
-            if (!quote && offset > 0) {
-              quote = text.slice(offset - 1, offset);
-              offset = offset - 1;
-            }
-            if (!quote) {
-              quote = ' ';
-            }
-          }
-          
-          return {
-            start: { blockId: blockNode.attrs.blockId, offset: offset },
-            end: { blockId: blockNode.attrs.blockId, offset: offset + quote.length },
-            quote: quote,
-            prefix: text.slice(Math.max(0, offset - 36), offset),
-            suffix: text.slice(offset + quote.length, offset + quote.length + 36),
-          };
-        }
-      } catch (err) {
-        console.warn('posAtDOM failed, falling back to selection', err);
-      }
-    }
-
-    if (editor && !range) {
-      const { state } = editor;
-      const { selection } = state;
-      const pos = selection.from;
-      let blockNode = null;
-      let blockPos = 0;
-      state.doc.descendants((node, p) => {
-        if (node.attrs?.blockId && p <= pos && p + node.nodeSize >= pos) {
-          blockNode = node;
-          blockPos = p;
-          return false;
-        }
-      });
-      if (blockNode) {
-        const text = blockNode.textContent || '';
-        let offset = Math.max(0, Math.min(text.length, pos - blockPos - 1));
-        
-        let quote = '';
-        if (!selection.empty) {
-          quote = state.doc.textBetween(selection.from, selection.to, ' ');
-        }
-        if (!quote) {
-          quote = text.slice(offset, offset + 1);
-          if (!quote && offset > 0) {
-            quote = text.slice(offset - 1, offset);
-            offset = offset - 1;
-          }
-          if (!quote) {
-            quote = ' ';
-          }
-        }
-        
-        return {
-          start: { blockId: blockNode.attrs.blockId, offset: offset },
-          end: { blockId: blockNode.attrs.blockId, offset: offset + quote.length },
-          quote: quote,
-          prefix: text.slice(Math.max(0, offset - 36), offset),
-          suffix: text.slice(offset + quote.length, offset + quote.length + 36),
-        };
-      }
-      return null;
-    }
-
-    // 2. Fallback to DOM range
-    if (!range) return null;
-    
-    let startBlock = this.getBlockFromNode(range.startContainer, range.startOffset);
-    let endBlock = this.getBlockFromNode(range.endContainer, range.endOffset);
-    
-    if (startBlock && endBlock && startBlock.dataset.blockId !== endBlock.dataset.blockId) {
-      if (range.endContainer === startBlock.parentElement && range.endContainer.childNodes[range.endOffset - 1] === startBlock) {
-        endBlock = startBlock;
-      } else if (range.startContainer === endBlock.parentElement && range.startContainer.childNodes[range.startOffset] === endBlock) {
-        startBlock = endBlock;
-      }
-    }
-    
-    if (!startBlock) {
-      const editable = range.commonAncestorContainer?.parentElement?.closest?.('.page-content');
-      if (editable) {
-        startBlock = editable.querySelector('[data-block-id]');
-      }
-    }
-    if (!startBlock) return null;
-    if (!endBlock) endBlock = startBlock;
-    
-    let start = 0;
-    if (startBlock.contains(range.startContainer)) {
-      const startPre = range.cloneRange();
-      startPre.selectNodeContents(startBlock);
-      startPre.setEnd(range.startContainer, range.startOffset);
-      start = startPre.toString().length;
-    }
-    
-    let end = start;
-    if (endBlock.contains(range.endContainer)) {
-      const endPre = range.cloneRange();
-      endPre.selectNodeContents(endBlock);
-      endPre.setEnd(range.endContainer, range.endOffset);
-      end = endPre.toString().length;
-    }
-    
-    let quote = range.toString();
-    const text = startBlock.textContent || '';
-    if (!quote) {
-      // Empty selection: grab exactly 1 letter
-      quote = text.slice(start, start + 1);
-      if (!quote && start > 0) {
-        quote = text.slice(start - 1, start);
-        start = start - 1;
-      }
-      if (!quote) {
-        quote = ' ';
-      }
-      end = start + quote.length;
-    }
-    
-    return {
-      start: { blockId: startBlock.dataset.blockId, offset: start },
-      end: { blockId: endBlock.dataset.blockId, offset: end },
-      quote: quote,
-      prefix: text.slice(Math.max(0, start - 36), start),
-      suffix: text.slice(end, end + 36),
-    };
-  }
-
-  async addBookmarkFromContext(overrideContext = null) {
-    const ctx = overrideContext || this.state.contextMenu;
-    if (!ctx) return;
-    
-    const paneEl = document.querySelector(`.workspace-pane[data-pane-id="${ctx.paneId}"]`);
-    let range = overrideContext?.range || null;
-    const selection = window.getSelection();
-    const hasSelection = !overrideContext && selection && !selection.isCollapsed && ctx.selectedText;
-    
-    if (hasSelection) {
-      range = this.restoreContextRange();
-    } else if (!overrideContext && typeof ctx.x === 'number' && typeof ctx.y === 'number') {
-      if (document.caretRangeFromPoint) {
-        range = document.caretRangeFromPoint(ctx.x, ctx.y);
-      } else if (document.caretPositionFromPoint) {
-        const position = document.caretPositionFromPoint(ctx.x, ctx.y);
-        if (position) {
-          range = document.createRange();
-          range.setStart(position.offsetNode, position.offset);
-          range.setEnd(position.offsetNode, position.offset);
-        }
-      }
-      if (range && paneEl && !paneEl.contains(range.startContainer)) {
-        range = null;
-      }
-    }
-    
-    if (!range && !overrideContext) {
-      range = this.restoreContextRange();
-    }
-    
-    if (ctx.docId) {
-      const doc = this.state.docs.find(d => d.id === ctx.docId);
-      if (!doc) return;
-      const editor = this.nocturneEditor?.get(ctx.paneId);
-      if (!editor?.state.doc.textContent.trim()) {
-        this.toast('Сначала добавьте текст в документ.');
-        return;
-      }
-      
-      const bookmarkAnchor = this.serializeRangeToBookmarkAnchor(range, ctx.paneId, ctx.docId);
-      if (!bookmarkAnchor) return;
-      
-      doc.bookmarks = doc.bookmarks || [];
-      const existing = doc.bookmarks.find(bookmark => bookmark.start?.blockId === bookmarkAnchor.start.blockId && bookmark.start?.offset === bookmarkAnchor.start.offset && bookmark.quote === bookmarkAnchor.quote);
-      if (existing) {
-        this.state.activeBookmarkIdByPane ||= {};
-        this.state.activeBookmarkIdByPane[ctx.paneId] = existing.id;
-        this.renderBookmarksMenu(ctx.paneId);
-        this.toast('Здесь уже есть закладка.');
-        return;
-      }
-      const bookmark = {
-        id: uid('bookmark'),
-        createdAt: Date.now(),
-        ...bookmarkAnchor
-      };
-      doc.bookmarks.push(bookmark);
-      
-      await this.db.put('docs', doc);
-      this.toast('Закладка установлена в документе.');
-      
-      this.state.activeBookmarkIdByPane ||= {};
-      this.state.activeBookmarkIdByPane[ctx.paneId] = bookmark.id;
-      
-      this.renderBookmarksMenu(ctx.paneId);
-    } else if (ctx.noteId) {
-      const note = (this.state.lore.notes || []).find(n => n.id === ctx.noteId);
-      if (!note) return;
-      if (!note.body?.trim()) {
-        this.toast('Сначала добавьте текст в запись.');
-        return;
-      }
-      const noteBodyEl = paneEl?.querySelector('.lore-detail.note-detail .lore-detail-main:not(.timeline-associations-panel) > p');
-      if (!range || !noteBodyEl?.contains(range.startContainer)) {
-        this.toast('Выделите место в тексте записи.');
-        return;
-      }
-      
-      let quote = ctx.selectedText || '';
-      let offset = 0;
-      
-      if (range) {
-        if (noteBodyEl && noteBodyEl.contains(range.startContainer)) {
-          const pre = range.cloneRange();
-          pre.selectNodeContents(noteBodyEl);
-          pre.setEnd(range.startContainer, range.startOffset);
-          const precedingContent = pre.cloneContents();
-          offset = (precedingContent.textContent || '').length + precedingContent.querySelectorAll('br').length;
-          if (!quote) {
-            const fullText = note.body || '';
-            quote = fullText.slice(offset, offset + 1);
-            if (!quote && offset > 0) {
-              quote = fullText.slice(offset - 1, offset);
-              offset = offset - 1;
-            }
-            if (!quote) {
-              quote = ' ';
-            }
-          }
-        }
-      }
-      
-      if (!quote) quote = ' ';
-      
-      note.bookmarks = note.bookmarks || [];
-      const existing = note.bookmarks.find(bookmark => bookmark.offset === offset && bookmark.quote === quote);
-      if (existing) {
-        this.state.activeBookmarkIdByPane ||= {};
-        this.state.activeBookmarkIdByPane[ctx.paneId] = existing.id;
-        this.renderBookmarksMenu(ctx.paneId);
-        this.toast('Здесь уже есть закладка.');
-        return;
-      }
-      const bookmark = {
-        id: uid('bookmark'),
-        quote: quote,
-        offset: offset,
-        createdAt: Date.now()
-      };
-      note.bookmarks.push(bookmark);
-      
-      await this.saveLore();
-      this.toast('Закладка установлена в заметке.');
-      
-      this.state.activeBookmarkIdByPane ||= {};
-      this.state.activeBookmarkIdByPane[ctx.paneId] = bookmark.id;
-      
-      this.renderBookmarksMenu(ctx.paneId);
-    }
-  }
-
-  async addBookmarkAtCurrentPosition(paneId) {
-    const pane = this.getPane(paneId);
-    if (!pane || !['document', 'note-detail'].includes(pane.type)) return;
-    const paneEl = document.querySelector(`.workspace-pane[data-pane-id="${paneId}"]`);
-    const noteBody = paneEl?.querySelector('.lore-detail.note-detail .lore-detail-main:not(.timeline-associations-panel) > p');
-    const selection = window.getSelection();
-    const selectedRange = pane.type === 'note-detail' && selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
-    const range = selectedRange && noteBody?.contains(selectedRange.startContainer) ? selectedRange : null;
-    await this.addBookmarkFromContext({
-      paneId,
-      docId: pane.type === 'document' ? pane.docId : null,
-      noteId: pane.type === 'note-detail' ? pane.entityId : null,
-      selectedText: range && !range.collapsed ? range.toString() : '',
-      range,
-    });
-  }
-
-  confirmDeleteBookmark(bookmarkId) {
-    this.closeAllFloatingMenus();
-    const overlay = document.getElementById('form-overlay');
-    if (!overlay) return;
-    
-    this.presentOverlay(overlay, `
-      <div class="form-modal confirm-modal">
-        <div class="confirm-icon"><i class="bx bx-trash"></i></div>
-        <h2>Удалить закладку?</h2>
-        <p>Вы действительно хотите удалить эту закладку?</p>
-        <div class="form-actions">
-          <button class="pill-btn" data-close-form>Отмена</button>
-          <button class="pill-btn danger-btn" data-confirm-delete>Удалить</button>
-        </div>
-      </div>
-    `);
-    overlay.classList.add('active');
-    overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
-    overlay.querySelector('[data-confirm-delete]').onclick = async () => {
-      overlay.classList.remove('active');
-      await this.deleteBookmark(bookmarkId);
-    };
-  }
-
-  async deleteBookmark(bookmarkId) {
-    let found = false;
-    Object.keys(this.state.activeBookmarkIdByPane || {}).forEach(paneId => {
-      if (this.state.activeBookmarkIdByPane[paneId] === bookmarkId) delete this.state.activeBookmarkIdByPane[paneId];
-    });
-    
-    // 1. Search docs
-    for (const doc of this.state.docs) {
-      if (doc.bookmarks && doc.bookmarks.some(b => b.id === bookmarkId)) {
-        doc.bookmarks = doc.bookmarks.filter(b => b.id !== bookmarkId);
-        await this.db.put('docs', doc);
-        found = true;
-        break;
-      }
-    }
-    
-    // 2. Search lore notes
-    if (!found && this.state.lore?.notes) {
-      for (const note of this.state.lore.notes) {
-        if (note.bookmarks && note.bookmarks.some(b => b.id === bookmarkId)) {
-          note.bookmarks = note.bookmarks.filter(b => b.id !== bookmarkId);
-          await this.saveLore();
-          found = true;
-          break;
-        }
-      }
-    }
-    
-    // 3. Re-render all bookmark widgets and highlights
-    if (this.state.workspace?.panes) {
-      Object.keys(this.state.workspace.panes).forEach((paneId) => {
-        this.renderBookmarksMenu(paneId);
-      });
-    }
-    this.updateBookmarkHighlights();
-    if (this.isMobileLayout() && this.state.mobile.panel === 'bookmarks') this.renderMobileShell();
-  }
-
-  jumpToDocumentBookmark(paneId, bookmark) {
-    this._isJumpingToBookmark = true;
-    if (this._jumpToBookmarkTimeout) clearTimeout(this._jumpToBookmarkTimeout);
-    this._jumpToBookmarkTimeout = setTimeout(() => { this._isJumpingToBookmark = false; }, 650);
-
-    const editor = this.nocturneEditor?.get(paneId);
-    if (!editor) return;
-    
-    let targetPos = -1;
-    editor.state.doc.descendants((node, pos) => {
-      if (node.attrs?.blockId === bookmark.start?.blockId) {
-        const text = node.textContent || '';
-        let localOffset = bookmark.start?.offset || 0;
-        if (bookmark.quote) {
-          const found = this.findBestQuoteOffset(text, bookmark.quote, bookmark.prefix, bookmark.suffix);
-          if (found >= 0) localOffset = found;
-        }
-        targetPos = pos + 1 + Math.max(0, Math.min(text.length, localOffset));
-        return false;
-      }
-    });
-    
-    if (targetPos < 0 && bookmark.quote) {
-      editor.state.doc.descendants((node, pos) => {
-        if (node.isTextblock) {
-          const text = node.textContent || '';
-          const found = this.findBestQuoteOffset(text, bookmark.quote, bookmark.prefix, bookmark.suffix);
-          if (found >= 0) {
-            targetPos = pos + 1 + found;
-            return false;
-          }
-        }
-      });
-    }
-    
-    if (targetPos >= 0) {
-      editor.commands.setTextSelection(targetPos);
-      editor.view.dom.focus({ preventScroll: true });
-      requestAnimationFrame(() => {
-        const scroller = editor.view.dom.closest('.editor-scroll-area');
-        if (!scroller) return;
-        const caret = editor.view.coordsAtPos(targetPos);
-        const viewport = scroller.getBoundingClientRect();
-        const caretCenter = (caret.top + caret.bottom) / 2;
-        scroller.scrollTo({ top: scroller.scrollTop + caretCenter - (viewport.top + viewport.height / 2), behavior: 'smooth' });
-      });
-      
-      const inlineEl = editor.view.dom.querySelector(`[data-bookmark-id="${bookmark.id}"]`);
-      if (inlineEl) {
-        inlineEl.classList.add('bookmark-flash-highlight');
-        setTimeout(() => inlineEl?.classList.remove('bookmark-flash-highlight'), 1800);
-      } else {
-        const blockEl = editor.view.dom.querySelector(`[data-block-id="${bookmark.start?.blockId}"]`);
-        if (blockEl) {
-          blockEl.classList.add('bookmark-flash-highlight');
-          setTimeout(() => blockEl?.classList.remove('bookmark-flash-highlight'), 1800);
-        }
-      }
-    }
-  }
-
-  jumpToNoteBookmark(paneId, bookmark) {
-    this._isJumpingToBookmark = true;
-    if (this._jumpToBookmarkTimeout) clearTimeout(this._jumpToBookmarkTimeout);
-    this._jumpToBookmarkTimeout = setTimeout(() => { this._isJumpingToBookmark = false; }, 650);
-
-    const paneEl = document.querySelector(`.workspace-pane[data-pane-id="${paneId}"]`);
-    if (!paneEl) return;
-    
-    const noteBodyEl = paneEl.querySelector('.lore-detail.note-detail .lore-detail-main:not(.timeline-associations-panel) > p');
-    if (!noteBodyEl) return;
-    
-    const targetEl = noteBodyEl.querySelector(`[data-bookmark-id="${bookmark.id}"]`);
-    if (targetEl) {
-      targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      targetEl.classList.add('bookmark-flash-highlight');
-      setTimeout(() => targetEl?.classList.remove('bookmark-flash-highlight'), 1800);
-    } else {
-      noteBodyEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }
-
-  activateBookmark(paneId, bookmarkId) {
-    const pane = this.getPane(paneId);
-    const isDoc = pane?.type === 'document';
-    const source = isDoc ? this.state.docs.find(doc => doc.id === pane.docId) : (this.state.lore.notes || []).find(note => note.id === pane?.entityId);
-    const bookmark = source?.bookmarks?.find(item => item.id === bookmarkId);
-    if (!bookmark) return;
-    this.state.activeBookmarkIdByPane ||= {};
-    this.state.activeBookmarkIdByPane[paneId] = bookmarkId;
-    this.renderBookmarksMenu(paneId);
-    this.updateBookmarkHighlights();
-    if (isDoc) this.jumpToDocumentBookmark(paneId, bookmark);
-    else setTimeout(() => this.jumpToNoteBookmark(paneId, bookmark), 75);
-  }
-
-  renderBookmarksMenu(paneId) {
-    const paneEl = document.querySelector(`.workspace-pane[data-pane-id="${paneId}"]`);
-    if (!paneEl) return;
-    const wasOpen = !!paneEl.querySelector('.pane-bookmarks-dropdown.active');
-    paneEl.querySelector('.pane-bookmarks-widget')?.remove();
-    paneEl.querySelector('.pane-bookmarks-dropdown')?.remove();
-    const pane = this.getPane(paneId);
-    const header = paneEl.querySelector('.workspace-pane-header');
-    const actions = header?.querySelector('.pane-header-actions');
-    if (!actions || !['document', 'note-detail'].includes(pane?.type)) return;
-    const isDoc = pane.type === 'document';
-    const source = isDoc ? this.state.docs.find(doc => doc.id === pane.docId) : (this.state.lore.notes || []).find(note => note.id === pane.entityId);
-    if (!source) return;
-    const bookmarks = [...(source.bookmarks || [])];
-    const editor = isDoc ? this.nocturneEditor?.get(paneId) : null;
-    if (this.state.settings?.bookmarkBehavior === 'time') {
-      bookmarks.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-    } else if (isDoc && editor) {
-      const blockOrder = new Map();
-      editor.state.doc.descendants(node => {
-        if (node.attrs?.blockId) blockOrder.set(node.attrs.blockId, blockOrder.size);
-      });
-      bookmarks.sort((a, b) => ((blockOrder.get(a.start?.blockId) ?? Number.MAX_SAFE_INTEGER) - (blockOrder.get(b.start?.blockId) ?? Number.MAX_SAFE_INTEGER)) || (a.start?.offset || 0) - (b.start?.offset || 0));
-    } else if (!isDoc) {
-      bookmarks.sort((a, b) => (a.offset || 0) - (b.offset || 0));
-    }
-    this.state.activeBookmarkIdByPane ||= {};
-    const activeId = this.state.activeBookmarkIdByPane[paneId];
-    const activeIndex = bookmarks.findIndex(bookmark => bookmark.id === activeId);
-    const widget = document.createElement('div');
-    widget.className = 'pane-bookmarks-widget';
-    const trigger = document.createElement('button');
-    trigger.type = 'button';
-    trigger.className = 'pane-bookmarks-btn';
-    trigger.setAttribute('aria-label', `Закладки: ${bookmarks.length}`);
-    trigger.setAttribute('aria-expanded', String(wasOpen));
-    trigger.setAttribute('aria-controls', `pane-bookmarks-${paneId}`);
-    trigger.innerHTML = `<i class="bx bx-bookmark" aria-hidden="true"></i><span>Закладки</span><span class="bookmarks-count">${bookmarks.length}</span><i class="bx bx-chevron-down" aria-hidden="true"></i>`;
-    widget.appendChild(trigger);
-    const dropdown = document.createElement('div');
-    dropdown.className = `pane-bookmarks-dropdown${wasOpen ? ' active' : ''}`;
-    dropdown.id = `pane-bookmarks-${paneId}`;
-    dropdown.setAttribute('role', 'region');
-    dropdown.setAttribute('aria-label', 'Закладки');
-    dropdown.setAttribute('aria-hidden', String(!wasOpen));
-    const dropdownHeader = document.createElement('div');
-    dropdownHeader.className = 'pane-bookmarks-header';
-    dropdownHeader.innerHTML = `<strong>Закладки</strong><span class="pane-bookmarks-position">${activeIndex < 0 ? '—' : activeIndex + 1} / ${bookmarks.length}</span>`;
-    const nav = document.createElement('div');
-    nav.className = 'pane-bookmarks-nav';
-    const jumpTo = index => {
-      if (!bookmarks.length) return;
-      this.activateBookmark(paneId, bookmarks[index].id);
-    };
-    for (const [direction, label, icon] of [[-1, 'Предыдущая закладка', 'bx-chevron-left'], [1, 'Следующая закладка', 'bx-chevron-right']]) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'pane-bookmarks-nav-btn';
-      button.disabled = !bookmarks.length;
-      button.title = label;
-      button.setAttribute('aria-label', label);
-      button.innerHTML = `<i class="bx ${icon}" aria-hidden="true"></i>`;
-      button.addEventListener('click', () => jumpTo(activeIndex < 0 ? (direction < 0 ? bookmarks.length - 1 : 0) : (activeIndex + direction + bookmarks.length) % bookmarks.length));
-      nav.appendChild(button);
-    }
-    dropdownHeader.appendChild(nav);
-    dropdown.appendChild(dropdownHeader);
-    const list = document.createElement('div');
-    list.className = 'pane-bookmarks-list';
-    if (!bookmarks.length) list.innerHTML = '<p class="pane-bookmarks-empty">Здесь пока нет закладок. Установите первую в текущем месте текста.</p>';
-    bookmarks.forEach((bookmark, index) => {
-      const item = document.createElement('div');
-      item.className = `pane-bookmarks-item${bookmark.id === activeId ? ' active' : ''}`;
-      const jumpButton = document.createElement('button');
-      jumpButton.type = 'button';
-      jumpButton.className = 'pane-bookmarks-item-text';
-      jumpButton.title = 'Перейти к закладке';
-      jumpButton.textContent = bookmark.quote?.trim() || `Закладка ${index + 1}`;
-      jumpButton.addEventListener('click', () => { dropdown.classList.remove('active'); jumpTo(index); });
-      const deleteButton = document.createElement('button');
-      deleteButton.type = 'button';
-      deleteButton.className = 'pane-bookmarks-item-delete btn-icon';
-      deleteButton.title = 'Удалить закладку';
-      deleteButton.setAttribute('aria-label', `Удалить закладку ${index + 1}`);
-      deleteButton.innerHTML = '<i class="bx bx-trash" aria-hidden="true"></i>';
-      deleteButton.addEventListener('click', () => this.confirmDeleteBookmark(bookmark.id));
-      item.append(jumpButton, deleteButton);
-      list.appendChild(item);
-    });
-    dropdown.appendChild(list);
-    const addButton = document.createElement('button');
-    addButton.type = 'button';
-    addButton.className = 'pane-bookmarks-add';
-    addButton.innerHTML = '<i class="bx bx-plus" aria-hidden="true"></i><span>Добавить в текущем месте</span>';
-    addButton.addEventListener('pointerdown', event => event.preventDefault());
-    addButton.addEventListener('click', () => this.addBookmarkAtCurrentPosition(paneId));
-    dropdown.appendChild(addButton);
-    const setOpen = open => {
-      dropdown.classList.toggle('active', open);
-      dropdown.setAttribute('aria-hidden', String(!open));
-      trigger.setAttribute('aria-expanded', String(open));
-    };
-    trigger.addEventListener('click', event => {
-      event.stopPropagation();
-      const open = !dropdown.classList.contains('active');
-      document.querySelectorAll('.pane-bookmarks-dropdown.active').forEach(element => {
-        element.classList.remove('active');
-        element.setAttribute('aria-hidden', 'true');
-        document.querySelector(`[aria-controls="${element.id}"]`)?.setAttribute('aria-expanded', 'false');
-      });
-      setOpen(open);
-    });
-    const onOutside = event => {
-      if (!widget.contains(event.target) && !dropdown.contains(event.target)) setOpen(false);
-    };
-    const onKeyDown = event => {
-      if (event.key === 'Escape' && dropdown.classList.contains('active')) { setOpen(false); trigger.focus(); }
-    };
-    document.addEventListener('click', onOutside);
-    document.addEventListener('keydown', onKeyDown);
-    const observer = new MutationObserver((_, instance) => {
-      if (!paneEl.contains(widget)) {
-        document.removeEventListener('click', onOutside);
-        document.removeEventListener('keydown', onKeyDown);
-        instance.disconnect();
-      }
-    });
-    observer.observe(paneEl, { childList: true, subtree: true });
-    actions.prepend(widget);
-    paneEl.appendChild(dropdown);
-    this.updateBookmarkHighlights();
-  }
-  updateBookmarkHighlights() {
-    if (this._updateBookmarkHighlightsTimer) clearTimeout(this._updateBookmarkHighlightsTimer);
-    this._updateBookmarkHighlightsTimer = setTimeout(() => {
-      // 1. Force update all active ProseMirror editor instances
-      if (this.state.workspace?.panes) {
-        Object.keys(this.state.workspace.panes).forEach((paneId) => {
-          const editor = this.nocturneEditor?.get(paneId);
-          if (editor) {
-            editor.view.dispatch(editor.view.state.tr.setMeta('nocturneBookmarksForceUpdate', true));
-          }
-        });
-      }
-      
-      // 2. Resolve Note Bookmarks in DOM
-      const noteBodyEls = document.querySelectorAll('.lore-detail.note-detail .lore-detail-main:not(.timeline-associations-panel) > p');
-      noteBodyEls.forEach((noteBodyEl) => {
-        const paneEl = noteBodyEl.closest('.workspace-pane');
-        const paneId = paneEl?.dataset.paneId;
-        if (!paneId) return;
-        const pane = this.getPane(paneId);
-        if (pane?.type === 'note-detail' && pane.entityId) {
-          const note = (this.state.lore.notes || []).find(n => n.id === pane.entityId);
-          if (note) {
-            const sourceText = note.body || 'Текст записи пуст.';
-            const renderText = value => escapeHtml(value).replace(/\n/g, '<br>');
-            let bodyText = renderText(sourceText);
-            if (note.bookmarks?.length) {
-              let cursor = 0;
-              const pieces = [];
-              const sorted = [...note.bookmarks].sort((a, b) => (a.offset || 0) - (b.offset || 0));
-              sorted.forEach(bookmark => {
-                const quote = bookmark.quote || '';
-                const offset = Math.max(0, Number(bookmark.offset) || 0);
-                const position = sourceText.slice(offset, offset + quote.length) === quote
-                  ? offset : sourceText.indexOf(quote, offset);
-                if (!quote || position < cursor) return;
-                const id = escapeHtml(bookmark.id);
-                const active = this.state.activeBookmarkIdByPane?.[paneId] === bookmark.id ? ' active' : '';
-                pieces.push(renderText(sourceText.slice(cursor, position)));
-                pieces.push(`<span class="nocturne-bookmark-house${active}" data-bookmark-id="${id}"><button class="nocturne-bookmark-house-inner" type="button" aria-label="Перейти к закладке"><svg class="nocturne-bookmark-svg" viewBox="0 0 40 46" aria-hidden="true"><path d="M20 2 37 17v22a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5V17Z" /></svg><i class="bx bxs-bookmark" aria-hidden="true"></i></button></span>`);
-                pieces.push(`<span class="nocturne-bookmark-range${active}" data-bookmark-id="${id}">${renderText(quote)}</span>`);
-                cursor = position + quote.length;
-              });
-              pieces.push(renderText(sourceText.slice(cursor)));
-              bodyText = pieces.join('');
-            }
-            if (noteBodyEl.innerHTML !== bodyText) {
-              noteBodyEl.innerHTML = bodyText;
-              noteBodyEl.querySelectorAll('.nocturne-bookmark-house-inner').forEach(button => {
-                button.addEventListener('pointerdown', event => event.preventDefault());
-                button.addEventListener('click', () => this.activateBookmark(paneId, button.closest('[data-bookmark-id]').dataset.bookmarkId));
-              });
-            }
-          }
-        }
-      });
-    }, 50);
-  }
+  async addBookmarkFromContext(context = null) { return this.bookmarks.addContext(context); }
+  async addBookmarkAtCurrentPosition(paneId) { return this.bookmarks.addCurrent(paneId); }
+  confirmDeleteBookmark(id) { const source = this.bookmarks.find(id); return source && this.bookmarks.remove(source.key, id); }
+  async deleteBookmark(id) { const source = this.bookmarks.find(id); return source && this.bookmarks.remove(source.key, id, { confirm: false }); }
+  activateBookmark(paneId, id) { const source = this.bookmarks.find(id, paneId); return source && this.bookmarks.jump(source.key, id, paneId); }
+  renderBookmarksMenu(paneId) { this.bookmarks.menu(paneId); this.bookmarks.refresh(); }
+  updateBookmarkHighlights() { this.bookmarks.refresh(); }
 
   async createReviewMarkFromSelection(kind, category = 'style', options = {}, rangeOverride = null) {
     const ctx = this.state.contextMenu;
@@ -14561,6 +13941,7 @@ class NocturneWriter {
       createdAt: Date.now(),
       ast: structuredClone(doc.ast),
       pmJson: structuredClone(doc.pmJson),
+      ...(this.state.settings.bookmarkSnapshots ? { bookmarks: structuredClone(doc.bookmarks || []), fieldBookmarks: structuredClone(doc.fieldBookmarks || {}), globalBookmarks: structuredClone(this.state.globalBookmarks || []) } : {}),
       notes: doc.notes || '',
       globalNotes: this.state.globalNotes || '',
       summary: doc.summary || doc.description,
@@ -14585,7 +13966,10 @@ class NocturneWriter {
     const snapshots = (await this.db.getAll('snapshots'))
       .filter((snap) => snap.docId === docId)
       .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
-    await Promise.all(snapshots.slice(limit).map((snap) => this.db.delete('snapshots', snap.id)));
+    for (const snapshot of snapshots.slice(limit)) {
+      await this.trash.store('snapshots', snapshot, 'documents');
+      await this.db.delete('snapshots', snapshot.id);
+    }
   }
 
   async saveActiveDoc(options = {}) {
@@ -14616,6 +14000,7 @@ class NocturneWriter {
     this.nocturneEditor?.syncDocFromEditorByDocId(docId);
     const doc = this.state.docs.find((item) => item.id === docId);
     if (!doc || doc.locked) return;
+    if (!await this.bookmarks.prepareOwner('doc', doc.id)) return false;
     this.writeLiveDraft(doc.id);
     this.setSaveStatus('saving', doc.id);
     if (this.state.settings.e2e && !this.state.sessionPassword) {
@@ -14679,6 +14064,7 @@ class NocturneWriter {
       if (!tab.dataset.action) tab.dataset.action = 'switch-notes';
     });
     this.renderFloatingNotesManager();
+    this.bookmarks.refresh();
   }
 
   floatingNoteScopeForContext() {
@@ -14985,7 +14371,7 @@ class NocturneWriter {
     const element = document.querySelector(`.floating-note[data-note-id="${id}"]`);
     const note = this.state.floatingNotes.find((item) => item.id === id);
     element?.classList.add('closing');
-    if (note && !note.temporary) await this.db.delete('floatingNotes', id);
+    if (note && !note.temporary) { await this.trash.store('floatingNotes', note); await this.db.delete('floatingNotes', id); }
     this.state.floatingNotes = this.state.floatingNotes.filter((note) => note.id !== id);
     setTimeout(() => {
       this.renderFloatingNotes();
@@ -15568,13 +14954,7 @@ class NocturneWriter {
       if (!options.silent) this.toast('Тестовых глав нет.');
       return;
     }
-    const demoMarks = this.state.reviewMarks.filter((mark) => ids.has(mark.docId));
-    const demoNotes = this.state.floatingNotes.filter((note) => note.scope === 'document' && ids.has(note.linkedId));
-    await Promise.all([
-      ...demoDocs.map((doc) => this.db.delete('docs', doc.id)),
-      ...demoMarks.map((mark) => this.db.delete('reviewMarks', mark.id)),
-      ...demoNotes.filter((note) => !note.temporary).map((note) => this.db.delete('floatingNotes', note.id)),
-    ]);
+    for (const doc of demoDocs) await this.deleteDoc(doc.id);
     demoDocs.forEach((doc) => safeRemoveStorageItem(localStorage, `${LIVE_PREFIX}${doc.id}`));
     this.state.docs = this.state.docs.filter((doc) => !ids.has(doc.id));
     this.state.reviewMarks = this.state.reviewMarks.filter((mark) => !ids.has(mark.docId));
@@ -15623,7 +15003,10 @@ class NocturneWriter {
       (note.scope === 'character' && doomedCharacterIds.has(note.linkedId))
       || (note.scope === 'location' && doomedLocationIds.has(note.linkedId))
     ));
-    await Promise.all(demoNotes.filter((note) => !note.temporary).map((note) => this.db.delete('floatingNotes', note.id)));
+    for (const note of demoNotes.filter(note => !note.temporary)) {
+      await this.trash.store('floatingNotes', note);
+      await this.db.delete('floatingNotes', note.id);
+    }
     this.state.floatingNotes = this.state.floatingNotes.filter((note) => !demoNotes.includes(note));
     this.state.lore.characters = this.state.lore.characters.filter((item) => !doomedCharacterIds.has(item.id));
     this.state.lore.locations = this.state.lore.locations.filter((item) => !doomedLocationIds.has(item.id));
@@ -15742,7 +15125,10 @@ class NocturneWriter {
       return;
     }
     if (!await this.confirmDialog({ title: 'Удалить редакторские правки?', message: `Документ: ${doc.title}`, confirmText: 'Удалить', icon: 'bx-message-x' })) return;
-    await Promise.all(marks.map((mark) => this.db.delete('reviewMarks', mark.id)));
+    for (const mark of marks) {
+      await this.trash.store('reviewMarks', mark);
+      await this.db.delete('reviewMarks', mark.id);
+    }
     this.state.reviewMarks = this.state.reviewMarks.filter((mark) => mark.docId !== doc.id);
     this.renderAll();
     this.toast(`Удалено правок: ${marks.length}`);
@@ -17149,6 +16535,7 @@ class NocturneWriter {
   }
 
   renderKb() {
+    this.bookmarks.refresh();
     if (this.kbTransitioning) {
       this.kbMotionGeneration = (this.kbMotionGeneration || 0) + 1;
       this.cancelKbEntrance();
@@ -17207,7 +16594,7 @@ class NocturneWriter {
       if (main) {
         this.kbRendering = true;
         try {
-          this.updateSurfaceHTML(main, detail ? this.renderLoreDetail(detail.type, detail.item, this.state.kbReadMode) : active === 'search' ? this.renderKnowledgeSearch({ closeButton: true }) : `
+          this.updateSurfaceHTML(main, detail ? this.renderLoreDetail(detail.type, detail.item, this.state.kbReadMode) : active === 'bookmarks' ? this.bookmarks.manager() : active === 'search' ? this.renderKnowledgeSearch({ closeButton: true }) : `
           ${this.kbViewTools()}
           <div class="kb-search-wrap">
             <i class="bx bx-search"></i>
@@ -17311,6 +16698,7 @@ class NocturneWriter {
         ['locations', 'bx-map-alt', 'Локации'],
         ['timeline', 'bx-git-commit', 'Таймлайн'],
         ['notes', 'bx-note', 'Записи'],
+         ['bookmarks', 'bx-bookmark', 'Закладки'],
         ['search', 'bx-search', 'Поиск'],
       ].map(([id, icon, label]) => `<div class="settings-tab ${active === id ? 'active' : ''}" data-kb-tab="${id}"><i class="bx ${icon}"></i> ${label}</div>`).join('')}
         <div class="kb-dump-sidebar-section">
@@ -17318,7 +16706,7 @@ class NocturneWriter {
         </div>
       </aside>
       <main class="kb-main">
-        ${detail ? this.renderLoreDetail(detail.type, detail.item, this.state.kbReadMode) : active === 'search' ? this.renderKnowledgeSearch({ closeButton: true }) : `
+        ${detail ? this.renderLoreDetail(detail.type, detail.item, this.state.kbReadMode) : active === 'bookmarks' ? this.bookmarks.manager() : active === 'search' ? this.renderKnowledgeSearch({ closeButton: true }) : `
         ${this.kbViewTools()}
         <div class="kb-search-wrap">
           <i class="bx bx-search"></i>
@@ -19322,7 +18710,7 @@ class NocturneWriter {
           ` : type === 'notes' ? `
             <label class="lore-field lore-field-wide">Заголовок <input class="form-control" name="title" value="${escapeHtml(item.title || '')}" required></label>
           ` : this.renderLoreEntityFields(type, item, iconOptions)}
-          <label class="lore-field lore-field-wide lore-description-field">Описание <textarea class="form-control" name="body" required>${escapeHtml(item.body || '')}</textarea></label>
+          <label class="lore-field lore-field-wide lore-description-field">Описание <textarea class="form-control" name="body" data-bookmark-source="${escapeHtml(this.bookmarks.sources().find(source => source.owner.kind === 'lore' && source.owner.worldId === this.state.activeLoreId && source.owner.id === item.id)?.key || '')}" required>${escapeHtml(item.body || '')}</textarea></label>
           ${isTimeline ? `
             <div class="lore-field lore-field-wide timeline-associations-fields collapsed">
               <div class="associations-title-row" data-action="toggle-associations">
@@ -19571,6 +18959,7 @@ class NocturneWriter {
           }
         });
         next = {
+          ...item,
           id: id || uid(isSubtimeline ? 'subtime' : 'time'),
           date: data.date,
           title: data.title,
@@ -19856,6 +19245,8 @@ class NocturneWriter {
   }
 
   async saveLore() {
+    if (!await this.bookmarks.prepareOwner('lore')) return;
+    await this.trash.captureWorld(this.state.lore, this.state.activeLoreId || 'world');
     if (this.state.lore.locked || (this.state.settings.e2e && !this.state.sessionPassword)) return;
     this.state.lore.characters = (this.state.lore.characters || []).map((item, index) => this.normalizeCharacter(item, index));
     this.state.lore.locations = (this.state.lore.locations || []).map((item, index) => this.normalizeLocation(item, index));
@@ -19875,7 +19266,9 @@ class NocturneWriter {
     if (this.state.activeSubtimelineId && !this.timelineEvent(this.state.activeSubtimelineId)) this.state.activeSubtimelineId = null;
     const activeId = this.state.activeLoreId || 'world';
     this.loreById?.set(activeId, structuredClone(this.state.lore));
-    await this.db.put('lore', { id: activeId, title: this.state.lore.title || 'Основное произведение', ...this.state.lore });
+    const storedWorld = { id: activeId, title: this.state.lore.title || 'Основное произведение', ...this.state.lore };
+    await this.db.put('lore', storedWorld);
+    this.bookmarks.worldRecords = this.bookmarks.worldRecords.filter(world => world.id !== activeId).concat(structuredClone(storedWorld));
     this.updateTypoHighlightsDebounced();
   }
 
@@ -19958,6 +19351,7 @@ class NocturneWriter {
       ['editor', 'bx-text', 'Микро-типографика'],
       ['dictionary', 'bx-book-content', 'Словарь ошибок'],
       ['review', 'bx-edit-alt', 'Редактура'],
+      ['bookmarks', 'bx-bookmark', 'Закладки'],
       ['focus', 'bx-target-lock', 'Фокус и продуктивность'],
       ['macros', 'bx-code-alt', 'Макросы'],
       ['formatting', 'bx-paint-roll', 'Разделители / Автоформат'],
@@ -20180,7 +19574,6 @@ class NocturneWriter {
           ${row('Дневная цель слов', 'Количество слов, к которому стремится дневной прогресс в нижней части sidebar.', range('dailyGoal', 100, 10000, 100))}
                               ${row('Show, Don’t Tell анализатор', 'Локально подсвечивает слабые слова и места, где фразу можно показать действием.', toggle('showDontTell'))}
           ${row('Фокус-линза', 'Позволяет временно выделить диалоги или описания и приглушить остальной текст.', select('dialogueLens', [['off', 'Выключено'], ['dialogues', 'Только диалоги'], ['descriptions', 'Только описания']]))}
-          ${row('Порядок закладок', 'Выберите, как упорядочивать закладки в списке документа и записи.', select('bookmarkBehavior', [['text', 'По тексту'], ['time', 'По времени добавления']]))}
         </div>`,
       ai: `
         <div class="tab-content active">
@@ -20276,7 +19669,7 @@ class NocturneWriter {
           ${row('История текста', 'Создайте снимок перед большой правкой. Восстановление возвращает текст и заметки.', `<button class="pill-btn ai-btn" data-action="manual-snapshot"><i class="bx bx-camera"></i> Создать снимок</button><button class="pill-btn" data-action="show-history">История</button>`)}
           ${row('Резервные копии', 'Последние 20 копий. В приложении сохраняются в отдельную папку; в браузере папку нужно подключить.', `<button class="pill-btn" data-action="open-backups">Копии и восстановление</button>`)}
           ${row('Автоматические копии', 'Создаёт копию проекта с интервалом автосохранения.', toggle('automaticBackups'))}
-          ${row('Корзина', 'Удалённые главы можно восстановить вместе с их заметками и историей.', `<button class="pill-btn" data-action="open-trash">Открыть корзину</button>`)}
+          ${row('Корзина', 'Документы, объекты базы знаний, закладки и другие удалённые данные можно восстановить.', `<button class="pill-btn" data-action="open-trash">Открыть корзину</button>`)}
           ${row('Конфликты синхронизации', 'Сравните версии после одновременной работы на ПК и телефоне.', `<button class="pill-btn" data-action="open-sync-conflicts">Сравнить версии</button>`)}
           ${this.runtime.isElectron ? row('История в Git', 'Дополнительно сохраняет версии проекта на этом компьютере.', toggle('gitVersioning')) : ''}
           ${row('Сквозное шифрование', 'AES-GCM для содержимого документов перед записью в IndexedDB.', toggle('e2e'))}
@@ -20286,7 +19679,7 @@ class NocturneWriter {
             <div class="misc-card-head" style="margin-bottom: 18px;">
               <div>
                 <h3 style="color: #ef4444; font-weight: 600;">Очистка данных</h3>
-                <p>Выборочное удаление элементов вашего проекта. Эти действия необратимы.</p>
+                <p>Удалённые пользовательские объекты сохраняются в корзине. Полный сброс проекта очищает все данные.</p>
               </div>
             </div>
             <div class="misc-action-grid">
@@ -20301,6 +19694,7 @@ class NocturneWriter {
           </section>
         </div>`,
 
+      bookmarks: this.bookmarks.settingsContent(row, toggle, select, range),
       macros: this.macrosSettingsContent(),
       formatting: this.formattingSettingsContent(),
       export: this.exportSettingsContent(row, toggle, input),
@@ -20350,7 +19744,7 @@ class NocturneWriter {
       { tab: 'focus', label: 'Дневная цель слов', note: 'Количество слов, к которому стремится дневной прогресс в нижней части sidebar.', key: 'dailyGoal', type: 'range', min: 100, max: 10000, step: 100 },
       { tab: 'focus', label: 'Show, Don’t Tell анализатор', note: 'Локально подсвечивает слабые слова и места, где фразу можно показать действием.', key: 'showDontTell', type: 'toggle' },
       { tab: 'focus', label: 'Фокус-линза', note: 'Позволяет временно выделить диалоги или описания и приглушить остальной текст.', key: 'dialogueLens', type: 'select', options: [['off', 'Выключено'], ['dialogues', 'Только диалоги'], ['descriptions', 'Только описания']] },
-      { tab: 'focus', label: 'Порядок закладок', note: 'Выберите, как упорядочивать закладки в списке документа и записи.', key: 'bookmarkBehavior', type: 'select', options: [['text', 'По тексту'], ['time', 'По времени добавления']] },
+      ...this.bookmarks.searchSettings(),
       { tab: 'ai', label: 'LLM Provider', note: 'Режим «Не настроен» ничего не генерирует.', key: 'aiProvider', type: 'select', options: [['local', 'Не настроен / без генерации'], ['ollama', 'Ollama'], ['groq', 'Groq free tier'], ['gemini', 'Gemini free tier'], ['openai', 'OpenAI-compatible'], ['anthropic', 'Anthropic-compatible']] },
       { tab: 'ai', label: 'Endpoint', note: 'Адрес API выбранного провайдера.', key: 'aiEndpoint', type: 'input' },
       { tab: 'ai', label: 'API Key', note: 'Ключ хранится локально в настройках браузера.', key: 'aiKey', type: 'input', inputType: 'password' },
@@ -20408,6 +19802,7 @@ class NocturneWriter {
       `;
     } else {
       const tabsList = [
+        { id: 'bookmarks', label: 'Закладки', note: 'Позиция, абзац, фрагмент, подтверждение удаления, копирование, снапшоты, навигация и вид метки.' },
         { id: 'visual', label: 'Внешний вид и Оформление', note: 'Цветовая тема, акцентный цвет темы, стиль каретки, компактность, typewriter.' },
         { id: 'editor', label: 'Настройки рукописи и Шрифты', note: 'Размер, отступы, шрифты рукописи, умная пунктуация, строгость проверки.' },
         { id: 'focus', label: 'Концентрация и Фокус', note: 'Режим дзен, фокус на абзаце, пагинация MS Word, анимация.' },
@@ -21431,15 +20826,17 @@ class NocturneWriter {
   async persistSettings() {
     if (this.resettingData) return;
     this.state.settings = this.validateSettings(this.state.settings);
+    await this.trash.captureSettings(this.state.settings);
     await this.db.put('settings', { id: 'app', value: this.state.settings });
     await this.persistGlobalNotes();
     safeRemoveStorageItem(localStorage, 'nocturne_settings');
   }
 
   async persistGlobalNotes() {
+    if (!await this.bookmarks.prepareOwner('global')) return;
     if (this.resettingData || (this.state.settings.e2e && !this.state.sessionPassword)) return;
     if ((await this.db.get('settings', 'global-notes'))?.locked) return;
-    await this.db.put('settings', { id: 'global-notes', text: this.state.globalNotes || '', updatedAt: Date.now() });
+    await this.db.put('settings', { id: 'global-notes', text: this.state.globalNotes || '', bookmarks: this.state.globalBookmarks || [], updatedAt: Date.now() });
     safeRemoveStorageItem(localStorage, 'nocturne-global-notes');
   }
 
@@ -22652,9 +22049,12 @@ ${raw}`;
       const snap = snapshots.find((item) => item.id === button.dataset.restore);
       if (!snap) return;
       this.activeDoc.ast = structuredClone(snap.ast);
+      if (this.state.settings.bookmarkSnapshots && snap.bookmarks) { this.activeDoc.bookmarks = structuredClone(snap.bookmarks); this.activeDoc.fieldBookmarks = structuredClone(snap.fieldBookmarks || {}); }
       this.activeDoc.notes = snap.notes || '';
       this.state.globalNotes = snap.globalNotes ?? this.state.globalNotes;
-      this.nocturneEditor.applyDocumentContent(this.activeDoc, { ast: snap.ast, pmJson: snap.pmJson });
+      this.nocturneEditor.applyDocumentContent(this.activeDoc, { ast: snap.ast, pmJson: snap.pmJson, history: true });
+      if (this.state.settings.bookmarkSnapshots && snap.globalBookmarks) this.state.globalBookmarks = structuredClone(snap.globalBookmarks);
+      this.bookmarks.resetPlainTextBaselines();
       this.activeDoc.summary = buildSummary(this.activeDoc.ast);
       this.activeDoc.updatedAt = Date.now();
       await this.persistGlobalNotes();
@@ -22695,6 +22095,7 @@ ${raw}`;
       lores: await readRecords('lore'),
       activeLoreId: this.state.activeLoreId,
       globalNotes: encryptedSafe ? '' : this.state.globalNotes,
+      globalBookmarks: encryptedSafe ? [] : structuredClone(this.state.globalBookmarks || []),
       floatingNotes: await readRecords('floatingNotes'),
       typoRules: await readRecords('typoRules'),
       reviewMarks: await readRecords('reviewMarks'),
@@ -23887,7 +23288,7 @@ ${raw}`;
     let committed = false;
     this.importingProject = true;
     clearTimeout(this.databaseSyncTimer);
-    const original = Object.fromEntries(['settings', 'folders', 'docs', 'lore', 'globalNotes', 'floatingNotes', 'typoRules', 'reviewMarks', 'activeLoreId', 'kbProjects', 'activeDocId'].map(key => [key, structuredClone(this.state[key])]));
+    const original = Object.fromEntries(['settings', 'folders', 'docs', 'lore', 'globalNotes', 'globalBookmarks', 'floatingNotes', 'typoRules', 'reviewMarks', 'activeLoreId', 'kbProjects', 'activeDocId'].map(key => [key, structuredClone(this.state[key])]));
     const originalLoreById = this.loreById;
     const report = { mode, docs: 0, folders: 0, characters: 0, locations: 0, timeline: 0, snapshots: 0, reviewMarks: 0, conflicts: 0 };
     try {
@@ -23906,6 +23307,7 @@ ${raw}`;
         notes: (payload.lore?.notes || []).map((item, index) => this.normalizeNote(item, index)),
       };
       this.state.globalNotes = String(payload.globalNotes || '');
+      this.state.globalBookmarks = structuredClone(payload.globalBookmarks || []);
       this.state.floatingNotes = (payload.floatingNotes || []).map((note) => note.protectedStore ? note : this.sanitizeFloatingNote(note));
       this.state.typoRules = (payload.typoRules || []).map((rule) => rule.protectedStore ? rule : this.sanitizeTypoRule(rule)).filter(Boolean);
       this.state.reviewMarks = (payload.reviewMarks || []).map((mark) => mark.protectedStore ? mark : this.sanitizeReviewMark(mark)).filter(Boolean);
@@ -23926,6 +23328,8 @@ ${raw}`;
       throw error;
     } finally { this.importingProject = false; }
     this.validateLoadedState();
+    await this.bookmarks.init();
+    await this.trash.init();
     this.initWorkspace();
     this.applySettings();
     this.renderAll();
@@ -23939,7 +23343,7 @@ ${raw}`;
     const protectedPreferences = settingsRecords.find(record => record.id === 'app' && record.protectedStore);
     const localSettings = (await this.db.getAllRaw('settings')).filter(record => ['sync-identity', 'sync-connection', 'backup-directory'].includes(record.id));
     await this.db.atomicWrite({
-      settings: [protectedPreferences || { id: 'app', value: this.state.settings }, ...settingsRecords.filter(record => !['app', 'global-notes', 'sync-identity', 'sync-connection', 'backup-directory'].includes(record.id)), ...localSettings, settingsRecords.find(record => record.id === 'global-notes') || { id: 'global-notes', text: this.state.globalNotes, updatedAt: Date.now() }],
+      settings: [protectedPreferences || { id: 'app', value: this.state.settings }, ...settingsRecords.filter(record => !['app', 'global-notes', 'sync-identity', 'sync-connection', 'backup-directory'].includes(record.id)), ...localSettings, settingsRecords.find(record => record.id === 'global-notes') || { id: 'global-notes', text: this.state.globalNotes, bookmarks: this.state.globalBookmarks || [], updatedAt: Date.now() }],
       folders: this.state.folders, docs: this.state.docs,
       lore: payload.lores?.length ? payload.lores : [{ id: 'world', ...this.state.lore }],
       floatingNotes: this.state.floatingNotes, typoRules: this.state.typoRules, reviewMarks: this.state.reviewMarks,
@@ -23952,6 +23356,7 @@ ${raw}`;
     this.state.lore = await this.loadLore();
     const globalNotes = await this.db.get('settings', 'global-notes');
     this.state.globalNotes = globalNotes?.text || '';
+    this.state.globalBookmarks = globalNotes?.bookmarks || [];
     this.state.docs = await this.loadDocs();
     const preferences = await this.db.get('settings', 'app');
     if (preferences && !preferences.locked) this.state.settings = this.validateSettings(preferences.value);
@@ -23999,23 +23404,29 @@ ${raw}`;
       if (Array.isArray(value)) return value.map(remapReferences);
       if (!value || typeof value !== 'object') return value;
       return Object.fromEntries(Object.entries(value).map(([key, child]) => [key,
-        ['id', 'docId', 'linkedId', 'loreId', 'folderId', 'parentId'].includes(key) && typeof child === 'string' ? idMap.get(child) || child
+        ['id', 'docId', 'linkedId', 'loreId', 'worldId', 'folderId', 'parentId'].includes(key) && typeof child === 'string' ? idMap.get(child) || child
           : ['documentIds', 'characterIds', 'locationIds', 'chapterIds', 'noteIds'].includes(key) && Array.isArray(child) ? child.map(id => idMap.get(id) || id)
           : key === 'characterRoles' && isPlainObject(child) ? Object.fromEntries(Object.entries(child).map(([id, role]) => [idMap.get(id) || id, role])) : remapReferences(child)]));
     };
     const importedWorlds = worlds.map(remapReferences);
+    for (const record of [...docs, ...importedWorlds]) this.bookmarks.cloneRecordBookmarks(record);
     const notes = (await decode('floatingNotes', payload.floatingNotes)).map(note => this.sanitizeFloatingNote({ ...remapReferences(note), id: uid('note') }));
     const typoRules = (await decode('typoRules', payload.typoRules)).map(rule => this.sanitizeTypoRule({ ...rule, id: uid('typo-rule') })).filter(Boolean);
     const marks = (await decode('reviewMarks', payload.reviewMarks)).map(mark => this.sanitizeReviewMark({ ...remapReferences(mark), id: uid('review') })).filter(Boolean);
     const snapshots = (await decode('snapshots', payload.snapshots)).map(snap => ({ ...remapReferences(snap), id: uid('snap') }));
     const trash = (await decode('trash', payload.trash)).map(item => ({ ...remapReferences(item), id: uid('trash') }));
     const importedNotes = (await decode('settings', (payload.settingsRecords || []).filter(record => record.id === 'global-notes')))[0];
-    const globalNotes = [this.state.globalNotes, payload.globalNotes || importedNotes?.text].filter(Boolean).join('\n\n');
-    await this.db.atomicWrite({ folders, docs, lore: importedWorlds, floatingNotes: notes, typoRules, reviewMarks: marks, snapshots, trash, settings: [{ id: 'global-notes', text: globalNotes, updatedAt: Date.now() }] });
+    const importedText = payload.globalNotes || importedNotes?.text || '';
+    const shift = this.state.globalNotes && importedText ? this.state.globalNotes.length + 2 : 0;
+    const globalNotes = [this.state.globalNotes, importedText].filter(Boolean).join('\n\n');
+    const importedBookmarks = cloneBookmarks(payload.globalBookmarks || importedNotes?.bookmarks || [], '');
+    for (const bookmark of importedBookmarks) for (const part of bookmark.parts || []) { part.anchor.from += shift; part.anchor.to += shift; }
+    const globalBookmarks = [...this.state.globalBookmarks || [], ...importedBookmarks];
+    await this.db.atomicWrite({ folders, docs, lore: importedWorlds, floatingNotes: notes, typoRules, reviewMarks: marks, snapshots, trash, settings: [{ id: 'global-notes', text: globalNotes, bookmarks: globalBookmarks, updatedAt: Date.now() }] });
     onCommit();
     this.state.folders.push(...folders); this.state.docs.push(...docs);
     this.state.floatingNotes.push(...notes); this.state.typoRules.push(...typoRules); this.state.reviewMarks.push(...marks);
-    this.state.globalNotes = globalNotes; this.state.lore = await this.loadLore();
+    this.state.globalNotes = globalNotes; this.state.globalBookmarks = globalBookmarks; this.state.lore = await this.loadLore();
     const total = collection => importedWorlds.reduce((count, world) => count + (world[collection]?.length || 0), 0);
     Object.assign(report, { folders: folders.length, docs: docs.length, characters: total('characters'), locations: total('locations'), timeline: total('timeline'), notes: total('notes'), snapshots: snapshots.length, reviewMarks: marks.length });
   }
@@ -24260,7 +23671,20 @@ ${raw}`;
     const overlay = document.getElementById('form-overlay');
     this.presentFormModal(`<div class="form-modal utility-modal"><form class="utility-form"><div class="modal-head-row"><div><h2>Правила мира</h2><p>По одному правилу на строку. AI использует их при включённом контексте базы знаний.</p></div><button type="button" class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div><textarea class="form-control" name="rules" rows="12" aria-label="Правила мира">${escapeHtml((this.state.lore.rules || []).map(rule => rule.text || rule.body || rule).join('\n'))}</textarea><div class="form-actions"><button class="pill-btn ai-btn" type="submit">Сохранить правила</button></div></form></div>`);
     overlay.classList.add('active'); overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
-    overlay.querySelector('form').onsubmit = async event => { event.preventDefault(); const old = this.state.lore.rules || []; this.state.lore.rules = event.target.elements.rules.value.split('\n').map(text => text.trim()).filter(Boolean).map(text => ({ id: old.find(rule => rule.text === text)?.id || uid('rule'), text })); await this.saveLore(); overlay.classList.remove('active'); this.toast('Правила мира сохранены.'); };
+    overlay.querySelector('form').onsubmit = async event => {
+      event.preventDefault();
+      const old = this.state.lore.rules || [], used = new Set();
+      const texts = event.target.elements.rules.value.split('\n').map(text => text.trim()).filter(Boolean);
+      const reserved = new Set(old.filter(rule => texts.includes(rule.text)).map(rule => rule.id));
+      this.state.lore.rules = texts.map((text, index) => {
+        const exact = old.find(rule => rule.text === text && !used.has(rule.id));
+        const candidate = old[index];
+        const previous = exact || (candidate && !used.has(candidate.id) && !reserved.has(candidate.id) ? candidate : null);
+        const id = previous?.id || uid('rule'); used.add(id);
+        return { ...previous, id, text };
+      });
+      await this.saveLore(); overlay.classList.remove('active'); this.toast('Правила мира сохранены.');
+    };
   }
 
   buildNocturnedPayload(doc, marks) {
@@ -24511,13 +23935,15 @@ ${raw}`;
     this.state.lore = await this.loadLore();
     await this.loadFloatingNotes(); await this.loadReviewMarks(); await this.loadTypoRules();
     const notes = await this.db.get('settings', 'global-notes');
-    if (notes && !notes.locked) this.state.globalNotes = notes.text || '';
+    if (notes && !notes.locked) { this.state.globalNotes = notes.text || ''; this.state.globalBookmarks = notes.bookmarks || []; }
     const preferences = await this.db.get('settings', 'app');
     if (preferences && !preferences.locked) this.state.settings = this.validateSettings(preferences.value);
     if (!this.state.settings.e2e && value) {
       const encryptedRecords = (await Promise.all(['docs', 'lore', 'settings', 'floatingNotes', 'snapshots', 'trash'].map(store => this.db.getAllRaw(store)))).flat().some(record => record.protectedStore);
       if (encryptedRecords) { this.state.settings.e2e = true; await this.migrateEncryption(); }
     }
+    await this.bookmarks.init();
+    await this.trash.init();
     this.initWorkspace();
     this.renderAll();
     this.toast('Пароль сессии применен, документы перечитаны.');
@@ -24539,7 +23965,7 @@ ${raw}`;
     });
     for (const doc of records.docs) delete doc.encrypted;
     records.settings = records.settings.filter(record => !['app', 'global-notes'].includes(record.id));
-    records.settings.push({ id: 'app', value: this.state.settings }, { id: 'global-notes', text: this.state.globalNotes, updatedAt: Date.now() });
+    records.settings.push({ id: 'app', value: this.state.settings }, { id: 'global-notes', text: this.state.globalNotes, bookmarks: this.state.globalBookmarks || [], updatedAt: Date.now() });
     await this.db.atomicWrite(records, { replace: true });
     this.clearAllLiveDrafts();
     safeRemoveStorageItem(localStorage, 'nocturne-global-notes');
