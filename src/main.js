@@ -1011,6 +1011,11 @@ class NocturneWriter {
     const titlebar = document.getElementById('electron-titlebar');
     if (!titlebar) return;
     document.body.classList.add('is-electron');
+    const headerActions = document.querySelector('.sidebar-header-actions');
+    if (headerActions) {
+      headerActions.classList.add('titlebar-header-actions');
+      titlebar.querySelector('.titlebar-brand')?.append(headerActions);
+    }
 
     window.addEventListener('focus', () => {
       document.body.classList.add('window-focused');
@@ -22629,6 +22634,7 @@ ${raw}`;
               <ul style="margin: 0 0 16px; padding-left: 20px;">
                 <li>Переходы между письмом, редактором и финализацией стали согласованными. Подписи помещаются в кнопки, а разделитель панелей остаётся виден во время смены режима.</li>
                 <li>Закладки используют палитру и меню Nocturne. Подсветка абзаца начинается от фигурной скобки; наведение сохраняется до правого значка. В базе знаний доступен крестик выхода.</li>
+                <li>В настольной шапке доступны инструменты проекта и настройки: обе кнопки используют те же значки и оформление, что в браузере.</li>
                 <li>Списки и окна сохраняют фокус и прокрутку при обновлении. Быстрые действия отменяют предыдущие переходы; закрытые окна не возвращаются после завершения старого запроса. Длинные формы и корзина помещаются на экране.</li>
               </ul>
 

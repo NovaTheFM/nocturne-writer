@@ -12,6 +12,65 @@ await mkdir(profile, { recursive: true }); await mkdir(backups, { recursive: tru
 await writeFile(`${profile}/backup-directory.json`, JSON.stringify({ path: backups }));
 const server = spawn(process.execPath, ['server.mjs'], { env: { ...process.env, PORT: String(port) }, stdio: 'ignore', windowsHide: true });
 let desktop, browser;
+async function checkHeader(pc) {
+  const directory = 'release/qa/electron-header';
+  await mkdir(directory, { recursive: true });
+  await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.setBackgroundThrottling(false));
+  await pc.waitForSelector('#whats-new-overlay.active');
+  assert.equal(await pc.locator('.whats-new-body > p').first().innerText(), `Версия ${JSON.parse(await readFile('package.json', 'utf8')).version}`);
+  await pc.screenshot({ path: `${directory}/whats-new-${packaged ? 'packaged' : 'dev'}.png` });
+  await pc.getByRole('button', { name: 'Спасибо, Луна' }).click();
+  await pc.waitForSelector('#whats-new-overlay', { state: 'detached' });
+  await pc.waitForSelector('#electron-titlebar', { state: 'visible' });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const reference = await context.newPage();
+  const results = [];
+  try {
+    await reference.goto(url); await reference.waitForSelector('.app-shell.ready');
+    for (const theme of ['nocturne', 'paper']) for (const compact of [false, true]) {
+      for (const page of [pc, reference]) {
+        await page.evaluate(({ theme, compact }) => { const a = window.nocturneApp; Object.assign(a.state.settings, { theme, compactPanels: compact }); a.applySettings(); }, { theme, compact });
+        await page.mouse.move(700, 200);
+        await page.evaluate(() => document.fonts.ready);
+        await page.waitForFunction(() => !document.querySelector('.sidebar-header-actions').getAnimations({ subtree: true }).some(animation => animation.playState === 'running'));
+      }
+      const sample = page => page.locator('.sidebar-header-actions .btn-icon').evaluateAll(buttons => buttons.map(button => {
+        const style = getComputedStyle(button), icon = button.querySelector('i'), bounds = button.getBoundingClientRect();
+        return { action: button.dataset.action, icon: icon.className, width: bounds.width, height: bounds.height, color: style.color, background: style.backgroundColor, radius: style.borderRadius, border: style.border, padding: style.padding, fontSize: style.fontSize, transition: style.transition, iconFont: getComputedStyle(icon).fontFamily, glyph: getComputedStyle(icon, '::before').content };
+      }));
+      const actual = await sample(pc), expected = await sample(reference);
+      assert.equal(actual.length, 2); assert.deepEqual(actual, expected, `${theme}/${compact}: native controls differ from browser controls`);
+      assert.equal(await pc.locator('[data-action="toggle-library-menu"]').count(), 1);
+      assert.equal(await pc.locator('#electron-titlebar [data-action="open-settings"]').count(), 1);
+      assert.equal(await pc.locator('#electron-titlebar .titlebar-controls button').count(), 3);
+      assert.equal(await pc.locator('.titlebar-header-actions').evaluate(element => getComputedStyle(element).webkitAppRegion), 'no-drag');
+      const geometry = await pc.locator('.titlebar-header-actions').evaluate(element => {
+        const box = element.getBoundingClientRect(), parent = element.closest('.titlebar-brand').getBoundingClientRect();
+        return { left: box.left, right: box.right, top: box.top, bottom: box.bottom, parentRight: parent.right, titlebarBottom: document.getElementById('electron-titlebar').getBoundingClientRect().bottom };
+      });
+      assert.ok(geometry.left > 0 && geometry.right <= geometry.parentRight && geometry.top >= 0 && geometry.bottom <= geometry.titlebarBottom, JSON.stringify(geometry));
+      const trigger = pc.locator('[data-action="toggle-library-menu"]');
+      await trigger.click(); await pc.waitForSelector('#library-menu.active');
+      const menu = await pc.locator('#library-menu').boundingBox(), anchor = await trigger.boundingBox();
+      assert.ok(Math.abs(menu.x - anchor.x) < 2 && Math.abs(menu.y - anchor.y - anchor.height - 10) < 2, JSON.stringify({ menu, anchor }));
+      assert.equal(await trigger.getAttribute('aria-expanded'), 'true');
+      await pc.screenshot({ path: `${directory}/${theme}-${compact ? 'compact' : 'regular'}-${packaged ? 'packaged' : 'dev'}.png` });
+      await pc.keyboard.press('Escape'); await pc.waitForSelector('#library-menu', { state: 'hidden' });
+      assert.equal(await trigger.evaluate(element => element === document.activeElement), true);
+      await pc.locator('#electron-titlebar [data-action="open-settings"]').click();
+      await pc.waitForSelector('#settings-overlay.active');
+      await pc.keyboard.press('Escape');
+      await pc.waitForFunction(() => {
+        const overlay = document.getElementById('settings-overlay'), style = getComputedStyle(overlay);
+        return !overlay.classList.contains('active') && !overlay.classList.contains('motion-exiting') && style.opacity === '0' && style.pointerEvents === 'none';
+      });
+      results.push({ theme, compact, passed: true, geometry, styles: actual });
+    }
+    for (const page of [pc, reference]) await page.evaluate(() => { const a = window.nocturneApp; Object.assign(a.state.settings, { theme: 'nocturne', compactPanels: false }); a.applySettings(); });
+    await writeFile(`${directory}/${packaged ? 'packaged' : 'development'}.json`, JSON.stringify(results, null, 2));
+    console.log('Electron titlebar: shared browser controls, real clicks, anchored tools menu, Escape focus, no-drag and settings passed in both themes and toolbar sizes.');
+  } finally { await context.close(); }
+}
 try {
   for (let i = 0; i < 70; i++) { try { if ((await fetch(url)).ok) break; } catch {} await new Promise(resolve => setTimeout(resolve, 100)); }
   const environment = { ...process.env, NOCTURNE_DEV_URL: url, NOCTURNE_TEST_PROFILE: profile, SYNC_PORT: String(syncPort) };
@@ -20,6 +79,8 @@ try {
   desktop = await _electron.launch({ executablePath: resolve(packaged ? '.electron_build/dist/win-unpacked/Nocturne Writer.exe' : 'node_modules/electron/dist/electron.exe'), args: packaged ? [] : ['electron/main.cjs'], env: environment });
   const pc = await desktop.firstWindow(); await pc.waitForFunction(() => window.nocturneApp?.databaseSync);
   assert.equal(await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible()), false);
+  browser = await chromium.launch({ headless: true });
+  await checkHeader(pc);
   await pc.evaluate(async () => {
     const a = window.nocturneApp; await a.createDoc(a.defaultFolderId(), 'Native desktop manuscript', '');
     a.nocturneEditor.get('primary').commands.setContent('<p>Electron document persisted externally.</p>'); await a.saveActiveDoc({ silent: true });
@@ -34,7 +95,6 @@ try {
     ws.send(payload); await new Promise(resolve => setTimeout(resolve, 150)); ws.terminate();
     assert.equal((await fetch(`http://localhost:${syncPort}/health`)).ok, true, 'Malformed input stopped the native broker');
   }
-  browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const phone = await context.newPage(); await phone.goto(url); await phone.waitForFunction(() => window.nocturneApp?.databaseSync);
   await phone.evaluate(async connection => {
@@ -51,8 +111,6 @@ try {
     await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.setBackgroundThrottling(false));
     const nativeInput = await pc.context().newCDPSession(pc);
     await nativeInput.send('Emulation.setFocusEmulationEnabled', { enabled: true });
-    await pc.getByRole('button', { name: 'Спасибо, Луна' }).click();
-    await pc.waitForSelector('#whats-new-overlay', { state: 'detached' });
     await pc.evaluate(async () => {
       const a = window.nocturneApp;
       document.querySelector('#form-overlay [data-close-form]')?.click();

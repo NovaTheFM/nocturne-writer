@@ -10540,46 +10540,15 @@ body.material.theme-paper .titlebar-brand {
   -webkit-app-region: no-drag;
 }
 
-.titlebar-settings-btn {
-  -webkit-app-region: no-drag;
-  pointer-events: auto;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--border-light);
-  color: var(--text-muted);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  margin-left: auto;
+.titlebar-header-actions {
   margin-right: 14px;
-  transition: all 0.22s cubic-bezier(0.25, 0.8, 0.25, 1);
-  z-index: 2;
+  -webkit-app-region: no-drag;
 }
 
-.titlebar-settings-btn:hover {
-  background: rgba(var(--accent-rgb, 139, 92, 246), 0.15);
-  border-color: var(--accent);
-  color: var(--accent);
-  box-shadow: 0 0 10px var(--accent-glow);
-  transform: rotate(25deg) scale(1.05);
+.titlebar-header-actions .btn-icon {
+  -webkit-app-region: no-drag;
 }
 
-body.theme-paper .titlebar-settings-btn {
-  background: rgba(0, 0, 0, 0.04);
-  border-color: rgba(0, 0, 0, 0.08);
-  color: var(--text-main);
-}
-
-body.theme-paper .titlebar-settings-btn:hover {
-  background: rgba(var(--accent-rgb, 139, 92, 246), 0.12);
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-/* Absolute centering of project and document titles in workspace */
 .titlebar-title {
   position: absolute;
   left: 50%;
