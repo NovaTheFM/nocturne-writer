@@ -508,8 +508,9 @@ try {
     assert.deepEqual(counts, [1,1,1,1]);
     await tab(page, 'mobile-open-lore');
     await page.locator('[data-mobile-kb-tab="notes"]').tap();
-    await page.locator('.mobile-lore-card [data-action="toggle-note-completed"]').tap();
-    assert.equal(await page.locator('.mobile-lore-card [data-action="toggle-note-completed"]').getAttribute('aria-pressed'), 'true');
+    await page.locator('.mobile-lore-card [data-action="toggle-note-actions"]').tap();
+    await page.locator('#note-actions-menu [data-action="toggle-note-completed"]').tap();
+    assert.equal(await page.locator('.mobile-lore-card').evaluate(card => card.classList.contains('note-card-completed')), true);
     await page.waitForFunction(() => window.nocturneApp.state.lore.notes[0].completed);
     await page.locator('.mobile-lore-card [data-action="edit-lore"]').tap();
     await app(page, () => window.nocturneApp.saveLore());

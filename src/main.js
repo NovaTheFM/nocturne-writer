@@ -27,6 +27,7 @@ import { platformFiles } from './platform/file-adapter.js';
 import { detectRuntime, configureNativeBars, bindNativeLifecycle, discoverNativeLan, minimizeNativeApp } from './platform/runtime.js';
 import { CommandPalette } from './features/command-palette.js';
 import { buildAiContext, serializeAiContextSafe } from './features/ai-context.js';
+import { KNOWLEDGE_SEARCH_TYPES, findTextMatches, queryTerms, highlightSearchText, searchKnowledge, searchSnippet } from './features/knowledge-search.js';
 import { LocalSyncClient, buildHttpBase, SYNC_PROTOCOL_VERSION } from './features/local-sync.js';
 import { DatabaseSync } from './features/database-sync.js';
 import { ProjectBackups } from './features/backups.js';
@@ -1388,6 +1389,7 @@ class NocturneWriter {
     return {
       empty: document.getElementById('empty-project-menu'),
       folder: document.getElementById('mobile-folder-menu'),
+      noteActions: document.getElementById('note-actions-menu'),
       library: document.getElementById('library-menu'),
       kb: document.getElementById('kb-menu'),
       mode: document.getElementById('review-mode-menu'),
@@ -1417,6 +1419,7 @@ class NocturneWriter {
     return {
       empty: this.emptyProjectMenuAnchor?.isConnected ? this.emptyProjectMenuAnchor : document.querySelector('[data-action="toggle-empty-project-menu"]'),
       folder: this.mobileFolderMenuAnchor?.isConnected ? this.mobileFolderMenuAnchor : null,
+      noteActions: this.noteActionsAnchor?.isConnected ? this.noteActionsAnchor : null,
       library: document.querySelector('[data-action="toggle-library-menu"]'),
       kb: document.querySelector('#kb-dropdown [data-action="toggle-kb-menu"]'),
       mode: document.querySelector('#review-mode-dropdown [data-action="toggle-review-mode-menu"]'),
@@ -1431,6 +1434,7 @@ class NocturneWriter {
   floatingMenuAnchorWrapper(key) {
     return {
       empty: this.floatingMenuAnchor('empty')?.closest('.empty-project-actions'),
+      noteActions: this.floatingMenuAnchor('noteActions')?.closest('.lore-card-actions, .mobile-lore-actions'),
       library: document.querySelector('.sidebar-header-actions'),
       kb: document.getElementById('kb-dropdown'),
       mode: document.getElementById('review-mode-dropdown'),
@@ -1444,11 +1448,25 @@ class NocturneWriter {
 
   positionFloatingToolbarMenu(key, anchor = this.floatingMenuAnchor(key)) {
     const surface = this.floatingMenuSurface(key);
-    if (!surface || !anchor || !['empty', 'folder', 'library', 'kb', 'mode', 'format', 'split', 'notes', 'search', 'review'].includes(key)) return;
+    if (!surface || !anchor || !['empty', 'folder', 'noteActions', 'library', 'kb', 'mode', 'format', 'split', 'notes', 'search', 'review'].includes(key)) return;
     const anchorRect = anchor.getBoundingClientRect();
+    if (key === 'noteActions') surface.style.maxHeight = '';
     const menuRect = surface.getBoundingClientRect();
     const margin = 10;
     const gap = 10;
+    if (key === 'noteActions') {
+      const cardRect = (anchor.closest('.note-card, .mobile-lore-card') || anchor).getBoundingClientRect();
+      const fitsRight = cardRect.right + gap + menuRect.width <= innerWidth - margin;
+      const left = fitsRight ? cardRect.right + gap : Math.max(margin, Math.min(cardRect.left, innerWidth - menuRect.width - margin));
+      const below = cardRect.bottom + gap, belowSpace = innerHeight - margin - below, aboveSpace = cardRect.top - gap - margin;
+      const useBelow = belowSpace >= menuRect.height || belowSpace >= aboveSpace;
+      const available = fitsRight ? innerHeight - 2 * margin : Math.max(0, useBelow ? belowSpace : aboveSpace);
+      if (menuRect.height > available) surface.style.maxHeight = `${available}px`;
+      const menuHeight = Math.min(menuRect.height, available);
+      const top = fitsRight ? Math.max(margin, Math.min(anchorRect.top, innerHeight - menuHeight - margin)) : useBelow ? below : cardRect.top - menuHeight - gap;
+      surface.style.left = `${Math.round(left)}px`; surface.style.top = `${Math.round(top)}px`;
+      return;
+    }
     const alignLeft = ['library', 'kb', 'mode', 'format', 'review'].includes(key);
     let left = key === 'empty' ? anchorRect.left + (anchorRect.width - menuRect.width) / 2 : alignLeft ? anchorRect.left : anchorRect.right - menuRect.width;
     left = Math.max(margin, Math.min(left, window.innerWidth - menuRect.width - margin));
@@ -1489,7 +1507,7 @@ class NocturneWriter {
     if (surface && surface !== el) surface.style.pointerEvents = '';
     this.activeFloatingMenuKey = key;
     this.floatingMenuAnchor(key)?.setAttribute('aria-expanded', 'true');
-    if (['empty', 'folder', 'library', 'mode'].includes(key)) el.querySelector('button')?.focus({ preventScroll: true });
+    if (['empty', 'folder', 'noteActions', 'library', 'mode'].includes(key)) el.querySelector('button')?.focus({ preventScroll: true });
     if (key === 'split') this.splitMenuOpen = true;
     this.syncFloatingMenuPortalState();
     requestAnimationFrame(() => this.positionFloatingToolbarMenu(key));
@@ -1535,7 +1553,7 @@ class NocturneWriter {
 
   closeAllFloatingMenus(options = '') {
     const except = typeof options === 'string' ? options : (options?.except || '');
-    ['empty', 'folder', 'library', 'kb', 'mode', 'format', 'split', 'notes', 'search', 'review', 'doc', 'context'].forEach((key) => {
+    ['empty', 'folder', 'noteActions', 'library', 'kb', 'mode', 'format', 'split', 'notes', 'search', 'review', 'doc', 'context'].forEach((key) => {
       if (key !== except) this.closeFloatingMenu(key, { animate: key !== 'doc' && key !== 'context' });
     });
   }
@@ -1734,7 +1752,7 @@ class NocturneWriter {
   paneTitle(pane) {
     if (!pane?.type) return 'Пустая область';
     if (pane.type === 'document') return this.state.docs.find((doc) => doc.id === pane.docId)?.title || 'Документ';
-    if (pane.type === 'kb-tab') return { characters: 'Персонажи', locations: 'Локации', timeline: 'Таймлайн', notes: 'Записи' }[pane.kbTab] || 'База знаний';
+    if (pane.type === 'kb-tab') return { characters: 'Персонажи', locations: 'Локации', timeline: 'Таймлайн', notes: 'Записи', search: 'Поиск в базе знаний' }[pane.kbTab] || 'База знаний';
     
     let list;
     const rawType = pane.entityType;
@@ -1785,6 +1803,7 @@ class NocturneWriter {
 
   renderKbPane(paneId, pane) {
     const tab = pane?.kbTab || 'characters';
+    if (tab === 'search') return this.renderKnowledgeSearch();
     if (tab === 'locations') {
       const locs = [...this.state.lore.locations].sort((a, b) => a.order - b.order);
       return `<section class="kb-pane-section"><h2>Локации</h2><div class="locations-grid" data-dnd-zone="locations">${locs.length ? locs.map((item) => this.locationCard(item, false)).join('') : this.emptyStateMarkup('bx-map-alt', 'Локаций пока нет.', 'Добавьте первое место, чтобы связать сцену с миром.', 'new-lore', 'Добавить место', 'data-lore-type="locations"')}</div></section>`;
@@ -2483,12 +2502,14 @@ class NocturneWriter {
           </div>
         </div>
         <div class="mobile-segmented mobile-lore-tabs">
-          ${[['characters', 'Персонажи'], ['locations', 'Локации'], ['timeline', 'Таймлайн'], ['notes', 'Записи']].map(([id, label]) => `<button class="${active === id ? 'active' : ''}" data-mobile-kb-tab="${id}">${label}</button>`).join('')}
+          ${[['characters', 'Персонажи'], ['locations', 'Локации'], ['timeline', 'Таймлайн'], ['notes', 'Записи'], ['search', 'Поиск']].map(([id, label]) => `<button class="${active === id ? 'active' : ''}" data-mobile-kb-tab="${id}">${label}</button>`).join('')}
         </div>
+        ${active === 'search' ? this.renderKnowledgeSearch() : `
         ${this.kbViewTools()}
         <div class="mobile-search-field"><i class="bx bx-search" aria-hidden="true"></i><input data-mobile-lore-search aria-label="Поиск в базе знаний" type="search" placeholder="Поиск в базе" value="${escapeHtml(this.state.mobile.loreSearch || '')}"></div>
         <div class="mobile-panel-actions"><button class="pill-btn ai-btn" data-action="new-lore" data-lore-type="${active}"><i class="bx bx-plus"></i> Добавить</button><span class="mobile-drag-hint"><i class="bx bx-grid-vertical"></i> Удерживайте карточку, чтобы перенести</span></div>
         <div class="mobile-kb-list ${active === 'timeline' ? 'timeline-container timeline-mobile-list' : ''}" data-dnd-zone="${escapeHtml(zone)}">${list}</div>
+        `}
       </div>`;
   }
 
@@ -2519,8 +2540,8 @@ class NocturneWriter {
         </div>
         <div class="mobile-lore-actions">
           ${sub}
-          ${type === 'notes' ? `<button class="mini-icon-btn ${item.completed ? 'active' : ''}" data-action="toggle-note-completed" data-lore-id="${escapeHtml(item.id)}" aria-label="${item.completed ? 'Вернуть запись в работу' : 'Отметить запись исполненной'}" aria-pressed="${!!item.completed}"><i class="bx ${item.completed ? 'bx-check-double' : 'bx-check'}"></i></button>` : ''}
           <button class="mini-icon-btn" data-action="edit-lore" data-lore-type="${escapeHtml(type)}" data-lore-id="${escapeHtml(item.id)}" aria-label="Редактировать"><i class="bx bx-pencil"></i></button>
+          ${type === 'notes' ? this.noteActionsTrigger(item.id, 'mini-icon-btn') : ''}
         </div>
       </article>`;
   }
@@ -3307,6 +3328,7 @@ class NocturneWriter {
       <div class="floating-notes-modal" id="floating-notes-modal"></div>
       <div class="floating-menu-portal" id="floating-menu-portal" aria-hidden="true">
         <div class="dropdown-menu popover-surface portal-floating-menu library-menu" id="mobile-folder-menu" data-floating-menu="folder" role="menu" aria-label="Действия папки" aria-hidden="true"></div>
+        <div class="dropdown-menu popover-surface portal-floating-menu library-menu note-actions-menu" id="note-actions-menu" data-floating-menu="noteActions" role="menu" aria-label="Другие действия записи" aria-hidden="true"></div>
         <div class="dropdown-menu popover-surface portal-floating-menu library-menu empty-project-menu" id="empty-project-menu" data-floating-menu="empty" role="menu" aria-label="Другие способы начать" aria-hidden="true">
           <button class="floating-menu-item" type="button" role="menuitem" data-action="import-doc"><i class="bx bx-import" aria-hidden="true"></i><span>Импорт текста</span></button>
           <button class="floating-menu-item" type="button" role="menuitem" data-action="import-project-dump"><i class="bx bx-archive-in" aria-hidden="true"></i><span>Восстановить проект</span></button>
@@ -3319,6 +3341,7 @@ class NocturneWriter {
           <div class="drop-item kb-drop-row" data-kb-open="locations"><i class="bx bx-map-alt"></i><span>Локации</span><button type="button" data-action="open-kb-right" data-kb-tab="locations" title="Открыть справа"><i class="bx bx-columns"></i></button></div>
           <div class="drop-item kb-drop-row" data-kb-open="timeline"><i class="bx bx-git-commit"></i><span>Таймлайн</span><button type="button" data-action="open-kb-right" data-kb-tab="timeline" title="Открыть справа"><i class="bx bx-columns"></i></button></div>
           <div class="drop-item kb-drop-row" data-kb-open="notes"><i class="bx bx-note"></i><span>Записи</span><button type="button" data-action="open-kb-right" data-kb-tab="notes" title="Открыть справа"><i class="bx bx-columns"></i></button></div>
+          <div class="drop-item kb-drop-row" data-kb-open="search"><i class="bx bx-search"></i><span>Поиск</span><button type="button" data-action="open-kb-right" data-kb-tab="search" title="Открыть справа"><i class="bx bx-columns"></i></button></div>
         </div>
         <div class="dropdown-menu popover-surface portal-floating-menu review-mode-menu" id="review-mode-menu" data-floating-menu="mode" role="menu" aria-label="Режим работы" aria-hidden="true">
           <button class="drop-item kb-drop-row review-mode-option" type="button" role="menuitemradio" data-review-mode="write" aria-checked="true"><i class="bx bx-pen" aria-hidden="true"></i><span>Письмо</span><i class="bx bx-check review-mode-option-check" aria-hidden="true"></i></button>
@@ -3666,6 +3689,7 @@ class NocturneWriter {
       return true;
     }
     if (this.state.activeLoreDetail) {
+      if (this.kbSearchReturn?.id === this.state.activeLoreDetail.id && !this.kbSearchReturn.paneId) { this.state.activeKbTab = 'search'; this.state.mobile.kbTab = 'search'; }
       this.state.activeLoreDetail = null;
       this.renderMobileShell();
       return true;
@@ -3931,6 +3955,8 @@ class NocturneWriter {
       this.closeOverlay(activeModal);
       return true;
     }
+    const readSearch = document.querySelector('#mobile-tab-surface.active .note-read-search:not([hidden]), #mobile-overlay.active .note-read-search:not([hidden])');
+    if (readSearch) { this.toggleNoteReadSearch(readSearch.closest('.note-read-mode'), false); return true; }
     const openSidePanel = document.querySelector('.side-panel.open');
     if (openSidePanel) {
       openSidePanel.classList.remove('open');
@@ -4044,7 +4070,7 @@ class NocturneWriter {
       input?.dispatchEvent(new Event('change', { bubbles: true }));
       return;
     }
-    const insideFloatingMenu = event.target.closest?.('#floating-menu-portal, .empty-project-actions, .sidebar-header-actions, #floating-note-menu-wrap, #split-menu-wrap, #kb-dropdown, #review-mode-dropdown, #format-dropdown, #search-menu-wrap, .review-issue-dropdown, #app-context-menu, #doc-search-panel, #search-navigator, .doc-context-menu, .doc-menu-btn');
+    const insideFloatingMenu = event.target.closest?.('#floating-menu-portal, [data-action="toggle-note-actions"], .empty-project-actions, .sidebar-header-actions, #floating-note-menu-wrap, #split-menu-wrap, #kb-dropdown, #review-mode-dropdown, #format-dropdown, #search-menu-wrap, .review-issue-dropdown, #app-context-menu, #doc-search-panel, #search-navigator, .doc-context-menu, .doc-menu-btn');
     if (!insideFloatingMenu) {
       this.closeAllFloatingMenus();
     }
@@ -4068,6 +4094,31 @@ class NocturneWriter {
       return;
     }
     const action = event.target.closest('[data-action]')?.dataset.action;
+    if (event.target.closest('#note-actions-menu')) {
+      this.closeFloatingMenu('noteActions'); this.noteActionsAnchor?.focus({ preventScroll: true });
+    }
+    if (action === 'toggle-note-actions') { this.openNoteActionsMenu(event.target.closest('[data-action]')); return; }
+    if (action === 'open-knowledge-result') { this.openKnowledgeSearchResult(event.target.closest('[data-action]')).catch(error => { console.error(error); this.toast('Не удалось открыть результат поиска.'); }); return; }
+    if (['knowledge-search-scope', 'knowledge-search-category', 'knowledge-search-more'].includes(action)) {
+      const search = this.knowledgeSearch(), button = event.target.closest('[data-action]');
+      if (action === 'knowledge-search-scope') { search.scope = button.dataset.scope; search.category = 'all'; search.limit = 50; }
+      if (action === 'knowledge-search-category') { search.category = button.dataset.category; search.limit = 50; }
+      if (action === 'knowledge-search-more') search.limit += 50;
+      this.refreshKnowledgeSearch(); return;
+    }
+    if (['toggle-note-read-search', 'close-note-read-search', 'note-read-match'].includes(action)) {
+      const article = event.target.closest('.note-read-mode');
+      if (action === 'note-read-match') this.navigateNoteReadMatch(article, Number(event.target.closest('[data-direction]').dataset.direction));
+      else this.toggleNoteReadSearch(article, action !== 'close-note-read-search' && article.querySelector('[data-action="toggle-note-read-search"]').getAttribute('aria-expanded') !== 'true');
+      return;
+    }
+    if (action === 'toggle-knowledge-fields') {
+      event.preventDefault();
+      const details = event.target.closest('details');
+      this.animateHeightTransition(details, () => details.open = !details.open, { duration: 220 });
+      if (details.open) this.animateSurfaceContent(details.querySelector('.knowledge-more-fields'));
+      return;
+    }
     if (action === 'close-whats-new') {
       const overlay = document.getElementById('whats-new-overlay');
       if (overlay) {
@@ -4154,12 +4205,14 @@ class NocturneWriter {
     }
     if (action === 'back-lore-list') {
       const paneId = event.target.closest('[data-pane-id]')?.dataset.paneId || event.target.closest('.workspace-pane[data-pane-id]')?.dataset.paneId;
+      const detailId = event.target.closest('.lore-detail')?.dataset.loreId;
+      const returnToSearch = this.kbSearchReturn?.id === detailId && this.kbSearchReturn?.paneId === (paneId || null);
       if (paneId) {
         const pane = this.getPane(paneId);
         if (pane && (pane.type === 'character-detail' || pane.type === 'location-detail' || pane.type === 'note-detail' || pane.type === 'timeline-detail' || pane.type === 'subtimeline-detail')) {
           const originalType = pane.type;
           pane.type = 'kb-tab';
-          pane.kbTab = originalType === 'location-detail' ? 'locations' : originalType === 'note-detail' ? 'notes' : (originalType === 'timeline-detail' || originalType === 'subtimeline-detail') ? 'timeline' : 'characters';
+          pane.kbTab = returnToSearch ? 'search' : originalType === 'location-detail' ? 'locations' : originalType === 'note-detail' ? 'notes' : (originalType === 'timeline-detail' || originalType === 'subtimeline-detail') ? 'timeline' : 'characters';
           pane.entityId = null;
           pane.entityType = null;
           this.persistWorkspaceState();
@@ -4168,12 +4221,14 @@ class NocturneWriter {
         }
       }
       this.state.activeLoreDetail = null;
+      if (returnToSearch) { this.state.activeKbTab = 'search'; this.state.mobile.kbTab = 'search'; }
       this.state.kbReadMode = false;
       this.kbTransitioning = true;
       if (this.isMobileLayout()) {
         this.renderMobileShell();
       } else {
-        this.renderKb();
+        if (returnToSearch) this.transitionKbContent(() => this.renderKb());
+        else this.renderKb();
       }
       return;
     }
@@ -4190,7 +4245,7 @@ class NocturneWriter {
       } else {
         this.state.kbReadMode = !this.state.kbReadMode;
         if (this.isMobileLayout()) this.renderMobileShell();
-        else this.renderKb();
+        else this.transitionKbContent(() => this.renderKb());
       }
       return;
     }
@@ -4619,7 +4674,10 @@ class NocturneWriter {
       'mobile-close-all': () => this.closeMobileToEditor(),
       'mobile-back': () => this.mobileBack(),
       'mobile-settings-back': () => { this.state.mobile.settingsTab = null; this.renderMobileShell(); },
-      'mobile-lore-back': () => { this.state.activeLoreDetail = null; this.renderMobileShell(); },
+      'mobile-lore-back': () => {
+        if (this.kbSearchReturn?.id === this.state.activeLoreDetail?.id && !this.kbSearchReturn.paneId) { this.state.activeKbTab = 'search'; this.state.mobile.kbTab = 'search'; }
+        this.state.activeLoreDetail = null; this.renderMobileShell();
+      },
       'mobile-subtimeline-back': () => { this.state.activeSubtimelineId = null; this.renderMobileShell(); },
       'mobile-save-now': () => this.saveActiveDoc({ silent: false }),
       'mobile-save-notes': () => this.saveMobileNote(),
@@ -5881,6 +5939,17 @@ class NocturneWriter {
   }
 
   handleInput(event) {
+    if (event.target.matches?.('[data-knowledge-query]')) {
+      this.knowledgeSearch().query = event.target.value; this.knowledgeSearch().limit = 50;
+      document.querySelectorAll('.knowledge-search-output').forEach(output => { if (output.__knowledgeTransition) output.__knowledgeTransition.focus = null; });
+      this.refreshKnowledgeSearchDebounced ||= debounce(() => this.refreshKnowledgeSearch(), 110);
+      if (!event.isComposing) this.refreshKnowledgeSearchDebounced();
+      return;
+    }
+    if (event.target.matches?.('[data-note-read-query]')) {
+      if (!event.isComposing) this.updateNoteReadSearch(event.target.closest('.note-read-mode'));
+      return;
+    }
     if (event.target.matches?.('[data-settings-id="new-macro-keys"]')) {
       this.macroRecordedKeys = event.target.value;
       const warning = this.settingsControl('macro-conflict-warning');
@@ -6191,6 +6260,16 @@ class NocturneWriter {
   }
 
   handleKeydown(event) {
+    const noteReader = event.target.closest?.('.note-read-mode') || document.querySelector('#kb-modal.active .note-read-mode, #mobile-tab-surface.active .note-read-mode, #mobile-overlay.active .note-read-mode, .workspace-pane.active-pane .note-read-mode');
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && event.code === 'KeyF' && noteReader) {
+      event.preventDefault(); this.toggleNoteReadSearch(noteReader); return;
+    }
+    if (event.key === 'Escape' && event.target.closest?.('.note-read-search')) {
+      event.preventDefault(); this.toggleNoteReadSearch(noteReader, false); return;
+    }
+    if (event.key === 'Enter' && event.target.matches?.('[data-note-read-query]')) {
+      event.preventDefault(); this.navigateNoteReadMatch(noteReader, event.shiftKey ? -1 : 1); return;
+    }
     if (event.key === 'Tab' && this.isFloatingMenuOpen('library')) { this.closeFloatingMenu('library'); this.floatingMenuAnchor('library')?.focus(); return; }
     const select = event.target.closest?.('.nocturne-select');
     if (select && ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Escape'].includes(event.key)) {
@@ -6208,7 +6287,8 @@ class NocturneWriter {
       }
     }
     if (event.key === 'Tab' && this.isFloatingMenuOpen('empty')) { this.closeFloatingMenu('empty'); this.floatingMenuAnchor('empty')?.focus(); return; }
-    const keyboardMenu = ['empty', 'folder', 'library', 'mode'].find(key => this.isFloatingMenuOpen(key));
+    if (event.key === 'Tab' && this.isFloatingMenuOpen('noteActions')) { this.closeFloatingMenu('noteActions'); this.floatingMenuAnchor('noteActions')?.focus(); return; }
+    const keyboardMenu = ['empty', 'folder', 'noteActions', 'library', 'mode'].find(key => this.isFloatingMenuOpen(key));
     if (keyboardMenu && ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Escape'].includes(event.key)) {
       event.preventDefault();
       if (event.key === 'Escape') { this.closeFloatingMenu(keyboardMenu); this.floatingMenuAnchor(keyboardMenu)?.focus(); return; }
@@ -16818,6 +16898,191 @@ class NocturneWriter {
     }
   }
 
+  knowledgeSearch() {
+    return this.knowledgeSearchState ||= { query: '', category: 'all', scope: 'current', limit: 50 };
+  }
+
+  knowledgeSearchWorlds() {
+    const worlds = new Map(this.loreById || []);
+    const activeId = this.state.activeLoreId || 'world';
+    worlds.set(activeId, { ...worlds.get(activeId), ...this.state.lore, id: activeId });
+    return [...worlds].filter(([id]) => this.knowledgeSearch().scope === 'all' || id === activeId).map(([id, world]) => ({ ...world, id }));
+  }
+
+  renderKnowledgeSearch({ closeButton = false } = {}) {
+    const search = this.knowledgeSearch();
+    return `<section class="knowledge-search" aria-label="Поиск по всей базе знаний">
+      <header class="knowledge-search-heading"><span class="knowledge-search-symbol"><i class="bx bx-search" aria-hidden="true"></i></span><div><h1>Поиск</h1><p>Найдите деталь, имя или идею в вашем мире.</p></div>${closeButton ? '<button type="button" class="btn-icon knowledge-search-close" data-action="close-kb" aria-label="Вернуться к рукописи"><i class="bx bx-x" aria-hidden="true"></i></button>' : ''}</header>
+      <div class="knowledge-search-controls">
+        <label class="knowledge-query"><i class="bx bx-search" aria-hidden="true"></i><input type="search" data-knowledge-query aria-label="Слова для поиска по всей базе знаний" placeholder="Имя, псевдоним, фраза из записи…" value="${escapeHtml(search.query)}" autocomplete="off" spellcheck="false"></label>
+        <div class="knowledge-search-scope" role="group" aria-label="Область поиска">${[['current', 'Это произведение'], ['all', 'Все произведения']].map(([scope, label]) => `<button type="button" data-action="knowledge-search-scope" data-scope="${scope}" aria-pressed="${search.scope === scope}">${label}</button>`).join('')}</div>
+        <p class="knowledge-search-hint">Персонажи, псевдонимы, локации, события, подсобытия, записи, закладки и правила мира.</p>
+      </div>
+      <div class="knowledge-search-output">${this.renderKnowledgeSearchResults()}</div>
+    </section>`;
+  }
+
+  renderKnowledgeSearchResults() {
+    const search = this.knowledgeSearch(), terms = queryTerms(search.query), worlds = this.knowledgeSearchWorlds();
+    const locked = worlds.filter(world => world.locked || world.protectedStore).length;
+    const notice = locked ? `<p class="knowledge-locked-notice"><i class="bx bx-lock-alt" aria-hidden="true"></i>Защищённые произведения (${locked}) доступны для поиска после разблокировки.</p>` : '';
+    if (!terms.length) return `${notice}<div class="knowledge-search-empty"><i class="bx bx-search-alt" aria-hidden="true"></i><h2>Всё, что вы записали</h2><p>Введите слово или несколько слов. Поиск проверит все текстовые поля, в том числе скрытые за карточками.</p><div class="knowledge-search-categories">${KNOWLEDGE_SEARCH_TYPES.filter(([type]) => type !== 'world').map(([, icon, label]) => `<span><i class="bx ${icon}" aria-hidden="true"></i>${label}</span>`).join('')}</div></div>`;
+    const results = searchKnowledge(worlds, search.query, { docs: this.state.docs, floatingNotes: this.state.floatingNotes });
+    const counts = new Map(KNOWLEDGE_SEARCH_TYPES.map(([type]) => [type, results.filter(result => result.type === type).length]));
+    const filtered = search.category === 'all' ? results : results.filter(result => result.type === search.category);
+    const visible = filtered.slice(0, search.limit);
+    const filters = `<div class="knowledge-search-filters" role="group" aria-label="Категории результатов">${[['all', 'Все', results.length], ...KNOWLEDGE_SEARCH_TYPES.filter(([type]) => counts.get(type) || type === search.category).map(([type, , label]) => [type, label, counts.get(type)])].map(([type, label, count]) => `<button type="button" data-action="knowledge-search-category" data-category="${type}" aria-pressed="${search.category === type}">${label}<span>${count}</span></button>`).join('')}</div>`;
+    const fieldMarkup = field => `<span class="knowledge-result-field"><span class="knowledge-field-label">${escapeHtml(field.label)}</span><span>${highlightSearchText(searchSnippet(field.text, terms), terms)}</span></span>`;
+    const groups = KNOWLEDGE_SEARCH_TYPES.map(([type, icon, label]) => {
+      const group = visible.filter(result => result.type === type);
+      if (!group.length) return '';
+      return `<section class="knowledge-result-group"><h2><i class="bx ${icon}" aria-hidden="true"></i>${label}<span>${counts.get(type)}</span></h2><div class="knowledge-results-list">${group.map(result => `<article class="knowledge-result">
+        <button type="button" class="knowledge-result-open" data-action="open-knowledge-result" data-world-id="${escapeHtml(result.worldId)}" data-result-type="${type}" data-result-id="${escapeHtml(result.id)}">
+          <span class="knowledge-result-top"><span><strong>${highlightSearchText(result.title, terms)}</strong><small>${escapeHtml(result.worldTitle)}${result.parentTitle ? ` · ${escapeHtml(result.parentTitle)}` : ''}</small></span><i class="bx bx-right-arrow-alt" aria-hidden="true"></i></span>
+          ${result.fields.slice(0, 3).map(fieldMarkup).join('')}
+        </button>
+        ${result.fields.length > 3 ? `<details class="knowledge-result-more"><summary data-action="toggle-knowledge-fields">Ещё совпадения в полях: ${result.fields.length - 3}</summary><div class="knowledge-more-fields">${result.fields.slice(3).map(fieldMarkup).join('')}</div></details>` : ''}
+      </article>`).join('')}</div></section>`;
+    }).join('');
+    return `${notice}<p class="knowledge-result-status" role="status" aria-live="polite">Найдено карточек: <strong>${results.length}</strong>${search.category !== 'all' ? ` · В категории: ${filtered.length}` : ''}</p>${filters}${groups || `<div class="knowledge-search-empty"><i class="bx bx-search" aria-hidden="true"></i><h2>Совпадений нет</h2><p>Попробуйте сократить запрос или выбрать другую область поиска.</p></div>`}${filtered.length > visible.length ? '<button type="button" class="pill-btn knowledge-search-more" data-action="knowledge-search-more">Показать ещё</button>' : ''}`;
+  }
+
+  refreshKnowledgeSearch() {
+    const html = this.renderKnowledgeSearchResults();
+    document.querySelectorAll('.knowledge-search-output').forEach(output => this.transitionKnowledgeSearchResults(output, html));
+    document.querySelectorAll('[data-knowledge-query]').forEach(input => { if (input !== document.activeElement) input.value = this.knowledgeSearch().query; });
+    document.querySelectorAll('[data-action="knowledge-search-scope"]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.scope === this.knowledgeSearch().scope)));
+  }
+
+  transitionKnowledgeSearchResults(output, html) {
+    const previous = output.__knowledgeTransition;
+    if (previous?.phase === 'out' && !this.shouldReduceSurfaceMotion()) { previous.html = html; return; }
+    const originalInert = previous?.originalInert ?? output.inert;
+    if (this.shouldReduceSurfaceMotion() || !this.isSurfaceVisible(output)) {
+      output.__knowledgeTransition = null; previous?.motion?.animation?.cancel(); output.inert = originalInert;
+      this.updateSurfaceHTML(output, html, { animate: false }); return;
+    }
+    const focused = output.contains(document.activeElement) ? document.activeElement : null;
+    const state = { phase: 'out', html, originalInert, motion: null, focus: focused ? { action: focused.dataset.action, category: focused.dataset.category } : previous?.focus };
+    if (focused) output.closest('.knowledge-search').querySelector('[data-knowledge-query]')?.focus({ preventScroll: true });
+    output.__knowledgeTransition = state; output.inert = true;
+    const outgoing = this.runMotion(output, [{ opacity: getComputedStyle(output).opacity }, { opacity: 0 }], { channel: 'knowledge-results', duration: 80, fill: 'forwards' });
+    previous?.motion?.animation?.cancel(); state.motion = outgoing;
+    outgoing.finished.then(finished => {
+      if (!finished || !output.isConnected || output.__knowledgeTransition !== state) return;
+      state.phase = 'in';
+      this.animateHeightTransition(output, () => this.updateSurfaceHTML(output, state.html, { animate: false }), { duration: 220 });
+      const incoming = this.runMotion(output, [{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'translateY(0)' }], { channel: 'knowledge-results', duration: 220, startFromCurrent: false });
+      outgoing.animation?.cancel(); state.motion = incoming;
+      incoming.finished.then(() => {
+        if (output.__knowledgeTransition !== state) return;
+        output.inert = originalInert; output.__knowledgeTransition = null;
+        if (state.focus && document.activeElement === output.closest('.knowledge-search').querySelector('[data-knowledge-query]')) {
+          [...output.querySelectorAll('button')].find(button => button.dataset.action === state.focus.action && button.dataset.category === state.focus.category)?.focus({ preventScroll: true });
+        }
+      });
+    });
+  }
+
+  async openKnowledgeSearchResult(button) {
+    const worldId = button.dataset.worldId, type = button.dataset.resultType, id = button.dataset.resultId;
+    const paneId = button.closest('.workspace-pane')?.dataset.paneId || null;
+    if (worldId !== (this.state.activeLoreId || 'world')) {
+      const world = await this.db.get('lore', worldId);
+      if (!world || world.locked || world.protectedStore) { this.toast('Произведение недоступно. Разблокируйте его и повторите поиск.'); return; }
+      this.state.activeLoreId = worldId; this.state.settings.activeLoreId = worldId;
+      this.state.lore = await this.loadLore();
+      await this.persistSettings(); this.updateElectronTitlebarTitle();
+    }
+    if (type === 'rules' || type === 'world') {
+      const world = this.state.lore;
+      const item = type === 'rules' ? (world.rules || []).find((rule, index) => String(rule?.id || index) === id) : world;
+      if (!item) { this.toast('Результат уже удалён. Повторите поиск.'); this.refreshKnowledgeSearch(); return; }
+      const fields = searchKnowledge([{ ...world, id: worldId }], this.knowledgeSearch().query).find(result => result.type === type && result.id === id)?.fields || [];
+      const overlay = document.getElementById('form-overlay');
+      this.presentFormModal(`<div class="form-modal utility-modal knowledge-result-preview"><div class="modal-head-row"><div><h2>${type === 'rules' ? 'Правило мира' : escapeHtml(world.title)}</h2><p>${escapeHtml(world.title)}</p></div><button type="button" class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x" aria-hidden="true"></i></button></div>${fields.map(field => `<section><h3>${escapeHtml(field.label)}</h3><p>${highlightSearchText(field.text, queryTerms(this.knowledgeSearch().query))}</p></section>`).join('')}</div>`);
+      overlay.querySelector('[data-close-form]').onclick = () => this.closeOverlay(overlay);
+      return;
+    }
+    this.kbSearchReturn = { type, id, paneId };
+    if (paneId || this.isMobileLayout()) this.openLoreDetail(type, id, paneId);
+    else await this.transitionKbContent(() => this.openLoreDetail(type, id));
+  }
+
+  renderNoteReadSearch() {
+    return `<div class="note-read-search-shell"><div class="note-read-search" hidden>
+      <label><i class="bx bx-search" aria-hidden="true"></i><input type="search" data-note-read-query aria-label="Поиск в этой заметке" placeholder="Найти в тексте…" autocomplete="off" spellcheck="false"></label>
+      <span class="note-read-search-count" role="status" aria-live="polite">Введите текст</span>
+      <div class="note-read-search-actions"><button type="button" class="btn-icon" data-action="note-read-match" data-direction="-1" aria-label="Предыдущее совпадение" disabled><i class="bx bx-chevron-up" aria-hidden="true"></i></button><button type="button" class="btn-icon" data-action="note-read-match" data-direction="1" aria-label="Следующее совпадение" disabled><i class="bx bx-chevron-down" aria-hidden="true"></i></button><button type="button" class="btn-icon" data-action="close-note-read-search" aria-label="Закрыть поиск"><i class="bx bx-x" aria-hidden="true"></i></button></div>
+    </div></div>`;
+  }
+
+  toggleNoteReadSearch(article, open = true) {
+    if (!article) return;
+    const panel = article.querySelector('.note-read-search'), trigger = article.querySelector('[data-action="toggle-note-read-search"]');
+    if (!panel) return;
+    const generation = article.__noteSearchGeneration = (article.__noteSearchGeneration || 0) + 1;
+    trigger?.setAttribute('aria-expanded', String(open));
+    if (open) {
+      panel.__nocturneMotions?.get('note-find-panel')?.animation?.cancel();
+      this.animateHeightTransition(panel.parentElement, () => panel.hidden = false, { duration: 220 });
+      this.runMotion(panel, [{ opacity: 0, transform: 'translateY(-4px)' }, { opacity: 1, transform: 'translateY(0)' }], { channel: 'note-find-panel', duration: 200 });
+      panel.querySelector('input').focus({ preventScroll: true });
+    } else {
+      const outgoing = this.runMotion(panel, [{ opacity: getComputedStyle(panel).opacity }, { opacity: 0 }], { channel: 'note-find-panel', duration: 100, fill: 'forwards' });
+      trigger?.focus({ preventScroll: true });
+      outgoing.finished.then(finished => {
+        if (!finished || !article.isConnected || article.__noteSearchGeneration !== generation) return;
+        this.animateHeightTransition(panel.parentElement, () => panel.hidden = true, { duration: 180 });
+        outgoing.animation?.cancel(); panel.querySelector('input').value = ''; this.updateNoteReadSearch(article);
+      });
+    }
+  }
+
+  updateNoteReadSearch(article) {
+    const text = article.querySelector('.note-read-text'), query = article.querySelector('[data-note-read-query]').value;
+    const note = this.state.lore.notes.find(item => item.id === article.dataset.loreId);
+    const body = note ? note.body || 'Текст записи пуст.' : article.__noteReadText ?? text.textContent;
+    article.__noteReadText = body;
+    let count = 0;
+    const highlight = (element, value) => {
+      let html = '', cursor = 0;
+      for (const range of findTextMatches(value, query)) { html += escapeHtml(value.slice(cursor, range.start)) + `<mark data-note-match="${count++}">${escapeHtml(value.slice(range.start, range.end))}</mark>`; cursor = range.end; }
+      element.innerHTML = html + escapeHtml(value.slice(cursor));
+    };
+    highlight(article.querySelector('.note-read-title'), note?.title || 'Без названия');
+    highlight(text, body);
+    this.runMotion(text, [{ opacity: .55 }, { opacity: 1 }], { channel: 'note-find-text', duration: 180 });
+    article.__noteReadMatch = -1;
+    article.querySelectorAll('[data-action="note-read-match"]').forEach(button => button.disabled = count === 0);
+    article.querySelector('.note-read-search-count').textContent = !query.trim() ? 'Введите текст' : count ? `1 / ${count}` : 'Совпадений нет';
+    this.runMotion(article.querySelector('.note-read-search-count'), [{ opacity: .4 }, { opacity: 1 }], { channel: 'note-find-count', duration: 160 });
+    if (count) this.navigateNoteReadMatch(article, 1);
+  }
+
+  navigateNoteReadMatch(article, direction) {
+    const matches = [...article.querySelectorAll('[data-note-match]')];
+    if (!matches.length) return;
+    const index = ((article.__noteReadMatch ?? -1) + direction + matches.length) % matches.length;
+    article.__noteReadMatch = index;
+    matches.forEach((mark, i) => mark.classList.toggle('current', i === index));
+    article.querySelector('.note-read-search-count').textContent = `${index + 1} / ${matches.length}`;
+    this.runMotion(article.querySelector('.note-read-search-count'), [{ opacity: .4 }, { opacity: 1 }], { channel: 'note-find-count', duration: 160 });
+    const mark = matches[index], scroller = article.querySelector('.note-read-container');
+    const rect = mark.getBoundingClientRect(), containerRect = scroller.getBoundingClientRect();
+    scroller.scrollTo({ top: Math.max(0, scroller.scrollTop + rect.top - containerRect.top - scroller.clientHeight / 3), behavior: this.shouldReduceSurfaceMotion() ? 'instant' : 'smooth' });
+  }
+
+  openNoteActionsMenu(anchor) {
+    if (this.isFloatingMenuOpen('noteActions') && this.noteActionsAnchor === anchor) { this.closeFloatingMenu('noteActions'); return; }
+    const note = this.state.lore.notes.find(item => item.id === anchor.dataset.loreId);
+    if (!note) return;
+    this.noteActionsAnchor = anchor;
+    const actions = [['toggle-note-completed', note.completed ? 'bx-undo' : 'bx-check-double', note.completed ? 'Вернуть в работу' : 'Отметить исполненной'], ['clean-note', 'reaper-icon', 'Чистильщик™'], ['dump-single-entity', 'bx-download', 'Экспорт записи'], ['delete-lore', 'bx-trash', 'Удалить запись']];
+    this.updateSurfaceHTML(this.floatingMenuElement('noteActions'), actions.map(([action, icon, label]) => `<button type="button" role="menuitem" class="floating-menu-item ${action === 'delete-lore' ? 'danger' : ''}" data-action="${action}" data-lore-type="notes" data-lore-id="${escapeHtml(note.id)}"><i class="${icon === 'reaper-icon' ? icon : `bx ${icon}`}" aria-hidden="true"></i><span>${label}</span></button>`).join(''), { animate: false });
+    this.openFloatingMenu('noteActions');
+  }
+
   renderKb() {
     if (this.kbTransitioning) {
       this.kbMotionGeneration = (this.kbMotionGeneration || 0) + 1;
@@ -16877,7 +17142,7 @@ class NocturneWriter {
       if (main) {
         this.kbRendering = true;
         try {
-          this.updateSurfaceHTML(main, detail ? this.renderLoreDetail(detail.type, detail.item, this.state.kbReadMode) : `
+          this.updateSurfaceHTML(main, detail ? this.renderLoreDetail(detail.type, detail.item, this.state.kbReadMode) : active === 'search' ? this.renderKnowledgeSearch({ closeButton: true }) : `
           ${this.kbViewTools()}
           <div class="kb-search-wrap">
             <i class="bx bx-search"></i>
@@ -16981,13 +17246,14 @@ class NocturneWriter {
         ['locations', 'bx-map-alt', 'Локации'],
         ['timeline', 'bx-git-commit', 'Таймлайн'],
         ['notes', 'bx-note', 'Записи'],
+        ['search', 'bx-search', 'Поиск'],
       ].map(([id, icon, label]) => `<div class="settings-tab ${active === id ? 'active' : ''}" data-kb-tab="${id}"><i class="bx ${icon}"></i> ${label}</div>`).join('')}
         <div class="kb-dump-sidebar-section">
           <button class="pill-btn kb-sidebar-dump-btn" data-action="dump-full-kb" title="Скачать резервную копию всей базы знаний"><i class="bx bx-download"></i> Дамп всей БЗ</button>
         </div>
       </aside>
       <main class="kb-main">
-        ${detail ? this.renderLoreDetail(detail.type, detail.item, this.state.kbReadMode) : `
+        ${detail ? this.renderLoreDetail(detail.type, detail.item, this.state.kbReadMode) : active === 'search' ? this.renderKnowledgeSearch({ closeButton: true }) : `
         ${this.kbViewTools()}
         <div class="kb-search-wrap">
           <i class="bx bx-search"></i>
@@ -17069,6 +17335,7 @@ class NocturneWriter {
   animateKbEntrance(tab) {
     const modal = document.getElementById('kb-modal');
     if (!modal?.classList.contains('active') || this.shouldReduceSurfaceMotion()) return;
+    if (tab === 'search') { const surface = modal.querySelector('.knowledge-search'); if (surface) this.animateSurfaceContent(surface); return; }
     const section = modal.querySelector(`#kb-sec-${tab}`);
     if (section) this.animateKbCards(section);
   }
@@ -17447,10 +17714,12 @@ class NocturneWriter {
           <article class="lore-detail note-detail note-read-mode" data-lore-id="${item.id}" data-lore-type="${type}">
             <div class="lore-detail-topbar">
               <button class="pill-btn" data-action="toggle-note-read-mode"><i class="bx bx-arrow-back"></i> Назад к досье</button>
-              <button class="btn-icon" data-action="close-kb"><i class="bx bx-x"></i></button>
+              <div class="note-read-topbar-actions"><button type="button" class="pill-btn" data-action="toggle-note-read-search" aria-expanded="false"><i class="bx bx-search" aria-hidden="true"></i> Поиск</button><button class="btn-icon" data-action="close-kb" aria-label="Закрыть"><i class="bx bx-x" aria-hidden="true"></i></button></div>
             </div>
+            ${this.renderNoteReadSearch()}
             <div class="note-read-container">
-              <div class="note-read-text">${escapeHtml(item.body || 'Текст записи пуст.').replace(/\n/g, '<br>')}</div>
+              <h1 class="note-read-title">${escapeHtml(item.title || 'Без названия')}</h1>
+              <div class="note-read-text">${escapeHtml(item.body || 'Текст записи пуст.')}</div>
             </div>
           </article>
         `;
@@ -18795,22 +19064,14 @@ class NocturneWriter {
     </div>`;
   }
 
+  noteActionsTrigger(id, className = '') {
+    return `<button type="button" class="note-actions-trigger ${className}" data-action="toggle-note-actions" data-lore-id="${escapeHtml(id)}" aria-label="Другие действия записи" title="Другие действия" aria-haspopup="menu" aria-controls="note-actions-menu" aria-expanded="false"><i class="bx bx-dots-horizontal-rounded" aria-hidden="true"></i></button>`;
+  }
+
   loreCardActions(type, id) {
     const safeId = escapeHtml(id), safeType = escapeHtml(type);
-    let doneButton = '';
-    if (type === 'notes') {
-      const note = (this.state.lore.notes || []).find(n => n.id === id);
-      const isCompleted = note?.completed;
-      const icon = isCompleted ? 'bx-check-double' : 'bx-check';
-      const title = isCompleted ? 'Вернуть в работу' : 'Исполнено';
-      doneButton = `<button type="button" data-action="toggle-note-completed" data-lore-id="${safeId}" class="done-btn ${isCompleted ? 'active' : ''}" title="${title}"><i class="bx ${icon}"></i></button>`;
-    }
-    const cleanerButton = type === 'notes'
-      ? `<button type="button" data-action="clean-note" data-lore-id="${safeId}" class="cleaner-btn" title="«Чистильщик™»"><i class="reaper-icon"></i></button>`
-      : '';
+    if (type === 'notes') return `<div class="lore-card-actions"><button type="button" data-action="edit-lore" data-lore-type="notes" data-lore-id="${safeId}" title="Редактировать" aria-label="Редактировать"><i class="bx bx-edit" aria-hidden="true"></i></button>${this.noteActionsTrigger(id)}</div>`;
     return `<div class="lore-card-actions">
-      ${doneButton}
-      ${cleanerButton}
       <button type="button" data-action="dump-single-entity" data-lore-type="${safeType}" data-lore-id="${safeId}" title="Дамп карточки"><i class="bx bx-download"></i></button>
       <button type="button" data-action="edit-lore" data-lore-type="${safeType}" data-lore-id="${safeId}" title="Редактировать"><i class="bx bx-edit"></i></button>
       <button type="button" data-action="delete-lore" data-lore-type="${safeType}" data-lore-id="${safeId}" title="Удалить"><i class="bx bx-trash"></i></button>
@@ -24357,7 +24618,7 @@ ${raw}`;
 
     if (!portal) return;
 
-    const hasOpenMenu = ['empty', 'folder', 'library', 'kb', 'mode', 'format', 'split', 'notes', 'search', 'review']
+    const hasOpenMenu = ['empty', 'folder', 'noteActions', 'library', 'kb', 'mode', 'format', 'split', 'notes', 'search', 'review']
 
       .some((key) => this.isFloatingMenuOpen(key));
 

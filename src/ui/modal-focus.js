@@ -2,7 +2,10 @@ export function manageModalFocus() {
   let active = null;
   let activeModal = null;
   let previousFocus = null;
-  const focusables = modal => [...modal.querySelectorAll('button, input, select, textarea, a[href], [tabindex="0"], [contenteditable="true"]')].filter(element => !element.disabled && element.getClientRects().length && getComputedStyle(element).visibility !== 'hidden');
+  const focusables = modal => {
+    const ownedMenus = [...document.querySelectorAll('.portal-floating-menu.active')].filter(menu => [...modal.querySelectorAll('[aria-controls]')].some(anchor => anchor.getAttribute('aria-controls') === menu.id));
+    return [modal, ...ownedMenus].flatMap(root => [...root.querySelectorAll('button, input, select, textarea, a[href], [tabindex="0"], [contenteditable="true"]')]).filter(element => !element.disabled && !element.closest('[inert]') && element.getClientRects().length && getComputedStyle(element).visibility !== 'hidden');
+  };
   const update = () => {
     for (const button of document.querySelectorAll('[data-settings-tab], [data-kb-tab], .kb-close-btn, .kb-project-switcher, .kb-project-item, .kb-project-action')) {
       button.setAttribute('role', 'button'); button.tabIndex = 0;
