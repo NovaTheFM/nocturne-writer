@@ -81,6 +81,48 @@ try {
     }
     return samples;
   });
+  await check('rendered row divider stays visible through every mode fade in both themes and toolbar sizes', async page => {
+    await createManuscript(page);
+    const samples = [];
+    for (const theme of ['nocturne', 'paper']) {
+      for (const compact of [false, true]) {
+        await page.evaluate(({ theme, compact }) => {
+          const a = window.nocturneApp; a.state.settings.theme = theme; a.applySettings();
+          document.body.classList.toggle('compact-toolbar', compact);
+        }, { theme, compact });
+        await page.waitForTimeout(450);
+        const clip = await page.evaluate(() => {
+          const toolbar = document.querySelector('.toolbar'), rect = toolbar.getBoundingClientRect(), style = getComputedStyle(toolbar);
+          return { x: Math.ceil(rect.left + parseFloat(style.paddingLeft) + 4), y: rect.top + parseFloat(style.gridTemplateRows), width: 48, height: 1 };
+        });
+        const baseline = await page.screenshot({ clip });
+        const background = await page.screenshot({ clip: { ...clip, y: clip.y - 2 } });
+        assert.ok(!baseline.equals(background), `${theme}/${compact}: divider is not visibly different from the toolbar background`);
+        for (const mode of ['editor', 'finalization', 'write']) {
+          await page.evaluate(mode => {
+            window.nocturneApp.setReviewMode(mode);
+            document.querySelector('.toolbar-center').__reviewModeTransition.motion.animation.finish();
+          }, mode);
+          await page.waitForFunction(() => document.querySelector('.toolbar-center').__reviewModeTransition?.phase === 'in');
+          await page.evaluate(() => {
+            const animation = document.querySelector('.toolbar-center').__reviewModeTransition.motion.animation;
+            animation.pause(); animation.currentTime = 0;
+          });
+          assert.equal(await page.locator('.toolbar-center').evaluate(el => Number(getComputedStyle(el).opacity)), 0);
+          await page.screenshot({ path: join(directory, `divider-${theme}-${compact ? 'compact' : 'normal'}-${mode}.png`), clip: { x: 260, y: 0, width: 1180, height: 90 } });
+          for (const time of [0, 110, 219]) {
+            await page.evaluate(time => document.querySelector('.toolbar-center').__reviewModeTransition.motion.animation.currentTime = time, time);
+            const rendered = await page.screenshot({ clip });
+            assert.ok(baseline.equals(rendered), `${theme}/${compact}/${mode}/${time}: rendered divider changes during the fade`);
+          }
+          await page.evaluate(() => document.querySelector('.toolbar-center').__reviewModeTransition.motion.animation.finish());
+          await page.waitForTimeout(350);
+          samples.push({ theme, compact, mode, clip, unchangedPixels: true });
+        }
+      }
+    }
+    return samples;
+  });
   await check('keyboard mode selection keeps editor identity and text, enforces readonly and restores focus', async page => {
     await createManuscript(page);
     const samples = [];

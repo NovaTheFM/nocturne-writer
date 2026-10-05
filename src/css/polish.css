@@ -178,7 +178,8 @@ button.utility-row, label.utility-row { cursor: pointer; }
   .toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: 46px 42px; height: 90px; min-height: 0; flex: 0 0 auto; padding: 0 18px 2px; column-gap: 10px; row-gap: 0; transition: height 220ms ease, background-color 220ms ease; }
   .toolbar-left { grid-area: 1 / 1; gap: 10px; }
   .toolbar-right { grid-area: 1 / 2; gap: 7px; }
-  .toolbar-center { grid-area: 2 / 1 / 3 / 3; display: flex; min-width: 0; gap: 10px; justify-content: center; border-top: 1px solid var(--border-light); }
+  .toolbar::after { content: ''; grid-area: 2 / 1 / 3 / 3; align-self: start; height: 1px; background: var(--border-light); pointer-events: none; }
+  .toolbar-center { grid-area: 2 / 1 / 3 / 3; display: flex; min-width: 0; gap: 10px; justify-content: center; padding-top: 1px; }
   .toolbar-history { padding-right: 10px; border-right: 1px solid var(--border); }
   .toolbar .tool-btn { flex: 0 0 34px; width: 34px; height: 34px; font-size: 20px; }
   .toolbar .save-indicator { width: 116px; min-width: 116px; height: 32px; padding: 0 8px; font-size: 11px; border-color: rgba(16,185,129,.28); background: rgba(16,185,129,.09); box-shadow: inset 0 1px 0 rgba(255,255,255,.04); }
