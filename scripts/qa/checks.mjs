@@ -49,6 +49,7 @@ export const ARTIFACT_CHECKS = [
 ];
 
 export const EXTRA_CHECKS = [
+  check('settings-copy-report', ['scripts/test-settings-copy-report.mjs'], ['source', 'settings', 'accessibility', 'responsive'], { platforms: ['desktop'], ownScenarioReport: 'results.json' }),
   check('tester-contract', ['--test', 'scripts/qa/test-runner.mjs'], ['source'], { modes: ['smoke', 'full'] }),
   check('cross-platform-journey', ['scripts/qa/cross-platform-journey.mjs'], ['writing', 'database', 'navigation', 'settings', 'responsive', 'accessibility', 'visual', 'offline', 'stress'], { modes: ['smoke', 'full'], timeout: 420_000, ownScenarioReport:'results.json' }),
   check('native-android', ['scripts/qa/native-android.mjs'], ['native-android', 'keyboard', 'navigation'], { platforms: ['android'], timeout: 90_000 }),
