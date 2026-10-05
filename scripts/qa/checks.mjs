@@ -63,5 +63,7 @@ export const DIAGNOSTIC_SCRIPTS = [
 ];
 
 export const AREA_LABELS = {
+  search: 'Поиск',
+  notes: 'Заметки',
   source: 'Исходники', database: 'Сохранность данных', writing: 'Письмо', selection: 'Выделение и буфер', pagination: 'Страницы', dictionary: 'Словарь', review: 'Редактура', lore: 'База знаний', settings: 'Настройки', navigation: 'Навигация', touch: 'Жесты', keyboard: 'Клавиатура', responsive: 'Размеры и поворот', motion: 'Анимации', accessibility: 'Доступность', visual: 'Визуальные состояния', stress: 'Повторяемые действия', ai: 'Ассистент', import: 'Импорт', export: 'Экспорт', backups: 'Копии и восстановление', sync: 'Синхронизация', security: 'Шифрование и защита', offline: 'Офлайн', performance: 'Производительность', release: 'Упаковка', 'native-contract': 'Платформенные контракты', 'native-desktop': 'Настоящий Electron', 'native-android': 'Настоящий Android WebView',
 };
