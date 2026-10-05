@@ -1403,6 +1403,7 @@ class NocturneWriter {
   }
 
   floatingMenuElement(key) {
+    if (key === 'bookmarkScope' || key === 'bookmarkPane') return this.bookmarks.floatingMenuElement(key);
     return {
       empty: document.getElementById('empty-project-menu'),
       folder: document.getElementById('mobile-folder-menu'),
@@ -1433,6 +1434,7 @@ class NocturneWriter {
   }
 
   floatingMenuAnchor(key) {
+    if (key === 'bookmarkScope' || key === 'bookmarkPane') return this.bookmarks.floatingMenuAnchor(key);
     return {
       empty: this.emptyProjectMenuAnchor?.isConnected ? this.emptyProjectMenuAnchor : document.querySelector('[data-action="toggle-empty-project-menu"]'),
       folder: this.mobileFolderMenuAnchor?.isConnected ? this.mobileFolderMenuAnchor : null,
@@ -1449,6 +1451,7 @@ class NocturneWriter {
   }
 
   floatingMenuAnchorWrapper(key) {
+    if (key === 'bookmarkScope' || key === 'bookmarkPane') return this.floatingMenuAnchor(key)?.parentElement;
     return {
       empty: this.floatingMenuAnchor('empty')?.closest('.empty-project-actions'),
       noteActions: this.floatingMenuAnchor('noteActions')?.closest('.lore-card-actions, .mobile-lore-actions'),
@@ -1465,7 +1468,7 @@ class NocturneWriter {
 
   positionFloatingToolbarMenu(key, anchor = this.floatingMenuAnchor(key)) {
     const surface = this.floatingMenuSurface(key);
-    if (!surface || !anchor || !['empty', 'folder', 'noteActions', 'library', 'kb', 'mode', 'format', 'split', 'notes', 'search', 'review'].includes(key)) return;
+    if (!surface || !anchor || !['empty', 'folder', 'noteActions', 'library', 'kb', 'mode', 'format', 'split', 'notes', 'search', 'review', 'bookmarkScope', 'bookmarkPane'].includes(key)) return;
     const anchorRect = anchor.getBoundingClientRect();
     if (key === 'noteActions') surface.style.maxHeight = '';
     const menuRect = surface.getBoundingClientRect();
@@ -1484,7 +1487,7 @@ class NocturneWriter {
       surface.style.left = `${Math.round(left)}px`; surface.style.top = `${Math.round(top)}px`;
       return;
     }
-    const alignLeft = ['library', 'kb', 'mode', 'format', 'review'].includes(key);
+    const alignLeft = ['library', 'kb', 'mode', 'format', 'review', 'bookmarkScope'].includes(key);
     let left = key === 'empty' ? anchorRect.left + (anchorRect.width - menuRect.width) / 2 : alignLeft ? anchorRect.left : anchorRect.right - menuRect.width;
     left = Math.max(margin, Math.min(left, window.innerWidth - menuRect.width - margin));
     const below = anchorRect.bottom + gap;
@@ -1524,7 +1527,7 @@ class NocturneWriter {
     if (surface && surface !== el) surface.style.pointerEvents = '';
     this.activeFloatingMenuKey = key;
     this.floatingMenuAnchor(key)?.setAttribute('aria-expanded', 'true');
-    if (['empty', 'folder', 'noteActions', 'library', 'mode'].includes(key)) el.querySelector('button')?.focus({ preventScroll: true });
+    if (['empty', 'folder', 'noteActions', 'library', 'mode', 'bookmarkScope'].includes(key)) (el.querySelector('[aria-checked="true"]') || el.querySelector('button'))?.focus({ preventScroll: true });
     if (key === 'split') this.splitMenuOpen = true;
     this.syncFloatingMenuPortalState();
     requestAnimationFrame(() => this.positionFloatingToolbarMenu(key));
@@ -1570,7 +1573,7 @@ class NocturneWriter {
 
   closeAllFloatingMenus(options = '') {
     const except = typeof options === 'string' ? options : (options?.except || '');
-    ['empty', 'folder', 'noteActions', 'library', 'kb', 'mode', 'format', 'split', 'notes', 'search', 'review', 'doc', 'context'].forEach((key) => {
+    ['empty', 'folder', 'noteActions', 'library', 'kb', 'mode', 'format', 'split', 'notes', 'search', 'review', 'doc', 'context', 'bookmarkScope', 'bookmarkPane'].forEach((key) => {
       if (key !== except) this.closeFloatingMenu(key, { animate: key !== 'doc' && key !== 'context' });
     });
   }
@@ -1820,7 +1823,7 @@ class NocturneWriter {
 
   renderKbPane(paneId, pane) {
     const tab = pane?.kbTab || 'characters';
-    if (tab === 'bookmarks') return this.bookmarks.manager();
+    if (tab === 'bookmarks') return this.bookmarks.manager({ context: paneId });
     if (tab === 'search') return this.renderKnowledgeSearch();
     if (tab === 'locations') {
       const locs = [...this.state.lore.locations].sort((a, b) => a.order - b.order);
@@ -2475,7 +2478,6 @@ class NocturneWriter {
 
   renderMobileKb(options = {}) {
     const active = this.state.mobile.kbTab || this.state.activeKbTab || 'characters';
-    if (active === 'bookmarks' && !this.state.activeLoreDetail) return `${options.asTab ? this.mobileTabHeader('База знаний', 'Закладки') : this.mobilePanelHeader('База знаний', 'Закладки')}<div class="mobile-panel-body">${this.bookmarks.manager()}</div>`;
     const detail = this.activeLoreDetailItem();
     if (detail && ['characters', 'locations', 'notes', 'timeline', 'subtimeline'].includes(detail.type)) return this.renderMobileLoreDetail(detail.type, detail.item);
     if (this.state.activeSubtimelineId) return this.renderMobileSubtimeline(this.state.activeSubtimelineId);
@@ -2524,12 +2526,14 @@ class NocturneWriter {
         <div class="mobile-segmented mobile-lore-tabs">
           ${[['characters', 'Персонажи'], ['locations', 'Локации'], ['timeline', 'Таймлайн'], ['notes', 'Записи'], ['bookmarks', 'Закладки'], ['search', 'Поиск']].map(([id, label]) => `<button class="${active === id ? 'active' : ''}" data-mobile-kb-tab="${id}">${label}</button>`).join('')}
         </div>
-        ${active === 'search' ? this.renderKnowledgeSearch() : `
+        <div class="mobile-kb-content" data-surface-key="kb-content-${escapeHtml(active)}">
+        ${active === 'bookmarks' ? this.bookmarks.manager({ context: 'mobile' }) : active === 'search' ? this.renderKnowledgeSearch() : `
         ${this.kbViewTools()}
         <div class="mobile-search-field"><i class="bx bx-search" aria-hidden="true"></i><input data-mobile-lore-search aria-label="Поиск в базе знаний" type="search" placeholder="Поиск в базе" value="${escapeHtml(this.state.mobile.loreSearch || '')}"></div>
         <div class="mobile-panel-actions"><button class="pill-btn ai-btn" data-action="new-lore" data-lore-type="${active}"><i class="bx bx-plus"></i> Добавить</button><span class="mobile-drag-hint"><i class="bx bx-grid-vertical"></i> Удерживайте карточку, чтобы перенести</span></div>
         <div class="mobile-kb-list ${active === 'timeline' ? 'timeline-container timeline-mobile-list' : ''}" data-dnd-zone="${escapeHtml(zone)}">${list}</div>
         `}
+        </div>
       </div>`;
   }
 
@@ -6299,7 +6303,7 @@ class NocturneWriter {
     }
     if (event.key === 'Tab' && this.isFloatingMenuOpen('empty')) { this.closeFloatingMenu('empty'); this.floatingMenuAnchor('empty')?.focus(); return; }
     if (event.key === 'Tab' && this.isFloatingMenuOpen('noteActions')) { this.closeFloatingMenu('noteActions'); this.floatingMenuAnchor('noteActions')?.focus(); return; }
-    const keyboardMenu = ['empty', 'folder', 'noteActions', 'library', 'mode'].find(key => this.isFloatingMenuOpen(key));
+    const keyboardMenu = ['empty', 'folder', 'noteActions', 'library', 'mode', 'bookmarkScope', 'bookmarkPane'].find(key => this.isFloatingMenuOpen(key));
     if (keyboardMenu && ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Escape'].includes(event.key)) {
       event.preventDefault();
       if (event.key === 'Escape') { this.closeFloatingMenu(keyboardMenu); this.floatingMenuAnchor(keyboardMenu)?.focus(); return; }
@@ -13036,7 +13040,7 @@ class NocturneWriter {
         }
       }
       for (const node of oldNodes) if (!used.has(node)) {
-        if (animate && node.nodeType === Node.ELEMENT_NODE && node.matches('.utility-row, .utility-list, .utility-empty, .form-actions, .modal-head-row, .dump-summary-grid, .sync-device-card, .sync-start, .sync-pairing, .sync-connection-form, .sync-options-content, .sync-find-computer, .sync-feedback, .conflict-versions')) this.animateSurfaceContent(node, true);
+        if (animate && node.nodeType === Node.ELEMENT_NODE && node.matches('.utility-row, .utility-list, .utility-empty, .form-actions, .modal-head-row, .dump-summary-grid, .sync-device-card, .sync-start, .sync-pairing, .sync-connection-form, .sync-options-content, .sync-find-computer, .sync-feedback, .conflict-versions, .mobile-kb-content, .bookmark-manager-row')) this.animateSurfaceContent(node, true);
         node.remove();
       }
     };
@@ -13044,7 +13048,7 @@ class NocturneWriter {
     const settingsChanged = element.matches('.settings-body') && element.querySelector('.settings-header h2')?.textContent !== next.querySelector('.settings-header h2')?.textContent;
     if (animate && settingsChanged) this.animateViewChange(element, update);
     else if (animate && structural && element.matches('.sync-mobile-content')) this.animateHeightTransition(element, update);
-    else if (animate && structural && !(this.kbRendering && element.closest('#kb-modal')) && element.matches('.utility-list, .sync-device-list, .docs-list-scroll, .folder-docs, .mobile-folder-docs, .command-group, .command-palette-results, .character-grid, .locations-grid, .timeline-container, .mobile-lore-grid')) this.animateLayoutTransition(element, update);
+    else if (animate && structural && !(this.kbRendering && element.closest('#kb-modal')) && element.matches('.utility-list, .sync-device-list, .docs-list-scroll, .folder-docs, .mobile-folder-docs, .command-group, .command-palette-results, .character-grid, .locations-grid, .timeline-container, .mobile-lore-grid, .bookmark-manager-list, .mobile-bookmarks-list, .pane-bookmarks-list')) this.animateLayoutTransition(element, update);
     else update();
     if (animate && textChanged && !element.closest('input, textarea, [contenteditable="true"], .page-content') && this.isSurfaceVisible(element)) {
       this.runMotion(element, [{ opacity: .6 }, { opacity: 1 }], { channel: 'text', duration: 160, easing: 'ease-out' });
@@ -16594,7 +16598,7 @@ class NocturneWriter {
       if (main) {
         this.kbRendering = true;
         try {
-          this.updateSurfaceHTML(main, detail ? this.renderLoreDetail(detail.type, detail.item, this.state.kbReadMode) : active === 'bookmarks' ? this.bookmarks.manager() : active === 'search' ? this.renderKnowledgeSearch({ closeButton: true }) : `
+          this.updateSurfaceHTML(main, detail ? this.renderLoreDetail(detail.type, detail.item, this.state.kbReadMode) : active === 'bookmarks' ? this.bookmarks.manager({ closeButton: true }) : active === 'search' ? this.renderKnowledgeSearch({ closeButton: true }) : `
           ${this.kbViewTools()}
           <div class="kb-search-wrap">
             <i class="bx bx-search"></i>
@@ -16706,7 +16710,7 @@ class NocturneWriter {
         </div>
       </aside>
       <main class="kb-main">
-        ${detail ? this.renderLoreDetail(detail.type, detail.item, this.state.kbReadMode) : active === 'bookmarks' ? this.bookmarks.manager() : active === 'search' ? this.renderKnowledgeSearch({ closeButton: true }) : `
+        ${detail ? this.renderLoreDetail(detail.type, detail.item, this.state.kbReadMode) : active === 'bookmarks' ? this.bookmarks.manager({ closeButton: true }) : active === 'search' ? this.renderKnowledgeSearch({ closeButton: true }) : `
         ${this.kbViewTools()}
         <div class="kb-search-wrap">
           <i class="bx bx-search"></i>
@@ -16788,7 +16792,11 @@ class NocturneWriter {
   animateKbEntrance(tab) {
     const modal = document.getElementById('kb-modal');
     if (!modal?.classList.contains('active') || this.shouldReduceSurfaceMotion()) return;
-    if (tab === 'search') { const surface = modal.querySelector('.knowledge-search'); if (surface) this.animateSurfaceContent(surface); return; }
+    if (tab === 'search' || tab === 'bookmarks') {
+      const surface = modal.querySelector(tab === 'search' ? '.knowledge-search' : '.bookmark-manager');
+      this.runMotion(surface, [{ opacity: .25, transform: 'translateY(8px)' }, { opacity: 1, transform: 'translateY(0)' }], { channel: 'kb-tab', duration: 320 });
+      return;
+    }
     const section = modal.querySelector(`#kb-sec-${tab}`);
     if (section) this.animateKbCards(section);
   }
@@ -16796,6 +16804,9 @@ class NocturneWriter {
   cancelKbEntrance() {
     this.kbEntranceGeneration = (this.kbEntranceGeneration || 0) + 1;
     const modal = document.getElementById('kb-modal');
+    modal?.querySelectorAll('.bookmark-manager, .knowledge-search').forEach(surface => {
+      for (const motion of surface.__nocturneMotions?.values() || []) motion.animation.cancel();
+    });
     modal?.querySelectorAll('.kb-enter-card').forEach(card => {
       card.__kbEntranceAnimation?.cancel();
       card.__kbEntranceAnimation = null;
@@ -18228,6 +18239,13 @@ class NocturneWriter {
 
   setupMobileKbSortables() {
     if (!this.isMobileLayout?.()) return;
+    cancelAnimationFrame(this.mobileKbTabFrame);
+    this.mobileKbTabFrame = requestAnimationFrame(() => {
+      const tabs = document.querySelector('.mobile-tab-surface.active .mobile-lore-tabs, .mobile-panel .mobile-lore-tabs'), active = tabs?.querySelector('button.active');
+      if (!active) return;
+      const bounds = tabs.getBoundingClientRect(), target = active.getBoundingClientRect();
+      if (target.left < bounds.left || target.right > bounds.right) tabs.scrollTo({ left: tabs.scrollLeft + target.left - bounds.left - (tabs.clientWidth - target.width) / 2, behavior: this.shouldReduceSurfaceMotion() ? 'instant' : 'smooth' });
+    });
     document.querySelectorAll('.mobile-tab-surface.active [data-dnd-zone], .mobile-panel [data-dnd-zone]').forEach((zone) => {
       if (zone.__sortable) return;
       this.setupKbSortable(zone);
@@ -19414,7 +19432,7 @@ class NocturneWriter {
     this.state.activeSettingsTab = tab;
     this.closeAllFloatingMenus();
     if (this.isMobileLayout()) {
-      const settingsTab = ['visual', 'editor', 'dictionary', 'review', 'focus', 'macros', 'formatting', 'ai', 'data', 'export', 'misc', 'search'].includes(tab) ? tab : null;
+      const settingsTab = ['visual', 'editor', 'dictionary', 'review', 'bookmarks', 'focus', 'macros', 'formatting', 'ai', 'data', 'export', 'misc', 'search'].includes(tab) ? tab : null;
       this.openMobilePanel('settings', 'more', { settingsTab });
       return;
     }
@@ -19426,8 +19444,13 @@ class NocturneWriter {
     return ['#8B5CF6', '#A855F7', '#0EA5E9', '#22C55E', '#F59E0B', '#EF4444'];
   }
 
-  renderAccentColorControl() {
-    const accent = this.normalizeAccentHex(this.state.settings.accent) || defaultSettings.accent;
+  renderAccentColorControl({ name = '', value = this.state.settings.accent, label = 'акцентного цвета' } = {}) {
+    const accent = this.normalizeAccentHex(value) || this.normalizeAccentHex(this.state.settings.accent) || defaultSettings.accent;
+    if (name) return `<div class="accent-picker bookmark-color-picker" data-bookmark-color-picker style="--accent-preview:${escapeHtml(accent)}">
+      <input type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(value || '')}">
+      <button type="button" class="accent-swatch" data-bookmark-color-focus aria-label="Ввести HEX ${escapeHtml(label)}"><span class="accent-swatch-orb"></span></button>
+      <div class="accent-picker-main"><label class="accent-hex-shell"><span>#</span><input value="${escapeHtml(accent.slice(1))}" maxlength="6" spellcheck="false" data-bookmark-color-hex aria-label="HEX ${escapeHtml(label)}"></label>
+      <div class="accent-presets" aria-label="Палитра ${escapeHtml(label)}">${this.accentPresets().map(color => `<button type="button" class="accent-preset ${value && color.toUpperCase() === accent ? 'active' : ''}" style="--preset:${escapeHtml(color)}" data-bookmark-color="${escapeHtml(color)}" aria-label="Цвет ${escapeHtml(color)}" aria-pressed="${!!value && color.toUpperCase() === accent}"></button>`).join('')}<button type="button" class="accent-reset" data-bookmark-color="" aria-pressed="${!value}">Акцент темы</button></div></div></div>`;
     return `
       <div class="accent-picker" data-accent-picker style="--accent-preview:${escapeHtml(accent)}">
         <label class="accent-swatch" title="Выбрать цвет">
@@ -24109,7 +24132,7 @@ ${raw}`;
 
     if (!portal) return;
 
-    const hasOpenMenu = ['empty', 'folder', 'noteActions', 'library', 'kb', 'mode', 'format', 'split', 'notes', 'search', 'review']
+    const hasOpenMenu = ['empty', 'folder', 'noteActions', 'library', 'kb', 'mode', 'format', 'split', 'notes', 'search', 'review', 'bookmarkScope', 'bookmarkPane']
 
       .some((key) => this.isFloatingMenuOpen(key));
 

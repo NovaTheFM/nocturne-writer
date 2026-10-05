@@ -22,6 +22,7 @@ export const PROJECT_CHECKS = [
   check('editor-adapter', ['scripts/test-editor-adapter.mjs'], ['writing', 'database'], { modes: ['smoke', 'full'] }),
   check('bookmark-model', ['--test', 'scripts/test-bookmark-model.mjs'], ['writing', 'database', 'backups']),
   check('bookmarks-ui', ['scripts/test-bookmarks-ui.mjs'], ['writing', 'lore', 'settings', 'touch', 'navigation', 'selection', 'backups'], { ports: [5333, 8933], scenarioReport: 'bookmarks-ui/results.json', timeout: 180_000 }),
+  check('bookmarks-design', ['scripts/test-bookmarks-design.mjs'], ['writing', 'lore', 'settings', 'motion', 'touch', 'navigation', 'accessibility', 'visual'], { ports: [5334, 8934], scenarioReport: 'bookmarks-design/results.json', timeout: 180_000 }),
   check('ai-context', ['scripts/test-ai-context.mjs'], ['ai', 'lore']),
   check('reliability', ['scripts/test-reliability.mjs'], ['database', 'writing', 'backups'], { ports: [5276] }),
   check('workflow-tools', ['scripts/test-workflow-tools.mjs'], ['writing', 'security', 'import', 'export', 'backups', 'ai', 'review'], { modes: ['smoke', 'full'], ports: [5282] }),

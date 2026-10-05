@@ -27,7 +27,7 @@ export class BookmarkController {
     this.app = app; this.filter = 'lore'; this.query = ''; this.status = 'all'; this.selected = new Set(); this.worldRecords = [];
     this.trashIds = new Map(); this.plainUndo = []; this.plainRedo = []; this.refreshFrame = 0; this.trashWork = Promise.resolve();
     this.plainTexts = new Map(); this.textHistory = new Map();
-    this.textareaMirrors = new Map();
+    this.textareaMirrors = new Map(); this.paneMenus = new Map(); this.plainRoots = new Set();
     this.resizeObserver = new ResizeObserver(() => this.refresh());
     document.addEventListener('scroll', () => this.refresh(), { capture: true, passive: true });
     window.addEventListener('resize', () => this.refresh(), { passive: true });
@@ -345,10 +345,10 @@ export class BookmarkController {
   stackChoice(bookmark) {
     return new Promise(resolve => {
       const overlay = document.getElementById('form-overlay');
-      this.app.presentFormModal(`<div class="form-modal bookmark-choice"><h2>Создать сложенную закладку?</h2><p>В этом месте уже есть «${escapeHtml(titleOf(bookmark))}». У каждой части останутся своё название и заметка.</p><div class="form-actions"><button type="button" class="pill-btn" data-choice="edit">Редактировать текущую</button><button type="button" class="pill-btn ai-btn" data-choice="create">Создать</button><button type="button" class="btn-icon" data-choice="cancel" aria-label="Отмена"><i class="bx bx-x"></i></button></div></div>`);
+      this.app.presentFormModal(`<div class="form-modal utility-modal bookmark-choice"><div class="modal-head-row"><h2>Создать сложенную закладку?</h2><button type="button" class="btn-icon" data-choice="cancel" aria-label="Отмена"><i class="bx bx-x" aria-hidden="true"></i></button></div><span class="bookmark-choice-icon" aria-hidden="true"><i class="bx bx-layer"></i></span><p>В этом месте уже есть «${escapeHtml(titleOf(bookmark))}». У каждой части останутся своё название и заметка.</p><div class="form-actions"><button type="button" class="pill-btn" data-choice="edit">Редактировать текущую</button><button type="button" class="pill-btn ai-btn" data-choice="create"><i class="bx bx-layer" aria-hidden="true"></i> Создать</button></div></div>`);
       overlay.classList.add('active');
       let settled = false;
-      const finish = value => { if (settled) return; settled = true; observer.disconnect(); document.removeEventListener('keydown', onKey); overlay.classList.remove('active'); resolve(value); };
+      const finish = value => { if (settled) return; settled = true; observer.disconnect(); document.removeEventListener('keydown', onKey); this.app.closeOverlay(overlay); resolve(value); };
       const onKey = event => { if (event.key === 'Escape') finish('cancel'); };
       const observer = new MutationObserver(() => { if (!overlay.classList.contains('active')) finish('cancel'); }); observer.observe(overlay, { attributes: true, attributeFilter: ['class'] });
       document.addEventListener('keydown', onKey);
@@ -390,7 +390,10 @@ export class BookmarkController {
     cancelAnimationFrame(this.refreshFrame);
     this.refreshFrame = requestAnimationFrame(() => {
       for (const [paneId, instance] of this.app.nocturneEditor.instances) this.drawEditor(paneId, instance.editor.view);
-      for (const { source, element, clipElement } of this.textRoots()) drawBookmarkLayer(element, source.values, {
+      const roots = this.textRoots(), currentRoots = new Set(roots.map(root => root.element));
+      for (const root of this.plainRoots) if (!currentRoots.has(root)) clearBookmarkLayer(root);
+      this.plainRoots = currentRoots;
+      for (const { source, element, clipElement } of roots) drawBookmarkLayer(element, source.values, {
         clipRect: clipElement ? () => clipElement.getBoundingClientRect() : null,
         rangeAt: (from, to) => rangeInText(element, from, to, source.text), paragraphAt: pos => {
           const block = textIndex(source.text).find(block => pos >= block.from && pos <= block.to);
@@ -414,7 +417,7 @@ export class BookmarkController {
       if (source.owner.worldId !== this.app.state.activeLoreId) { this.app.state.activeLoreId = source.owner.worldId; this.app.state.settings.activeLoreId = source.owner.worldId; this.app.state.lore = await this.app.loadLore(); await this.app.persistSettings(); }
       if (source.owner.type === 'rules') {
         this.app.presentFormModal(`<div class="form-modal utility-modal"><div class="modal-head-row"><h2>Правило мира</h2><button type="button" class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div><p class="bookmark-plain-preview" data-bookmark-text data-bookmark-source="${escapeHtml(source.key)}">${escapeHtml(source.text)}</p><button type="button" class="pill-btn" data-bookmark-action="add" data-owner="${escapeHtml(source.key)}">Поставить закладку</button></div>`);
-        document.querySelector('#form-overlay [data-close-form]').onclick = () => document.getElementById('form-overlay').classList.remove('active');
+        document.querySelector('#form-overlay [data-close-form]').onclick = () => this.app.closeOverlay(document.getElementById('form-overlay'));
         await new Promise(resolve => requestAnimationFrame(resolve)); this.refresh(); return;
       }
       this.app.state.activeLoreDetail = { type: source.owner.type, id: source.owner.id };
@@ -428,6 +431,7 @@ export class BookmarkController {
     this.refresh();
   }
   async jump(key, id, paneId = null) {
+    const generation = this.jumpGeneration = (this.jumpGeneration || 0) + 1;
     document.dispatchEvent(new Event('nocturne:skip-modal-focus-restore'));
     let source = this.source(key), bookmark = source?.values.find(value => value.id === id);
     if (!bookmark) return;
@@ -462,8 +466,9 @@ export class BookmarkController {
     source.record.lastBookmarkId = id;
     this.refresh(); this.refreshMenus();
     requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (generation !== this.jumpGeneration || !root.isConnected) return;
       if (this.app.isMobileLayout() && document.activeElement?.closest('.ProseMirror, textarea, [contenteditable="true"]')) document.activeElement.blur();
-      flashBookmark(root, id, this.app.shouldReduceSurfaceMotion());
+      flashBookmark(root, id, this.app.shouldReduceSurfaceMotion(), (...args) => this.app.runMotion(...args));
     }));
     this.persist(source).catch(error => this.app.toast(error.message));
   }
@@ -493,12 +498,37 @@ export class BookmarkController {
     }
     return [...groups.values()].sort((a, b) => this.settings.bookmarkBehavior === 'time' ? a[0].bookmark.createdAt - b[0].bookmark.createdAt : this.settings.bookmarkBehavior === 'manual' ? a[0].bookmark.order - b[0].bookmark.order : a[0].source.title.localeCompare(b[0].source.title, 'ru') || bookmarkBounds(a[0].bookmark).from - bookmarkBounds(b[0].bookmark).from);
   }
-  scopeSwitcher() {
-    const tabs = [['lore', 'Закладки Базы знаний'], ['docs', 'Закладки рукописей'], ['all', 'Все закладки']];
-    return `<div class="bookmark-scope-switch" role="group" aria-label="Область закладок" style="--bookmark-tab-index:${tabs.findIndex(([id]) => id === this.filter)}"><span class="bookmark-scope-indicator" aria-hidden="true"></span>${tabs.map(([id, label]) => `<button type="button" data-bookmark-action="scope" data-value="${id}" aria-pressed="${id === this.filter}">${label}</button>`).join('')}</div>`;
+  scopeOptions() {
+    return [['lore', 'bx-book-content', 'Закладки Базы знаний'], ['docs', 'bx-file', 'Закладки рукописей'], ['all', 'bx-bookmark', 'Все закладки']];
   }
-  manager() {
-    return `<section class="bookmark-manager"><div class="kb-header"><div><h1>Закладки</h1><p class="bookmark-manager-subtitle">Сохранённые места и фрагменты</p></div><button type="button" class="pill-btn" data-action="open-trash"><i class="bx bx-trash"></i> Корзина</button></div>${this.scopeSwitcher()}<div class="bookmark-manager-tools"><label class="bookmark-search"><i class="bx bx-search" aria-hidden="true"></i><input class="form-control" data-bookmark-search aria-label="Поиск закладок" placeholder="Название, заметка, метка…" value="${escapeHtml(this.query)}"></label><label class="bookmark-status-label">Привязка<select class="form-control" data-bookmark-status><option value="all"${this.status === 'all' ? ' selected' : ''}>Все</option><option value="attached"${this.status === 'attached' ? ' selected' : ''}>На месте</option><option value="unresolved"${this.status === 'unresolved' ? ' selected' : ''}>Нужно выбрать место</option></select></label></div><div class="bookmark-bulk-actions"><button type="button" class="pill-btn" data-bookmark-action="select-all">Выбрать все</button><button type="button" class="pill-btn danger-btn" data-bookmark-action="delete-selected">В корзину выбранные</button><span data-bookmark-selection-count aria-live="polite">${this.selected.size ? `Выбрано: ${this.selected.size}` : ''}</span></div><div class="bookmark-manager-list">${this.managerRows()}</div></section>`;
+  scopeSwitcher() {
+    const [, icon, label] = this.scopeOptions().find(([id]) => id === this.filter);
+    return `<div class="bookmark-scope-switch review-mode-dropdown"><button type="button" class="pill-btn review-mode-trigger bookmark-scope-trigger" data-bookmark-action="scope-menu" aria-label="Область закладок: ${label}" aria-haspopup="menu" aria-controls="bookmark-scope-menu" aria-expanded="false"><span class="review-mode-trigger-content"><i class="bx ${icon} review-mode-trigger-icon" aria-hidden="true"></i><span class="review-mode-trigger-label">${label}</span></span><i class="bx bx-chevron-down review-mode-trigger-chevron" aria-hidden="true"></i></button></div>`;
+  }
+  floatingMenuElement(key) { return key === 'bookmarkScope' ? this.scopeMenu : this.paneMenus.get(this.openPaneMenuId)?.dropdown; }
+  floatingMenuAnchor(key) { return key === 'bookmarkScope' ? this.scopeAnchor : this.paneMenus.get(this.openPaneMenuId)?.widget.querySelector('button'); }
+  openScopeMenu(anchor) {
+    this.app.closeSettingsSelects();
+    if (this.app.isFloatingMenuOpen('bookmarkScope') && this.scopeAnchor === anchor) { this.app.closeFloatingMenu('bookmarkScope'); return; }
+    this.scopeAnchor = anchor;
+    if (!this.scopeMenu) {
+      this.scopeMenu = document.createElement('div'); this.scopeMenu.id = 'bookmark-scope-menu';
+      this.scopeMenu.className = 'dropdown-menu popover-surface portal-floating-menu review-mode-menu bookmark-scope-menu';
+      this.scopeMenu.dataset.floatingMenu = 'bookmarkScope'; this.scopeMenu.setAttribute('role', 'menu');
+      this.scopeMenu.setAttribute('aria-label', 'Область закладок'); this.scopeMenu.setAttribute('aria-hidden', 'true');
+      document.getElementById('floating-menu-portal').append(this.scopeMenu);
+    }
+    this.app.updateSurfaceHTML(this.scopeMenu, this.scopeOptions().map(([id, icon, label]) => `<button type="button" class="drop-item kb-drop-row review-mode-option" role="menuitemradio" aria-checked="${id === this.filter}" data-bookmark-action="scope" data-value="${id}"><i class="bx ${icon}" aria-hidden="true"></i><span>${label}</span><i class="bx bx-check review-mode-option-check" aria-hidden="true"></i></button>`).join(''), { animate: false });
+    this.app.openFloatingMenu('bookmarkScope');
+  }
+  manager({ closeButton = false, context = 'main' } = {}) {
+    const status = this.app.renderFormSelect('bookmark-status', [['all', 'Все привязки'], ['attached', 'На месте'], ['unresolved', 'Нужно выбрать место']], this.status, { id: `bookmark-status-${context}`, label: 'Состояние привязки' }).replace('type="hidden"', 'type="hidden" data-bookmark-status');
+    return `<section class="bookmark-manager">
+      <div class="kb-header"><div><h1>Закладки</h1><p class="bookmark-manager-subtitle">Сохранённые места и фрагменты</p></div><div class="kb-header-actions"><button type="button" class="pill-btn" data-action="open-trash"><i class="bx bx-trash" aria-hidden="true"></i> Корзина</button>${closeButton ? '<button type="button" class="btn-icon kb-close-btn" data-action="close-kb" aria-label="Вернуться к рукописи"><i class="bx bx-x" aria-hidden="true"></i></button>' : ''}</div></div>
+      <div class="bookmark-manager-context">${this.scopeSwitcher()}<span class="bookmark-total" data-bookmark-total>${this.groups().length} в списке</span></div>
+      <div class="bookmark-manager-tools"><label class="bookmark-search"><i class="bx bx-search" aria-hidden="true"></i><input class="form-control" data-bookmark-search aria-label="Поиск закладок" placeholder="Название, заметка, метка…" value="${escapeHtml(this.query)}"></label><div class="bookmark-status-control">${status}</div></div>
+      <div class="bookmark-bulk-actions"><button type="button" class="pill-btn" data-bookmark-action="select-all"><i class="bx bx-check-double" aria-hidden="true"></i> Выбрать все</button><button type="button" class="pill-btn danger-btn" data-bookmark-action="delete-selected"${this.selected.size ? '' : ' disabled'}><i class="bx bx-trash" aria-hidden="true"></i> В корзину выбранные</button><span data-bookmark-selection-count aria-live="polite">${this.selected.size ? `Выбрано: ${this.selected.size}` : ''}</span></div>
+      <div class="bookmark-manager-list">${this.managerRows()}</div></section>`;
   }
   managerRows() {
     const groups = this.groups();
@@ -509,37 +539,52 @@ export class BookmarkController {
     }).join('');
   }
   refreshManager() {
+    document.querySelectorAll('[data-bookmark-total]').forEach(element => { element.textContent = `${this.groups().length} в списке`; });
+    document.querySelectorAll('[data-bookmark-action="delete-selected"]').forEach(element => { element.disabled = !this.selected.size; });
     for (const list of document.querySelectorAll('.bookmark-manager-list')) this.app.updateSurfaceHTML(list, this.managerRows());
     document.querySelectorAll('[data-bookmark-selection-count]').forEach(element => { element.textContent = this.selected.size ? `Выбрано: ${this.selected.size}` : ''; });
   }
   async edit(key, id, variants = null) {
+    this.editGeneration = (this.editGeneration || 0) + 1;
     const source = this.source(key), bookmark = source?.values.find(value => value.id === id);
     if (!bookmark) return;
     variants ||= this.sources().flatMap(candidate => candidate.values.filter(value => value.groupId === bookmark.groupId && bookmarkSignature(value) === bookmarkSignature(bookmark)).map(value => ({ source: candidate, bookmark: value })));
     const overlay = document.getElementById('form-overlay');
-    this.app.presentFormModal(`<form class="form-modal bookmark-edit-modal"><div class="modal-head-row"><div><h2>${bookmark.parts.length > 1 ? 'Сложенная закладка' : 'Закладка'}</h2><p>${escapeHtml(source.title)}</p></div><button type="button" class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div>${variants.length > 1 ? `<div class="bookmark-variant-switch" role="group" aria-label="Оригинал и копии">${variants.map((variant, index) => `<button type="button" class="pill-btn ${variant.bookmark.id === id ? 'ai-btn' : ''}" data-bookmark-variant="${index}" aria-pressed="${variant.bookmark.id === id}">${index === 0 ? 'Оригинал' : `Копия ${index}`}</button>`).join('')}</div>` : ''}<div class="bookmark-edit-parts">${bookmark.parts.map((part, index) => `<fieldset class="bookmark-part-fields"><legend>${bookmark.parts.length > 1 ? `Часть ${index + 1} · ` : ''}${labels[part.anchor.kind]}</legend><label>Название<input class="form-control" name="title-${index}" value="${escapeHtml(part.title)}" maxlength="160" required></label><label>Заметка<textarea class="form-control" name="note-${index}" maxlength="4000" rows="3">${escapeHtml(part.note)}</textarea></label><div class="bookmark-edit-extras"><label>Цвет<input type="color" name="color-${index}" value="${part.color || this.app.state.settings.accent}"></label><label>Метки через запятую<input class="form-control" name="tags-${index}" value="${escapeHtml(part.tags.join(', '))}" maxlength="800"></label></div><p class="bookmark-anchor-preview">${part.anchor.status === 'unresolved' ? 'Место потеряно. Выберите его вручную.' : escapeHtml(part.anchor.quote || 'Точная позиция в тексте')}</p><button type="button" class="pill-btn" data-rebind-part="${index}"><i class="bx bx-map-pin"></i> Выбрать новое место</button></fieldset>`).join('')}</div><div class="form-actions"><button type="button" class="pill-btn" data-jump-edit>Перейти</button><button type="button" class="pill-btn danger-btn" data-delete-edit>В корзину</button><button class="pill-btn ai-btn" type="submit">Сохранить</button></div></form>`);
+    this.app.presentFormModal(`<form class="form-modal utility-modal bookmark-edit-modal" novalidate><div class="modal-head-row"><div><h2>${bookmark.parts.length > 1 ? 'Сложенная закладка' : 'Закладка'}</h2><p>${escapeHtml(source.title)}</p></div><button type="button" class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div>${variants.length > 1 ? `<div class="bookmark-variant-switch knowledge-search-filters" role="group" aria-label="Оригинал и копии"><span class="knowledge-selection" aria-hidden="true"></span>${variants.map((variant, index) => `<button type="button" class="pill-btn" data-bookmark-variant="${index}" aria-pressed="${variant.bookmark.id === id}">${index === 0 ? 'Оригинал' : `Копия ${index}`}</button>`).join('')}</div>` : ''}<div class="bookmark-edit-parts">${bookmark.parts.map((part, index) => `<fieldset class="bookmark-part-fields"><legend>${bookmark.parts.length > 1 ? `Часть ${index + 1} · ` : ''}${labels[part.anchor.kind]}</legend><label>Название<input class="form-control" name="title-${index}" value="${escapeHtml(part.title)}" maxlength="160" required></label><label>Заметка<textarea class="form-control" name="note-${index}" maxlength="4000" rows="3">${escapeHtml(part.note)}</textarea></label><div class="bookmark-edit-extras"><div class="bookmark-color-field"><span>Цвет</span>${this.app.renderAccentColorControl({ name: `color-${index}`, value: part.color, label: `части ${index + 1}` })}</div><label>Метки через запятую<input class="form-control" name="tags-${index}" value="${escapeHtml(part.tags.join(', '))}" maxlength="800"></label></div><p class="bookmark-anchor-preview">${part.anchor.status === 'unresolved' ? 'Место потеряно. Выберите его вручную.' : escapeHtml(part.anchor.quote || 'Точная позиция в тексте')}</p><button type="button" class="pill-btn" data-rebind-part="${index}"><i class="bx bx-map-pin"></i> Выбрать новое место</button></fieldset>`).join('')}</div><div class="form-actions"><button type="button" class="pill-btn" data-jump-edit>Перейти</button><button type="button" class="pill-btn danger-btn" data-delete-edit>В корзину</button><button class="pill-btn ai-btn" type="submit">Сохранить</button></div></form>`);
     overlay.classList.add('active');
-    overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
+    requestAnimationFrame(() => { const group = overlay.querySelector('.bookmark-variant-switch'); if (group) this.app.positionKnowledgeSelection(group); });
+    overlay.querySelector('[data-close-form]').onclick = () => { this.editGeneration++; this.app.closeOverlay(overlay); };
     const readValues = () => {
       const form = overlay.querySelector('form'), values = structuredClone(this.source(key).values), value = values.find(value => value.id === id);
       for (const [index, part] of value.parts.entries()) {
-        part.title = form.elements[`title-${index}`].value.trim().slice(0, 160) || part.title;
+        const title = form.elements[`title-${index}`];
+        if (!title.value.trim()) { title.setAttribute('aria-invalid', 'true'); title.focus(); throw new Error('Введите название закладки.'); }
+        title.removeAttribute('aria-invalid'); part.title = title.value.trim().slice(0, 160);
         part.note = form.elements[`note-${index}`].value.slice(0, 4000);
+        const picker = form.elements[`color-${index}`].closest('[data-bookmark-color-picker]');
+        if (picker.classList.contains('invalid')) throw new Error('Укажите цвет шестью HEX-символами.');
         const color = form.elements[`color-${index}`].value;
-        part.color = !part.color && color.toLowerCase() === String(this.app.state.settings.accent).toLowerCase() ? '' : color;
+        part.color = color;
         part.tags = [...new Set(form.elements[`tags-${index}`].value.split(',').map(tag => tag.trim().slice(0, 40)).filter(Boolean))].slice(0, 20);
       }
       return values;
     };
     overlay.querySelectorAll('[data-bookmark-variant]').forEach(button => button.onclick = async () => {
-      try { const values = readValues(); if (JSON.stringify(values) !== JSON.stringify(this.source(key).values)) await this.change(key, values); const variant = variants[Number(button.dataset.bookmarkVariant)]; await this.edit(variant.source.key, variant.bookmark.id, variants); } catch (error) { this.app.toast(error.message); }
+      const generation = this.editGeneration = (this.editGeneration || 0) + 1;
+      try {
+        const values = readValues();
+        if (JSON.stringify(values) !== JSON.stringify(this.source(key).values)) await this.change(key, values);
+        if (generation !== this.editGeneration || !overlay.classList.contains('active')) return;
+        const variant = variants[Number(button.dataset.bookmarkVariant)];
+        await this.edit(variant.source.key, variant.bookmark.id, variants);
+      } catch (error) { this.app.toast(error.message); }
     });
-    overlay.querySelector('[data-jump-edit]').onclick = () => { overlay.classList.remove('active'); document.getElementById('kb-modal')?.classList.remove('active'); this.jump(key, id); };
-    overlay.querySelector('[data-delete-edit]').onclick = () => this.remove(key, id).then(deleted => { if (deleted) overlay.classList.remove('active'); else this.edit(key, id, variants); });
-    overlay.querySelectorAll('[data-rebind-part]').forEach(button => button.onclick = async () => { this.rebinding = { sourceKey: key, id, partIndex: Number(button.dataset.rebindPart) }; overlay.classList.remove('active'); document.getElementById('kb-modal')?.classList.remove('active'); await this.openOwner(source); this.app.toast('Выберите новое место и нажмите «Поставить закладку» или Ctrl+Shift+B.'); });
+    overlay.querySelector('[data-jump-edit]').onclick = () => { this.app.closeOverlay(overlay); this.app.closeOverlay(document.getElementById('kb-modal')); this.jump(key, id); };
+    overlay.querySelector('[data-delete-edit]').onclick = () => this.remove(key, id).then(deleted => { if (deleted) this.app.closeOverlay(overlay); else this.edit(key, id, variants); });
+    overlay.querySelectorAll('[data-rebind-part]').forEach(button => button.onclick = async () => { this.rebinding = { sourceKey: key, id, partIndex: Number(button.dataset.rebindPart) }; this.app.closeOverlay(overlay); this.app.closeOverlay(document.getElementById('kb-modal')); await this.openOwner(source); this.app.toast('Выберите новое место и нажмите «Поставить закладку» или Ctrl+Shift+B.'); });
     overlay.querySelector('form').onsubmit = async event => {
       event.preventDefault();
-      try { await this.change(key, readValues()); overlay.classList.remove('active'); this.app.toast('Закладка сохранена.'); } catch (error) { this.app.toast(error.message); }
+      try { await this.change(key, readValues()); this.app.closeOverlay(overlay); this.app.toast('Закладка сохранена.'); } catch (error) { this.app.toast(error.message); }
     };
   }
   refreshMenus() { for (const paneId of Object.keys(this.app.state.workspace?.panes || {})) this.menu(paneId); }
@@ -549,16 +594,30 @@ export class BookmarkController {
   menu(paneId) {
     const pane = document.querySelector(`.workspace-pane[data-pane-id="${CSS.escape(paneId)}"]`), source = this.paneSource(paneId), actions = pane?.querySelector('.pane-header-actions');
     if (!actions) return;
-    const open = !!pane.querySelector('.pane-bookmarks-dropdown.active');
-    pane.querySelector('.pane-bookmarks-widget')?.remove(); pane.querySelector('.pane-bookmarks-dropdown')?.remove();
+    for (const [id, record] of this.paneMenus) if (!record.widget.isConnected || id === paneId && record.sourceKey !== source?.key) {
+      if (this.openPaneMenuId === id) this.app.closeFloatingMenu('bookmarkPane', { animate: false });
+      record.widget.remove(); record.dropdown.remove(); this.paneMenus.delete(id);
+    }
     if (!source) return;
+    let record = this.paneMenus.get(paneId);
+    if (!record) {
+      const widget = document.createElement('div'); widget.className = 'pane-bookmarks-widget';
+      const dropdown = document.createElement('div'); dropdown.id = `pane-bookmarks-${paneId}`;
+      dropdown.className = 'pane-bookmarks-dropdown popover-surface portal-floating-menu';
+      dropdown.dataset.floatingMenu = 'bookmarkPane'; dropdown.setAttribute('aria-hidden', 'true'); dropdown.setAttribute('aria-label', 'Закладки текущего текста');
+      record = { widget, dropdown, sourceKey: source.key }; this.paneMenus.set(paneId, record);
+      actions.prepend(widget); document.getElementById('floating-menu-portal').append(dropdown);
+    }
+    const { widget, dropdown } = record, open = dropdown.classList.contains('active');
     const values = this.sorted(source), activeId = this.app.state.activeBookmarkIdByPane?.[paneId], index = values.findIndex(value => value.id === activeId);
-    const widget = document.createElement('div'); widget.className = 'pane-bookmarks-widget';
-    widget.innerHTML = `<button type="button" class="pane-bookmarks-btn" aria-expanded="${open}" aria-controls="pane-bookmarks-${paneId}" aria-label="Закладки: ${values.length}"><i class="bx bx-bookmark" aria-hidden="true"></i><span>Закладки</span><span class="bookmarks-count">${values.length}</span><i class="bx bx-chevron-down" aria-hidden="true"></i></button>`;
-    const dropdown = document.createElement('div'); dropdown.id = `pane-bookmarks-${paneId}`; dropdown.className = `pane-bookmarks-dropdown${open ? ' active' : ''}`; dropdown.setAttribute('aria-hidden', String(!open));
-    dropdown.innerHTML = `<div class="pane-bookmarks-header"><strong>Закладки</strong><span class="pane-bookmarks-position">${index < 0 ? '—' : index + 1} / ${values.length}</span><div class="pane-bookmarks-nav"><button type="button" class="pane-bookmarks-nav-btn" data-direction="-1" aria-label="Предыдущая закладка"${values.length ? '' : ' disabled'}><i class="bx bx-chevron-left"></i></button><button type="button" class="pane-bookmarks-nav-btn" data-direction="1" aria-label="Следующая закладка"${values.length ? '' : ' disabled'}><i class="bx bx-chevron-right"></i></button></div></div><div class="pane-bookmarks-list">${values.length ? values.map(value => `<div class="pane-bookmarks-item${value.id === activeId ? ' active' : ''}"><button type="button" class="pane-bookmarks-item-text" data-jump="${escapeHtml(value.id)}">${escapeHtml(titleOf(value))}</button><button type="button" class="pane-bookmarks-item-delete btn-icon" data-edit="${escapeHtml(value.id)}" aria-label="Изменить закладку"><i class="bx bx-pencil"></i></button><button type="button" class="pane-bookmarks-item-delete btn-icon" data-delete="${escapeHtml(value.id)}" aria-label="Удалить закладку"><i class="bx bx-trash"></i></button></div>`).join('') : '<p class="pane-bookmarks-empty">Выберите место в тексте, чтобы установить закладку.</p>'}</div><button type="button" class="pane-bookmarks-add"><i class="bx bx-plus"></i> Добавить в текущем месте</button>`;
-    const close = () => { dropdown.classList.remove('active'); dropdown.setAttribute('aria-hidden', 'true'); widget.querySelector('button').setAttribute('aria-expanded', 'false'); };
-    widget.querySelector('button').onclick = event => { event.stopPropagation(); const isOpen = dropdown.classList.toggle('active'); dropdown.setAttribute('aria-hidden', String(!isOpen)); widget.querySelector('button').setAttribute('aria-expanded', String(isOpen)); };
+    this.app.updateSurfaceHTML(widget, `<button type="button" class="pane-bookmarks-btn" aria-expanded="${open}" aria-controls="pane-bookmarks-${paneId}" aria-label="Закладки: ${values.length}"><i class="bx bx-bookmark" aria-hidden="true"></i><span>Закладки</span><span class="bookmarks-count">${values.length}</span><i class="bx bx-chevron-down" aria-hidden="true"></i></button>`, { animate: false });
+    this.app.updateSurfaceHTML(dropdown, `<div class="pane-bookmarks-header"><strong>Закладки</strong><span class="pane-bookmarks-position">${index < 0 ? '—' : index + 1} / ${values.length}</span><div class="pane-bookmarks-nav"><button type="button" class="pane-bookmarks-nav-btn" data-direction="-1" aria-label="Предыдущая закладка"${values.length ? '' : ' disabled'}><i class="bx bx-chevron-left"></i></button><button type="button" class="pane-bookmarks-nav-btn" data-direction="1" aria-label="Следующая закладка"${values.length ? '' : ' disabled'}><i class="bx bx-chevron-right"></i></button></div></div><div class="pane-bookmarks-list">${values.length ? values.map(value => `<div class="pane-bookmarks-item${value.id === activeId ? ' active' : ''}"><button type="button" class="pane-bookmarks-item-text" data-jump="${escapeHtml(value.id)}">${escapeHtml(titleOf(value))}</button><button type="button" class="pane-bookmarks-item-delete btn-icon" data-edit="${escapeHtml(value.id)}" aria-label="Изменить закладку"><i class="bx bx-pencil"></i></button><button type="button" class="pane-bookmarks-item-delete btn-icon" data-delete="${escapeHtml(value.id)}" aria-label="Удалить закладку"><i class="bx bx-trash"></i></button></div>`).join('') : '<p class="pane-bookmarks-empty">Выберите место в тексте, чтобы установить закладку.</p>'}</div><button type="button" class="pane-bookmarks-add"><i class="bx bx-plus"></i> Добавить в текущем месте</button>`);
+    const close = () => { if (this.openPaneMenuId === paneId) this.app.closeFloatingMenu('bookmarkPane'); };
+    widget.querySelector('button').onclick = event => {
+      event.stopPropagation();
+      if (this.openPaneMenuId === paneId && this.app.isFloatingMenuOpen('bookmarkPane')) close();
+      else { this.app.closeFloatingMenu('bookmarkPane'); this.openPaneMenuId = paneId; this.app.openFloatingMenu('bookmarkPane'); }
+    };
     dropdown.querySelector('.pane-bookmarks-add').onpointerdown = event => event.preventDefault();
     dropdown.querySelector('.pane-bookmarks-add').onclick = () => this.addCurrent(paneId);
     dropdown.querySelectorAll('[data-jump]').forEach(button => button.onclick = () => { close(); this.jump(source.key, button.dataset.jump, paneId); });
@@ -572,20 +631,36 @@ export class BookmarkController {
       if (target < 0 || target >= values.length) { if (!this.settings.bookmarkWrap) return; target = direction > 0 ? 0 : values.length - 1; }
       this.jump(source.key, values[target].id, paneId);
     });
-    const outside = event => { if (!widget.contains(event.target) && !dropdown.contains(event.target)) close(); };
-    const key = event => { if (event.key === 'Escape' && dropdown.classList.contains('active')) { close(); widget.querySelector('button').focus(); } };
-    document.addEventListener('click', outside); document.addEventListener('keydown', key);
-    const observer = new MutationObserver(() => { if (!widget.isConnected) { observer.disconnect(); document.removeEventListener('click', outside); document.removeEventListener('keydown', key); } }); observer.observe(pane, { childList: true });
-    actions.prepend(widget); pane.append(dropdown);
   }
   mobileList() {
     const paneId = this.app.state.workspace.focusedPaneId, source = this.paneSource(paneId), values = source ? this.sorted(source) : [];
-    return `${this.app.mobilePanelHeader('Закладки', source?.title || 'Текущий текст')}<div class="mobile-panel-body"><button class="pill-btn ai-btn" data-action="mobile-add-bookmark"${source ? '' : ' disabled'}><i class="bx bx-plus"></i> В текущем месте</button><div class="mobile-bookmarks-list">${values.length ? values.map((bookmark, index) => `<div class="mobile-bookmark-row"><button data-action="mobile-jump-bookmark" data-bookmark-id="${escapeHtml(bookmark.id)}" data-bookmark-pane="${paneId}"><i class="bx bx-bookmark"></i><span><small>Закладка ${index + 1}</small><strong>${escapeHtml(titleOf(bookmark))}</strong></span></button><button type="button" class="mini-icon-btn" data-bookmark-action="edit" data-owner="${escapeHtml(source.key)}" data-bookmark-id="${escapeHtml(bookmark.id)}" aria-label="Изменить закладку"><i class="bx bx-pencil"></i></button><button class="mini-icon-btn" data-action="mobile-delete-bookmark" data-bookmark-id="${escapeHtml(bookmark.id)}" aria-label="Удалить закладку"><i class="bx bx-trash"></i></button></div>`).join('') : this.app.emptyStateMarkup('bx-bookmark', 'Сохраните место в тексте', 'Закладка поможет вернуться к нужной сцене.')}</div><button type="button" class="pill-btn" data-bookmark-action="manager">Все закладки</button></div>`;
+    return `${this.app.mobilePanelHeader('Закладки', source?.title || 'Текущий текст')}<div class="mobile-panel-body"><button class="pill-btn ai-btn" data-action="mobile-add-bookmark"${source ? '' : ' disabled'}><i class="bx bx-plus"></i> В текущем месте</button><div class="mobile-bookmarks-list">${values.length ? values.map((bookmark, index) => `<div class="mobile-bookmark-row" data-surface-key="bookmark-${escapeHtml(bookmark.id)}"><button data-action="mobile-jump-bookmark" data-bookmark-id="${escapeHtml(bookmark.id)}" data-bookmark-pane="${paneId}"><i class="bx bx-bookmark"></i><span><small>Закладка ${index + 1}</small><strong>${escapeHtml(titleOf(bookmark))}</strong></span></button><button type="button" class="mini-icon-btn" data-bookmark-action="edit" data-owner="${escapeHtml(source.key)}" data-bookmark-id="${escapeHtml(bookmark.id)}" aria-label="Изменить закладку"><i class="bx bx-pencil"></i></button><button class="mini-icon-btn" data-action="mobile-delete-bookmark" data-bookmark-id="${escapeHtml(bookmark.id)}" aria-label="Удалить закладку"><i class="bx bx-trash"></i></button></div>`).join('') : this.app.emptyStateMarkup('bx-bookmark', 'Сохраните место в тексте', 'Закладка поможет вернуться к нужной сцене.')}</div><button type="button" class="pill-btn" data-bookmark-action="manager">Все закладки</button></div>`;
+  }
+  setPartColor(picker, value, { input = false } = {}) {
+    const color = this.app.normalizeAccentHex(value), effective = color || this.app.state.settings.accent;
+    picker.classList.toggle('invalid', !!value && !color);
+    picker.querySelector('[data-bookmark-color-hex]').setAttribute('aria-invalid', String(!!value && !color));
+    if (value && !color) return;
+    picker.querySelector('input[type="hidden"]').value = color; picker.style.setProperty('--accent-preview', effective);
+    if (!input) picker.querySelector('[data-bookmark-color-hex]').value = effective.slice(1);
+    picker.querySelectorAll('[data-bookmark-color]').forEach(button => {
+      const selected = button.dataset.bookmarkColor ? this.app.normalizeAccentHex(button.dataset.bookmarkColor) === color : !color;
+      button.classList.toggle('active', selected); button.setAttribute('aria-pressed', String(selected));
+    });
   }
   handleClick(event) {
+    if (event.target.closest('.bookmark-manager .nocturne-select')) this.app.closeFloatingMenu('bookmarkScope');
+    const colorButton = event.target.closest('[data-bookmark-color], [data-bookmark-color-focus]');
+    if (colorButton) {
+      const picker = colorButton.closest('[data-bookmark-color-picker]');
+      if (colorButton.hasAttribute('data-bookmark-color-focus')) { const hex = picker.querySelector('[data-bookmark-color-hex]'); hex.focus(); hex.select(); }
+      else this.setPartColor(picker, colorButton.dataset.bookmarkColor);
+      return true;
+    }
     const button = event.target.closest('[data-bookmark-action]');
     if (!button) return false;
     const action = button.dataset.bookmarkAction, key = button.dataset.owner, id = button.dataset.bookmarkId;
+    if (!['scope', 'scope-menu'].includes(action)) { this.app.closeAllFloatingMenus(); this.app.closeSettingsSelects(); }
     const run = async () => {
       if (action === 'add-notes') {
         const field = document.querySelector(this.app.isMobileLayout() ? '[data-mobile-notes-input]' : '#notes-input'), source = this.sourceForElement(field);
@@ -595,10 +670,23 @@ export class BookmarkController {
         await this.addContext(context);
       }
       if (action === 'add') await this.addContext({ ...this.capture(this.app.state.workspace.focusedPaneId), sourceKey: key });
-      if (action === 'scope') { this.filter = button.dataset.value; const switcher = button.closest('.bookmark-scope-switch'); switcher.style.setProperty('--bookmark-tab-index', ['lore', 'docs', 'all'].indexOf(this.filter)); switcher.querySelectorAll('button').forEach(element => element.setAttribute('aria-pressed', String(element === button))); this.refreshManager(); }
+      if (action === 'scope-menu') this.openScopeMenu(button);
+      if (action === 'scope') {
+        this.filter = button.dataset.value; this.app.closeFloatingMenu('bookmarkScope');
+        const [, icon, label] = this.scopeOptions().find(([value]) => value === this.filter);
+        document.querySelectorAll('.bookmark-scope-trigger').forEach(trigger => {
+          trigger.setAttribute('aria-label', `Область закладок: ${label}`);
+          const content = trigger.querySelector('.review-mode-trigger-content');
+          this.app.transitionReviewModeSurface(content, () => this.app.animateHeightTransition(trigger, () => {
+            content.querySelector('span').textContent = label;
+            content.querySelector('i').className = `bx ${icon} review-mode-trigger-icon`;
+          }, { width: true, duration: 240 }), { key: this.filter });
+        });
+        this.scopeAnchor?.focus({ preventScroll: true }); this.refreshManager();
+      }
       if (action === 'edit') await this.edit(key, id);
       if (action === 'delete') await this.remove(key, id);
-      if (action === 'jump') { document.getElementById('kb-modal')?.classList.remove('active'); await this.jump(key, id); }
+      if (action === 'jump') { this.app.closeOverlay(document.getElementById('kb-modal')); await this.jump(key, id); }
       if (action === 'manager') { this.app.state.activeLoreDetail = null; this.app.state.activeKbTab = 'bookmarks'; this.app.state.mobile.kbTab = 'bookmarks'; if (this.app.isMobileLayout()) this.app.switchMobileTab('lore'); else this.app.openKb('bookmarks'); }
       if (action === 'select-all') { for (const group of this.groups()) for (const variant of group) this.selected.add(`${variant.source.key}~${variant.bookmark.id}`); this.refreshManager(); }
       if (action === 'delete-selected') {
@@ -619,10 +707,12 @@ export class BookmarkController {
     run().catch(error => this.app.toast(error.message)); return true;
   }
   handleInput(event) {
+    if (event.target.closest('.bookmark-edit-modal') && event.target.name?.startsWith('title-')) event.target.removeAttribute('aria-invalid');
+    if (event.target.matches('[data-bookmark-color-hex]')) { this.setPartColor(event.target.closest('[data-bookmark-color-picker]'), `#${event.target.value}`, { input: true }); return true; }
     if (this.sourceForElement(event.target)) { this.lastPlainInput = performance.now(); this.refresh(); }
     if (event.target.matches('[data-bookmark-search]')) { this.query = event.target.value; this.refreshManager(); return true; }
     if (event.target.matches('[data-bookmark-status]')) { this.status = event.target.value; this.refreshManager(); return true; }
-    if (event.target.matches('[data-bookmark-select]')) { const key = `${event.target.dataset.bookmarkSelect}~${event.target.dataset.bookmarkId}`; if (event.target.checked) this.selected.add(key); else this.selected.delete(key); return true; }
+    if (event.target.matches('[data-bookmark-select]')) { const key = `${event.target.dataset.bookmarkSelect}~${event.target.dataset.bookmarkId}`; if (event.target.checked) this.selected.add(key); else this.selected.delete(key); this.refreshManager(); return true; }
     return false;
   }
   settingsContent(row, toggle, select, range) {

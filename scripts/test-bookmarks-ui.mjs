@@ -76,7 +76,7 @@ try {
   });
   await check('bookmark management and settings expose requested controls safely', async page => {
     await page.evaluate(async()=>{const a=window.nocturneApp,e=a.nocturneEditor.get('primary');e.commands.setTextSelection(8);await a.addBookmarkAtCurrentPosition('primary');a.bookmarks.filter='docs';a.openKb('bookmarks');});
-    await page.waitForSelector('.bookmark-manager'); assert.equal(await page.locator('.bookmark-scope-switch button').count(),3);
+    await page.waitForSelector('.bookmark-manager'); await page.locator('.bookmark-scope-trigger').click(); assert.equal(await page.locator('#bookmark-scope-menu [role="menuitemradio"]').count(),3); await page.keyboard.press('Escape');
     await page.locator('.bookmark-manager-main').click(); await page.locator('[name="title-0"]').fill('<img src=x onerror=alert(1)>'); await page.locator('[name="note-0"]').fill('Собственная заметка'); await page.locator('.bookmark-edit-modal [type="submit"]').click();
     await page.waitForSelector('#form-overlay.active', { state: 'hidden' });
     assert.equal(await page.locator('.bookmark-manager-row img').count(),0);assert.match(await page.locator('.bookmark-manager-row').innerText(),/Собственная заметка/);

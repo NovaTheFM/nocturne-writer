@@ -50,7 +50,8 @@ try {
       for (const width of [1024, 1280, 1440, 1920]) {
         await page.setViewportSize({ width, height: 900 });
         for (const mode of ['write', 'editor', 'finalization']) {
-          await page.evaluate(mode => window.nocturneApp.setReviewMode(mode), mode); await page.waitForTimeout(450);
+          await page.evaluate(mode => window.nocturneApp.setReviewMode(mode), mode);
+          await page.waitForFunction(() => { const trigger=document.querySelector('.review-mode-trigger'); return !trigger.getAnimations({subtree:true}).some(animation=>animation.playState==='running') && !trigger.style.width; });
           const sample = await page.evaluate(() => {
             const button = document.querySelector('.review-mode-trigger'), label = button.querySelector('.review-mode-trigger-label');
             const [icon, chevron] = button.querySelectorAll('i'), b = button.getBoundingClientRect(), text = label.getBoundingClientRect();
@@ -170,7 +171,9 @@ try {
       assert.ok(sample.frames.every(frame => Math.min(Math.abs(frame.x - sample.start), Math.abs(frame.x - sample.end)) < 1), `${mode}: controls slide across the row`);
       assert.ok(sample.frames.every(frame => frame.ghosts === 0 && frame.childMotions === 0), `${mode}: independent child motion or overlapping copies`);
       assert.ok(sample.frames.every(frame => frame.labelAlpha < .1 || frame.clipped < 1), `${mode}: visible label gets clipped: ${JSON.stringify(sample.frames)}`);
-      assert.equal(sample.mode, mode); assert.equal(sample.inert, false); samples.push({ mode, ...sample });
+      await page.waitForFunction(() => !document.querySelector('.toolbar-center').inert);
+      const settledInert = await page.locator('.toolbar-center').evaluate(element => element.inert);
+      assert.equal(sample.mode, mode); assert.equal(settledInert, false); samples.push({ mode, ...sample, settledInert });
     }
     return samples;
   }, { recordVideo: { dir: join(directory, 'motion-video'), size: { width: 1440, height: 900 } } });
