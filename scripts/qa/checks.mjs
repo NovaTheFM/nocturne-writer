@@ -35,6 +35,7 @@ export const PROJECT_CHECKS = [
   check('interface-revision', ['scripts/test-interface-revision.mjs'], ['settings', 'lore', 'navigation'], { ports: [5290, 8890] }),
   check('surface-motion', ['scripts/test-surface-motion.mjs'], ['motion', 'navigation'], { ports: [5292, 8892] }),
   check('app-motion', ['scripts/test-app-motion.mjs'], ['motion', 'lore', 'navigation'], { ports: [5294, 8894] }),
+  check('review-mode-ui', ['--import', './scripts/qa/observe-playwright.mjs', 'scripts/test-review-mode-ui.mjs'], ['writing', 'review', 'motion', 'responsive', 'accessibility'], { ownScenarioReport: 'results.json' }),
 ];
 
 export const ARTIFACT_CHECKS = [

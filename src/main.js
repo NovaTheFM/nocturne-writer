@@ -1894,8 +1894,15 @@ class NocturneWriter {
     });
     const trigger = document.querySelector('.review-mode-trigger');
     if (trigger) {
-      trigger.querySelector('.review-mode-trigger-label').textContent = modeLabels[mode][0];
-      trigger.querySelector('.review-mode-trigger-icon').className = `bx ${modeLabels[mode][1]} review-mode-trigger-icon`;
+      const label = trigger.querySelector('.review-mode-trigger-label');
+      const icon = trigger.querySelector('.review-mode-trigger-icon');
+      if (label.textContent !== modeLabels[mode][0]) {
+        this.animateHeightTransition(trigger, () => {
+          label.textContent = modeLabels[mode][0];
+          icon.className = `bx ${modeLabels[mode][1]} review-mode-trigger-icon`;
+          for (const element of [label, icon]) this.runMotion(element, [{ opacity: 0 }, { opacity: 1 }], { duration: 220 });
+        }, { width: true });
+      }
       trigger.setAttribute('aria-label', `Режим работы: ${modeLabels[mode][0]}`);
     }
     document.querySelectorAll('.page-content').forEach((editable) => {
@@ -1916,10 +1923,14 @@ class NocturneWriter {
     if (this.state.reviewMode === mode) return;
     this.state.reviewMode = mode;
     safeSetStorageItem(localStorage, 'nocturne-review-mode', mode);
-    this.applyReviewMode();
+    const toolbar = document.querySelector('.toolbar-center');
+    const targets = toolbar ? [...toolbar.querySelectorAll('.toolbar-history > button, .toolbar-formatting > *, .toolbar-center > .tool-divider, #search-menu-wrap')] : [];
+    this.animateLayoutTransition(toolbar, () => {
+      this.applyReviewMode();
+      this.renderReviewToolbarSlot({ resize: false });
+    }, { targets, duration: .28 });
     this.updateReviewHighlights();
     this.renderReviewNavigator();
-    this.renderReviewToolbarSlot();
     this.renderMobileTopbarStatus();
     this.toast(mode === 'editor' ? 'Режим редактора: текст защищён от ввода.' : mode === 'finalization' ? 'Режим финализации: правки видны и доступны.' : 'Режим письма.', 950);
     
@@ -8935,15 +8946,15 @@ class NocturneWriter {
     el.style.transformOrigin = '';
   }
 
-  animateLayoutTransition(container, mutateDOM) {
+  animateLayoutTransition(container, mutateDOM, { targets = null, duration = .46 } = {}) {
     if (!container || this.shouldReduceSurfaceMotion()) {
       mutateDOM();
       return;
     }
     
     // 1. Record current positions of all animated elements inside container
-    const targets = Array.from(container.querySelectorAll('.doc-item, .section-title, .char-card, .loc-card, .timeline-item, .note-card'));
-    const rawCandidates = targets.length ? targets : Array.from(container.children);
+    const matched = targets || Array.from(container.querySelectorAll('.doc-item, .section-title, .char-card, .loc-card, .timeline-item, .note-card'));
+    const rawCandidates = matched.length ? matched : Array.from(container.children);
     const candidateList = rawCandidates.filter(el => !el.matches('h1, h2, h3, h4, header, .kb-header, .kb-pane-breadcrumb, .pane-back-btn'));
     const visibility = new Map(candidateList.map(element => [element, element.getClientRects().length ? { rect: element.getBoundingClientRect(), font: getComputedStyle(element).font, color: getComputedStyle(element).color } : null]));
     const animatePresence = () => {
@@ -8967,25 +8978,25 @@ class NocturneWriter {
       animatePresence();
       const transitions = new Map(candidateList.map(element => [element, element.style.transition]));
       candidateList.forEach(element => { element.style.transition = 'none'; element.classList.add('is-flipping'); });
+      const restore = () => {
+        candidateList.forEach(el => {
+          el.style.transition = transitions.get(el);
+          el.classList.remove('is-flipping');
+          el._isFlippingGrid = false;
+          const zone = el.closest('[data-dnd-zone]');
+          if (zone && zone._prevPosMap) zone._prevPosMap.set(el, { left: el.offsetLeft, top: el.offsetTop });
+        });
+      };
       Flip.from(state, {
-        duration: 0.46,
+        duration,
         ease: 'power3.out',
         absolute: false,
         nested: true,
         onStart: () => {
           candidateList.forEach(el => { el._isFlippingGrid = true; });
         },
-        onComplete: () => {
-          candidateList.forEach(el => {
-            el.style.transition = transitions.get(el);
-            el.classList.remove('is-flipping');
-            el._isFlippingGrid = false;
-            const zone = el.closest('[data-dnd-zone]');
-            if (zone && zone._prevPosMap) {
-              zone._prevPosMap.set(el, { left: el.offsetLeft, top: el.offsetTop });
-            }
-          });
-        }
+        onComplete: restore,
+        onInterrupt: restore,
       });
       return;
     }
@@ -12807,25 +12818,31 @@ class NocturneWriter {
     }
   }
 
-  renderReviewToolbarSlot() {
+  renderReviewToolbarSlot({ resize = true } = {}) {
     const slot = document.getElementById('review-toolbar-slot');
     if (!slot) return;
-    const updateSlot = html => {
-      this.animateHeightTransition(slot, () => this.updateSurfaceHTML(slot, html), { width: true });
+    const mode = this.state.reviewMode || 'write';
+    const updateSlot = (html, className) => {
+      const modeChanged = slot.__reviewMode !== undefined && slot.__reviewMode !== mode;
+      const change = () => {
+        slot.className = className;
+        this.updateSurfaceHTML(slot, html, { animate: false });
+      };
+      const update = () => modeChanged ? this.animateViewChange(slot, change, { distance: 4, startOpacity: 0 }) : change();
+      if (resize) this.animateHeightTransition(slot, update, { width: true });
+      else update();
+      slot.__reviewMode = mode;
       const mobileSlot = document.getElementById('mobile-review-toolbar');
       if (mobileSlot) this.updateSurfaceHTML(mobileSlot, html);
     };
-    const mode = this.state.reviewMode || 'write';
     if (mode === 'write') {
-      updateSlot('');
-      slot.className = 'review-toolbar-slot empty';
+      updateSlot('', 'review-toolbar-slot empty');
       delete slot.dataset.selectionReady;
       return;
     }
     if (mode === 'editor') {
       const enabled = this.hasFocusedTextSelection();
       const disabled = enabled ? '' : 'disabled';
-      slot.className = 'review-toolbar-slot editor-tools';
       slot.dataset.selectionReady = String(enabled);
       updateSlot(`
         <span class="review-toolbar-caption"><i class="bx bx-comment-edit"></i>${enabled ? 'Пометки к выделению' : 'Выделите текст для пометки'}</span>
@@ -12835,17 +12852,16 @@ class NocturneWriter {
           <button class="review-tool-btn icon-only has-chevron" data-action="toggle-review-issue-menu" title="${enabled ? 'Проблема' : 'Проблема — выделите текст'}" aria-label="Проблема" ${disabled}><i class="bx bx-error-circle"></i><i class="bx bx-chevron-down review-chevron"></i></button>
         </div>
         <button class="review-tool-btn icon-only" data-action="quick-typo-rule" title="${enabled ? 'В словарь' : 'В словарь — выделите текст'}" aria-label="В словарь" ${disabled}><i class="bx bx-book-add"></i></button>
-      `);
+      `, 'review-toolbar-slot editor-tools');
       return;
     }
     const marks = this.reviewMarksForFocusedDoc();
     const docId = this.getFocusedDoc()?.id;
     const index = Math.min(marks.length - 1, Math.max(0, this.state.currentReviewIndexByDoc[docId] || 0));
-    slot.className = 'review-toolbar-slot finalization-tools';
     delete slot.dataset.selectionReady;
     updateSlot(marks.length
       ? `<div class="review-toolbar-nav"><button class="review-tool-btn icon-only" data-action="review-prev" title="Предыдущая правка" aria-label="Предыдущая правка"><i class="bx bx-chevron-left"></i></button><span class="review-count">${index + 1} / ${marks.length}</span><button class="review-tool-btn icon-only" data-action="review-next" title="Следующая правка" aria-label="Следующая правка"><i class="bx bx-chevron-right"></i></button></div>`
-      : '<span class="review-empty-chip"><i class="bx bx-check-circle"></i>Правок нет</span>');
+      : '<span class="review-empty-chip"><i class="bx bx-check-circle"></i>Правок нет</span>', 'review-toolbar-slot finalization-tools');
   }
 
   renderReviewNavigator() {
@@ -13389,11 +13405,11 @@ class NocturneWriter {
     return motion;
   }
 
-  animateViewChange(element, update, { direction = 1 } = {}) {
+  animateViewChange(element, update, { direction = 1, distance = 8, startOpacity = .35 } = {}) {
     if (!element) { update(); return; }
     if (this.isSurfaceVisible(element)) this.animateSurfaceContent(element, true);
     update();
-    if (this.isSurfaceVisible(element)) this.runMotion(element, [{ opacity: .35, transform: `translateX(${direction * 8}px)` }, { opacity: 1, transform: 'translateX(0)' }], { channel: 'view', duration: 240 });
+    if (this.isSurfaceVisible(element)) this.runMotion(element, [{ opacity: startOpacity, transform: `translateX(${direction * distance}px)` }, { opacity: 1, transform: 'translateX(0)' }], { channel: 'view', duration: 240 });
   }
 
   isSurfaceVisible(element) {
@@ -13404,13 +13420,13 @@ class NocturneWriter {
     return (!overlay || overlay.classList.contains('active')) && getComputedStyle(element).visibility !== 'hidden';
   }
 
-  updateSurfaceHTML(element, html, { key = null, preserve = true, resize = false } = {}) {
+  updateSurfaceHTML(element, html, { key = null, preserve = true, resize = false, animate = true } = {}) {
     if (!element || (element.__motionMarkup === html && element.__motionView === key)) return;
     const next = element.cloneNode(false); next.innerHTML = html;
     const viewChanged = key !== null && element.__motionView !== undefined && element.__motionView !== key;
-    const update = () => preserve ? this.patchSurface(element, next) : element.replaceChildren(...next.childNodes);
-    const change = () => viewChanged || !preserve ? this.animateViewChange(element, update, { direction: this.state.mobile.tabDirection || 1 }) : update();
-    if (resize && this.isSurfaceVisible(element)) this.animateHeightTransition(element.closest('.form-modal, .cleaner-modal, .command-palette-panel') || element, change);
+    const update = () => preserve ? this.patchSurface(element, next, true, animate) : element.replaceChildren(...next.childNodes);
+    const change = () => animate && (viewChanged || !preserve) ? this.animateViewChange(element, update, { direction: this.state.mobile.tabDirection || 1 }) : update();
+    if (animate && resize && this.isSurfaceVisible(element)) this.animateHeightTransition(element.closest('.form-modal, .cleaner-modal, .command-palette-panel') || element, change);
     else change();
     element.__motionMarkup = html; element.__motionView = key;
   }
@@ -13469,8 +13485,8 @@ class NocturneWriter {
     if (exiting) animation.finished.then(() => { target.remove(); if (element.__exitGhost === target) element.__exitGhost = null; });
   }
 
-  patchSurface(element, next, resize = true) {
-    if (resize && element.matches('.folder-docs, .mobile-folder-docs') && element.classList.contains('collapsed') !== next.classList.contains('collapsed')) {
+  patchSurface(element, next, resize = true, animate = true) {
+    if (animate && resize && element.matches('.folder-docs, .mobile-folder-docs') && element.classList.contains('collapsed') !== next.classList.contains('collapsed')) {
       this.animateHeightTransition(element, () => this.patchSurface(element, next, false)); return;
     }
     const focus = document.activeElement;
@@ -13499,29 +13515,29 @@ class NocturneWriter {
         if (current) {
           used.add(current);
           if (element.childNodes[index] !== current) element.insertBefore(current, element.childNodes[index] || null);
-          if (current.nodeType === Node.ELEMENT_NODE) this.patchSurface(current, target);
+          if (current.nodeType === Node.ELEMENT_NODE) this.patchSurface(current, target, true, animate);
           else if (current.nodeValue !== target.nodeValue) { current.nodeValue = target.nodeValue; textChanged = true; }
         } else {
           const added = target.cloneNode(true);
           element.insertBefore(added, element.childNodes[index] || null);
-          if (added.nodeType === Node.ELEMENT_NODE && !added.classList.contains('new-card-entrance') && !(this.kbRendering && added.closest('#kb-modal'))) this.animateSurfaceContent(added);
+          if (animate && added.nodeType === Node.ELEMENT_NODE && !added.classList.contains('new-card-entrance') && !(this.kbRendering && added.closest('#kb-modal'))) this.animateSurfaceContent(added);
         }
       }
       for (const node of oldNodes) if (!used.has(node)) {
-        if (node.nodeType === Node.ELEMENT_NODE && node.matches('.utility-row, .utility-list, .utility-empty, .form-actions, .modal-head-row, .dump-summary-grid, .sync-device-card, .sync-start, .sync-pairing, .sync-connection-form, .sync-options-content, .sync-find-computer, .sync-feedback, .conflict-versions')) this.animateSurfaceContent(node, true);
+        if (animate && node.nodeType === Node.ELEMENT_NODE && node.matches('.utility-row, .utility-list, .utility-empty, .form-actions, .modal-head-row, .dump-summary-grid, .sync-device-card, .sync-start, .sync-pairing, .sync-connection-form, .sync-options-content, .sync-find-computer, .sync-feedback, .conflict-versions')) this.animateSurfaceContent(node, true);
         node.remove();
       }
     };
     const structural = oldNodes.length !== nextNodes.length || oldNodes.some((node, index) => this.surfaceNodeKey(node) !== this.surfaceNodeKey(nextNodes[index] || next));
     const settingsChanged = element.matches('.settings-body') && element.querySelector('.settings-header h2')?.textContent !== next.querySelector('.settings-header h2')?.textContent;
-    if (settingsChanged) this.animateViewChange(element, update);
-    else if (structural && element.matches('.sync-mobile-content')) this.animateHeightTransition(element, update);
-    else if (structural && !(this.kbRendering && element.closest('#kb-modal')) && element.matches('.utility-list, .sync-device-list, .docs-list-scroll, .folder-docs, .mobile-folder-docs, .command-group, .command-palette-results, .character-grid, .locations-grid, .timeline-container, .mobile-lore-grid')) this.animateLayoutTransition(element, update);
+    if (animate && settingsChanged) this.animateViewChange(element, update);
+    else if (animate && structural && element.matches('.sync-mobile-content')) this.animateHeightTransition(element, update);
+    else if (animate && structural && !(this.kbRendering && element.closest('#kb-modal')) && element.matches('.utility-list, .sync-device-list, .docs-list-scroll, .folder-docs, .mobile-folder-docs, .command-group, .command-palette-results, .character-grid, .locations-grid, .timeline-container, .mobile-lore-grid')) this.animateLayoutTransition(element, update);
     else update();
-    if (textChanged && !element.closest('input, textarea, [contenteditable="true"], .page-content') && this.isSurfaceVisible(element)) {
+    if (animate && textChanged && !element.closest('input, textarea, [contenteditable="true"], .page-content') && this.isSurfaceVisible(element)) {
       this.runMotion(element, [{ opacity: .6 }, { opacity: 1 }], { channel: 'text', duration: 160, easing: 'ease-out' });
     }
-    if (symbolChanged) this.runMotion(element, [{ opacity: .25 }, { opacity: 1 }], { duration: 160, easing: 'ease-out' });
+    if (animate && symbolChanged) this.runMotion(element, [{ opacity: .25 }, { opacity: 1 }], { duration: 160, easing: 'ease-out' });
   }
 
   presentOverlay(overlay, html, { activate = false } = {}) {
