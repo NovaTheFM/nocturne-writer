@@ -1,0 +1,150 @@
+﻿{
+    "long_answer_chars":  3679,
+    "visual_qa":  "All 11 Word body page previews inspected. Full print rendering unavailable because LibreOffice/soffice is missing; headers, footers and rendering-specific list markers are not visually verified.",
+    "answer_fields":  15,
+    "question_numbers":  [
+                             "1.",
+                             "2.",
+                             "3.",
+                             "4.",
+                             "5.",
+                             "6.",
+                             "7.",
+                             "8.",
+                             "9.",
+                             "10.",
+                             "11.",
+                             "12.",
+                             "13.",
+                             "14.",
+                             "15."
+                         ],
+    "document_protected":  false,
+    "word_pages":  11,
+    "original_question_text_preserved":  true,
+    "questions":  15,
+    "fields":  [
+                   {
+                       "locked":  false,
+                       "page":  2,
+                       "tag":  "feedback-core-1"
+                   },
+                   {
+                       "locked":  false,
+                       "page":  3,
+                       "tag":  "answer-01"
+                   },
+                   {
+                       "locked":  false,
+                       "page":  3,
+                       "tag":  "answer-02"
+                   },
+                   {
+                       "locked":  false,
+                       "page":  3,
+                       "tag":  "answer-03"
+                   },
+                   {
+                       "locked":  false,
+                       "page":  3,
+                       "tag":  "answer-04"
+                   },
+                   {
+                       "locked":  false,
+                       "page":  3,
+                       "tag":  "answer-05"
+                   },
+                   {
+                       "locked":  false,
+                       "page":  4,
+                       "tag":  "feedback-core-2"
+                   },
+                   {
+                       "locked":  false,
+                       "page":  5,
+                       "tag":  "answer-06"
+                   },
+                   {
+                       "locked":  false,
+                       "page":  5,
+                       "tag":  "answer-07"
+                   },
+                   {
+                       "locked":  false,
+                       "page":  5,
+                       "tag":  "answer-08"
+                   },
+                   {
+                       "locked":  false,
+                       "page":  5,
+                       "tag":  "answer-09"
+                   },
+                   {
+                       "locked":  false,
+                       "page":  5,
+                       "tag":  "answer-10"
+                   },
+                   {
+                       "locked":  false,
+                       "page":  6,
+                       "tag":  "feedback-core-3"
+                   },
+                   {
+                       "locked":  false,
+                       "page":  7,
+                       "tag":  "answer-11"
+                   },
+                   {
+                       "locked":  false,
+                       "page":  7,
+                       "tag":  "answer-12"
+                   },
+                   {
+                       "locked":  false,
+                       "page":  7,
+                       "tag":  "answer-13"
+                   },
+                   {
+                       "locked":  false,
+                       "page":  7,
+                       "tag":  "answer-14"
+                   },
+                   {
+                       "locked":  false,
+                       "page":  7,
+                       "tag":  "answer-15"
+                   },
+                   {
+                       "locked":  false,
+                       "page":  8,
+                       "tag":  "feedback-extra-1"
+                   },
+                   {
+                       "locked":  false,
+                       "page":  8,
+                       "tag":  "feedback-extra-2"
+                   },
+                   {
+                       "locked":  false,
+                       "page":  9,
+                       "tag":  "feedback-extra-3"
+                   },
+                   {
+                       "locked":  false,
+                       "page":  9,
+                       "tag":  "feedback-extra-4"
+                   },
+                   {
+                       "locked":  false,
+                       "page":  10,
+                       "tag":  "feedback-extra-5"
+                   },
+                   {
+                       "locked":  false,
+                       "page":  10,
+                       "tag":  "feedback-extra-6"
+                   }
+               ],
+    "correction_fields":  9,
+    "long_answer_expanded_pages":  13
+}
