@@ -314,7 +314,8 @@ try {
   }, { reducedMotion: 'reduce' });
   await check('mobile search and more menu work by touch, preserve keyboard focus and back closes note search first', async page => {
     await openSearch(page);
-    assert.equal(await page.locator('[data-mobile-kb-tab]').count(), 6);
+    assert.equal(await page.locator('.mobile-lore-tabs [data-mobile-kb-tab]').count(), 6);
+    assert.equal(await page.locator('.kb-global-tab[data-mobile-kb-tab="books"]').count(), 1);
     await query(page, 'Лунная'); assert.equal(await page.locator('.knowledge-result').count(), 1);
     assert.equal(await page.locator('[data-knowledge-query]').evaluate(el => el === document.activeElement), true);
     await page.screenshot({ path: join(directory, 'mobile-search.png') });

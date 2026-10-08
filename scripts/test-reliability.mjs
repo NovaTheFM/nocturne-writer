@@ -127,8 +127,11 @@ try {
       await a.createSnapshot();
       a.nocturneEditor.get('primary').commands.setContent('<p>New version</p>'); a.getFocusedDoc().notes = 'New notes';
       await a.showHistory();
-      document.querySelector('[data-restore]').click();
-      await new Promise(resolve => setTimeout(resolve, 200));
+      const snapshotId = document.querySelector('[data-history-preview]').dataset.historyPreview;
+      await a.history.open(a.getFocusedDoc().id, snapshotId);
+      document.querySelector('[name="restore-notes"]').checked = true;
+      document.querySelector('[data-history-apply]').click();
+      for (let index = 0; index < 40 && a.getFocusedDoc().notes !== 'Original notes'; index++) await new Promise(resolve => setTimeout(resolve, 25));
       return { text: a.nocturneEditor.get('primary').getText(), notes: a.getFocusedDoc().notes };
     });
     assert.equal(result.text, 'Original snapshot text'); assert.equal(result.notes, 'Original notes');

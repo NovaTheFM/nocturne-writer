@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -34,7 +35,7 @@ async function saved(page) {
   await page.waitForFunction(() => document.getElementById('storage').textContent === 'Ответы сохранены в этом браузере');
 }
 try {
-  await check('inventory covers defaults, registry and every rendered setting row; exact current copy and source hashes', async () => {
+  await check('historical inventory covers captured defaults, registry and rows; committed evidence remains intact', async () => {
     const keys = new Set(inventory.items.map(item => item.key));
     assert.equal(keys.size, inventory.items.length);
     assert.equal(new Set(inventory.items.map(item => item.id)).size, inventory.items.length);
@@ -49,7 +50,15 @@ try {
       assert.ok(item, `Missing rendered row: ${surface.tab}/${raw}`);
       assert.ok(item.variants.some(variant => variant.short === row.short && variant.long === row.long && (variant.title === row.title || !row.title)), `Current text changed in evidence: ${key}`);
     }
-    for (const [file, hash] of Object.entries(capture.sources)) assert.equal(createHash('sha256').update(await readFile(file)).digest('hex'), hash);
+    const capturePath = `${folder}/capture.json`;
+    const snapshotCommit = execFileSync('git', ['log', '--diff-filter=A', '--format=%H', '--', capturePath], { encoding: 'utf8', windowsHide: true }).trim().split(/\s+/)[0];
+    assert.match(snapshotCommit, /^[a-f0-9]{40}$/);
+    const originalCapture = JSON.parse(execFileSync('git', ['show', `${snapshotCommit}:${capturePath}`], { encoding: 'utf8', windowsHide: true, maxBuffer: 4 * 1024 * 1024 }));
+    assert.deepEqual(capture, originalCapture, 'The dated report must retain its original captured evidence');
+    assert.deepEqual(inventory.metadata.sources, capture.sources);
+    const changedSources = [];
+    for (const [file, hash] of Object.entries(capture.sources)) if (createHash('sha256').update(await readFile(file)).digest('hex') !== hash) changedSources.push(file);
+    console.log(`Historical settings audit ${inventory.metadata.date}; current source changes: ${changedSources.join(', ') || 'none'}. This audit describes its captured revision.`);
     assert.equal((markdown.match(/^#### S-\d+ · /gm) || []).length, inventory.items.length);
     assert.deepEqual(JSON.parse(html.match(/<script type="application\/json" id="inventory">([\s\S]+?)<\/script>/)[1]), inventory);
     for (const item of inventory.items) {

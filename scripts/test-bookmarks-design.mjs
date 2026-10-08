@@ -157,10 +157,12 @@ try {
     assert.equal(await trigger.getAttribute('aria-expanded'),'false'); assert.equal(await trigger.evaluate(el => document.activeElement === el),true);
   });
   await check('mobile knowledge navigation persists on bookmark and search tabs; settings route works', async page => {
-    await seed(page); assert.equal(await page.locator('[data-mobile-kb-tab]').count(),6);
+    await seed(page); assert.equal(await page.locator('.mobile-lore-tabs [data-mobile-kb-tab]').count(),6);
+    assert.equal(await page.locator('.kb-global-tab[data-mobile-kb-tab="books"]').count(),1);
     await page.locator('[data-mobile-kb-tab="search"]').click(); await page.locator('[data-mobile-kb-tab="bookmarks"]').click();
     await page.locator('[data-mobile-kb-tab="characters"]').click(); await page.locator('[data-mobile-kb-tab="bookmarks"]').click();
-    await page.waitForTimeout(600); assert.equal(await page.locator('[data-mobile-kb-tab]').count(),6);
+    await page.waitForTimeout(600); assert.equal(await page.locator('.mobile-lore-tabs [data-mobile-kb-tab]').count(),6);
+    assert.equal(await page.locator('.kb-global-tab[data-mobile-kb-tab="books"]').count(),1);
     assert.equal(await page.locator('.bookmark-manager').count(),1);
     assert.ok(await page.locator('.bookmark-scope-trigger').evaluate(el => el.getBoundingClientRect().height >= 44));
     await page.locator('.bookmark-scope-trigger').click();

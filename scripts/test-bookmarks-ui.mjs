@@ -181,7 +181,10 @@ try {
   }, true);
   await check('snapshots restore bookmarks together with text and preserve undo',async page=>{
     await page.evaluate(async()=>{const a=window.nocturneApp,e=a.nocturneEditor.get('primary');e.commands.setTextSelection(8);await a.addBookmarkAtCurrentPosition('primary');await a.createSnapshot();await a.bookmarks.remove(a.bookmarks.paneSource('primary').key,a.getFocusedDoc().bookmarks[0].id,{confirm:false});a.showHistory();});
-    await page.waitForSelector('[data-restore]');await page.locator('[data-restore]').first().click();await page.waitForSelector('#form-overlay.active',{state:'hidden'});assert.equal(await page.evaluate(()=>window.nocturneApp.getFocusedDoc().bookmarks.length),1);
+    await page.locator('[data-history-preview]').first().click();
+    await page.locator('[data-history-apply]').click();
+    await page.waitForFunction(() => window.nocturneApp.getFocusedDoc().bookmarks.length === 1);
+    assert.equal(await page.evaluate(()=>window.nocturneApp.getFocusedDoc().bookmarks.length),1);
     const result=await page.evaluate(async()=>{const a=window.nocturneApp,e=a.nocturneEditor.get('primary');e.commands.undo();const count=a.getFocusedDoc().bookmarks.length;a.state.settings.bookmarkSnapshots=false;const previous=new Set((await a.db.getAll('snapshots')).map(snap=>snap.id));await a.createSnapshot();const snap=(await a.db.getAll('snapshots')).find(snap=>!previous.has(snap.id));return{count,disabled:snap.bookmarks===undefined};});assert.equal(result.count,0);assert.equal(result.disabled,true);
   });
   await check('legacy migration survives reload and unresolved records can be rebound',async page=>{

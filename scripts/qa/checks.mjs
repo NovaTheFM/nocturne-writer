@@ -24,6 +24,7 @@ export const PROJECT_CHECKS = [
   check('bookmarks-ui', ['scripts/test-bookmarks-ui.mjs'], ['writing', 'lore', 'settings', 'touch', 'navigation', 'selection', 'backups'], { ports: [5333, 8933], scenarioReport: 'bookmarks-ui/results.json', timeout: 180_000 }),
   check('bookmarks-design', ['scripts/test-bookmarks-design.mjs'], ['writing', 'lore', 'settings', 'motion', 'touch', 'navigation', 'accessibility', 'visual'], { ports: [5334, 8934], scenarioReport: 'bookmarks-design/results.json', timeout: 180_000 }),
   check('ai-context', ['scripts/test-ai-context.mjs'], ['ai', 'lore']),
+  check('workflow-model', ['--test', 'scripts/test-workflow-model.mjs'], ['writing', 'search', 'settings']),
   check('questionnaire-workflow', ['scripts/test-questionnaire-workflow.mjs'], ['writing', 'search', 'backups', 'ai', 'lore', 'settings', 'motion', 'responsive'], { ports: [5335], timeout: 180_000, ownScenarioReport: 'results.json' }),
   check('reliability', ['scripts/test-reliability.mjs'], ['database', 'writing', 'backups'], { ports: [5276] }),
   check('workflow-tools', ['scripts/test-workflow-tools.mjs'], ['writing', 'security', 'import', 'export', 'backups', 'ai', 'review'], { modes: ['smoke', 'full'], ports: [5282] }),

@@ -245,7 +245,7 @@ body.mobile-shell-active .floating-notes-modal-body { padding: 16px; }
 body.mobile-shell-active .floating-notes-modal h2,
 body.mobile-shell-active .floating-manager-section h3 { color: var(--text-main); }
 body.mobile-shell-active .floating-manager-grid { grid-template-columns: minmax(0, 1fr); }
-body.mobile-shell-active .form-modal { max-height: calc(var(--mobile-viewport-height, 100dvh) - 24px - var(--app-safe-top) - var(--app-safe-bottom)); max-width: 100%; overflow-y: auto; }
+body.mobile-shell-active .form-modal { max-height: calc(min(var(--mobile-viewport-height, 100dvh), 100dvh) - 24px - var(--app-safe-top) - var(--app-safe-bottom)); max-width: 100%; overflow-y: auto; }
 body.mobile-shell-active.mobile-keyboard-open .modal-overlay { top: var(--mobile-viewport-top, 0px); bottom: auto; height: var(--mobile-viewport-height, 100dvh); }
 body.mobile-shell-active .command-palette-panel { height: var(--mobile-viewport-height, 100dvh); background: var(--bg-deep); }
 body.mobile-shell-active .command-palette-mobile-head { padding-top: calc(10px + var(--app-safe-top)); }

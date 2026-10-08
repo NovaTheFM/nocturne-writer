@@ -94,10 +94,12 @@ try {
     assert.ok(result.index >= 0); assert.equal(result.actual, result.expected);
   });
   await check('F22 hidden editor-mode formatting controls cannot receive focus', async page => {
-    await page.evaluate(() => window.nocturneApp.setReviewMode('editor')); await page.waitForTimeout(450);
+    await page.evaluate(() => window.nocturneApp.setReviewMode('editor'));
+    await page.waitForFunction(() => { const toolbar = document.querySelector('.toolbar-center'); return toolbar.dataset.toolbarReviewMode === 'editor' && !toolbar.__reviewModeTransition && !toolbar.inert; }, null, { timeout: 5000 });
     const result = await page.evaluate(() => { const button = document.querySelector('.toolbar-formatting button'); button.focus(); return { focused: document.activeElement === button, inert: button.closest('[inert]') !== null }; });
     assert.equal(result.focused, false); assert.equal(result.inert, true);
-    await page.evaluate(() => window.nocturneApp.setReviewMode('write')); await page.waitForTimeout(450);
+    await page.evaluate(() => window.nocturneApp.setReviewMode('write'));
+    await page.waitForFunction(() => { const toolbar = document.querySelector('.toolbar-center'); return toolbar.dataset.toolbarReviewMode === 'write' && !toolbar.__reviewModeTransition && !toolbar.inert; }, null, { timeout: 5000 });
     assert.equal(await page.evaluate(() => { const b = document.querySelector('.toolbar-formatting button'); b.focus(); return document.activeElement === b; }), true);
   });
   await check('F27 sprint completes and unlocks after its deadline', async page => {

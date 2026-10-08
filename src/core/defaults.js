@@ -1,6 +1,8 @@
 import { bookmarkDefaults } from '../features/bookmark-model.js';
+import { workflowDefaults } from '../features/workflow-settings.js';
 
 export const defaultSettings = {
+  ...workflowDefaults,
   ...bookmarkDefaults,
   automaticBackups: true,
   exportIncludeNotes: false,

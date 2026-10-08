@@ -33,7 +33,7 @@ export async function protectRecord(store, record, { enabled = false, password =
     if (!password) return { id: record.id, value };
     return { id: record.id, value, protectedStore: store, encrypted: await encryptJson(secrets, password) };
   }
-  if (!(SENSITIVE.has(store) || (store === 'settings' && record.id === 'global-notes'))) return record;
+  if (!(SENSITIVE.has(store) || (store === 'settings' && ['global-notes', 'books-library', 'ai-results'].includes(record.id)))) return record;
   if (!password) {
     if (record.encrypted && record.locked) return record;
     throw new Error('Введите мастер-пароль для защищённого сохранения.');
