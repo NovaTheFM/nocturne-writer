@@ -25,7 +25,7 @@ try {
     const result = await page.evaluate(() => {
       const a = window.nocturneApp, modal = document.querySelector('.settings-modal'), tab = modal.querySelector('[data-settings-tab="editor"]');
       tab.focus(); tab.click();
-      return { same: modal === document.querySelector('.settings-modal'), focus: tab === document.activeElement, moving: document.querySelector('.settings-body').getAnimations().length > 0 };
+      return { same: modal === document.querySelector('.settings-modal'), focus: tab === document.activeElement, moving: document.querySelector('.settings-body > .tab-content').getAnimations().length > 0 };
     });
     assert.equal(result.same, true); assert.equal(result.focus, true); assert.equal(result.moving, true); return result;
   });

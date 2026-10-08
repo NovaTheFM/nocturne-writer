@@ -4415,13 +4415,17 @@ body.resizing-floating-note {
   background: rgba(var(--accent-rgb, 139, 92, 246), 0.12);
 }
 .toggle {
+  appearance: none;
+  padding: 0;
+  border: 0;
+  display: block;
   width: 44px;
   height: 24px;
   background: #2a2a35;
   border-radius: 12px;
   position: relative;
   cursor: pointer;
-  transition: 240ms ease;
+  transition: background-color 240ms ease, box-shadow 240ms ease;
   flex-shrink: 0;
 }
 .toggle::after {

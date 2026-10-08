@@ -44,6 +44,7 @@ import { closeHistory } from './vendor/tiptap/nocturne-tiptap.bundle.js';
 import { legacyAstToHtml } from './editor/document-adapter.js';
 import { aiIcon, iconSvg } from './ui/icons.js';
 import { manageModalFocus } from './ui/modal-focus.js';
+import { updateRangeMotion } from './ui/range-motion.js';
 import Sortable from './vendor/sortablejs/sortable.complete.esm.js';
 import { fastdom } from './vendor/fastdom/fastdom.js';
 import { gsap, Flip } from './vendor/gsap/gsap-flip.bundle.js';
@@ -3601,6 +3602,7 @@ class NocturneWriter {
     }
     this.renderMobileTopbarStatus();
     this.updateRangeControls();
+    this.updateWorkflowSelections();
     if (this.state.mobile.activeTab === 'ai' || this.state.mobile.panel === 'ai') {
       this.updateAssistantPanelState();
       if (this.mobileSentimentVisible || this.state.settings.sentimentTimeline) this.drawSentiment(true);
@@ -12889,9 +12891,10 @@ class NocturneWriter {
   surfaceNodeKey(node) {
     if (node.nodeType !== Node.ELEMENT_NODE) return String(node.nodeType);
     const field = node.dataset.syncField || node.getAttribute('name');
-    const childField = node.matches('label') ? node.querySelector('input[data-sync-field]')?.dataset.syncField : '';
+    const childField = node.matches('label, .setting-row') ? (node.querySelector('[data-setting]')?.dataset.setting || node.querySelector('[data-setting-select]')?.dataset.settingSelect || node.querySelector('input, textarea')?.getAttribute('name') || node.querySelector('input[data-sync-field]')?.dataset.syncField) : '';
     const identity = ['docId', 'loreId', 'folderId', 'noteId', 'commandPaletteRun', 'settingsTab', 'kbTab', 'projectId', 'setting', 'settingSelect', 'mobileTab', 'assocTab', 'assocContent', 'ruleId', 'macroId', 'bookmarkId', 'ctxDoc'].find(key => node.dataset[key]);
-    const key = node.dataset.surfaceKey || (identity ? `${identity}:${node.dataset[identity]}` : '') || field || childField || node.dataset.action || node.dataset.value
+    const workflowAction = node.dataset.bookAction ? `book:${node.dataset.bookAction}:${node.dataset.bookId || node.dataset.bookTab || node.dataset.bookFilter || node.dataset.docId || node.dataset.entityId || ''}:${node.dataset.direction || ''}` : node.dataset.historyMode ? `history-mode:${node.dataset.historyMode}` : '';
+    const key = node.dataset.surfaceKey || workflowAction || (identity ? `${identity}:${node.dataset[identity]}` : '') || field || childField || node.dataset.action || node.dataset.value
       || (node.id && !node.id.startsWith('modal-title-') ? node.id : '') || node.classList[0] || '';
     return `${node.tagName}:${key}`;
   }
@@ -13047,6 +13050,28 @@ class NocturneWriter {
   }
 
   patchSurface(element, next, resize = true, animate = true) {
+    if (element.matches('.workflow-choice, [data-range-field]')) {
+      const decoration = element.querySelector(':scope > .knowledge-selection, :scope > .range-motion-rail');
+      if (decoration && !next.querySelector(`:scope > .${decoration.classList[0]}`)) next.append(decoration.cloneNode(true));
+    }
+    if (animate && element.matches('.history-document-view') && element.dataset.historyView !== next.dataset.historyView) {
+      this.animateViewChange(element, () => this.patchSurface(element, next, false, false)); return;
+    }
+    if (animate && element.matches('.book-detail-content') && element.dataset.bookTabView !== next.dataset.bookTabView) {
+      this.animateViewChange(element, () => this.patchSurface(element, next, false, false)); return;
+    }
+    const settingsChanged = element.matches('.settings-body') && element.querySelector('.settings-header h2')?.textContent !== next.querySelector('.settings-header h2')?.textContent;
+    if (animate && settingsChanged) {
+      const header = element.querySelector('.settings-header'), content = element.querySelector('.tab-content');
+      this.closeSettingsSelects();
+      this.patchSurface(header, next.querySelector('.settings-header'), false, false);
+      this.runMotion(header.querySelector('h2'), [{ opacity: .55 }, { opacity: 1 }], { channel: 'settings-title', duration: 180 });
+      this.animateViewChange(content, () => {
+        this.patchSurface(content, next.querySelector('.tab-content'), false, false);
+        element.scrollTo({ top: 0, behavior: 'instant' });
+      });
+      return;
+    }
     if (animate && resize && element.matches('.folder-docs, .mobile-folder-docs') && element.classList.contains('collapsed') !== next.classList.contains('collapsed')) {
       this.animateHeightTransition(element, () => this.patchSurface(element, next, false)); return;
     }
@@ -13090,10 +13115,8 @@ class NocturneWriter {
       }
     };
     const structural = oldNodes.length !== nextNodes.length || oldNodes.some((node, index) => this.surfaceNodeKey(node) !== this.surfaceNodeKey(nextNodes[index] || next));
-    const settingsChanged = element.matches('.settings-body') && element.querySelector('.settings-header h2')?.textContent !== next.querySelector('.settings-header h2')?.textContent;
-    if (animate && settingsChanged) this.animateViewChange(element, update);
-    else if (animate && structural && element.matches('.sync-mobile-content')) this.animateHeightTransition(element, update);
-    else if (animate && structural && !(this.kbRendering && element.closest('#kb-modal')) && element.matches('.utility-list, .sync-device-list, .docs-list-scroll, .folder-docs, .mobile-folder-docs, .command-group, .command-palette-results, .character-grid, .locations-grid, .timeline-container, .mobile-lore-grid, .bookmark-manager-list, .mobile-bookmarks-list, .pane-bookmarks-list')) this.animateLayoutTransition(element, update);
+    if (animate && structural && element.matches('.sync-mobile-content')) this.animateHeightTransition(element, update);
+    else if (animate && structural && !(this.kbRendering && element.closest('#kb-modal')) && element.matches('.utility-list, .books-grid, .sync-device-list, .docs-list-scroll, .folder-docs, .mobile-folder-docs, .command-group, .command-palette-results, .character-grid, .locations-grid, .timeline-container, .mobile-lore-grid, .bookmark-manager-list, .mobile-bookmarks-list, .pane-bookmarks-list')) this.animateLayoutTransition(element, update);
     else update();
     if (animate && textChanged && !element.closest('input, textarea, [contenteditable="true"], .page-content') && this.isSurfaceVisible(element)) {
       this.runMotion(element, [{ opacity: .6 }, { opacity: 1 }], { channel: 'text', duration: 160, easing: 'ease-out' });
@@ -13110,7 +13133,10 @@ class NocturneWriter {
     if (!next || !overlay) return;
     const focusWasInside = current?.contains(document.activeElement);
     if (overlay.classList.contains('active') && current?.tagName === next.tagName) {
-      if (current.__surfaceMarkup !== html) this.animateHeightTransition(current.querySelector('.form-modal, .cleaner-modal') || current, () => this.patchSurface(current, next), { width: true });
+      if (current.__surfaceMarkup !== html) {
+        if (current.matches('.settings-modal')) this.patchSurface(current, next);
+        else this.animateHeightTransition(current.querySelector('.form-modal, .cleaner-modal') || current, () => this.patchSurface(current, next), { width: true });
+      }
     } else {
       const from = overlay.classList.contains('active') && current ? { height: current.offsetHeight, width: current.offsetWidth } : null;
       if (from) this.animateSurfaceContent(current, true);
@@ -13126,6 +13152,7 @@ class NocturneWriter {
     if (title) { title.id ||= `modal-title-${overlay.id || uid('surface')}`; modal.setAttribute('aria-labelledby', title.id); }
     modal.__surfaceKind = `${next.tagName}:${next.className}:${title?.textContent || ''}`;
     if (activate) { overlay.classList.add('active'); overlay.setAttribute('aria-hidden', 'false'); }
+    this.updateWorkflowSelections(modal);
     if (focusWasInside && !modal.contains(document.activeElement)) {
       (modal.querySelector('[autofocus], input:not([type="hidden"]):not([type="checkbox"]), textarea, .sync-primary, .nocturne-select-trigger') || modal).focus({ preventScroll: true });
     }
@@ -16471,6 +16498,23 @@ class NocturneWriter {
     }
   }
 
+  updateWorkflowSelections(root = document) {
+    root.querySelectorAll('.workflow-choice').forEach(group => {
+      if (!group.querySelector('.knowledge-selection')) {
+        const selection = document.createElement('span'); selection.className = 'knowledge-selection'; selection.setAttribute('aria-hidden', 'true'); group.prepend(selection);
+      }
+      this.positionKnowledgeSelection(group);
+    });
+    if (!this.workflowSelectionObserver) this.workflowSelectionObserver = new ResizeObserver(entries => {
+      for (const { target } of entries) if (target.isConnected) this.positionKnowledgeSelection(target, false);
+    });
+    this.workflowSelectionGroups ||= new Set();
+    for (const group of this.workflowSelectionGroups) if (!group.isConnected) { this.workflowSelectionObserver.unobserve(group); this.workflowSelectionGroups.delete(group); }
+    root.querySelectorAll('.workflow-choice').forEach(group => {
+      if (!this.workflowSelectionGroups.has(group)) { this.workflowSelectionGroups.add(group); this.workflowSelectionObserver.observe(group); }
+    });
+  }
+
   transitionKnowledgeSearchResults(output, html) {
     if (output.__motionMarkup === html) return;
     clearTimeout(output.__knowledgeTransition?.timer);
@@ -16876,9 +16920,10 @@ class NocturneWriter {
   animateKbEntrance(tab) {
     const modal = document.getElementById('kb-modal');
     if (!modal?.classList.contains('active') || this.shouldReduceSurfaceMotion()) return;
-    if (tab === 'search' || tab === 'bookmarks') {
-      const surface = modal.querySelector(tab === 'search' ? '.knowledge-search' : '.bookmark-manager');
+    if (tab === 'books' || tab === 'search' || tab === 'bookmarks') {
+      const surface = modal.querySelector(tab === 'books' ? '.books-library' : tab === 'search' ? '.knowledge-search' : '.bookmark-manager');
       this.runMotion(surface, [{ opacity: .25, transform: 'translateY(8px)' }, { opacity: 1, transform: 'translateY(0)' }], { channel: 'kb-tab', duration: 320 });
+      this.updateWorkflowSelections(modal);
       return;
     }
     const section = modal.querySelector(`#kb-sec-${tab}`);
@@ -16888,7 +16933,7 @@ class NocturneWriter {
   cancelKbEntrance() {
     this.kbEntranceGeneration = (this.kbEntranceGeneration || 0) + 1;
     const modal = document.getElementById('kb-modal');
-    modal?.querySelectorAll('.bookmark-manager, .knowledge-search').forEach(surface => {
+    modal?.querySelectorAll('.books-library, .bookmark-manager, .knowledge-search').forEach(surface => {
       for (const motion of surface.__nocturneMotions?.values() || []) motion.animation.cancel();
     });
     modal?.querySelectorAll('.kb-enter-card').forEach(card => {
@@ -19599,8 +19644,8 @@ class NocturneWriter {
   settingsContent(tab) {
     if (['history', 'manuscript-search'].includes(tab)) return `<div class="tab-content active workflow-settings">${workflowSettingsContent(this, tab)}</div>`;
     const s = this.state.settings;
-    const row = (label, note, control) => `<div class="setting-row ${this.isMobileLayout() && /^<div class="toggle /.test(control) ? 'setting-row-switch' : ''}"><div class="setting-info"><span>${label}${note ? `<i class="bx bx-info-circle info-icon" tabindex="0" data-tip="${escapeHtml(note)}"></i>` : ''}</span>${note ? `<small>${note}</small>` : ''}</div><div class="setting-control">${control}</div></div>`;
-    const toggle = (key) => `<div class="toggle ${s[key] ? 'on' : ''}" data-setting="${key}" data-kind="toggle"></div>`;
+    const row = (label, note, control) => `<div class="setting-row ${/class="toggle /.test(control) ? 'setting-row-switch' : ''}"><div class="setting-info"><span>${label}${note ? `<i class="bx bx-info-circle info-icon" tabindex="0" data-tip="${escapeHtml(note)}"></i>` : ''}</span>${note ? `<small>${note}</small>` : ''}</div><div class="setting-control">${control}</div></div>`;
+    const toggle = (key) => `<button type="button" class="toggle ${s[key] ? 'on' : ''}" data-setting="${key}" data-kind="toggle" role="switch" aria-checked="${!!s[key]}"></button>`;
     const range = (key, min, max, step = 1, suffix = '') => `<div class="range-field" data-range-field><input class="range-control" type="range" min="${min}" max="${max}" step="${step}" value="${s[key]}" data-setting="${key}" data-suffix="${escapeHtml(suffix)}"><input class="range-value-input" type="text" value="${s[key]}${suffix}" data-setting-input="${key}" data-suffix="${escapeHtml(suffix)}" data-min="${min}" data-max="${max}" data-step="${step}"></div>`;
     const select = (key, options) => this.renderSettingsSelect(key, options);
     const input = (key, type = 'text') => `<input class="form-control" type="${type}" value="${escapeHtml(s[key] || '')}" data-setting="${key}">`;
@@ -19952,7 +19997,7 @@ class NocturneWriter {
       } else {
         const s = this.state.settings;
         const row = (label, note, control) => `<div class="setting-row"><div class="setting-info"><span>${label}${note ? `<i class="bx bx-info-circle info-icon" tabindex="0" data-tip="${escapeHtml(note)}"></i>` : ''}</span>${note ? `<small>${note}</small>` : ''}</div><div class="setting-control">${control}</div></div>`;
-        const toggle = (key) => `<div class="toggle ${s[key] ? 'on' : ''}" data-setting="${key}" data-kind="toggle"></div>`;
+        const toggle = (key) => `<button type="button" class="toggle ${s[key] ? 'on' : ''}" data-setting="${key}" data-kind="toggle" role="switch" aria-checked="${!!s[key]}"></button>`;
         const range = (key, min, max, step = 1, suffix = '') => `<div class="range-field" data-range-field><input class="range-control" type="range" min="${min}" max="${max}" step="${step}" value="${s[key]}" data-setting="${key}" data-suffix="${escapeHtml(suffix)}"><input class="range-value-input" type="text" value="${s[key]}${suffix}" data-setting-input="${key}" data-suffix="${escapeHtml(suffix)}" data-min="${min}" data-max="${max}" data-step="${step}"></div>`;
         const select = (key, options) => this.renderSettingsSelect(key, options);
         const input = (key, type = 'text') => `<input class="form-control" type="${type}" value="${escapeHtml(s[key] || '')}" data-setting="${key}">`;
@@ -20056,7 +20101,7 @@ class NocturneWriter {
       } else {
         const s = this.state.settings;
         const row = (label, note, control) => `<div class="setting-row"><div class="setting-info"><span>${label}${note ? `<i class="bx bx-info-circle info-icon" tabindex="0" data-tip="${escapeHtml(note)}"></i>` : ''}</span>${note ? `<small>${note}</small>` : ''}</div><div class="setting-control">${control}</div></div>`;
-        const toggle = (key) => `<div class="toggle ${s[key] ? 'on' : ''}" data-setting="${key}" data-kind="toggle"></div>`;
+        const toggle = (key) => `<button type="button" class="toggle ${s[key] ? 'on' : ''}" data-setting="${key}" data-kind="toggle" role="switch" aria-checked="${!!s[key]}"></button>`;
         const range = (key, min, max, step = 1, suffix = '') => `<div class="range-field" data-range-field><input class="range-control" type="range" min="${min}" max="${max}" step="${step}" value="${s[key]}" data-setting="${key}" data-suffix="${escapeHtml(suffix)}"><input class="range-value-input" type="text" value="${s[key]}${suffix}" data-setting-input="${key}" data-suffix="${escapeHtml(suffix)}" data-min="${min}" data-max="${max}" data-step="${step}"></div>`;
         const select = (key, options) => this.renderSettingsSelect(key, options);
         const input = (key, type = 'text') => `<input class="form-control" type="${type}" value="${escapeHtml(s[key] || '')}" data-setting="${key}">`;
@@ -20280,7 +20325,7 @@ class NocturneWriter {
     const s = this.state.settings;
     const rules = s.customInputRules || [];
     const row = (label, note, control) => `<div class="setting-row"><div class="setting-info"><span>${label}${note ? `<i class="bx bx-info-circle info-icon" tabindex="0" data-tip="${escapeHtml(note)}"></i>` : ''}</span>${note ? `<small>${note}</small>` : ''}</div><div class="setting-control">${control}</div></div>`;
-    const toggle = (key) => `<div class="toggle ${s[key] ? 'on' : ''}" data-setting="${key}" data-kind="toggle"></div>`;
+    const toggle = (key) => `<button type="button" class="toggle ${s[key] ? 'on' : ''}" data-setting="${key}" data-kind="toggle" role="switch" aria-checked="${!!s[key]}"></button>`;
     return `
       <div class="tab-content active formatting-settings">
         <p class="settings-tab-desc" style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px; line-height: 1.5;">Настройте динамические правила автозамены в редакторе. Например, ввод трех звездочек и нажатие клавиши Enter или Пробел может применить центрирование текста вместо вставки стандартного разделителя.</p>
@@ -20550,6 +20595,8 @@ class NocturneWriter {
       select.classList.remove('open');
       select.querySelector('[data-setting-select-toggle], [data-form-select-toggle]')?.setAttribute('aria-expanded', 'false');
       select.querySelector('.nocturne-select-menu')?.setAttribute('aria-hidden', 'true');
+      const menu = select.querySelector('.nocturne-select-menu');
+      if (typeof menu?.hidePopover === 'function' && menu.matches(':popover-open')) menu.hidePopover();
     });
   }
 
@@ -20560,6 +20607,29 @@ class NocturneWriter {
     select.classList.toggle('open', willOpen);
     select.querySelector('[data-setting-select-toggle], [data-form-select-toggle]')?.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
     select.querySelector('.nocturne-select-menu')?.setAttribute('aria-hidden', willOpen ? 'false' : 'true');
+    const menu = select.querySelector('.nocturne-select-menu');
+    if (menu && typeof menu.showPopover === 'function') {
+      menu.setAttribute('popover', 'manual');
+      if (willOpen) { menu.showPopover(); this.positionSettingsSelect(select); }
+      else if (menu.matches(':popover-open')) menu.hidePopover();
+    }
+    if (!this.selectPositionBound) {
+      this.selectPositionBound = true;
+      const reposition = () => document.querySelectorAll('.nocturne-select.open').forEach(node => this.positionSettingsSelect(node));
+      window.addEventListener('resize', reposition);
+      document.addEventListener('scroll', event => { if (!event.target.closest?.('.nocturne-select-menu')) reposition(); }, true);
+    }
+  }
+
+  positionSettingsSelect(select) {
+    const menu = select.querySelector('.nocturne-select-menu');
+    if (typeof menu?.showPopover !== 'function' || !menu.matches(':popover-open')) return;
+    const rect = select.querySelector('.nocturne-select-trigger').getBoundingClientRect();
+    const viewport = window.visualViewport, width = Math.min(Math.max(224, rect.width), (viewport?.width || innerWidth) - 24);
+    const bottom = (viewport?.height || innerHeight) + (viewport?.offsetTop || 0) - 12;
+    const below = bottom - rect.bottom - 8, above = rect.top - 20, flip = below < Math.min(220, menu.scrollHeight) && above > below;
+    const height = Math.min(300, Math.max(80, flip ? above : below));
+    Object.assign(menu.style, { width: `${width}px`, maxHeight: `${height}px`, left: `${Math.max(12, Math.min(rect.left, (viewport?.width || innerWidth) - width - 12))}px`, top: `${flip ? Math.max(12, rect.top - Math.min(height, menu.scrollHeight) - 8) : rect.bottom + 8}px` });
   }
 
   updateSettingFromCustomOption(option) {
@@ -20692,6 +20762,14 @@ class NocturneWriter {
 
   updateRangeControls(root = document) {
     root.querySelectorAll?.('.range-control').forEach((control) => this.updateRangeControl(control));
+    if (!this.rangeResizeObserver) this.rangeResizeObserver = new ResizeObserver(entries => {
+      for (const { target } of entries) { const control = target.querySelector('.range-control'); if (control?.isConnected) this.updateRangeControl(control); }
+    });
+    this.rangeFields ||= new Set();
+    for (const field of this.rangeFields) if (!field.isConnected) { this.rangeResizeObserver.unobserve(field); this.rangeFields.delete(field); }
+    root.querySelectorAll?.('[data-range-field]').forEach(field => {
+      if (!this.rangeFields.has(field)) { this.rangeFields.add(field); this.rangeResizeObserver.observe(field); }
+    });
   }
 
   updateRangeControl(control) {
@@ -20700,6 +20778,7 @@ class NocturneWriter {
     const value = Number(control.value || 0);
     const pct = max === min ? 0 : ((value - min) / (max - min)) * 100;
     control.style.setProperty('--range-progress', `${Math.max(0, Math.min(100, pct))}%`);
+    updateRangeMotion(this, control, Math.max(0, Math.min(100, pct)));
     const chip = control.closest('[data-range-field]')?.querySelector('.range-value, .range-value-input') || control.nextElementSibling;
     if (chip) {
       const displayVal = `${control.value}${control.dataset.suffix || ''}`;
@@ -23758,7 +23837,7 @@ ${raw}`;
 
   async openBackups() {
     const copies = (await this.db.getAll('backups')).sort((a, b) => b.createdAt - a.createdAt), overlay = document.getElementById('form-overlay');
-    this.presentFormModal(`<div class="form-modal utility-modal"><div class="modal-head-row"><div><h2>Резервные копии</h2><p>Храним последние 20 копий. Автоматическая копия создаётся с интервалом автосохранения.</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div><div class="form-actions"><button class="pill-btn" data-action="choose-backup-directory"><i class="bx bx-folder-open"></i> Папка копий</button><button class="pill-btn ai-btn" data-backup-create>Создать копию</button></div><div class="utility-list">${copies.map(copy => `<div class="utility-row" data-surface-key="openBackups-${escapeHtml(copy.id)}"><i class="bx bx-archive"></i><div><strong>${new Date(copy.createdAt).toLocaleString()}</strong><small>${copy.external ? escapeHtml(copy.path) : 'В этом браузере · скачайте или подключите папку'} · ${Math.ceil((copy.bytes || 0) / 1024)} КБ</small></div><button class="pill-btn" data-backup-restore="${escapeHtml(copy.id)}" ${copy.locked ? 'disabled' : ''}>Открыть</button></div>`).join('') || '<p class="utility-empty">Копий пока нет. Создайте первую перед большой правкой.</p>'}</div></div>`);
+    this.presentFormModal(`<div class="form-modal utility-modal backups-modal"><div class="modal-head-row"><div><h2>Резервные копии</h2><p>Храним последние 20 копий. Автоматическая копия создаётся с интервалом автосохранения.</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div><div class="form-actions"><button class="pill-btn" data-action="choose-backup-directory"><i class="bx bx-folder-open"></i> Папка копий</button><button class="pill-btn ai-btn" data-backup-create>Создать копию</button></div><div class="utility-list">${copies.map(copy => `<div class="utility-row" data-surface-key="openBackups-${escapeHtml(copy.id)}"><i class="bx bx-archive"></i><div><strong>${new Date(copy.createdAt).toLocaleString()}</strong><small>${copy.external ? escapeHtml(copy.path) : 'В этом браузере · скачайте или подключите папку'} · ${Math.ceil((copy.bytes || 0) / 1024)} КБ</small></div><button class="pill-btn" data-backup-restore="${escapeHtml(copy.id)}" ${copy.locked ? 'disabled' : ''}>Открыть</button></div>`).join('') || '<p class="utility-empty">Копий пока нет. Создайте первую перед большой правкой.</p>'}</div></div>`);
     overlay.classList.add('active'); overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     const createButton = overlay.querySelector('[data-backup-create]');
     createButton.onclick = async () => {

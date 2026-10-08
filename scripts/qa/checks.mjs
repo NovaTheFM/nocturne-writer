@@ -26,6 +26,7 @@ export const PROJECT_CHECKS = [
   check('ai-context', ['scripts/test-ai-context.mjs'], ['ai', 'lore']),
   check('workflow-model', ['--test', 'scripts/test-workflow-model.mjs'], ['writing', 'search', 'settings']),
   check('questionnaire-workflow', ['scripts/test-questionnaire-workflow.mjs'], ['writing', 'search', 'backups', 'ai', 'lore', 'settings', 'motion', 'responsive'], { ports: [5335], timeout: 180_000, ownScenarioReport: 'results.json' }),
+  check('interface-polish', ['scripts/test-interface-polish.mjs'], ['settings', 'lore', 'backups', 'motion', 'responsive', 'accessibility', 'visual'], { ports: [5336], timeout: 180_000, ownScenarioReport: 'results.json' }),
   check('reliability', ['scripts/test-reliability.mjs'], ['database', 'writing', 'backups'], { ports: [5276] }),
   check('workflow-tools', ['scripts/test-workflow-tools.mjs'], ['writing', 'security', 'import', 'export', 'backups', 'ai', 'review'], { modes: ['smoke', 'full'], ports: [5282] }),
   check('lan-integration', ['scripts/test-lan-sync.mjs'], ['sync', 'database'], { ports: [5277, 8880] }),

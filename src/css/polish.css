@@ -275,10 +275,10 @@ button.utility-row, label.utility-row { cursor: pointer; }
 .utility-modal > .form-actions + .utility-list { margin-top: 16px; padding-top: 8px; border-top: 1px solid var(--border-light); }
 .utility-row:has(:focus-visible) { background: var(--hover-soft); }
 .utility-row:has(:checked) .check-mark { transition: background-color 160ms ease, border-color 160ms ease; }
-.surface-busy, .surface-busy:disabled { font-size: 0 !important; opacity: 1; cursor: progress; gap: 8px; }
-.surface-busy > * { display: none !important; }
-.surface-busy::before { content: ''; position: static; display: block; flex: 0 0 14px; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent-hover); border-radius: 50%; background: transparent; animation: spin 900ms linear infinite; }
-.surface-busy::after { content: attr(data-busy-label); font: 600 12px/1.4 var(--font-ui); color: var(--text-main); }
+.surface-busy, .surface-busy:disabled { position: relative; color: transparent !important; opacity: 1; cursor: progress; }
+.surface-busy > * { opacity: 0 !important; }
+.surface-busy::before { content: ''; position: absolute; left: 11px; top: calc(50% - 7px); width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent-hover); border-radius: 50%; background: transparent; animation: spin 900ms linear infinite; }
+.surface-busy::after { content: attr(data-busy-label); position: absolute; inset: 0 10px 0 32px; align-content: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: center; font: 600 12px/1.4 var(--font-ui); color: var(--text-main); }
 .sync-secondary-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .sync-secondary-actions .pill-btn { font-size: 12px; }
 .sync-extra-fields { margin-bottom: 16px; }

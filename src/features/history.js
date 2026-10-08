@@ -1,5 +1,5 @@
-import { buildSummary, countWords, docText, escapeHtml, uid } from '../core/utils.js';
-import { tiptapJsonToLegacyAst } from '../editor/document-adapter.js';
+import { blockText, buildSummary, countWords, docText, escapeHtml, normalizeHtml, uid } from '../core/utils.js';
+import { legacyAstToHtml, tiptapJsonToLegacyAst } from '../editor/document-adapter.js';
 import { diffText, textChange } from './manuscript-search.js';
 
 const labels = { manual: 'Ручная версия', timer: 'По времени работы', growth: 'Рост текста', 'large-edit': 'Перед большой правкой', 'before-restore': 'Перед восстановлением', 'before-ai': 'Перед принятой правкой ИИ' };
@@ -151,17 +151,19 @@ export class HistoryController {
     const records = await this.records(docId);
     if (revision !== this.viewRevision) return;
     const selected = records.find(item => item.id === selectedId && !item.locked);
+    const choices = this.restoreChoice?.id === selectedId ? this.restoreChoice.fields : {};
     const overlay = document.getElementById('form-overlay'), settings = this.app.state.settings;
     const currentText = docText(doc.ast), savedText = selected ? docText(selected.ast) : '';
     const change = diffText(savedText, currentText);
-    const marked = side => change.segments.filter(part => part.type !== (side === 'saved' ? 'added' : 'removed')).map(part => part.type === 'equal' ? escapeHtml(part.text) : `<${side === 'saved' ? 'del' : 'ins'}>${escapeHtml(part.text)}</${side === 'saved' ? 'del' : 'ins'}>`).join('');
+    const preview = (record, side = '') => this.documentPreview(record, side ? change.segments : [], side);
     this.app.presentFormModal(`<div class="form-modal utility-modal history-modal"><div class="modal-head-row"><div><span class="workflow-eyebrow">История и восстановление</span><h2>${escapeHtml(doc.title)}</h2><p>Просматривайте версии перед заменой текста. Текущий вариант будет сохранён.</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div>
       <div class="workflow-toolbar"><button class="pill-btn ai-btn" data-history-save><i class="bx bx-camera"></i> Сохранить версию</button><button class="pill-btn" data-history-settings><i class="bx bx-slider-alt"></i> Настройки</button>${doc.historyUndoId ? '<button class="pill-btn" data-history-undo><i class="bx bx-undo"></i> Отменить восстановление</button>' : ''}</div>
       <div class="history-layout"><div class="history-versions utility-list">${records.map(item => `<div class="history-version ${item.id === selectedId ? 'active' : ''}" data-surface-key="history-${escapeHtml(item.id)}"><button class="history-item" data-history-preview="${escapeHtml(item.id)}" ${item.locked ? 'disabled' : ''}><strong>${escapeHtml(this.versionTitle(item) || 'Версия')}</strong><span>${new Date(item.createdAt).toLocaleString('ru-RU')}</span><small>${escapeHtml(labels[item.reason] || "")} &middot; ${item.wordCount ?? countWords(docText(item.ast))} слов · ${item.approximateDelta ? "&asymp;" : ""}+${item.addedChars || 0} / −${item.removedChars || 0} знаков${item.pinned ? ' · закреплена' : ''}</small></button></div>`).join('') || this.app.emptyStateMarkup('bx-history', 'История пока пуста', 'Ручная версия сохраняет важный этап. Автоматические версии появятся во время работы.')}</div>
-      <section class="history-preview" data-surface-key="history-preview-${escapeHtml(selectedId || 'empty')}">${selected ? `<div class="workflow-toolbar history-view-modes">${[['text', 'Текст'], ['compare', 'Сравнить'], ['copy', 'Копия главы']].map(([value, label]) => `<button class="context-chip ${mode === value ? 'active' : ''}" aria-pressed="${mode === value}" data-history-mode="${value}">${label}</button>`).join('')}</div><h3>${escapeHtml(this.versionTitle(selected) || 'Сохранённая версия')}</h3>
-      ${mode === 'compare' ? `<div class="history-compare"><section><h4>В этой версии</h4><div class="history-text">${marked('saved')}</div></section><section><h4>Сейчас</h4><div class="history-text">${marked('current')}</div></section></div>` : `<div class="history-text">${escapeHtml(savedText) || 'Пустой текст'}</div>`}
-      ${mode === 'copy' ? '<p class="workflow-note">Откроем отдельную главу с текстом и заметками этой версии. Исходная глава останется на месте.</p>' : `<fieldset class="history-restore-options"><legend>Что восстановить</legend>${[['text', 'Текст главы', true], ['notes', 'Заметки главы', settings.historyRestoreNotes], ['bookmarks', 'Закладки главы', settings.historyRestoreBookmarks && !!selected.bookmarks], ['globalNotes', 'Общие заметки всего проекта', false]].map(([key, label, checked]) => `<label class="nocturne-check"><input type="checkbox" name="restore-${key}" ${checked ? 'checked' : ''}><span class="check-mark"></span><span>${label}</span></label>`).join('')}</fieldset>`}
-      <div class="form-actions"><button class="pill-btn" data-history-rename><i class="bx bx-pencil"></i> Назвать</button><button class="pill-btn" data-history-pin>${selected.pinned ? 'Открепить' : 'Закрепить'}</button><button class="btn-icon danger-btn" data-history-delete aria-label="Удалить версию"><i class="bx bx-trash"></i></button><button class="pill-btn ai-btn" data-history-apply>${mode === 'copy' ? 'Открыть копию' : 'Восстановить выбранное'}</button></div>` : '<div class="history-no-selection"><i class="bx bx-time-five"></i><h3>Выберите версию</h3><p>Сначала покажем сохранённый текст.</p></div>'}</section></div></div>`);
+      <section class="history-preview" data-surface-key="history-preview">${selected ? `<div class="history-preview-scroll" data-surface-key="history-preview-scroll"><div class="workflow-toolbar history-view-modes knowledge-search-scope workflow-choice">${[['text', 'Текст'], ['compare', 'Сравнить'], ['copy', 'Копия главы']].map(([value, label]) => `<button class="context-chip ${mode === value ? 'active' : ''}" aria-pressed="${mode === value}" data-history-mode="${value}">${label}</button>`).join('')}</div><h3>${escapeHtml(this.versionTitle(selected) || 'Сохранённая версия')}</h3>
+      <div class="history-document-view" data-surface-key="history-document-view" data-history-view="${escapeHtml(selected.id)}:${mode}">${mode === 'compare' ? `<div class="history-change-summary"><span class="history-change-removed">−${change.removed} знаков в текущем тексте</span><span class="history-change-added">+${change.added} новых знаков</span></div><div class="history-compare"><section><h4>Сохранённая версия</h4>${preview(selected, 'saved')}</section><section><h4>Текущий текст</h4>${preview(doc, 'current')}</section></div>` : preview(selected)}</div>
+      ${mode !== 'copy' ? this.restoreFlow(selected) : ''}
+      ${mode === 'copy' ? '<p class="workflow-note">Откроем отдельную главу с текстом и заметками этой версии. Исходная глава останется на месте.</p>' : `<fieldset class="history-restore-options"><legend>Что восстановить</legend>${[['text', 'Текст главы', true], ['notes', 'Заметки главы', settings.historyRestoreNotes], ['bookmarks', 'Закладки главы', settings.historyRestoreBookmarks && !!selected.bookmarks], ['globalNotes', 'Общие заметки всего проекта', false]].map(([key, label, checked]) => `<label class="nocturne-check"><input type="checkbox" name="restore-${key}" ${(choices[key] ?? checked) ? 'checked' : ''} ${key === 'bookmarks' && !selected.bookmarks ? 'disabled' : ''}><span class="check-mark"></span><span>${label}</span></label>`).join('')}</fieldset>`}
+      </div><div class="form-actions"><button class="pill-btn" data-history-rename><i class="bx bx-pencil"></i> Назвать</button><button class="pill-btn" data-history-pin>${selected.pinned ? 'Открепить' : 'Закрепить'}</button><button class="btn-icon danger-btn" data-history-delete aria-label="Удалить версию"><i class="bx bx-trash"></i></button><button class="pill-btn ai-btn" data-history-apply>${mode === 'copy' ? 'Открыть копию' : 'Восстановить выбранное'}</button></div>` : '<div class="history-no-selection"><i class="bx bx-time-five"></i><h3>Выберите версию</h3><p>Сначала покажем сохранённый текст.</p></div>'}</section></div></div>`);
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('[data-history-save]').onclick = () => this.manual();
     overlay.querySelector('[data-history-settings]').onclick = () => { overlay.classList.remove('active'); this.app.openSettingsTab('history'); };
@@ -169,15 +171,71 @@ export class HistoryController {
     overlay.querySelectorAll('[data-history-preview]').forEach(button => { button.onclick = () => this.open(doc.id, button.dataset.historyPreview); });
     overlay.querySelectorAll('[data-history-mode]').forEach(button => { button.onclick = () => this.open(doc.id, selected.id, button.dataset.historyMode); });
     if (!selected) return;
+    overlay.querySelectorAll('[name^="restore-"]').forEach(input => { input.onchange = () => {
+      this.restoreChoice = { id: selected.id, fields: Object.fromEntries([...overlay.querySelectorAll('[name^="restore-"]')].map(field => [field.name.slice(8), field.checked])) };
+    }; });
     overlay.querySelector('[data-history-pin]').onclick = async () => { try { await this.app.db.put('snapshots', { ...selected, pinned: !selected.pinned }); await this.open(doc.id, selected.id, mode); } catch (error) { this.app.toast(error.message); } };
     overlay.querySelector('[data-history-rename]').onclick = () => this.editVersion(selected, mode);
     overlay.querySelector('[data-history-delete]').onclick = () => this.deleteVersion(selected);
     overlay.querySelector('[data-history-apply]').onclick = async event => {
-      try { await this.app.runSurfaceAction(event.currentTarget, 'Восстанавливаем…', async () => {
+      try { await this.app.runSurfaceAction(event.currentTarget, mode === 'copy' ? 'Открываем копию…' : 'Восстанавливаем…', async () => {
         if (mode === 'copy') { await this.copy(selected); overlay.classList.remove('active'); }
-        else { const fields = Object.fromEntries(['text', 'notes', 'bookmarks', 'globalNotes'].map(key => [key, !!overlay.querySelector(`[name="restore-${key}"]`)?.checked])); await this.restore(selected.id, fields); await this.open(doc.id, selected.id, mode); this.app.toast('Версия восстановлена. Прежний вариант сохранён в истории.'); }
-      }); } catch (error) { this.app.toast(error.message); }
+        else { const fields = Object.fromEntries(['text', 'notes', 'bookmarks', 'globalNotes'].map(key => [key, !!overlay.querySelector(`[name="restore-${key}"]`)?.checked])); await this.restore(selected.id, fields, { onProgress: phase => this.showRestoreProgress(phase) }); await this.open(doc.id, selected.id, mode); this.app.toast('Версия восстановлена. Прежний вариант сохранён в истории.'); }
+      }); } catch (error) { this.showRestoreProgress('error'); this.app.toast(error.message); }
     };
+  }
+
+  documentPreview(record, segments = [], side = '') {
+    const blocks = (record.ast?.blocks || []).map(block => ({ ...block, align: ['left', 'center', 'right', 'justify'].includes(block.align) ? block.align : 'left', html: normalizeHtml(block.html || '<br>') }));
+    const container = document.createElement('div'); container.innerHTML = legacyAstToHtml({ blocks });
+    if (side) {
+      let cursor = 0;
+      const ranges = [];
+      for (const part of segments) {
+        if (part.type === (side === 'saved' ? 'added' : 'removed')) continue;
+        if (part.type !== 'equal') ranges.push({ start: cursor, end: cursor + part.text.length });
+        cursor += part.text.length;
+      }
+      let offset = 0;
+      [...container.children].forEach((element, index) => {
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT), nodes = [];
+        while (walker.nextNode()) nodes.push(walker.currentNode);
+        let local = offset;
+        for (const node of nodes) {
+          const text = node.nodeValue, fragment = document.createDocumentFragment(); let used = 0;
+          for (const range of ranges) {
+            const from = Math.max(0, range.start - local), to = Math.min(text.length, range.end - local);
+            if (to <= from) continue;
+            fragment.append(document.createTextNode(text.slice(used, from)));
+            const mark = document.createElement(side === 'saved' ? 'del' : 'ins'); mark.textContent = text.slice(from, to); fragment.append(mark); used = to;
+          }
+          if (used) { fragment.append(document.createTextNode(text.slice(used))); node.replaceWith(fragment); }
+          local += text.length;
+        }
+        offset += blockText(blocks[index]).length + 2;
+      });
+    }
+    return `<div class="history-paper-scroll"><article class="history-paper"><div class="history-paper-caption"><i class="bx bx-file"></i><span>${countWords(docText(record.ast)).toLocaleString('ru-RU')} слов · предпросмотр главы</span></div><div class="history-paper-content">${container.innerHTML}</div></article></div>`;
+  }
+
+  restoreFlow(snapshot) {
+    const complete = this.lastRestore?.id === snapshot.id;
+    return `<div class="history-restore-flow" data-history-restore-flow data-phase="${complete ? 'complete' : 'preview'}"><div class="history-flow-steps">${[['current', 'bx-file', 'Текущая глава'], ['safety', 'bx-shield-quarter', 'Сохраним прежнюю'], ['version', 'bx-history', 'Вернём выбранное']].map(([id, icon, label]) => `<div class="history-flow-step ${complete ? 'complete' : ''}" data-restore-step="${id}"><span class="history-flow-icon"><i class="bx ${icon}"></i></span><span>${label}</span></div>`).join('')}</div><p data-restore-status role="status">${complete ? 'Готово. Прежний вариант сохранён — восстановление можно отменить.' : 'Сначала сохраним текущую главу. После восстановления доступна отмена.'}</p></div>`;
+  }
+
+  showRestoreProgress(phase) {
+    const flow = document.querySelector('[data-history-restore-flow]'); if (!flow) return;
+    flow.dataset.phase = phase;
+    if (phase === 'saving') {
+      const scroller = flow.closest('.history-preview-scroll');
+      if (scroller) {
+        const bounds = scroller.getBoundingClientRect(), rect = flow.getBoundingClientRect();
+        scroller.scrollTo({ top: scroller.scrollTop + rect.top - bounds.top - Math.max(0, (scroller.clientHeight - rect.height) / 2), behavior: this.app.shouldReduceSurfaceMotion() ? 'instant' : 'smooth' });
+      }
+    }
+    const index = { saving: 0, restoring: 1, complete: 3, error: -1 }[phase];
+    [...flow.querySelectorAll('[data-restore-step]')].forEach((step, position) => { step.classList.toggle('complete', position < index); step.classList.toggle('active', position === index); });
+    flow.querySelector('[data-restore-status]').textContent = { saving: 'Сохраняем текущую главу…', restoring: 'Сохраняем прежний вариант и восстанавливаем выбранное…', complete: 'Готово. Прежний вариант сохранён — доступна отмена.', error: 'Восстановление не завершено. Подробности — в уведомлении.' }[phase];
   }
 
   editVersion(snapshot, mode) {
@@ -194,11 +252,12 @@ export class HistoryController {
     overlay.querySelector('[data-delete]').onclick = async () => { try { await this.app.trash.store('snapshots', snapshot, 'documents'); await this.app.db.delete('snapshots', snapshot.id); await this.checkSize(snapshot.docId); await this.open(snapshot.docId); } catch (error) { this.app.toast(error.message); } };
   }
 
-  async restore(id, fields = { text: true }, { undo = false } = {}) {
+  async restore(id, fields = { text: true }, { undo = false, onProgress = () => {} } = {}) {
     if (!Object.values(fields).some(Boolean)) throw new Error('Выберите хотя бы один пункт для восстановления.');
     await this.work;
     const snapshot = await this.app.db.get('snapshots', id), doc = this.app.state.docs.find(item => item.id === snapshot?.docId);
     if (!snapshot || snapshot.locked || !doc || doc.locked) throw new Error('Эта версия сейчас недоступна.');
+    onProgress('saving');
     if (!await this.app.saveDocById(doc.id, { silent: true })) throw new Error('Не удалось сохранить текущую главу. Восстановление не выполнено.');
     const safety = await this.makeSnapshot(doc, { reason: 'before-restore' }); safety.restoreFields = { ...fields };
     const restored = structuredClone(doc);
@@ -209,12 +268,14 @@ export class HistoryController {
     const records = { docs: [restored], snapshots: [safety] };
     if (fields.globalNotes) records.settings = [{ id: 'global-notes', text: snapshot.globalNotes || '', bookmarks: structuredClone(snapshot.globalBookmarks || this.app.state.globalBookmarks || []), updatedAt: Date.now() }];
     const previous = this.app.db.documentVersions.get(doc.id);
+    onProgress('restoring');
     await this.app.db.atomicWrite(records, { expect: previous ? { docs: [{ id: doc.id, value: previous }] } : {} });
     Object.assign(doc, restored);
     if (fields.globalNotes) { this.app.state.globalNotes = records.settings[0].text; this.app.state.globalBookmarks = records.settings[0].bookmarks; }
     this.suppressed.add(doc.id);
     try { if (fields.text) this.app.nocturneEditor.applyDocumentContent(doc, { ast: restored.ast, pmJson: restored.pmJson, history: true }); } finally { this.suppressed.delete(doc.id); }
     this.app.bookmarks.resetPlainTextBaselines(); this.app.renderAll();
+    this.lastRestore = undo ? null : { id, at: Date.now() }; onProgress('complete');
     return safety;
   }
 
