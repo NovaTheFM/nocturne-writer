@@ -1,4 +1,5 @@
 import { blockText, docText, textFromHtml } from '../core/utils.js';
+import { characterMentionForms } from '../core/name-inflections.js';
 
 function plain(value = '', max = 1200) {
   const text = textFromHtml(String(value || '')).replace(/\s+/g, ' ').trim();
@@ -10,6 +11,7 @@ function tokens(value = '') {
 }
 
 function entityNames(entity = {}) {
+  if (entity.firstName || entity.lastName || entity.type === 'character') return characterMentionForms(entity);
   return [
     entity.name,
     entity.displayName,

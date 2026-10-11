@@ -1,47 +1,12 @@
 import { buildSummary, textFromHtml } from '../core/utils.js';
 import { tiptapJsonToLegacyAst } from '../editor/document-adapter.js';
 import { anchorAt, jsonEditorIndex, normalizeBookmarks, textIndex } from './bookmark-model.js';
+import { createCharacterNameReplacement } from '../core/name-inflections.js';
 
 const technicalField = /^(?:id|type|scope|status|source|kind|category|color|colorKey|icon|image|encrypted|protectedStore|ownerKey|groupId|reason|characterRoles|attrs|marks|ast|pmJson|bookmarks|fieldBookmarks|start|end|href|src)$|(?:Ids?|URL|Url|Path|Hash)$/;
 const characterIdentity = new Set(['name', 'displayName', 'firstName', 'lastName', 'aliases', 'mentionForms']);
-const escapePattern = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const fold = value => value.toLocaleLowerCase('ru');
-
 export function characterNameReplacement(before, after) {
-  const pairs = new Map();
-  for (const field of ['displayName', 'name', 'firstName', 'lastName']) {
-    const oldName = String(before[field] || '').trim();
-    const newName = String(after[field] || (field === 'lastName' ? after.firstName : '') || '').trim();
-    if (oldName && oldName !== newName) pairs.set(fold(oldName), { from: oldName, to: newName });
-  }
-  if (before.mentionForms?.length === after.mentionForms?.length) {
-    before.mentionForms?.forEach((from, index) => {
-      const to = after.mentionForms[index];
-      if (from && to && from !== to) pairs.set(fold(from), { from, to });
-    });
-  }
-  // A new full name can contain an old name component: do not expand it a second time.
-  for (const field of ['displayName', 'name']) {
-    const name = String(after[field] || '').trim();
-    if (name && !pairs.has(fold(name))) pairs.set(fold(name), { from: name, to: name });
-  }
-  const terms = [...pairs.values()].sort((a, b) => b.from.length - a.from.length);
-  const pattern = terms.length ? new RegExp(`(?<![\\p{L}\\p{M}\\p{N}_])(?:${terms.map(pair => escapePattern(pair.from).replace(/\s+/g, '\\s+')).join('|')})(?![\\p{L}\\p{M}\\p{N}_])`, 'giu') : null;
-  const matches = text => {
-    if (!pattern) return [];
-    return [...String(text).matchAll(pattern)].flatMap(match => {
-      const pair = pairs.get(fold(match[0].replace(/\s+/g, ' '))) || terms.find(term => fold(term.from.replace(/\s+/g, ' ')) === fold(match[0].replace(/\s+/g, ' ')));
-      let replacement = pair.to;
-      if (match[0] === match[0].toLocaleUpperCase('ru')) replacement = replacement.toLocaleUpperCase('ru');
-      else if (match[0] === match[0].toLocaleLowerCase('ru')) replacement = replacement.toLocaleLowerCase('ru');
-      return replacement === match[0] ? [] : [{ from: match.index, to: match.index + match[0].length, text: replacement }];
-    });
-  };
-  return { matches, text(value) {
-    let result = String(value);
-    for (const match of matches(result).reverse()) result = result.slice(0, match.from) + match.text + result.slice(match.to);
-    return result;
-  } };
+  return createCharacterNameReplacement(before, after);
 }
 
 export function mapRenamePosition(position, edits, assoc = 1) {

@@ -29,6 +29,7 @@ import { CommandPalette } from './features/command-palette.js';
 import { buildAiContext, serializeAiContextSafe } from './features/ai-context.js';
 import { KNOWLEDGE_SEARCH_TYPES, findTextMatches, queryTerms, highlightSearchText, searchKnowledge, searchSnippet } from './features/knowledge-search.js';
 import { characterNameReplacement, renameCharacterReferences, renameReviewAnchors } from './features/character-rename.js';
+import { characterMentionForms, nameParadigm, inferCharacterGender } from './core/name-inflections.js';
 import { LocalSyncClient, buildHttpBase, SYNC_PROTOCOL_VERSION } from './features/local-sync.js';
 import { DatabaseSync } from './features/database-sync.js';
 import { ProjectBackups } from './features/backups.js';
@@ -12046,14 +12047,7 @@ class NocturneWriter {
       matches.forEach((word) => protectedWords.add(normalizeTypoToken(word)));
     };
     this.allEntities().forEach((entity) => {
-      [
-        entity.name,
-        entity.firstName,
-        entity.lastName,
-        entity.displayName,
-        ...(entity.aliases || []),
-        ...(entity.mentionForms || []),
-      ].forEach(addText);
+      this.entityMentionValues(entity).forEach(addText);
     });
     if (Array.isArray(this.state.settings?.userLexicon)) {
       this.state.settings.userLexicon.forEach(addText);
@@ -12678,7 +12672,7 @@ class NocturneWriter {
   }
 
   isEntityBoundary(char) {
-    return !char || !/[\p{L}\p{N}_]/u.test(char);
+    return !char || !/[\p{L}\p{M}\p{N}_'’‐‑-]/u.test(char);
   }
 
   buildEntityMentionIndex() {
@@ -12697,9 +12691,10 @@ class NocturneWriter {
       familyMap.set(key, [...(familyMap.get(key) || []), character]);
     });
     characters.forEach((character) => {
+      const surnameForms = new Set(Object.values(nameParadigm(character.lastName || '', { gender: inferCharacterGender(character), kind: 'lastName' })).flat().map(normalizeTypoToken));
       this.entityMentionValues(character).forEach((mention) => {
         const familyMembers = familyMap.get(normalizeTypoToken(character.lastName || '')) || [];
-        const isSharedSurname = familyMembers.length > 1 && normalizeTypoToken(mention) === normalizeTypoToken(character.lastName || '');
+        const isSharedSurname = familyMembers.length > 1 && surnameForms.has(normalizeTypoToken(mention));
         if (isSharedSurname) return;
         push(mention, {
           type: 'exact-entity',
@@ -12710,14 +12705,15 @@ class NocturneWriter {
     });
     familyMap.forEach((members, key) => {
       const familyName = members[0]?.lastName || '';
+      const forms = [...new Set(members.flatMap(member => Object.values(nameParadigm(member.lastName, { gender: inferCharacterGender(member), kind: 'lastName' })).flat()))];
       if (members.length > 1) {
-        push(familyName, { type: 'family-group', kind: 'family', familyName, members });
+        forms.forEach(form => push(form, { type: 'family-group', kind: 'family', familyName, members }));
       } else if (members[0]) {
-        push(familyName, {
+        forms.forEach(form => push(form, {
           type: 'single-entity-surname',
           kind: 'character',
           entity: members[0],
-        });
+        }));
       }
     });
     (this.state.lore.locations || []).forEach((location) => {
@@ -12739,6 +12735,7 @@ class NocturneWriter {
   }
 
   entityMentionValues(entity) {
+    if (entity.firstName || entity.lastName || entity.type === 'character') return characterMentionForms(entity);
     return [...new Set([
       entity.displayName,
       entity.name,
@@ -18870,7 +18867,7 @@ class NocturneWriter {
       <label class="lore-field">Роль / тип <input class="form-control" name="role" value="${escapeHtml(item.role || '')}"></label>
       <label class="lore-field">Встроенная иконка ${iconSelect}</label>
       <label class="lore-field lore-field-wide">Алиасы через запятую <input class="form-control" name="aliases" value="${escapeHtml((item.aliases || []).join(', '))}"></label>
-      <label class="lore-field lore-field-wide">Варианты упоминаний через запятую <input class="form-control" name="mentionForms" value="${escapeHtml((item.mentionForms || []).join(', '))}"><small>Сюда можно добавить склонённые формы или устойчивые варианты, например: Зейна Леранте, Зейну Леранте.</small></label>
+      <label class="lore-field lore-field-wide">Варианты упоминаний через запятую <input class="form-control" name="mentionForms" value="${escapeHtml((item.mentionForms || []).join(', '))}"><small>Падежные формы имени распознаются автоматически. Здесь можно добавить особые авторские варианты — заполнять это поле для склонений не нужно.</small></label>
       <label class="lore-field lore-field-wide lore-file-field">
         <span>Своя картинка</span>
         <input class="lore-file-native" type="file" name="imageFile" accept="image/*">
