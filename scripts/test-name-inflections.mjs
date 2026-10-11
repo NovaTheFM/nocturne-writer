@@ -99,3 +99,14 @@ test('prepositions, modifiers and verb government resolve indeclinable names', (
 test('a previous preposition does not swallow the subject of the next verb', () => {
   assert.equal(rename('Аеири', 'Зейн', 'У костра Аеири сидела. Рядом с домом Аеири стояла. У Аеири появился дом.'), 'У костра Зейн сидела. Рядом с домом Зейн стояла. У Зейна появился дом.');
 });
+test('fantasy-name gender can be inferred from the existing card without additional inputs', () => {
+  const heroine = character('Кьэль', 'Блэк', { role: 'Воительница', body: 'Она охраняет мост.' });
+  assert.equal(inferCharacterGender(heroine), 'feminine');
+  assert.equal(rename(heroine, character('Мира', 'Северная'), 'У Кьэль Блэк. С Кьэль Блэк.'), 'У Миры Северной. С Мирой Северной.');
+  const forms = characterMentionForms(heroine);
+  assert.ok(!forms.includes('Кьэля'));
+  heroine.role = ''; heroine.body = 'Он потерял мать.';
+  assert.equal(inferCharacterGender(heroine), 'masculine');
+  assert.ok(characterMentionForms(heroine).includes('Кьэля'));
+  assert.equal(inferCharacterGender(character('Ив', '', { body: 'Ив — девушка из другого мира.' })), 'feminine');
+});

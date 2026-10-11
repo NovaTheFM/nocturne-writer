@@ -129,6 +129,7 @@ try {
       return { count: forms.length, words: ['зейна', 'зейну', 'зейном', 'зейне'].every(word => lexicon.has(word)), falseMatches: a.findEntityMatches('СверхЗейна Кай-Зейна', index).length };
     }, source);
     assert.deepEqual(recognition, { count: 6, words: true, falseMatches: 0 });
+    assert.deepEqual(await page.locator('.ProseMirror p').filter({ hasText: 'Кай-Зейна' }).first().locator('.entity-link').allTextContents(), ['Зейна']);
     await propose(page, 'Мария', 'Северная');
     await page.locator('[data-rename-choice="rename"]').click();
     await page.waitForFunction(() => window.nocturneApp.state.lore.characters[0].firstName === 'Мария');
