@@ -100,7 +100,11 @@ export function characterMentionForms(character = {}, { includeSurname = true } 
   if (cached?.signature === signature) return cached.forms.slice();
   const gender = inferCharacterGender(character), names = [character.displayName, character.name, character.firstName].filter(Boolean);
   const forms = names.flatMap(name => Object.values(nameParadigm(name, { gender, lastName: character.lastName })).flat());
-  for (const alias of character.aliases || []) forms.push(...Object.values(nameParadigm(alias, { gender: inferCharacterGender({ name: alias }, gender) })).flat());
+  for (const alias of character.aliases || []) {
+    const words = String(alias).trim().split(/\s+/u);
+    const lastName = words.length > 1 ? words.at(-1) : '';
+    forms.push(...Object.values(nameParadigm(alias, { gender: inferCharacterGender({ name: alias, lastName }, gender), lastName })).flat());
+  }
   if (includeSurname && character.lastName) forms.push(...Object.values(nameParadigm(character.lastName, { gender, kind: 'lastName' })).flat());
   forms.push(...(character.mentionForms || []));
   const result = [...new Set(forms.map(form => String(form).trim()).filter(Boolean))];
@@ -118,6 +122,11 @@ export function resolveNameCase(candidates, text, start, end) {
   const left = normalizeName(text.slice(Math.max(0, start - 120), start).split(/[.!?;,:\n]/u).at(-1));
   const words = left.match(/[а-я]+(?:-[а-я]+)*/gu) || [], near = words.slice(-4);
   const choose = (...cases) => cases.find(nameCase => candidates.includes(nameCase));
+  const last = words.at(-1) || '';
+  const immediatePreposition = genitivePrepositions.has(last) || dativePrepositions.has(last) || instrumentalPrepositions.has(last) || prepositionalPrepositions.has(last) || ['в', 'во', 'на', 'за', 'под', 'подо', 'через', 'про', 'сквозь'].includes(last);
+  const genitiveHead = /(?:^|\s)(?:нет|отсутствие|отсутствия|имя|имени|смерть|смерти|голос|голоса|след|следы|жизнь|жизни|письмо|письма|взгляд|взгляда|дом|дома|рука|руки|слова|брат|сестра|друг|друга|не было|не стало)\s*$/u.test(left);
+  const right = normalizeName(text.slice(end, end + 70));
+  if (candidates.includes('nominative') && !immediatePreposition && !genitiveHead && !/(?:ого|его|ому|ему|ой|ей|ым|им|ую|юю)$/u.test(last) && /^(?:был[аи]?|будет|есть|стал[аи]?|сид\p{L}*|стоя\p{L}*|приш\p{L}*|пош\p{L}*|вош\p{L}*|выш\p{L}*|сказ\p{L}*|говор\p{L}*|смотр\p{L}*|улыб\p{L}*|засме\p{L}*|остал\p{L}*|появил\p{L}*)(?![\p{L}\p{M}])/u.test(right)) return 'nominative';
   let preferred;
   for (let index = near.length - 1; index >= 0 && !preferred; index--) {
     const word = near[index];
@@ -130,7 +139,7 @@ export function resolveNameCase(candidates, text, start, end) {
     else if (['через', 'про', 'сквозь'].includes(word)) preferred = choose('accusative');
   }
   if (preferred) return preferred;
-  if (/(?:^|\s)(?:нет|отсутствие|отсутствия|имя|имени|смерть|смерти|голос|голоса|след|следы|жизнь|жизни|письмо|письма|взгляд|взгляда|дом|дома|рука|руки|слова|брат|сестра|друг|друга|не было|не стало)\s*$/u.test(left)) return choose('genitive') || candidates[0];
+  if (genitiveHead) return choose('genitive') || candidates[0];
   if (/(?:^|\s)(?:вижу|видел[аи]?|увидел[аи]?|увижу|встреч\p{L}*|встрет\p{L}*|люб\p{L}*|зов[уе]\p{L}*|позвал[аи]?|наш[её]л[аи]?|найду|жду|ждал[аи]?|обнял[аи]?|обним\p{L}*|ищ\p{L}*|искал[аи]?|помню|знаю|убил[аи]?|спас[ау]?|ненавижу)\s*$/u.test(left)) return choose('accusative') || candidates[0];
   if (/(?:^|\s)(?:помог\p{L}*|помо\p{L}*|верю|довер\p{L}*|сказал[аи]?|скажу|ответил[аи]?|отвеч\p{L}*|пишу|написал[аи]?|дал[аи]?|дам|подарил[аи]?)\s*$/u.test(left)) return choose('dative') || candidates[0];
   if (/(?:^|\s)(?:горжусь|гордил\p{L}*|восхища\p{L}*|любуюсь|доволен|довольна)\s*$/u.test(left)) return choose('instrumental') || candidates[0];
