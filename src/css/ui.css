@@ -28,6 +28,7 @@ textarea::selection {
 .page-content ::selection {
   color: currentColor;
   background: transparent !important;
+  text-shadow: none;
 }
 
 #nocturne-selection-layer {
@@ -63,9 +64,7 @@ textarea::selection {
 
 #nocturne-selection-layer.no-transition .nocturne-selection-rect,
 #nocturne-selection-layer.no-transition .nocturne-selection-handle,
-body.is-selecting-text #nocturne-selection-layer .nocturne-selection-rect,
 body.is-scrolling #nocturne-selection-layer .nocturne-selection-rect,
-#nocturne-selection-layer.dragging .nocturne-selection-rect,
 #nocturne-selection-layer .nocturne-selection-rect.selection-entering {
   transition: none !important;
 }
@@ -3029,9 +3028,9 @@ body.ctrl-pressed .entity-family-link:hover {
 .side-panel {
   position: absolute;
   right: -390px;
-  top: 64px;
+  top: var(--side-panel-top, 64px);
   width: 370px;
-  height: calc(100% - 64px);
+  height: calc(100% - var(--side-panel-top, 64px));
   background: var(--bg-glass);
   backdrop-filter: blur(24px);
   border-left: 1px solid var(--border-light);
@@ -3043,6 +3042,7 @@ body.ctrl-pressed .entity-family-link:hover {
 }
 .side-panel.open { right: 0; }
 .panel-header {
+  flex: 0 0 64px;
   padding: 0 24px;
   justify-content: space-between;
   border-bottom: 1px solid var(--border-light);
@@ -10795,8 +10795,8 @@ body.is-electron .main-workspace {
 }
 
 body.is-electron .side-panel {
-  top: 102px;
-  height: calc(100% - 102px);
+  top: var(--side-panel-top, 102px);
+  height: calc(100% - var(--side-panel-top, 102px));
 }
 
 body.is-electron .kb-modal {

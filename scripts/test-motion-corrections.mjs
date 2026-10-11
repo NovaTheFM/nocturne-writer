@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { FRAME_CAMERA_ARGS, FrameCamera } from './qa/frame-camera.mjs';
+import { captureNativeSelection } from '../reports/capture-native-selection.mjs';
 
 const port = 5339;
 const output = process.env.NOCTURNE_QA_DIR || 'release/qa/motion-corrections';
@@ -42,6 +43,7 @@ async function record(page, camera, config, name, options) {
 try {
   for (let attempt = 0; attempt < 80; attempt++) { try { if ((await fetch(`http://localhost:${port}`)).ok) break; } catch {} await new Promise(resolve => setTimeout(resolve, 100)); }
   for (const config of configurations) {
+    if (process.env.NOCTURNE_MOTION_RECORD === 'off') config.video = false;
     const context = await browser.newContext({ viewport: { width: config.width, height: config.height }, isMobile: !!config.mobile, hasTouch: !!config.mobile });
     const page = await context.newPage(); const camera = new FrameCamera(page, output); const errors = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -68,25 +70,28 @@ try {
       check(config, 'dictionary creates only visible exit copies', Math.max(...search.map(sample => sample.ghosts.length)) < 30, { maximumGhosts: Math.max(...search.map(sample => sample.ghosts.length)) });
       await reset(page, camera); await page.evaluate(() => { const a = window.nocturneApp; a.openSettingsTab('formatting'); a.settingsSurfaceRoot().querySelector('.formatting-list').scrollIntoView({ block: 'center', behavior: 'instant' }); }); await camera.settle();
       const formatting = await record(page, camera, config, 'formatting-delete', { frames: 120, events: [{ frame: 18, action: () => camera.click('[data-action="formatting-delete"]') }], inspect: () => {
-        const a = window.nocturneApp, list = a.settingsSurfaceRoot().querySelector('.formatting-list'), row = list.querySelector('.formatting-item'), toggle = row?.querySelector('.toggle'), l = list.getBoundingClientRect(), t = toggle?.getBoundingClientRect();
-        return { overflow: getComputedStyle(list).overflowY, listBottom: l.bottom, toggleBottom: t?.bottom || 0, toggleTop: t?.top || 0, on: toggle?.classList.contains('on'), count: list.querySelectorAll('.formatting-item').length };
+        const a = window.nocturneApp, list = a.settingsSurfaceRoot().querySelector('.formatting-list'), row = list.querySelector('[data-surface-key="formatting:..."]'), toggle = row?.querySelector('.toggle'), l = list.getBoundingClientRect(), t = toggle?.getBoundingClientRect();
+        return { overflow: getComputedStyle(list).overflowY, listBottom: l.bottom, toggleBottom: t?.bottom || 0, toggleTop: t?.top || 0, on: toggle?.classList.contains('on'), toggleBackground: toggle && getComputedStyle(toggle).backgroundColor, thumbTransform: toggle && getComputedStyle(toggle, '::after').transform, ghostSwitches: document.querySelectorAll('.surface-exit-ghost .toggle').length, count: list.querySelectorAll('.formatting-item').length };
       } });
       const clipped = formatting.filter(sample => sample.frame > 18 && sample.frame < 70 && sample.overflow === 'hidden' && sample.toggleBottom > sample.listBottom + 1);
       check(config, 'remaining switch is never clipped during row removal', clipped.length === 0, { clippedFrames: clipped.length });
       check(config, 'remaining switch keeps its off state', formatting.filter(sample => sample.frame >= 19).every(sample => sample.on === false), {});
+      check(config, 'remaining switch has no color or thumb blink', new Set(formatting.map(sample => sample.toggleBackground)).size === 1 && new Set(formatting.map(sample => sample.thumbTransform)).size === 1 && formatting.every(sample => sample.ghostSwitches === 0), {});
       await reset(page, camera);
       await page.evaluate(() => { const a = window.nocturneApp; a.openSettingsTab('macros'); a.settingsSurfaceRoot().querySelector('.macro-add-card').scrollIntoView({ block: 'start', behavior: 'instant' }); }); await camera.settle();
       const helper = await record(page, camera, config, 'macro-helper', { frames: 150, events: [{ frame: 18, action: () => camera.click('[data-action="macro-record-toggle"]') }, { frame: 90, action: () => camera.click('[data-action="macro-record-toggle"]') }], inspect: () => { const a = window.nocturneApp, card = a.settingsSurfaceRoot().querySelector('.macro-add-card'), helper = a.settingsControl('macro-record-instructions'); return { height: card?.getBoundingClientRect().height || 0, helperVisible: helper && getComputedStyle(helper).display !== 'none' && getComputedStyle(helper).visibility !== 'hidden' && helper.getBoundingClientRect().height > 1 && getComputedStyle(helper).opacity !== '0', text: helper?.textContent }; } });
       check(config, 'recording helper and card actually change in the clip', helper.some(sample => sample.helperVisible) && helper.some(sample => !sample.helperVisible) && new Set(helper.map(sample => Math.round(sample.height * 10))).size > 5, { heights: new Set(helper.map(sample => Math.round(sample.height * 10))).size });
       await camera.settle();
       await page.evaluate(() => window.nocturneApp.settingsSurfaceRoot().querySelector('.macros-list').scrollIntoView({ block: 'center', behavior: 'instant' })); await camera.settle();
-      const macros = await record(page, camera, config, 'macro-delete', { frames: 210, events: [{ frame: 18, action: () => camera.click('[data-action="macro-delete"]') }, { frame: 48, action: () => camera.click('[data-confirm-delete-macro]') }], inspect: () => { const row = document.querySelector('.macro-item'), r = row?.getBoundingClientRect(); return { count: document.querySelectorAll('.macro-item').length, y: r?.top || 0 }; } });
-      check(config, 'macro recording covers confirmation and completed reflow', macros[0].count === 3 && macros.at(-1).count === 2 && new Set(macros.filter(sample => sample.count === 2).map(sample => Math.round(sample.y * 10))).size > 5, { count: macros.at(-1).count });
+      const macros = await record(page, camera, config, 'macro-delete', { frames: 210, events: [{ frame: 18, action: () => camera.click('[data-action="macro-delete"]') }, { frame: 48, action: () => camera.click('[data-confirm-delete-macro]') }], inspect: () => { const list = window.nocturneApp.settingsSurfaceRoot().querySelector('.macros-list'), row = list.querySelector('.macro-item'), r = row?.getBoundingClientRect(); return { count: list.querySelectorAll('.macro-item').length, y: r?.top || 0, height: list.getBoundingClientRect().height }; } });
+      const reflow = macros.filter(sample => sample.count === 2), reflowY = new Set(reflow.map(sample => Math.round(sample.y * 10))).size, reflowHeight = new Set(reflow.map(sample => Math.round(sample.height * 10))).size;
+      check(config, 'macro recording covers confirmation and completed reflow', macros[0].count === 3 && macros.at(-1).count === 2 && (reflowY > 5 || reflowHeight > 5), { count: macros.at(-1).count, reflowY, reflowHeight });
       await reset(page, camera);
       await page.evaluate(() => { const a = window.nocturneApp; a.state.floatingNotesManagerOpen = true; a.renderFloatingNotesModal(); }); await camera.settle();
-      const floating = await record(page, camera, config, 'floating-resize', { frames: config.mobile ? 270 : 180, events: [{ frame: 18, action: () => camera.click('[data-action="delete-floating-note"]') }, ...(config.mobile ? [{ frame: 80, action: () => camera.click('[data-action="delete-floating-note"]') }, { frame: 142, action: () => camera.click('[data-action="delete-floating-note"]') }] : [])], inspect: () => { const panel = document.querySelector('.floating-notes-modal-panel'); return { height: panel?.getBoundingClientRect().height || 0, top: panel?.getBoundingClientRect().top || 0, count: document.querySelectorAll('.floating-manager-card').length }; } });
+      const floating = await record(page, camera, config, 'floating-resize', { frames: config.mobile || config.id === 'desktop-short' ? 270 : 180, events: [{ frame: 18, action: () => camera.click('[data-action="delete-floating-note"]') }, ...(config.mobile || config.id === 'desktop-short' ? [{ frame: 80, action: () => camera.click('[data-action="delete-floating-note"]') }, { frame: 142, action: () => camera.click('[data-action="delete-floating-note"]') }] : [])], inspect: () => { const panel = document.querySelector('.floating-notes-modal-panel'), grid = panel?.querySelector('.floating-manager-grid'); return { height: panel?.getBoundingClientRect().height || 0, gridHeight: grid?.getBoundingClientRect().height || 0, top: panel?.getBoundingClientRect().top || 0, count: document.querySelectorAll('.floating-manager-card').length }; } });
       const heights = floating.filter(sample => sample.frame >= 18).map(sample => Math.round(sample.height * 10));
-      if (!config.mobile) check(config, 'notes modal shrinks through intermediate sizes', new Set(heights).size > 5, { heights: new Set(heights).size, before: floating[0].height, after: floating.at(-1).height });
+      const layoutHeights = config.id === 'desktop-short' ? floating.map(sample => Math.round(sample.gridHeight * 10)) : heights;
+      check(config, 'notes modal or its scrollable grid shrinks through intermediate sizes', new Set(layoutHeights).size > 5, { heights: new Set(layoutHeights).size, before: floating[0].height, after: floating.at(-1).height });
       await reset(page, camera);
       await page.evaluate(() => { const a = window.nocturneApp; if (a.isMobileLayout()) a.openMobilePanel('notes', 'more'); else a.togglePanel('notes-panel'); a.renderNotes(); }); await camera.settle();
       await camera.screenshot(`${config.id}-notes-panel`); evidence.push({ config: config.id, name: 'notes-panel', screenshot: `${config.id}-notes-panel.png` });
@@ -102,6 +107,12 @@ try {
       check(config, 'selection interpolates while the pointer is down', new Set(moving.map(sample => Math.round(sample.width * 10))).size > 3 && moving.some(sample => Math.abs(sample.width - sample.target) > 1), { intermediateWidths: new Set(moving.map(sample => Math.round(sample.width * 10))).size });
       check(config, 'smoothing preserves the selected text exactly', selection.every(sample => sample.native === sample.text), {});
       check(config, 'selection finishes clearing', !selection.at(-1).active, {});
+      if (!config.mobile) {
+        const native = await captureNativeSelection(page, camera, `${config.id}-selection-native`, !!config.video);
+        if (native.video) evidence.push({ config: config.id, name: 'selection-native', video: native.video, fps: native.fps, frames: native.frames, seconds: native.seconds });
+        check(config, 'actual pointer drag keeps exact native selection after release', native.observations.filter(sample => sample.frame >= 160).every(sample => sample.native === sample.text) && native.observations.some(sample => sample.dragging && sample.to > sample.from && sample.native.length > 0), {});
+        check(config, 'actual pointer drag smooths movement between characters', native.observations.some(sample => sample.dragging && sample.width > 0 && sample.target > 0 && Math.abs(sample.width - sample.target) > .5), {});
+      }
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await page.evaluate(() => { const a = window.nocturneApp; a.nocturneEditor.get('primary').commands.setTextSelection({ from: 18, to: 30 }); a.renderNocturneSelectionLayer(); }); await camera.advance();
       const reduced = await page.evaluate(() => { const rect = document.querySelector('.nocturne-selection-rect'); return Math.abs(rect.getBoundingClientRect().width - parseFloat(rect.style.width)) < 1; });

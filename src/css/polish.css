@@ -89,6 +89,17 @@
 .note-actions-menu { overflow-y: auto; }
 .note-actions-menu .floating-menu-item { transition: transform 120ms ease, background-color 160ms ease, color 160ms ease; }
 .note-actions-menu .floating-menu-item:active { transform: scale(.98); }
+.notes-panel-body { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+.notes-panel-body > .notes-tabs, .notes-panel-body > .notes-tools, .notes-panel-body > .floating-notes-manager { flex-shrink: 0; }
+.notes-panel-body > .notes-textarea { flex: 1 0 180px; overflow-wrap: anywhere; }
+#notes-panel .panel-header > .btn-icon { min-width: 44px; min-height: 44px; flex-shrink: 0; }
+.floating-notes-modal-head { flex-shrink: 0; }
+.floating-notes-modal-body { min-height: 0; }
+.settings-body, .mobile-panel-body:has(.settings-page), .floating-notes-modal-body { overflow-anchor: none; }
+.floating-manager-grid > .floating-manager-empty { grid-column: 1 / -1; }
+.macro-helper-text { display: grid; grid-template-rows: 0fr; margin-top: 0; opacity: 0; visibility: hidden; font-size: 11px; color: var(--text-muted); transition: grid-template-rows 240ms cubic-bezier(.16, 1, .3, 1), margin-top 240ms cubic-bezier(.16, 1, .3, 1), opacity 180ms ease, visibility 0ms linear 240ms; }
+.macro-helper-text > div { min-height: 0; overflow: hidden; }
+.macro-helper-text.is-recording { grid-template-rows: 1fr; margin-top: 12px; opacity: 1; visibility: visible; transition-delay: 0ms; }
 @media (prefers-reduced-motion: reduce) {
   .knowledge-search *, .knowledge-search *::after, .note-read-mode *, .note-actions-menu *, .note-actions-trigger { transition-duration: 0ms !important; }
 }
@@ -230,7 +241,7 @@ button.utility-row, label.utility-row { cursor: pointer; }
 .sync-options-content { padding-top: 16px; }
 .sync-mobile-content { min-width: 0; }
 .surface-exit-ghost { position: fixed; z-index: 6100; pointer-events: none; overflow: hidden; user-select: none; }
-.surface-exit-ghost * { pointer-events: none !important; animation: none !important; }
+.surface-exit-ghost *, .surface-exit-ghost *::before, .surface-exit-ghost *::after { pointer-events: none !important; animation: none !important; transition: none !important; }
 .surface-exit-ghost { animation: none !important; contain: layout paint; }
 .command-palette-overlay { display: flex; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 220ms ease, visibility 0s linear 220ms; }
 .command-palette-overlay.active, .command-palette-overlay.motion-exiting { display: flex; animation: none; }

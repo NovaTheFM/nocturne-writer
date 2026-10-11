@@ -32,15 +32,18 @@ export class FrameCamera {
     this.base = result.virtualTimeTicksBase;
   }
 
-  async advance(milliseconds = 1000 / this.fps, screenshot = false) {
+  async advance(milliseconds = 1000 / this.fps, screenshot = false, inputFrame = false) {
     const expired = new Promise(resolve => this.cdp.once('Emulation.virtualTimeBudgetExpired', resolve));
     await this.cdp.send('Emulation.setVirtualTimePolicy', { policy: 'advance', budget: milliseconds, maxVirtualTimeTaskStarvationCount: 10000 });
-    await expired;
     this.time += milliseconds;
-    const result = await this.cdp.send('HeadlessExperimental.beginFrame', {
+    const draw = () => this.cdp.send('HeadlessExperimental.beginFrame', {
       frameTimeTicks: this.base + this.time, interval: milliseconds,
       ...(screenshot ? { screenshot: { format: 'png' } } : {}),
     });
+    let result;
+    if (inputFrame) result = await draw();
+    await expired;
+    if (!inputFrame) result = await draw();
     return screenshot ? Buffer.from(result.screenshotData, 'base64') : null;
   }
 
@@ -57,6 +60,13 @@ export class FrameCamera {
     const rect = await this.page.locator(selector).first().boundingBox();
     if (!rect) throw new Error(`Capture action has no visible target: ${selector}`);
     await this.page.mouse.click(rect.x + rect.width / 2, rect.y + rect.height / 2);
+  }
+
+  async input(action) {
+    let complete = false;
+    const pending = action().finally(() => { complete = true; });
+    while (!complete) await this.advance();
+    await pending;
   }
 
   async record(name, { frames = 120, events = [], inspect = null, video = true, clip = null, beforeFrame = null } = {}) {
@@ -76,8 +86,9 @@ export class FrameCamera {
     try {
       for (let frame = 0; frame < frames; frame++) {
         for (const event of events) if (event.frame === frame) await event.action();
-        if (beforeFrame) await beforeFrame(frame);
-        const pixels = await this.advance(1000 / this.fps, video);
+        const input = beforeFrame?.(frame);
+        const pixels = await this.advance(1000 / this.fps, video, !!beforeFrame);
+        await input;
         if (video) {
           hashes.add(createHash('sha256').update(pixels).digest('hex'));
           if (!encoder.stdin.write(pixels)) await once(encoder.stdin, 'drain');

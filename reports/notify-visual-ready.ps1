@@ -24,7 +24,7 @@ $title.Location = New-Object System.Drawing.Point(24, 22)
 $title.Size = New-Object System.Drawing.Size(525, 40)
 $form.Controls.Add($title)
 $description = New-Object System.Windows.Forms.Label
-$description.Text = "26 визуальных пунктов исправлены, выделение текста обновлено.`r`n`r`nВ отчёте: слева «до», справа «после», GIF анимаций, переключение исправлений и увеличение изображений."
+$description.Text = "Исправлены 8 пунктов из последнего разбора.`r`n`r`nСлева «до», справа «после». Записи и APNG в 60 FPS, пауза, замедление, шаг по кадрам и переключение исправлений. Приложение готово к проверке."
 $description.Location = New-Object System.Drawing.Point(26, 75)
 $description.Size = New-Object System.Drawing.Size(520, 115)
 $form.Controls.Add($description)

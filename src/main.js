@@ -3332,6 +3332,7 @@ class NocturneWriter {
               <div class="panel-title"><i class="bx bx-notepad"></i> Заметки к документу</div>
               <button class="btn-icon" data-action="close-notes"><i class="bx bx-x"></i></button>
             </div>
+            <div class="notes-panel-body">
             <div class="notes-tabs">
               <button class="notes-tab active" data-notes-mode="document">Документ</button>
               <button class="notes-tab" data-notes-mode="global">Общие</button>
@@ -3345,6 +3346,7 @@ class NocturneWriter {
             </div>
             <div class="floating-notes-manager" id="floating-notes-manager"></div>
             <div contenteditable="true" class="notes-textarea" id="notes-input" placeholder="Ваши быстрые идеи..."></div>
+            </div>
           </aside>
         </main>
         ${this.renderMobileTabSurface()}
@@ -3503,6 +3505,7 @@ class NocturneWriter {
     this.updateAssistantPanelState();
     this.updateSplitMenuState();
     this.renderMobileShell();
+    this.syncSidePanelGeometry();
   }
 
   mobileViewScrollKey(tab) {
@@ -5703,7 +5706,7 @@ class NocturneWriter {
     layer.classList.add('active');
     if (!layer._rectPool) layer._rectPool = [];
     if (entering) layer.__selectionFade = this.runMotion(layer, [{ opacity: 0 }, { opacity: 1 }], { channel: 'selection-layer', duration: 100 });
-    const immediate = this.shouldReduceSurfaceMotion() || layer.classList.contains('dragging') || document.body.matches('.is-selecting-text, .is-scrolling');
+    const immediate = this.shouldReduceSurfaceMotion() || document.body.classList.contains('is-scrolling');
     layer.classList.toggle('no-transition', immediate);
     const used = new Set();
     for (const r of merged) {
@@ -8045,13 +8048,26 @@ class NocturneWriter {
         this.renderFormattingListOnly();
         this.toast(existingIdx !== -1 ? 'Правило автозамены обновлено.' : 'Правило автозамены успешно добавлено.');
       },
-      'formatting-delete': () => {
+      'formatting-delete': async () => {
         const btn = event.target.closest('[data-rule-idx]');
         const idx = parseInt(btn?.dataset.ruleIdx, 10);
-        if (Number.isFinite(idx) && this.state.settings.customInputRules) {
-          this.state.settings.customInputRules.splice(idx, 1);
+        const rules = this.state.settings.customInputRules, rule = rules?.[idx], row = btn?.closest('.formatting-item');
+        if (rule && row && !row.__ruleRemoving) {
+          row.__ruleRemoving = true;
+          const restoreFocus = row.contains(document.activeElement);
+          row.inert = true;
+          const exit = this.runMotion(row, [{ opacity: 1 }, { opacity: 0 }], { channel: 'rule-removal', duration: 140, fill: 'forwards' });
+          await exit.finished;
+          const current = rules.indexOf(rule);
+          if (current < 0) { exit.animation?.cancel(); return; }
+          rules.splice(current, 1);
           this.persistSettings();
           this.renderFormattingListOnly();
+          exit.animation?.cancel();
+          if (restoreFocus && this.isSurfaceVisible(this.settingsSurfaceRoot())) {
+            const remaining = this.settingsSurfaceRoot().querySelectorAll('[data-action="formatting-delete"]');
+            (remaining[Math.min(current, remaining.length - 1)] || this.settingsSurfaceRoot().querySelector('[data-action="formatting-save-new"]'))?.focus({ preventScroll: true });
+          }
           this.toast('Правило автозамены удалено.');
         }
       },
@@ -8732,7 +8748,25 @@ class NocturneWriter {
     }
   }
 
+  syncSidePanelGeometry() {
+    const workspace = document.querySelector('.main-workspace');
+    const toolbar = workspace?.querySelector(':scope > .toolbar');
+    if (!toolbar) return;
+    const update = () => {
+      const top = Math.max(0, toolbar.getBoundingClientRect().bottom - workspace.getBoundingClientRect().top);
+      workspace.style.setProperty('--side-panel-top', `${top}px`);
+    };
+    if (this.sidePanelToolbar !== toolbar) {
+      this.sidePanelGeometryObserver?.disconnect();
+      this.sidePanelToolbar = toolbar;
+      this.sidePanelGeometryObserver = new ResizeObserver(update);
+      this.sidePanelGeometryObserver.observe(toolbar);
+    }
+    update();
+  }
+
   togglePanel(id) {
+    this.syncSidePanelGeometry();
     const panel = document.getElementById(id);
     document.querySelectorAll('.side-panel').forEach((el) => {
       if (el !== panel) el.classList.remove('open');
@@ -9135,19 +9169,21 @@ class NocturneWriter {
     };
     
     if (typeof Flip !== 'undefined' && candidateList.length) {
-      const state = Flip.getState(candidateList, { kill: false });
-      Flip.killFlipsOf(candidateList);
-      for (const element of candidateList) {
+      const resizeList = container.matches('.formatting-list, .dictionary-list, .macros-list, .floating-manager-grid');
+      const flipTargets = resizeList ? [container, ...candidateList] : candidateList;
+      const state = Flip.getState(flipTargets, { kill: false });
+      Flip.killFlipsOf(flipTargets);
+      for (const element of flipTargets) {
         for (const motion of element.__nocturneMotions?.values() || []) {
           if (motion.animation.effect?.getKeyframes().some(frame => frame.transform)) motion.animation.cancel();
         }
       }
       mutateDOM();
       animatePresence();
-      const transitions = new Map(candidateList.map(element => [element, element.style.transition]));
-      candidateList.forEach(element => { element.style.transition = 'none'; element.classList.add('is-flipping'); });
+      const transitions = new Map(flipTargets.map(element => [element, element.style.transition]));
+      flipTargets.forEach(element => { element.style.transition = 'none'; element.classList.add('is-flipping'); });
       const restore = () => {
-        candidateList.forEach(el => {
+        flipTargets.forEach(el => {
           el.style.transition = transitions.get(el);
           el.classList.remove('is-flipping');
           el._isFlippingGrid = false;
@@ -9161,7 +9197,7 @@ class NocturneWriter {
         absolute: false,
         nested: true,
         onStart: () => {
-          candidateList.forEach(el => { el._isFlippingGrid = true; });
+          flipTargets.forEach(el => { el._isFlippingGrid = true; });
         },
         onComplete: restore,
         onInterrupt: restore,
@@ -13000,7 +13036,8 @@ class NocturneWriter {
     const viewChanged = key !== null && element.__motionView !== undefined && element.__motionView !== key;
     const update = () => preserve ? this.patchSurface(element, next, true, animate) : element.replaceChildren(...next.childNodes);
     const change = () => animate && (viewChanged || !preserve) ? this.animateViewChange(element, update, { direction: this.state.mobile.tabDirection || 1 }) : update();
-    if (animate && resize && this.isSurfaceVisible(element)) this.animateHeightTransition(element.closest('.form-modal, .cleaner-modal, .command-palette-panel') || element, change);
+    const layoutOwnsHeight = element.matches('.formatting-list, .dictionary-list, .macros-list, .floating-manager-grid');
+    if (animate && resize && !layoutOwnsHeight && this.isSurfaceVisible(element)) this.animateHeightTransition(element.closest('.form-modal, .cleaner-modal, .command-palette-panel') || element, change);
     else change();
     element.__motionMarkup = html; element.__motionView = key;
   }
@@ -13031,9 +13068,27 @@ class NocturneWriter {
     else overlay.__motionCloseTimer = setTimeout(finish, duration);
   }
 
+  captureSurfaceExit(element) {
+    if (!this.isSurfaceVisible(element)) return null;
+    const rect = element.getBoundingClientRect();
+    let left = Math.max(0, rect.left), top = Math.max(0, rect.top);
+    let right = Math.min(innerWidth, rect.right), bottom = Math.min(innerHeight, rect.bottom);
+    for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+      const style = getComputedStyle(parent), bounds = parent.getBoundingClientRect();
+      if (/auto|scroll|hidden|clip/.test(style.overflowX)) { left = Math.max(left, bounds.left + parent.clientLeft); right = Math.min(right, bounds.left + parent.clientLeft + parent.clientWidth); }
+      if (/auto|scroll|hidden|clip/.test(style.overflowY)) { top = Math.max(top, bounds.top + parent.clientTop); bottom = Math.min(bottom, bounds.top + parent.clientTop + parent.clientHeight); }
+    }
+    if (right <= left || bottom <= top) return null;
+    const style = getComputedStyle(element);
+    if (Number(style.opacity) < .001) return null;
+    return { rect, font: style.font, color: style.color, opacity: style.opacity, clip: [top - rect.top, rect.right - right, rect.bottom - bottom, left - rect.left] };
+  }
+
   animateSurfaceContent(element, exiting = false, snapshot = null) {
+    if (exiting && !snapshot) snapshot = this.captureSurfaceExit(element);
+    if (exiting && !snapshot) return;
     if ((!snapshot && !this.isSurfaceVisible(element)) || this.shouldReduceSurfaceMotion()) return;
-    const opacity = getComputedStyle(element).opacity;
+    const opacity = snapshot?.opacity || getComputedStyle(element).opacity;
     let target = element;
     if (exiting) {
       element.__exitGhost?.remove();
@@ -13049,6 +13104,7 @@ class NocturneWriter {
       const owner = element.closest('.modal-overlay, .kb-modal, .mobile-overlay, .mobile-tab-surface, .command-palette-overlay, .review-navigator, .floating-notes-modal, .entity-hover-card, .doc-search-panel, .app-context-menu');
       const style = getComputedStyle(element);
       Object.assign(target.style, { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px`, margin: '0', font: snapshot?.font || style.font, color: snapshot?.color || style.color, zIndex: String((parseInt(owner ? getComputedStyle(owner).zIndex : '100', 10) || 100) + 1), maxHeight: `${rect.height}px` });
+      if (snapshot?.clip) target.style.clipPath = `inset(${snapshot.clip.map(value => `${Math.max(0, value)}px`).join(' ')})`;
       element.__exitGhost = target;
       document.body.append(target);
     }
@@ -13101,6 +13157,11 @@ class NocturneWriter {
       if (element instanceof HTMLInputElement) element.checked = next.checked;
     }
     const oldNodes = [...element.childNodes], nextNodes = [...next.childNodes], used = new Set();
+    const nextKeys = new Set(nextNodes.map(node => this.surfaceNodeKey(node)));
+    const exits = new Map();
+    if (animate) for (const node of oldNodes) {
+      if (node.nodeType === Node.ELEMENT_NODE && !nextKeys.has(this.surfaceNodeKey(node))) exits.set(node, this.captureSurfaceExit(node));
+    }
     const update = () => {
       for (let index = 0; index < nextNodes.length; index++) {
         const target = nextNodes[index], key = this.surfaceNodeKey(target);
@@ -13117,7 +13178,7 @@ class NocturneWriter {
         }
       }
       for (const node of oldNodes) if (!used.has(node)) {
-        if (animate && node.nodeType === Node.ELEMENT_NODE && node.matches('.utility-row, .utility-list, .utility-empty, .form-actions, .modal-head-row, .dump-summary-grid, .sync-device-card, .sync-start, .sync-pairing, .sync-connection-form, .sync-options-content, .sync-find-computer, .sync-feedback, .conflict-versions, .mobile-kb-content, .bookmark-manager-row, .formatting-item, .dictionary-card, .macro-item, .floating-manager-card, .floating-manager-grid')) this.animateSurfaceContent(node, true);
+        if (animate && exits.get(node) && node.matches('.utility-row, .utility-list, .utility-empty, .form-actions, .modal-head-row, .dump-summary-grid, .sync-device-card, .sync-start, .sync-pairing, .sync-connection-form, .sync-options-content, .sync-find-computer, .sync-feedback, .conflict-versions, .mobile-kb-content, .bookmark-manager-row, .formatting-item, .dictionary-card, .macro-item, .floating-manager-card, .floating-manager-grid')) this.animateSurfaceContent(node, true, exits.get(node));
         node.remove();
       }
     };
@@ -14347,7 +14408,7 @@ class NocturneWriter {
   renderFloatingNotesModalSection(title, notes, empty) {
     return `<section class="floating-manager-section">
       <h3>${escapeHtml(title)}</h3>
-      ${notes.length ? `<div class="floating-manager-grid">${notes.map((note) => this.renderFloatingNoteManagerCard(note)).join('')}</div>` : `<p class="floating-manager-empty">${escapeHtml(empty)}</p>`}
+      <div class="floating-manager-grid">${notes.length ? notes.map((note) => this.renderFloatingNoteManagerCard(note)).join('') : `<p class="floating-manager-empty">${escapeHtml(empty)}</p>`}</div>
     </section>`;
   }
 
@@ -20229,7 +20290,7 @@ class NocturneWriter {
               <button class="pill-btn ai-btn" data-action="macro-save-new"><i class="bx bx-plus"></i> Добавить</button>
             </div>
           </div>
-          <div id="macro-record-instructions" class="macro-helper-text" style="font-size: 11px; color: var(--text-muted); margin-top: 12px; display: ${this.macroRecordingState ? 'block' : 'none'};">Нажмите сочетание клавиш на клавиатуре, чтобы записать макрос.</div>
+          <div id="macro-record-instructions" class="macro-helper-text ${this.macroRecordingState ? 'is-recording' : ''}" aria-hidden="${!this.macroRecordingState}"><div>Нажмите сочетание клавиш на клавиатуре, чтобы записать макрос.</div></div>
           <div id="macro-conflict-warning" class="macro-warning" style="display:none; color:var(--accent); font-size:12px; margin-top:8px; font-weight:500;"></div>
         </section>
 
@@ -20307,11 +20368,8 @@ class NocturneWriter {
       const visible = !!this.macroRecordingState;
       if (recordInstruct.__recordingVisible !== visible) {
         recordInstruct.__recordingVisible = visible;
-        this.animateHeightTransition(recordInstruct.closest('.macro-add-card'), () => {
-          if (!visible) this.animateSurfaceContent(recordInstruct, true);
-          recordInstruct.style.display = visible ? 'block' : 'none';
-          if (visible) this.animateSurfaceContent(recordInstruct);
-        });
+        recordInstruct.classList.toggle('is-recording', visible);
+        recordInstruct.setAttribute('aria-hidden', String(!visible));
       }
     }
     const keysInput = this.settingsControl('new-macro-keys');
