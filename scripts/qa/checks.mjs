@@ -44,6 +44,7 @@ export const PROJECT_CHECKS = [
   check('review-mode-ui', ['--import', './scripts/qa/observe-playwright.mjs', 'scripts/test-review-mode-ui.mjs'], ['writing', 'review', 'motion', 'responsive', 'accessibility'], { ownScenarioReport: 'results.json' }),
   check('knowledge-search', ['--import', './scripts/qa/observe-playwright.mjs', 'scripts/test-knowledge-search.mjs'], ['lore', 'search', 'notes', 'responsive', 'keyboard', 'accessibility'], { ownScenarioReport: 'results.json', timeout: 180_000 }),
   check('character-rename', ['--import', './scripts/qa/observe-playwright.mjs', 'scripts/test-character-rename.mjs'], ['lore', 'writing', 'notes', 'database', 'security', 'responsive', 'keyboard', 'touch', 'accessibility', 'motion'], { ownScenarioReport: 'results.json', timeout: 240_000 }),
+  check('name-inflections', ['--test', '--experimental-test-coverage', '--test-coverage-include=src/core/name-inflections.js', 'scripts/test-name-inflections.mjs'], ['lore', 'writing', 'search', 'ai', 'dictionary']),
 ];
 
 export const ARTIFACT_CHECKS = [
