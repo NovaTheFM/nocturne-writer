@@ -149,6 +149,36 @@ try {
       await page.evaluate(() => window.nocturneApp.openSettingsTab('visual')); await page.waitForTimeout(100);
       await page.locator('[data-setting-select="theme"] .nocturne-select-trigger').click(); await page.locator('[data-setting-select="theme"] .nocturne-select-trigger').click(); await page.waitForTimeout(30);
       await check(page, config, 'reduced motion select closes immediately', () => getComputedStyle(document.querySelector('[data-setting-select="theme"] .nocturne-select-menu')).display === 'none');
+      await page.emulateMedia({ reducedMotion: 'no-preference' });
+      const themeTrigger = page.locator('[data-setting-select="theme"] .nocturne-select-trigger');
+      await themeTrigger.click(); await page.waitForTimeout(200); await themeTrigger.click(); await page.waitForTimeout(30); await themeTrigger.click(); await page.waitForTimeout(250);
+      await check(page, config, 'reopening menu cancels pending close', () => { const select = document.querySelector('[data-setting-select="theme"]'); return select.classList.contains('open') && !select.querySelector('.nocturne-select-menu').inert && select.querySelector('.nocturne-select-menu').matches(':popover-open'); });
+      await scene(page, config, 'association-focus', async () => { await page.evaluate(() => window.nocturneApp.editLore('timeline', 'visual-event')); await page.locator('[data-action="toggle-associations"]').click(); await page.waitForTimeout(350); const checkbox = page.locator('.char-assoc-card input[type="checkbox"]'); await checkbox.focus(); const before = await checkbox.isChecked(); await page.keyboard.press('Space'); results.push({ name: `${config.id}: association space toggles once`, ok: (await checkbox.isChecked()) !== before }); });
+      await check(page, config, 'association keyboard focus decorates card', () => parseFloat(getComputedStyle(document.querySelector('.char-assoc-card')).outlineWidth) >= 2);
+      await page.locator('[data-action="toggle-associations"]').click();
+      await check(page, config, 'collapsed association controls inert', () => document.querySelector('.assoc-collapsible-content').inert);
+      await reset(page); await page.evaluate(() => window.nocturneApp.openSettingsTab('formatting')); await page.waitForTimeout(350);
+      await check(page, config, 'formatting action fully readable', () => { const node = document.querySelector('.formatting-field-group .nocturne-select-trigger > span'); return node.scrollWidth <= node.clientWidth + 1; });
+      await page.evaluate(() => { const a = window.nocturneApp; a.state.settings.customInputRules = [{ trigger: 'first', action: 'center', enabled: true }, { trigger: 'second', action: 'separator', enabled: true }]; a.renderFormattingListOnly(); window.__visualSurvivor = a.settingsSurfaceRoot().querySelectorAll('.formatting-item')[1]; });
+      await page.waitForTimeout(350); await page.locator('[data-action="formatting-delete"]').first().click();
+      await check(page, config, 'formatting survivor keeps identity', () => window.__visualSurvivor.isConnected && window.__visualSurvivor.textContent.includes('second'));
+      await reset(page); await page.evaluate(() => window.nocturneApp.openSettingsTab('dictionary')); await page.waitForTimeout(350);
+      await page.evaluate(() => { const a = window.nocturneApp; a.state.dictionaryFilter = 'mine'; a.state.dictionarySearch = ''; a.updateDictionaryList(); window.__visualSurvivor = a.settingsSurfaceRoot().querySelectorAll('.dictionary-card')[1]; }); await page.waitForTimeout(350);
+      await page.locator('[data-dictionary-search]').fill('слофо'); await page.waitForTimeout(250);
+      await check(page, config, 'dictionary survivor keeps identity', () => window.__visualSurvivor.isConnected && window.__visualSurvivor.textContent.includes('слофо'));
+      await reset(page); await page.evaluate(() => window.nocturneApp.openSettingsTab('editor')); await page.waitForTimeout(350);
+      const decimalField = page.locator('.range-value-input[data-setting-input="lineHeight"]');
+      await decimalField.fill('1,75');
+      await check(page, config, 'decimal keyboard comma preserves value while typing', () => window.nocturneApp.state.settings.lineHeight === 1.75);
+      await decimalField.blur();
+      await check(page, config, 'decimal keyboard comma commits correctly', () => window.nocturneApp.state.settings.lineHeight === 1.75 && document.querySelector('.range-value-input[data-setting-input="lineHeight"]').value === '1.75');
+      await reset(page); await page.evaluate(() => { const editor = window.nocturneApp.nocturneEditor.get('primary'); editor.commands.setTextSelection(18); editor.view.focus(); });
+      await page.waitForFunction(() => window.nocturneApp.nocturneEditor.get('primary').view.hasFocus());
+      await page.keyboard.press('Shift+ArrowRight'); await page.keyboard.press('Shift+ArrowRight'); await page.waitForTimeout(180);
+      await check(page, config, 'keyboard selection stays native and exact', () => { const editor = window.nocturneApp.nocturneEditor.get('primary'), selection = editor.state.selection, native = getSelection(); return { ok: selection.to - selection.from === 2 && native.toString() === editor.state.doc.textBetween(selection.from, selection.to), from: selection.from, to: selection.to, text: native.toString() }; });
+      await page.evaluate(() => { const a = window.nocturneApp, editor = a.nocturneEditor.get('primary'); editor.commands.setTextSelection({ from: 18, to: 80 }); a.renderNocturneSelectionLayer(); }); await page.waitForTimeout(180);
+      await page.emulateMedia({ reducedMotion: 'reduce' }); await page.evaluate(() => { const a = window.nocturneApp; a.nocturneEditor.get('primary').commands.setTextSelection(18); a.renderNocturneSelectionLayer(); });
+      await check(page, config, 'reduced motion selection clears immediately', () => !document.getElementById('nocturne-selection-layer').classList.contains('active'));
       results.push({ name: `${config.id}: runtime errors`, ok: errors.length === 0, errors });
     } catch (error) { results.push({ name: `${config.id}: journey`, ok: false, error: error.stack }); }
     finally { const video = page.video(); await context.close(); if (video) await video.saveAs(`${output}/${config.id}-motion.webm`); }

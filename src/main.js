@@ -20845,7 +20845,7 @@ class NocturneWriter {
       rawStr = rawStr.slice(0, -suffix.length).trim();
     }
     
-    let val = parseFloat(rawStr);
+    let val = parseFloat(rawStr.replace(',', '.'));
     if (isNaN(val)) return; 
     
     val = Math.max(min, Math.min(max, val));
@@ -20881,7 +20881,7 @@ class NocturneWriter {
       rawStr = rawStr.slice(0, -suffix.length).trim();
     }
     
-    let val = parseFloat(rawStr);
+    let val = parseFloat(rawStr.replace(',', '.'));
     if (isNaN(val)) {
       val = Number(this.state.settings[key] || 0);
     }
