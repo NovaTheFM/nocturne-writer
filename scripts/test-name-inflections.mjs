@@ -74,6 +74,8 @@ test('retained old aliases keep their own declension when the new name changes g
   const forms = characterMentionForms(character('Анна', '', { aliases: ['Зейн'] }));
   assert.ok(forms.includes('Зейну'));
   assert.ok(forms.includes('Зейном'));
+  const full = characterMentionForms(character('Аеири', '', { aliases: ['Мария Северная'] }));
+  assert.ok(full.includes('Марией Северной'));
 });
 test('other character full names and ambiguous nominative names are protected', () => {
   const r = characterNameReplacement(character('Зейн'), character('Оррин'), { characters: [character('Зейна', '', { id: 'other' }), character('Зейн', 'Другой', { id: 'namesake' })] });
@@ -93,4 +95,7 @@ test('compound instrumental variants may mix long and short endings', () => {
 });
 test('prepositions, modifiers and verb government resolve indeclinable names', () => {
   assert.equal(rename('Аеири', 'Зейн', 'Нет Аеири. Помог Аеири. Горжусь Аеири. У дорогого Аеири. За Аеири. Через Аеири. Смотрю на Аеири. При Аеири.'), 'Нет Зейна. Помог Зейну. Горжусь Зейном. У дорогого Зейна. За Зейном. Через Зейна. Смотрю на Зейна. При Зейне.');
+});
+test('a previous preposition does not swallow the subject of the next verb', () => {
+  assert.equal(rename('Аеири', 'Зейн', 'У костра Аеири сидела. Рядом с домом Аеири стояла. У Аеири появился дом.'), 'У костра Зейн сидела. Рядом с домом Зейн стояла. У Зейна появился дом.');
 });

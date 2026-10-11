@@ -103,6 +103,59 @@ async function renamed(page) {
 try {
   for (let i = 0; i < 60; i++) { try { if ((await fetch(url)).ok) break; } catch {} await new Promise(resolve => setTimeout(resolve, 100)); }
   browser = await chromium.launch({ headless: true });
+  for (const width of [1440, 390]) await check(`automatic cases ${width}px: rich text, every store, mentions, lexicon, aliases and reload`, async page => {
+    const source = 'Зейн Леранте; у Зейна Леранте; к Зейну Леранте; вижу Зейна Леранте; с Зейном Леранте; о Зейне Леранте.';
+    const expected = 'Мария Северная; у Марии Северной; к Марии Северной; вижу Марию Северную; с Марией Северной; о Марии Северной.';
+    await page.evaluate(async source => {
+      const a = window.nocturneApp, doc = a.getFocusedDoc(), editor = a.nocturneEditor.get('primary');
+      Object.assign(a.state.lore.characters[0], a.normalizeCharacter({ id: 'char-rename', firstName: 'Зейн', lastName: 'Леранте', body: 'Герой истории' }));
+      a.state.lore.characters.push(a.normalizeCharacter({ id: 'ambiguous', firstName: 'Зейна' }));
+      editor.commands.setContent(`<p><strong>Зей</strong>н Леранте; у Зейна Леранте; к Зейну Леранте; вижу Зейна Леранте; с <em>Зейном</em> Леранте; о Зейне Леранте.</p><p>Зейна пришла. СверхЗейна. Кай-Зейна.</p>`);
+      const { anchorAt, editorIndex, makeBookmark } = await import('/src/features/bookmark-model.js');
+      const bookmark = makeBookmark(anchorAt(editorIndex(editor.state.doc), 1, 13, 'range'));
+      a.nocturneEditor.applyDocumentContent(doc, { pmJson: editor.getJSON(), bookmarks: [bookmark] });
+      doc.notes = source; a.state.globalNotes = source;
+      a.state.lore.notes[0].body = source;
+      a.state.lore.timeline[0].body = source; a.state.lore.timeline[0].subEvents[0].body = source;
+      a.state.floatingNotes.forEach(note => { note.body = source; });
+      await a.db.put('floatingNotes', a.state.floatingNotes[0]);
+      await a.db.put('trash', { id: 'declined-trash', type: 'document', doc: { id: 'deleted-declined', notes: source } });
+      const other = await a.db.get('lore', 'other-world'); other.notes[0].body = source; await a.db.put('lore', other);
+      await a.saveLore(); await a.saveActiveDoc({ silent: true }); await a.persistGlobalNotes(); a.renderAll();
+    }, source);
+    const recognition = await page.evaluate(source => {
+      const a = window.nocturneApp, index = a.buildEntityMentionIndex(), lexicon = a.buildProtectedLexicon();
+      const forms = a.findEntityMatches(source, index).map(match => match.mention);
+      return { count: forms.length, words: ['зейна', 'зейну', 'зейном', 'зейне'].every(word => lexicon.has(word)), falseMatches: a.findEntityMatches('СверхЗейна Кай-Зейна', index).length };
+    }, source);
+    assert.deepEqual(recognition, { count: 6, words: true, falseMatches: 0 });
+    await propose(page, 'Мария', 'Северная');
+    await page.locator('[data-rename-choice="rename"]').click();
+    await page.waitForFunction(() => window.nocturneApp.state.lore.characters[0].firstName === 'Мария');
+    const getTexts = () => page.evaluate(async () => {
+      const a = window.nocturneApp, doc = a.getFocusedDoc();
+      return { texts: [doc.notes, a.state.globalNotes, a.state.lore.notes[0].body, a.state.lore.timeline[0].body, a.state.lore.timeline[0].subEvents[0].body, ...a.state.floatingNotes.map(note => note.body), (await a.db.get('lore', 'other-world')).notes[0].body, (await a.db.get('trash', 'declined-trash')).doc.notes],
+        rich: a.nocturneEditor.get('primary').getText(), bookmark: doc.bookmarks[0].parts[0].anchor.quote,
+        formatting: doc.pmJson.content[0].content.filter(node => node.marks?.length).length };
+    });
+    const result = await getTexts();
+    assert.ok(result.texts.every(text => text === expected), JSON.stringify(result.texts));
+    assert.ok(result.rich.includes(expected)); assert.ok(result.rich.includes('Зейна пришла. СверхЗейна. Кай-Зейна.'));
+    assert.equal(result.bookmark, 'Мария Северная'); assert.ok(result.formatting >= 2);
+    await page.reload(); await page.waitForSelector('.app-shell.ready');
+    assert.equal((await getTexts()).texts[0], expected);
+    await propose(page, 'Аеири', ''); await page.locator('[data-rename-choice="alias"]').click();
+    await page.waitForFunction(() => window.nocturneApp.state.lore.characters[0].firstName === 'Аеири');
+    const final = await getTexts();
+    assert.equal(final.texts[0], 'Аеири; у Аеири; к Аеири; вижу Аеири; с Аеири; о Аеири.');
+    const alias = await page.evaluate(() => {
+      const a = window.nocturneApp, character = a.state.lore.characters[0];
+      return { saved: character.aliases.includes('Мария Северная'), matches: a.findEntityMatches('С Марией Северной', a.buildEntityMentionIndex()).filter(match => match.entity?.id === character.id).length };
+    });
+    assert.deepEqual(alias, { saved: true, matches: 1 });
+    await page.screenshot({ path: join(output, `automatic-cases-${width}.png`) });
+    return { cases: 6, stores: result.texts.length, formatting: true, bookmark: true, alias: true, recognition };
+  }, { viewport: { width, height: 900 }, ...(width < 500 ? { isMobile: true, hasTouch: true } : {}) });
   await check('cancel and Escape preserve data, form edits and focus; unchanged names do not prompt', async page => {
     await propose(page);
     assert.equal(await page.locator('.character-rename-modal button').count(), 3);
