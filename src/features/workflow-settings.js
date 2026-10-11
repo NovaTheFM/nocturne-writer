@@ -7,7 +7,6 @@ export const workflowDefaults = {
   historyLimitMB: 50, historyRestoreNotes: false, historyRestoreBookmarks: true,
   manuscriptSearchMode: 'phrase', searchFoldYo: false, searchInflections: false, searchAliases: false,
   searchResultsMode: 'return', searchFilterFirst: 'all', searchShowAll: false,
-  aiContextMode: 'automatic', aiResultLocation: 'chapter',
 };
 
 export const workflowSettings = [
@@ -33,8 +32,6 @@ export const workflowSettings = [
   { tab: 'manuscript-search', key: 'searchResultsMode', label: 'После открытия найденного текста', note: 'На телефоне сохраняем запрос и положение списка для возврата. Панель рядом с текстом доступна на ПК.', type: 'select', options: [['return', 'Закрывать, с возможностью вернуться'], ['side', 'Оставлять рядом с текстом на ПК']] },
   { tab: 'manuscript-search', key: 'searchFilterFirst', label: 'Первый фильтр результатов', note: 'Определяет порядок фильтров; выбранная область не сужается автоматически.', type: 'select', options: [['all', 'Всегда показывать всё'], ['work', 'Произведение'], ['chapter', 'Глава'], ['type', 'Тип материала'], ['status', 'Статус главы']] },
   { tab: 'manuscript-search', key: 'searchShowAll', label: 'Всегда показывать все совпадения', note: 'Выключено: первые фрагменты и кнопка «Показать ещё». Включено: полный список.', type: 'toggle' },
-  { tab: 'ai', key: 'aiContextMode', label: 'Подбор сведений для ИИ', note: 'Автоматический подбор можно поправить в окне контекста. Ручной выбор и сохранённые наборы доступны там же.', type: 'select', options: [['automatic', 'Автоматически, с моими уточнениями'], ['manual', 'Выбирать вручную'], ['preset', 'Сохранённый набор']] },
-  { tab: 'ai', key: 'aiResultLocation', label: 'Где находить готовый ответ', note: 'Каждый ответ сохраняется. При смене главы исходный текст остаётся без изменений.', type: 'select', options: [['chapter', 'В правках исходной главы'], ['history', 'В истории запросов'], ['notification', 'Уведомление и история для возврата']] },
 ];
 
 export function validateWorkflowSettings(settings) {

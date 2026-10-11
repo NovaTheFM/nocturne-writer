@@ -15,7 +15,7 @@ async function test(name, action, mobile = false, options = {}) {
   page.on('dialog', async dialog => { dialogs.push(dialog.type()); await dialog.dismiss(); });
   try {
     await page.goto(`http://localhost:${port}`);
-    await page.waitForFunction(() => window.nocturneApp?.books && document.querySelector('.app-shell.ready') && getComputedStyle(document.getElementById('preloader')).visibility === 'hidden');
+    await page.waitForFunction(() => window.nocturneApp?.history && document.querySelector('.app-shell.ready') && getComputedStyle(document.getElementById('preloader')).visibility === 'hidden');
     await action(page);
     assert.deepEqual(errors, []); assert.deepEqual(dialogs, []);
     results.push({ name, ok: true, mobile });
@@ -26,21 +26,6 @@ const settle = page => page.waitForTimeout(600);
 try {
   for (let i = 0; i < 80; i++) { try { if ((await fetch(`http://localhost:${port}`)).ok) break; } catch {} await new Promise(resolve => setTimeout(resolve, 100)); }
   for (const mobile of [false, true]) {
-    await test('book form spacing, bounded description, numeric error and select alignment', async page => {
-      await page.evaluate(() => window.nocturneApp.books.edit()); await settle(page);
-      await page.locator('[name="title"]').fill('Ночная библиотека');
-      await page.locator('[name="targetWords"]').fill('не число');
-      await page.locator('[type="submit"]').click();
-      await page.waitForTimeout(420);
-      await page.locator('textarea[name="description"]').evaluate(node => { node.style.width = '2000px'; node.style.height = '700px'; });
-      await page.screenshot({ path: `${output}/book-form-${mobile ? 'mobile' : 'desktop'}.png` });
-      const bounds = await page.evaluate(() => {
-        const form = document.querySelector('.book-edit-modal'), title = form.querySelector('[name="title"]').getBoundingClientRect(), author = form.querySelector('[name="author"]').closest('label').getBoundingClientRect(), description = form.querySelector('textarea').getBoundingClientRect(), rect = form.getBoundingClientRect();
-        return { gap: author.top - title.bottom, overflow: form.scrollWidth - form.clientWidth, width: description.width, right: description.right, maxRight: rect.right - 12, height: description.height };
-      });
-      await writeFile(`${output}/book-form-${mobile ? 'mobile' : 'desktop'}.json`, JSON.stringify(bounds));
-      assert.ok(bounds.gap >= 14, JSON.stringify(bounds)); assert.ok(bounds.overflow <= 1); assert.ok(bounds.right <= bounds.maxRight); assert.ok(bounds.height < 300);
-    }, mobile);
     await test('settings aligned controls, Nocturne switches and uninterrupted tab transition', async page => {
       await page.evaluate(() => window.nocturneApp.openSettingsTab('ai')); await settle(page);
       await page.screenshot({ path: `${output}/settings-ai-${mobile ? 'mobile' : 'desktop'}.png` });
@@ -73,32 +58,6 @@ try {
     }, mobile);
   }
   for (const mobile of [false, true]) {
-    await test('books retain header, animate their first navigation and move the selected tab', async page => {
-      await page.evaluate(async mobile => {
-        const a = window.nocturneApp;
-        await a.createDoc(a.defaultFolderId(), 'Первая глава', '');
-        const book = await a.books.save({ title: 'Письма после полуночи', author: 'Автор', description: 'История о памяти, городе и возвращении домой.', targetWords: 40000, documentIds: [a.getFocusedDoc().id] });
-        await a.books.save({ title: 'Тихий берег', author: 'Автор', status: 'editing' });
-        a.books.selectedId = null;
-        if (mobile) { a.state.mobile.kbTab = 'books'; a.switchMobileTab('lore'); } else a.openKb('books');
-        window.__polishBookId = book.id;
-      }, mobile); await settle(page);
-      await page.screenshot({ path: `${output}/books-library-${mobile ? 'mobile' : 'desktop'}.png` });
-      await page.locator('.book-card').filter({ hasText: 'Письма после полуночи' }).click();
-      const entrance = await page.evaluate(() => document.querySelector('.books-library').getAnimations().filter(animation => animation.playState === 'running').length);
-      assert.ok(entrance > 0, 'Opening the first book must animate'); await settle(page);
-      const header = page.locator('.book-detail-heading'), before = await header.boundingBox();
-      await page.screenshot({ path: `${output}/book-overview-${mobile ? 'mobile' : 'desktop'}.png` });
-      await page.locator('[data-book-tab="chapters"]').click();
-      const frame = await page.evaluate(() => ({ content: document.querySelector('.book-detail-content').getAnimations().length, indicator: document.querySelector('.book-detail-tabs .knowledge-selection').getAnimations().length, header: document.querySelector('.book-detail-heading').getAnimations().length }));
-      assert.ok(frame.content > 0); assert.ok(frame.indicator > 0); assert.equal(frame.header, 0);
-      await page.screenshot({ path: `${output}/book-transition-${mobile ? 'mobile' : 'desktop'}.png` }); await settle(page);
-      const after = await header.boundingBox(); assert.ok(Math.abs(before.x - after.x) <= 1); assert.ok(Math.abs(before.y - after.y) <= 1);
-      await page.locator('[data-book-tab="notes"]').click(); await settle(page);
-      const textarea = page.locator('[data-book-notes]'); await textarea.fill('Сохранённый замысел');
-      await page.waitForTimeout(750); await page.locator('[data-book-tab="overview"]').click(); await settle(page); await page.locator('[data-book-tab="notes"]').click(); await settle(page);
-      assert.equal(await textarea.inputValue(), 'Сохранённый замысел');
-    }, mobile);
     await test('rich recovery comparison, truthful save phases and safe undo', async page => {
       await page.evaluate(async () => {
         const a = window.nocturneApp;

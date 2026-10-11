@@ -37,6 +37,6 @@ test('search folds yo, preserves real offsets, accepts inflections and exact wor
   assert.equal(findManuscriptText('Ёлка', 'елка').length, 0);
 });
 test('workflow settings reject unknown modes and clamp numeric limits', () => {
-  const result = validateWorkflowSettings({ ...workflowDefaults, historyTimerKeep: -5, historyLimitMB: Infinity, aiContextMode: 'invalid', historyOpenMode: 'invalid' });
-  assert.equal(result.historyTimerKeep, 1); assert.equal(result.historyLimitMB, 50); assert.equal(result.aiContextMode, 'automatic'); assert.equal(result.historyOpenMode, 'text');
+  const result = validateWorkflowSettings({ ...workflowDefaults, historyTimerKeep: -5, historyLimitMB: Infinity, historyOpenMode: 'invalid' });
+  assert.equal(result.historyTimerKeep, 1); assert.equal(result.historyLimitMB, 50); assert.equal(result.historyOpenMode, 'text');
 });

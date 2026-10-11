@@ -2,7 +2,7 @@ import { blockText, buildSummary, countWords, docText, escapeHtml, normalizeHtml
 import { legacyAstToHtml, tiptapJsonToLegacyAst } from '../editor/document-adapter.js';
 import { diffText, textChange } from './manuscript-search.js';
 
-const labels = { manual: 'Ручная версия', timer: 'По времени работы', growth: 'Рост текста', 'large-edit': 'Перед большой правкой', 'before-restore': 'Перед восстановлением', 'before-ai': 'Перед принятой правкой ИИ' };
+const labels = { manual: 'Ручная версия', timer: 'По времени работы', growth: 'Рост текста', 'large-edit': 'Перед большой правкой', 'before-restore': 'Перед восстановлением' };
 const sentences = text => (text.match(/[.!?…]+(?:\s|$)/gu) || []).length;
 
 export class HistoryController {
@@ -33,7 +33,7 @@ export class HistoryController {
     return {
       id: uid('snap'), docId: doc.id, title: doc.title, name: options.name || '', reason: options.reason || 'manual',
       pinned: options.reason === 'manual', createdAt: Date.now(), ast: structuredClone(doc.ast), pmJson: structuredClone(doc.pmJson),
-      ...(this.app.state.settings.bookmarkSnapshots || ['before-restore', 'before-ai'].includes(options.reason) ? {
+      ...(this.app.state.settings.bookmarkSnapshots || options.reason === 'before-restore' ? {
         bookmarks: structuredClone(doc.bookmarks || []), fieldBookmarks: structuredClone(doc.fieldBookmarks || {}), globalBookmarks: structuredClone(this.app.state.globalBookmarks || []),
       } : {}),
       notes: doc.notes || '', globalNotes: this.app.state.globalNotes || '',

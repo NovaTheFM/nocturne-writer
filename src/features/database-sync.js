@@ -1,6 +1,6 @@
 const STORES = ['folders', 'docs', 'lore', 'floatingNotes', 'reviewMarks', 'typoRules', 'snapshots', 'stats', 'trash', 'settings'];
 const safeId = value => typeof value === 'string' && /^[\w.:-]{1,240}$/u.test(value);
-const allowed = (store, id) => STORES.includes(store) && (store !== 'settings' || ['global-notes', 'books-library'].includes(id));
+const allowed = (store, id) => STORES.includes(store) && (store !== 'settings' || id === 'global-notes');
 const keyOf = (store, id) => `${store}:${id}`;
 const mergeClocks = (a = {}, b = {}) => Object.fromEntries([...new Set([...Object.keys(a), ...Object.keys(b)])].map(id => [id, Math.max(a[id] || 0, b[id] || 0)]));
 

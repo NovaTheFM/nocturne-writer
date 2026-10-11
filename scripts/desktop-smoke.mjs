@@ -178,7 +178,7 @@ async function runAppSmoke(page) {
     assertInPage(repaired.ok && repaired.writing?.text === 'Безопасный текст.', 'invalid AI protocol was not repaired to JSON');
 
     const styleReview = app.validateParsedAiProtocol(app.parseAiJsonResponse(JSON.stringify({ type: 'review', thinking: '', issues: [] })), 'style');
-    assertInPage(!styleReview, 'soft style suggestions must support individually reviewed changes');
+    assertInPage(!!styleReview, 'legacy style rewriting must reject review protocol');
     const wrongType = app.validateParsedAiProtocol(app.parseAiJsonResponse(JSON.stringify({ type: 'writing', thinking: '', mode: 'replace-block', text: 'Unapproved text' })), 'proofread');
     assertInPage(!!wrongType, 'wrong AI response type was not rejected');
 

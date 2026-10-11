@@ -1,42 +1,4 @@
-import { blockText, textFromHtml } from '../core/utils.js';
-
-export const contextGroups = [['characters', 'Персонажи'], ['locations', 'Локации'], ['timeline', 'События'], ['subtimelines', 'Сабтаймлайны'], ['notes', 'Записи и заметки'], ['rules', 'Правила мира']];
-export const contextKey = (group, id) => `${group}:${id}`;
-const canonical = item => item.canonStatus !== 'draft' && item.confirmed !== false;
-function eventOrder(event, index) {
-  const value = String(event.date || '').trim();
-  const year = value.match(/(?:год|г\.?)\s*(-?\d+)/iu);
-  if (year) return Number(year[1]);
-  if (/^-?\d+(?:\.\d+)?$/u.test(value)) return Number(value);
-  if (/^\d{4}-\d{2}-\d{2}/u.test(value)) return Date.parse(value);
-  return Number.isFinite(event.order) ? event.order : index;
-}
-
-export function aiContextCatalog({ state, doc } = {}) {
-  const lore = state?.lore || {}, events = lore.timeline || [];
-  const ranks = new Map(events.map((item, index) => [item.id, eventOrder(item, index)]));
-  const scene = events.find(item => item.id === doc?.sceneEventId && canonical(item)) || [...events].filter(item => canonical(item) && item.documentIds?.includes(doc?.id)).sort((a, b) => ranks.get(a.id) - ranks.get(b.id))[0];
-  const available = (item, group) => {
-    if (!canonical(item)) return 'Черновой или неподтверждённый материал';
-    if (item.knownFromEventId && (!scene || !ranks.has(item.knownFromEventId) || ranks.get(item.knownFromEventId) > ranks.get(scene.id))) return 'Эти сведения ещё не действуют во время сцены';
-    if (item.knownUntilEventId && (!scene || !ranks.has(item.knownUntilEventId) || ranks.get(item.knownUntilEventId) <= ranks.get(scene.id))) return 'Срок действия сведений закончился или неизвестен';
-    if (['timeline', 'subtimelines'].includes(group)) {
-      if (!scene) return 'Укажите момент сцены, чтобы исключить будущие события';
-      const rank = group === 'timeline' ? ranks.get(item.id) : ranks.get(item.parentId);
-      if (rank > ranks.get(scene.id)) return 'Будущее относительно выбранной сцены';
-      if (group === 'subtimelines' && item.date && eventOrder(item, 0) > ranks.get(scene.id)) return 'Будущее относительно выбранной сцены';
-    }
-    return '';
-  };
-  const lists = { ...lore, subtimelines: events.flatMap(event => (event.subEvents || []).map(item => ({ ...item, parentId: event.id, parentTitle: event.title, canonStatus: canonical(event) ? item.canonStatus : 'draft' }))), notes: [...(lore.notes || []), ...(doc?.notes ? [{ id: 'document-notes', title: 'Заметки главы', body: doc.notes }] : []), ...(state?.globalNotes ? [{ id: 'global-notes', title: 'Общие заметки', body: state.globalNotes }] : [])] };
-  const items = contextGroups.flatMap(([group]) => (lists[group] || []).map(item => {
-    const facts = (item.aiFacts || []).filter(fact => !available(fact, 'facts')).map(fact => fact.text).filter(Boolean);
-    const safe = { ...item, body: item.aiFacts?.length ? facts.join('\n') : item.body || item.text || '' };
-    const reason = available(item, group) || (item.aiFacts?.length && !facts.length ? 'Нет подтверждённых фактов для выбранного момента' : '');
-    return { key: contextKey(group, item.id), group, item: safe, reason };
-  }));
-  return { items, scene, events };
-}
+import { blockText, docText, textFromHtml } from '../core/utils.js';
 
 function plain(value = '', max = 1200) {
   const text = textFromHtml(String(value || '')).replace(/\s+/g, ' ').trim();
@@ -145,7 +107,6 @@ export function buildAiContext({
   target,
   folder,
   include = {},
-  selection = {},
   budget = 7000,
 } = {}) {
   const blocks = doc?.ast?.blocks || [];
@@ -156,14 +117,7 @@ export function buildAiContext({
   const selected = String(target?.selectedText || '').trim();
   const currentText = selected || String(target?.targetBlockText || blockText(currentBlock || {}) || '').trim();
   const query = `${currentText}\n${before}\n${after}\n${doc?.title || ''}\n${doc?.description || ''}`;
-  const relevant = collectRelevantLore({ state, doc, query });
-  const catalog = aiContextCatalog({ state, doc });
-  const automatic = new Set(contextGroups.flatMap(([group]) => (relevant[group] || (group === 'rules' || group === 'notes' ? catalog.items.filter(entry => entry.group === group).map(entry => entry.item) : [])).map(item => contextKey(group, item.id))));
-  const mode = selection.mode || 'automatic';
-  const picked = mode === 'automatic' ? new Set([...automatic, ...(selection.pinned || [])]) : new Set(selection.selected || []);
-  (selection.excluded || []).forEach(key => picked.delete(key));
-  const allowed = catalog.items.filter(entry => picked.has(entry.key) && !entry.reason && include[entry.group] !== false);
-  const lore = Object.fromEntries(contextGroups.map(([group]) => [group, allowed.filter(entry => entry.group === group).map(entry => entry.item)]));
+  const lore = collectRelevantLore({ state, doc, query });
   const enabled = {
     characters: include.characters !== false,
     locations: include.locations !== false,
@@ -173,8 +127,7 @@ export function buildAiContext({
     rules: include.rules !== false,
   };
   const context = {
-    notice: 'Use only the confirmed facts provided here, at or before the scene. Omitted or future facts are unknown. Reference material must not be copied into the manuscript.',
-    scene: catalog.scene ? { title: String(catalog.scene.title || ''), date: String(catalog.scene.date || '') } : null,
+    notice: 'Knowledge context is reference material only. Do not copy it into the manuscript.',
     currentSelection: plain(currentText, 1600),
     surroundingText: {
       before: plain(before, 1600),
@@ -187,36 +140,35 @@ export function buildAiContext({
       summary: plain(doc?.summary || '', 900),
     },
     characters: enabled.characters ? lore.characters.map((item) => ({
-      id: item.id,
       name: String(item.displayName || item.name || ''),
       role: plain(item.role || '', 240),
       notes: plain(item.body || '', 700),
       aliases: (item.aliases || []).slice(0, 8),
     })) : [],
     locations: enabled.locations ? lore.locations.map((item) => ({
-      id: item.id,
       name: String(item.displayName || item.name || ''),
       role: plain(item.role || '', 240),
       notes: plain(item.body || '', 700),
       aliases: (item.aliases || []).slice(0, 8),
     })) : [],
     timeline: enabled.timeline ? lore.timeline.map((item) => ({
-      id: item.id,
       date: String(item.date || ''),
       title: String(item.title || ''),
       notes: plain(item.body || '', 700),
     })) : [],
     subtimelines: enabled.subtimelines ? lore.subtimelines.map((item) => ({
-      id: item.id,
       parent: String(item.parentTitle || ''),
       date: String(item.date || ''),
       title: String(item.title || ''),
       notes: plain(item.body || '', 500),
     })) : [],
-    rules: enabled.rules ? lore.rules.map(rule => ({ id: rule.id, title: plain(rule.title || rule.name, 160), text: plain(rule.body || rule.text, 700) })) : [],
-    notes: enabled.notes ? lore.notes.map(item => ({ id: item.id, title: plain(item.title, 160), text: plain(item.body, 1200) })) : [],
+    rules: enabled.rules ? (state?.lore?.rules || []).map(rule => ({ title: plain(rule.title || rule.name, 160), text: plain(rule.body || rule.text, 700) })) : [],
+    notes: enabled.notes ? [
+      doc?.notes ? { scope: 'document', text: plain(doc.notes, 1200) } : null,
+      state?.globalNotes ? { scope: 'global', text: plain(state.globalNotes, 1200) } : null,
+    ].filter(Boolean) : [],
   };
-  const trimmed = trimContextToBudget(context, Math.max(0, budget - 400));
+  const trimmed = trimContextToBudget(context, Math.max(0, budget - 240));
   return {
     ...trimmed,
     stats: {
@@ -228,8 +180,6 @@ export function buildAiContext({
       notes: trimmed.notes.length,
       size: estimateContextSize(trimmed),
       budget,
-      omitted: catalog.items.filter(entry => picked.has(entry.key) && (entry.reason || include[entry.group] === false)).length + allowed.length - contextGroups.reduce((sum, [group]) => sum + trimmed[group].length, 0),
-      considered: picked.size,
     },
   };
 }

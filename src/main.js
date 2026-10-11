@@ -32,8 +32,6 @@ import { LocalSyncClient, buildHttpBase, SYNC_PROTOCOL_VERSION } from './feature
 import { DatabaseSync } from './features/database-sync.js';
 import { ProjectBackups } from './features/backups.js';
 import { HistoryController } from './features/history.js';
-import { BooksController } from './features/books.js';
-import { AiWorkspaceController } from './features/ai-workspace.js';
 import { workflowSettings, workflowSettingsContent, validateWorkflowSettings } from './features/workflow-settings.js';
 import { collectManuscriptMatches } from './features/manuscript-search.js';
 import { TrashController } from './features/trash-controller.js';
@@ -284,8 +282,6 @@ class NocturneWriter {
     this.trash = new TrashController(this);
     this.bookmarks = new BookmarkController(this);
     this.history = new HistoryController(this);
-    this.books = new BooksController(this);
-    this.aiWorkspace = new AiWorkspaceController(this);
     this.nocturneEditor = new NocturneEditorBridge({
       bookmarkController: this.bookmarks,
       getSettings: () => this.state.settings,
@@ -407,10 +403,7 @@ class NocturneWriter {
     await this.loadTypoRules();
     await this.loadReviewMarks();
     this.validateLoadedState();
-    await this.books.load();
-    await this.aiWorkspace?.load();
     await this.bookmarks.init();
-    this.books.bind();
     await this.trash.init();
     this.initWorkspace();
     this.renderShell();
@@ -617,6 +610,8 @@ class NocturneWriter {
         clamp('aiTemperature', 0, 2);
     clamp('loreStrictness', 0, 100);
     clamp('autosaveMinutes', 1, 120);
+    delete merged.aiContextMode;
+    delete merged.aiResultLocation;
     return validateWorkflowSettings(merged);
   }
 
@@ -801,7 +796,6 @@ class NocturneWriter {
       severity: ['low', 'medium', 'high'].includes(mark.severity) ? mark.severity : '',
       status: ['open', 'resolved', 'accepted', 'rejected'].includes(mark.status) ? mark.status : 'open',
       unresolvedRange: !!mark.unresolvedRange,
-      deferred: !!mark.deferred,
       createdAt: mark.createdAt || now,
       updatedAt: mark.updatedAt || now,
     };
@@ -872,15 +866,6 @@ class NocturneWriter {
       await this.db.put('lore', defaultLore);
       lores.push(defaultLore);
     }
-    for (const world of lores) {
-      if (world.locked || !(world.rules || []).some(rule => typeof rule === 'string' || !rule?.id)) continue;
-      const raw = await this.db.getRaw('lore', world.id);
-      const current = structuredClone(await this.db.decodeRecord('lore', raw));
-      if (!current || current.locked) continue;
-      current.rules = (current.rules || []).map(rule => typeof rule === 'string' ? { id: uid('rule'), text: rule } : { ...rule, id: rule?.id || uid('rule') });
-      await this.db.atomicWrite({ lore: [current] }, { expect: { lore: [{ id: world.id, value: raw }] } });
-      Object.assign(world, current);
-    }
     this.loreById = new Map(lores.map(world => [world.id, world]));
     this.state.kbProjects = lores.map(p => ({ id: p.id, title: p.title || (p.id === 'world' ? 'Основное произведение' : 'Произведение ' + p.id) }));
     
@@ -899,7 +884,7 @@ class NocturneWriter {
       locations: (lore?.locations || []).map((item, index) => this.normalizeLocation(item, index)),
       timeline: (lore?.timeline || []).map((item, index) => this.normalizeTimelineEvent(item, index)),
       notes: (lore?.notes || []).map((item, index) => this.normalizeNote(item, index)),
-      rules: lore?.rules || [],
+      rules: (lore?.rules || []).map(rule => typeof rule === 'string' ? { id: uid('rule'), text: rule } : rule),
     };
   }
 
@@ -1015,7 +1000,7 @@ class NocturneWriter {
       const docId = validDocId(raw.docId) || (raw.docId === undefined ? fallbackDocId : null);
       return docId ? { ...this.emptyPaneDescriptor(id), type: 'document', docId } : this.emptyPaneDescriptor(id);
     }
-    if (type === 'kb-tab') return { ...this.emptyPaneDescriptor(id), type, kbTab: raw.kbTab || 'characters', subtimelineParentId: raw.subtimelineParentId || null };
+    if (type === 'kb-tab') return { ...this.emptyPaneDescriptor(id), type, kbTab: ['characters', 'locations', 'timeline', 'notes', 'bookmarks', 'search'].includes(raw.kbTab) ? raw.kbTab : 'characters', subtimelineParentId: raw.subtimelineParentId || null };
     if (type === 'character-detail' || type === 'location-detail' || type === 'note-detail') return { ...this.emptyPaneDescriptor(id), type, entityType: raw.entityType || type.replace('-detail', ''), entityId: raw.entityId || null };
     return this.emptyPaneDescriptor(id);
   }
@@ -1851,7 +1836,6 @@ class NocturneWriter {
 
   renderKbPane(paneId, pane) {
     const tab = pane?.kbTab || 'characters';
-    if (tab === 'books') return this.books.render();
     if (tab === 'bookmarks') return this.bookmarks.manager({ context: paneId });
     if (tab === 'search') return this.renderKnowledgeSearch();
     if (tab === 'locations') {
@@ -2529,8 +2513,7 @@ class NocturneWriter {
     return `
       ${options.asTab ? this.mobileTabHeader('База знаний', 'Персонажи, локации и таймлайн') : this.mobilePanelHeader('База знаний', 'Персонажи, локации и таймлайн')}
       <div class="mobile-panel-body">
-        <button class="pill-btn kb-global-tab ${active === 'books' ? 'active' : ''}" data-mobile-kb-tab="books"><i class="bx bx-book-open"></i><span>Книги <small>Вся библиотека</small></span></button>
-        <div class="kb-project-switcher-mobile-wrap" ${active === 'books' ? 'hidden' : ''}>
+        <div class="kb-project-switcher-mobile-wrap">
           <div class="kb-project-switcher" id="kb-project-switcher-btn-mobile">
             <i class="bx bx-cabinet"></i>
             <span>${escapeHtml(this.state.lore.title || 'Основное произведение')}</span>
@@ -2559,7 +2542,7 @@ class NocturneWriter {
           ${[['characters', 'Персонажи'], ['locations', 'Локации'], ['timeline', 'Таймлайн'], ['notes', 'Записи'], ['bookmarks', 'Закладки'], ['search', 'Поиск']].map(([id, label]) => `<button class="${active === id ? 'active' : ''}" data-mobile-kb-tab="${id}">${label}</button>`).join('')}
         </div>
         <div class="mobile-kb-content" data-surface-key="kb-content-${escapeHtml(active)}">
-        ${active === 'books' ? this.books.render() : active === 'bookmarks' ? this.bookmarks.manager({ context: 'mobile' }) : active === 'search' ? this.renderKnowledgeSearch() : `
+        ${active === 'bookmarks' ? this.bookmarks.manager({ context: 'mobile' }) : active === 'search' ? this.renderKnowledgeSearch() : `
         ${this.kbViewTools()}
         <div class="mobile-search-field"><i class="bx bx-search" aria-hidden="true"></i><input data-mobile-lore-search aria-label="Поиск в базе знаний" type="search" placeholder="Поиск в базе" value="${escapeHtml(this.state.mobile.loreSearch || '')}"></div>
         <div class="mobile-panel-actions"><button class="pill-btn ai-btn" data-action="new-lore" data-lore-type="${active}"><i class="bx bx-plus"></i> Добавить</button><span class="mobile-drag-hint"><i class="bx bx-grid-vertical"></i> Удерживайте карточку, чтобы перенести</span></div>
@@ -2656,8 +2639,7 @@ class NocturneWriter {
         <h3 class="mobile-ai-section-title">Работа над сценой</h3>
         <div class="mobile-ai-grid">
           <button class="ai-card ai-card-secondary" data-ai="continue" ${cloudDisabled}><h4><i class="bx bx-brain"></i> Продолжить</h4><p>С места, где стоит каретка</p></button>
-          <button class="ai-card ai-card-secondary" data-ai="style" ${cloudDisabled}><h4><i class="bx bx-brush"></i> Мягкая стилистика</h4><p>Сохраняет голос автора · выделение или вся глава</p></button>
-          <button class="ai-card ai-card-secondary" data-ai="rewrite" ${cloudDisabled}><h4><i class="bx bx-copy-alt"></i> Альтернативный вариант</h4><p>Отдельное предложение для сравнения и частичного принятия</p></button>
+          <button class="ai-card ai-card-secondary" data-ai="style" ${cloudDisabled}><h4><i class="bx bx-brush"></i> Улучшить стиль</h4><p>Выделение или текущий абзац</p></button>
         </div>
         <h3 class="mobile-ai-section-title">Анализ на устройстве</h3>
         <button class="mobile-action-row" data-ai="sentiment" ${doc && !doc.locked ? '' : 'disabled'}><span class="mobile-action-icon"><i class="bx bx-line-chart"></i></span><span class="mobile-action-copy"><strong>Тональность сцены</strong><small>Эмоциональный ритм текста · без AI-модели</small></span><i class="bx bx-chevron-right mobile-row-chevron"></i></button>
@@ -2665,7 +2647,7 @@ class NocturneWriter {
         <section class="ai-context-box">
           <div class="ai-context-head"><div><strong>Контекст базы знаний</strong><span>Без вставки в документ</span></div><div class="toggle ${this.state.settings.aiKnowledgeContext ? 'on' : ''}" data-setting="aiKnowledgeContext" data-kind="toggle"></div></div>
           <div class="ai-context-toggles">${[['aiContextCharacters', 'Персонажи'], ['aiContextLocations', 'Локации'], ['aiContextTimeline', 'Таймлайн'], ['aiContextSubtimelines', 'Подсобытия'], ['aiContextNotes', 'Записи']].map(([key, label]) => `<button class="context-chip ${this.state.settings[key] ? 'active' : ''}" data-setting="${key}" data-kind="toggle" aria-pressed="${!!this.state.settings[key]}">${label}</button>`).join('')}</div>
-          <button class="pill-btn" data-action="preview-ai-context"><i class="bx bx-show"></i> Предпросмотр контекста</button><button class="pill-btn" data-action="open-ai-history"><i class="bx bx-history"></i> История ИИ</button>
+          <button class="pill-btn" data-action="preview-ai-context"><i class="bx bx-show"></i> Предпросмотр контекста</button>
           <button class="pill-btn" data-action="mobile-open-ai-settings"><i class="bx bx-cog"></i> Настройки AI</button>
         </section>
         <div class="ai-output mobile-ai-output">${escapeHtml(this.assistantPanelMessage || 'Готов к работе.')}</div>
@@ -2897,8 +2879,6 @@ class NocturneWriter {
     if (notes && !notes.locked) { this.state.globalNotes = notes.text || ''; this.state.globalBookmarks = notes.bookmarks || []; }
     const conflicts = await this.db.getAll('syncConflicts');
     for (const id of this.localDocConflicts || []) if (!conflicts.some(conflict => conflict.origin === 'local-tab' && conflict.recordId === id)) this.localDocConflicts.delete(id);
-    await this.books.load();
-    await this.aiWorkspace?.load();
     await this.bookmarks.init();
     await this.trash.init();
     this.state.sync.conflicts = conflicts.length;
@@ -3322,8 +3302,7 @@ class NocturneWriter {
               <button class="ai-card ai-card-primary" data-ai="lore-check"><h4><i class="bx bx-shield-quarter"></i> Проверить лор</h4><p>Сравнивает фрагмент или документ с Базой знаний и отмечает возможные противоречия.</p></button>
               <div class="ai-tool-section-title">Творческие инструменты</div>
               <button class="ai-card ai-card-secondary" data-ai="continue"><h4><i class="bx bx-brain"></i> Продолжить фрагмент</h4><p>Продолжает текущую фразу или сцену с учетом позиции каретки.</p></button>
-              <button class="ai-card ai-card-secondary" data-ai="style"><h4><i class="bx bx-brush"></i> Мягкая стилистика</h4><p>Предлагает точечные изменения, сохраняя голос автора. Без выделения проверяет всю главу.</p></button>
-              <button class="ai-card ai-card-secondary" data-ai="rewrite"><h4><i class="bx bx-copy-alt"></i> Альтернативный вариант</h4><p>Предлагает другую редакцию выделения или всей главы. Принимайте только выбранные изменения.</p></button>
+              <button class="ai-card ai-card-secondary" data-ai="style"><h4><i class="bx bx-brush"></i> Улучшить стиль</h4><p>Переписывает текущий абзац или выделение с учетом выбранной персоны редактора.</p></button>
               <button class="ai-card ai-card-secondary" data-ai="sentiment"><h4><i class="bx bx-line-chart"></i> Тональность сцены</h4><p>Строит эмоциональную кривую текущей главы локальным анализатором.</p></button>
               <section class="ai-context-box">
                 <div class="ai-context-head">
@@ -3339,7 +3318,7 @@ class NocturneWriter {
                     ['aiContextNotes', 'Заметки'],
                   ].map(([key, label]) => `<button class="context-chip ${this.state.settings[key] ? 'active' : ''}" data-setting="${key}" data-kind="toggle">${label}</button>`).join('')}
                 </div>
-                <button class="pill-btn" data-action="preview-ai-context"><i class="bx bx-show"></i> Предпросмотр контекста</button><button class="pill-btn" data-action="open-ai-history"><i class="bx bx-history"></i> История ИИ</button>
+                <button class="pill-btn" data-action="preview-ai-context"><i class="bx bx-show"></i> Предпросмотр контекста</button>
               </section>
               <div class="ai-output" id="ai-output">Готов к работе.</div>
               <button class="pill-btn ai-stop-button" data-action="cancel-ai" hidden><i class="bx bx-stop-circle"></i> Остановить запрос</button>
@@ -3383,7 +3362,6 @@ class NocturneWriter {
           ${[['export-book', 'bx-book-open', 'Экспорт книги'], ['open-review-queue', 'bx-message-square-edit', 'Все правки'], ['open-backups', 'bx-archive', 'Резервные копии'], ['open-trash', 'bx-trash', 'Корзина'], ['manual-snapshot', 'bx-camera', 'Сохранить версию'], ['open-command-palette', 'bx-command', 'Палитра команд']].map(([action, icon, label]) => `<button class="floating-menu-item" role="menuitem" data-action="${action}"><i class="bx ${icon}"></i><span>${label}</span></button>`).join('')}
         </div>
         <div class="dropdown-menu popover-surface portal-floating-menu" id="kb-menu" data-floating-menu="kb" aria-hidden="true">
-          <button class="drop-item kb-global-tab" data-kb-open="books"><i class="bx bx-book-open"></i><span>Книги <small>Вся библиотека</small></span></button>
           <div class="drop-item kb-drop-row" data-kb-open="characters"><i class="bx bx-user-pin"></i><span>Персонажи</span><button type="button" data-action="open-kb-right" data-kb-tab="characters" title="Открыть справа"><i class="bx bx-columns"></i></button></div>
           <div class="drop-item kb-drop-row" data-kb-open="locations"><i class="bx bx-map-alt"></i><span>Локации</span><button type="button" data-action="open-kb-right" data-kb-tab="locations" title="Открыть справа"><i class="bx bx-columns"></i></button></div>
           <div class="drop-item kb-drop-row" data-kb-open="timeline"><i class="bx bx-git-commit"></i><span>Таймлайн</span><button type="button" data-action="open-kb-right" data-kb-tab="timeline" title="Открыть справа"><i class="bx bx-columns"></i></button></div>
@@ -3953,7 +3931,6 @@ class NocturneWriter {
   async flushOpenDocuments() {
     await Promise.all(Object.values(this.state.workspace?.panes || {}).filter(pane => pane.type === 'document' && pane.docId).map(pane => this.saveDocById(pane.docId, { silent: true })));
     await this.persistGlobalNotes();
-    await this.books.flush();
   }
 
   blurMobileEditorFocus() {
@@ -8550,7 +8527,6 @@ class NocturneWriter {
       'sync-apply-merge': () => this.applySyncMergePreview(),
       'open-trash': () => this.openTrash(),
       'export-book': () => this.openBookExport(),
-      'new-book': () => this.books.edit(),
       'open-review-queue': () => this.openReviewQueue(),
       'return-to-manuscript': () => this.returnToManuscript(),
       'cancel-ai': () => { if (this.activeAiRequest) { this.activeAiRequest.userCancelled = true; this.activeAiRequest.controller.abort(); } },
@@ -8579,7 +8555,6 @@ class NocturneWriter {
         if (ok) await this.exportProjectDump({ plaintextE2e: true });
       },
       'preview-ai-context': () => this.openAiContextPreview(),
-      'open-ai-history': () => this.aiWorkspace.openInbox(),
       'show-history': () => this.showHistory(),
       'save-password': () => this.setSessionPassword(),
       'reset-data': () => this.resetData(),
@@ -12893,7 +12868,7 @@ class NocturneWriter {
     const field = node.dataset.syncField || node.getAttribute('name');
     const childField = node.matches('label, .setting-row') ? (node.querySelector('[data-setting]')?.dataset.setting || node.querySelector('[data-setting-select]')?.dataset.settingSelect || node.querySelector('input, textarea')?.getAttribute('name') || node.querySelector('input[data-sync-field]')?.dataset.syncField) : '';
     const identity = ['docId', 'loreId', 'folderId', 'noteId', 'commandPaletteRun', 'settingsTab', 'kbTab', 'projectId', 'setting', 'settingSelect', 'mobileTab', 'assocTab', 'assocContent', 'ruleId', 'macroId', 'bookmarkId', 'ctxDoc'].find(key => node.dataset[key]);
-    const workflowAction = node.dataset.bookAction ? `book:${node.dataset.bookAction}:${node.dataset.bookId || node.dataset.bookTab || node.dataset.bookFilter || node.dataset.docId || node.dataset.entityId || ''}:${node.dataset.direction || ''}` : node.dataset.historyMode ? `history-mode:${node.dataset.historyMode}` : '';
+    const workflowAction = node.dataset.historyMode ? `history-mode:${node.dataset.historyMode}` : '';
     const key = node.dataset.surfaceKey || workflowAction || (identity ? `${identity}:${node.dataset[identity]}` : '') || field || childField || node.dataset.action || node.dataset.value
       || (node.id && !node.id.startsWith('modal-title-') ? node.id : '') || node.classList[0] || '';
     return `${node.tagName}:${key}`;
@@ -13057,9 +13032,6 @@ class NocturneWriter {
     if (animate && element.matches('.history-document-view') && element.dataset.historyView !== next.dataset.historyView) {
       this.animateViewChange(element, () => this.patchSurface(element, next, false, false)); return;
     }
-    if (animate && element.matches('.book-detail-content') && element.dataset.bookTabView !== next.dataset.bookTabView) {
-      this.animateViewChange(element, () => this.patchSurface(element, next, false, false)); return;
-    }
     const settingsChanged = element.matches('.settings-body') && element.querySelector('.settings-header h2')?.textContent !== next.querySelector('.settings-header h2')?.textContent;
     if (animate && settingsChanged) {
       const header = element.querySelector('.settings-header'), content = element.querySelector('.tab-content');
@@ -13116,7 +13088,7 @@ class NocturneWriter {
     };
     const structural = oldNodes.length !== nextNodes.length || oldNodes.some((node, index) => this.surfaceNodeKey(node) !== this.surfaceNodeKey(nextNodes[index] || next));
     if (animate && structural && element.matches('.sync-mobile-content')) this.animateHeightTransition(element, update);
-    else if (animate && structural && !(this.kbRendering && element.closest('#kb-modal')) && element.matches('.utility-list, .books-grid, .sync-device-list, .docs-list-scroll, .folder-docs, .mobile-folder-docs, .command-group, .command-palette-results, .character-grid, .locations-grid, .timeline-container, .mobile-lore-grid, .bookmark-manager-list, .mobile-bookmarks-list, .pane-bookmarks-list')) this.animateLayoutTransition(element, update);
+    else if (animate && structural && !(this.kbRendering && element.closest('#kb-modal')) && element.matches('.utility-list, .sync-device-list, .docs-list-scroll, .folder-docs, .mobile-folder-docs, .command-group, .command-palette-results, .character-grid, .locations-grid, .timeline-container, .mobile-lore-grid, .bookmark-manager-list, .mobile-bookmarks-list, .pane-bookmarks-list')) this.animateLayoutTransition(element, update);
     else update();
     if (animate && textChanged && !element.closest('input, textarea, [contenteditable="true"], .page-content') && this.isSurfaceVisible(element)) {
       this.runMotion(element, [{ opacity: .6 }, { opacity: 1 }], { channel: 'text', duration: 160, easing: 'ease-out' });
@@ -16725,7 +16697,7 @@ class NocturneWriter {
       if (main) {
         this.kbRendering = true;
         try {
-          this.updateSurfaceHTML(main, detail ? this.renderLoreDetail(detail.type, detail.item, this.state.kbReadMode) : active === 'books' ? this.books.render() : active === 'bookmarks' ? this.bookmarks.manager({ closeButton: true }) : active === 'search' ? this.renderKnowledgeSearch({ closeButton: true }) : `
+          this.updateSurfaceHTML(main, detail ? this.renderLoreDetail(detail.type, detail.item, this.state.kbReadMode) : active === 'bookmarks' ? this.bookmarks.manager({ closeButton: true }) : active === 'search' ? this.renderKnowledgeSearch({ closeButton: true }) : `
           ${this.kbViewTools()}
           <div class="kb-search-wrap">
             <i class="bx bx-search"></i>
@@ -16800,7 +16772,6 @@ class NocturneWriter {
       <aside class="kb-sidebar">
         <h2 class="kb-title">База Знаний</h2>
         <div class="kb-sidebar-header">
-          <button class="settings-tab kb-global-tab ${active === 'books' ? 'active' : ''}" data-kb-tab="books"><i class="bx bx-book-open"></i><span>Книги <small>Вся библиотека</small></span></button>
           <div class="kb-project-switcher" id="kb-project-switcher-btn">
             <i class="bx bx-cabinet"></i>
             <span>${escapeHtml(this.state.lore.title || 'Основное произведение')}</span>
@@ -16838,7 +16809,7 @@ class NocturneWriter {
         </div>
       </aside>
       <main class="kb-main">
-        ${detail ? this.renderLoreDetail(detail.type, detail.item, this.state.kbReadMode) : active === 'books' ? this.books.render() : active === 'bookmarks' ? this.bookmarks.manager({ closeButton: true }) : active === 'search' ? this.renderKnowledgeSearch({ closeButton: true }) : `
+        ${detail ? this.renderLoreDetail(detail.type, detail.item, this.state.kbReadMode) : active === 'bookmarks' ? this.bookmarks.manager({ closeButton: true }) : active === 'search' ? this.renderKnowledgeSearch({ closeButton: true }) : `
         ${this.kbViewTools()}
         <div class="kb-search-wrap">
           <i class="bx bx-search"></i>
@@ -16920,10 +16891,9 @@ class NocturneWriter {
   animateKbEntrance(tab) {
     const modal = document.getElementById('kb-modal');
     if (!modal?.classList.contains('active') || this.shouldReduceSurfaceMotion()) return;
-    if (tab === 'books' || tab === 'search' || tab === 'bookmarks') {
-      const surface = modal.querySelector(tab === 'books' ? '.books-library' : tab === 'search' ? '.knowledge-search' : '.bookmark-manager');
+    if (tab === 'search' || tab === 'bookmarks') {
+      const surface = modal.querySelector(tab === 'search' ? '.knowledge-search' : '.bookmark-manager');
       this.runMotion(surface, [{ opacity: .25, transform: 'translateY(8px)' }, { opacity: 1, transform: 'translateY(0)' }], { channel: 'kb-tab', duration: 320 });
-      this.updateWorkflowSelections(modal);
       return;
     }
     const section = modal.querySelector(`#kb-sec-${tab}`);
@@ -16933,7 +16903,7 @@ class NocturneWriter {
   cancelKbEntrance() {
     this.kbEntranceGeneration = (this.kbEntranceGeneration || 0) + 1;
     const modal = document.getElementById('kb-modal');
-    modal?.querySelectorAll('.books-library, .bookmark-manager, .knowledge-search').forEach(surface => {
+    modal?.querySelectorAll('.bookmark-manager, .knowledge-search').forEach(surface => {
       for (const motion of surface.__nocturneMotions?.values() || []) motion.animation.cancel();
     });
     modal?.querySelectorAll('.kb-enter-card').forEach(card => {
@@ -19804,7 +19774,6 @@ class NocturneWriter {
           </div>
           ${row('Креативность', 'Температура запроса: ниже — предсказуемее, выше — свободнее формулировки.', range('aiTemperature', 0, 1.4, .05))}
           ${row('Контекст базы знаний', 'Передаёт ассистенту релевантных персонажей, локации, таймлайн, сабтаймлайны и заметки как справочный контекст, не вставляя его в документ.', toggle('aiKnowledgeContext'))}
-          ${workflowSettingsContent(this, 'ai')}
           ${row('Правила мира', 'Ограничения лора, которые учитывает ассистент.', `<button class="pill-btn" data-action="edit-world-rules"><i class="bx bx-book-content"></i> Открыть правила</button>`)}
           ${row('Группы контекста', 'Можно отключить отдельные части контекста для более коротких запросов.', `
             <div class="context-settings-grid">
@@ -21090,7 +21059,6 @@ class NocturneWriter {
       target,
       folder,
       include: this.aiContextOptions(),
-      selection: this.aiWorkspace.selection(doc),
       budget: 7200,
     });
     this.lastAiContext = context;
@@ -21109,7 +21077,37 @@ class NocturneWriter {
   }
 
   openAiContextPreview() {
-    this.aiWorkspace.openContext();
+    const doc = this.getFocusedDoc();
+    if (!doc) {
+      this.toast('Откройте документ для preview context.');
+      return;
+    }
+    const target = this.captureAssistantTargetSnapshot('proofread', doc, this.state.workspace?.focusedPaneId || 'primary')
+      || { docId: doc.id, blockIndex: 0, targetBlockText: docText(doc.ast).slice(0, 1200) };
+    const context = this.buildCurrentAiContext(doc, target) || { disabled: true, message: 'Knowledge Context выключен.' };
+    const serialized = serializeAiContextSafe(context);
+    const overlay = document.getElementById('form-overlay');
+    this.presentOverlay(overlay, `
+      <div class="form-modal ai-context-preview-modal">
+        <div class="modal-head-row">
+          <div><h2>Knowledge Context Preview</h2><p>Read-only JSON, не вставляется в документ.</p></div>
+          <button class="btn-icon" data-close-form><i class="bx bx-x"></i></button>
+        </div>
+        <div class="ai-context-stats">
+          ${context.stats ? `
+            <span>Characters: ${context.stats.characters}</span>
+            <span>Locations: ${context.stats.locations}</span>
+            <span>Таймлайн: ${context.stats.timeline}</span>
+            <span>Subtimelines: ${context.stats.subtimelines}</span>
+            <span>Notes: ${context.stats.notes}</span>
+            <span>${context.stats.size} chars</span>
+          ` : '<span>Context disabled</span>'}
+        </div>
+        <pre class="ai-context-preview" tabindex="0">${escapeHtml(serialized)}</pre>
+        <div class="form-actions"><button class="pill-btn ai-btn" data-close-form>Закрыть</button></div>
+      </div>`);
+    overlay.classList.add('active');
+    overlay.querySelectorAll('[data-close-form]').forEach((button) => { button.onclick = () => overlay.classList.remove('active'); });
   }
 
   async runAi(kind) {
@@ -21144,7 +21142,6 @@ class NocturneWriter {
         paneId,
         target,
         kind,
-        sourceAst: structuredClone(context.doc.ast),
         controller: new AbortController(),
         timeoutId: null,
       };
@@ -21160,16 +21157,19 @@ class NocturneWriter {
         this.handleAiProtocolPartial(chunks.join(''), request, kind);
       }, request.controller.signal, budget);
       if (this.activeAiRequest?.id !== request.id) return;
-      if (request.controller.signal.aborted) throw request.controller.signal.reason || new DOMException('Cancelled', 'AbortError');
+      const stillOpen = this.getPane(request.paneId)?.type === 'document' && this.getPane(request.paneId)?.docId === request.docId;
+      if (!stillOpen) {
+        this.setAssistantOutput('AI-запрос завершён, но исходный документ уже не открыт.', 'idle');
+        this.toast('AI-результат не вставлен: исходная область изменилась.');
+        return;
+      }
       const rawResponse = chunks.join('');
       if (!rawResponse.trim()) throw new Error('Провайдер ИИ вернул пустой ответ.');
       const parsed = await this.parseAiProtocolWithRepair(rawResponse, prompt, budget, request);
       if (!parsed.ok) throw new Error(parsed.message || 'Модель вернула ответ в неожиданном формате. Текст в документ не вставлен.');
-      const savedResult = await this.aiWorkspace.record(request, parsed, context.doc, request.sourceAst);
-      const stillOpen = this.getPane(request.paneId)?.type === 'document' && this.getPane(request.paneId)?.docId === request.docId;
       if (parsed.thinking) this.setAssistantOutput(parsed.thinking, 'idle');
       if (parsed.writing?.text && parsed.writing.complete) {
-        if (stillOpen && this.state.settings.aiResultLocation === 'chapter') this.aiWorkspace.openInbox(savedResult.id);
+        this.insertSuggestion(parsed.writing.text, { ok: true, doc: context.doc, paneId: request.paneId, target: request.target, kind, mode: parsed.writing.mode });
       }
       if (Array.isArray(parsed.review)) {
         const result = await this.createAiReviewMarks(parsed.review, context.doc, request.target);
@@ -21180,18 +21180,13 @@ class NocturneWriter {
           this.hideReviewNavigatorIfNoMarks();
           this.toast('AI-проверка завершена: правок нет.', 1200);
         }
-        if (result.count && stillOpen && this.state.settings.aiResultLocation === 'chapter') {
+        if (result.count) {
           this.state.reviewMode = 'finalization';
           safeSetStorageItem(localStorage, 'nocturne-review-mode', 'finalization');
           this.applyReviewMode();
           this.renderReviewNavigator();
           this.updateReviewHighlights();
         }
-      }
-      if (!stillOpen || this.state.settings.aiResultLocation !== 'chapter') {
-        this.setAssistantOutput(`Ответ для главы «${context.doc.title}» сохранён в истории ИИ.`, 'idle');
-        this.toast(`Готов ответ для «${context.doc.title}». Откройте «История ИИ», чтобы разобрать его.`);
-        if (this.state.settings.aiResultLocation === 'notification') this.aiWorkspace.notify(savedResult);
       }
       if (!parsed.writing?.text && !Array.isArray(parsed.review) && !parsed.thinking) throw new Error('Модель вернула ответ в неожиданном формате.');
     } catch (error) {
@@ -21209,8 +21204,6 @@ class NocturneWriter {
   }
 
   captureAssistantTargetSnapshot(kind, doc = this.getFocusedDoc(), paneId = this.state.workspace?.focusedPaneId || 'primary') {
-    if (!doc || doc.locked) return null;
-    this.nocturneEditor.syncDocFromEditorByDocId(doc.id);
     const selection = this.selectionSnapshot?.docId === doc?.id ? this.selectionSnapshot : this.captureSelectionSnapshot();
     if (selection?.range && selection.docId === doc?.id && selection.text?.trim()) {
       const target = this.assistantTargetFromRange(selection.range, doc, paneId, selection.text);
@@ -21219,10 +21212,6 @@ class NocturneWriter {
         if (kind === 'continue') this.assistantTargetSnapshot.startOffset = this.assistantTargetSnapshot.endOffset;
         return this.assistantTargetSnapshot;
       }
-    }
-    if (kind !== 'continue') {
-      this.assistantTargetSnapshot = { docId: doc.id, paneId, mode: 'whole-chapter', blockId: doc.ast.blocks[0]?.id, blockIndex: 0, selectedText: '', targetBlockText: docText(doc.ast), contextBefore: '', contextAfter: '' };
-      return this.assistantTargetSnapshot;
     }
     const caret = selection?.caret?.docId === doc?.id ? selection.caret : this.getCaretSnapshot();
     const block = doc?.ast?.blocks?.find((item) => item.id === caret?.blockId);
@@ -21429,15 +21418,9 @@ quote — точная цитата проблемного места; reason �
 Не возвращай type="writing".
 Если противоречий нет: {"type":"review","thinking":"Явных противоречий с лором не найдено.","issues":[]}.`
         : kind === 'style'
-          ? `РЕЖИМ: МЯГКАЯ СТИЛИСТИКА.
-Верни JSON type="review" с отдельными issues категории style или repetition.
-Сохрани голос автора, смысл, время и точку зрения. Предлагай только точечные улучшения, которые помогают чтению.
-Каждая правка должна иметь точную цитату quote, готовую замену replacement и понятный reason. Не переписывай всю главу.
-Если улучшений нет: {"type":"review","thinking":"Текст можно оставить как есть.","issues":[]}.`
-        : kind === 'rewrite'
-          ? `РЕЖИМ: АЛЬТЕРНАТИВНЫЙ ВАРИАНТ.
+          ? `РЕЖИМ: УЛУЧШИТЬ СТИЛЬ.
 Верни JSON с "type":"writing", "mode":"${preferredMode}", "thinking" и "text".
-В text перепиши только цель: ${aiTarget?.mode === 'whole-chapter' ? 'вся глава целиком, без потери абзацев и смысла' : preferredMode === 'replace-selection' ? 'выделенный фрагмент' : 'текущий абзац'}.
+В text перепиши только цель: ${preferredMode === 'replace-selection' ? 'выделенный фрагмент' : 'текущий абзац'}.
 Не добавляй объяснения в text. Не расширяй радикально. Сохрани смысл, лицо, время, тон и авторский контекст. Не возвращай review/issues.`
           : `РЕЖИМ: ПРОДОЛЖИТЬ ФРАГМЕНТ.
 Верни JSON с "type":"writing", "mode":"${preferredMode}", "thinking" и "text".
@@ -21473,7 +21456,6 @@ ${text}`;
 
   aiGenerationBudget(kind, target = null) {
     const words = countWords(target?.selectedText || target?.targetBlockText || '');
-    if (target?.mode === 'whole-chapter') return { maxTokens: Math.max(1800, Math.min(16000, words * (kind === 'rewrite' ? 4 : 2) + 1000)) };
     if (['proofread', 'lore-check'].includes(kind)) return { maxTokens: 900 };
     if (kind === 'style' && target?.mode === 'replace-selection') return { maxTokens: Math.max(120, Math.min(420, words * 3 + 80)) };
     if (kind === 'style') return { maxTokens: Math.max(180, Math.min(520, words * 3 + 100)) };
@@ -21588,6 +21570,10 @@ ${text}`;
   handleAiProtocolPartial(buffer, request, kind) {
     const parsed = this.parseAiProtocol(buffer, true);
     if (parsed.thinking) this.setAssistantOutput(parsed.thinking, 'busy');
+    if (parsed.writing?.text && parsed.writing.complete && ['style', 'continue'].includes(kind) && !this.containsUnsafeAiOutput(parsed.writing.text)) {
+      const doc = this.state.docs.find((item) => item.id === request.docId);
+      if (doc) this.insertSuggestion(parsed.writing.text, { ok: true, doc, paneId: request.paneId, target: request.target, kind, mode: parsed.writing.mode, streaming: !parsed.writing.complete, silent: true });
+    }
   }
 
   containsAiProtocolMarkup(text = '') {
@@ -21612,7 +21598,7 @@ ${text}`;
 
   expectedAiProtocolForKind(kind) {
     if (['proofread', 'lore-check'].includes(kind)) return 'review';
-    if (['rewrite', 'continue'].includes(kind)) return 'writing';
+    if (['style', 'continue'].includes(kind)) return 'writing';
     return 'any';
   }
 
@@ -22226,8 +22212,7 @@ ${raw}`;
   }
 
   async buildNocturneDump(options = {}) {
-    await this.books.flush();
-    await Promise.all([this.history.work, this.aiWorkspace.work]);
+    await this.history.work;
     const encryptedSafe = this.state.settings.e2e && !options.plaintextE2e;
     for (const doc of this.state.docs) {
       if (!doc.locked && (!this.state.settings.e2e || this.state.sessionPassword)) {
@@ -23325,20 +23310,7 @@ ${raw}`;
       if (item.userLexicon !== undefined && !Array.isArray(item.userLexicon)) fail(`${label}.userLexicon`);
     };
     if (payload.settings !== undefined) settings(payload.settings, 'settings');
-    for (const item of payload.settingsRecords || []) {
-      if (item.id === 'app' && item.value !== undefined) settings(item.value, 'settingsRecords.app');
-      if (encrypted(item, `settingsRecords.${item.id}`) || !['books-library', 'ai-results'].includes(item.id)) continue;
-      records(item.items, `settingsRecords.${item.id}.items`, (entry, label) => {
-        strings(entry, ['title', 'author', 'description', 'notes', 'docId', 'thinking', 'baselineText', 'kind'], label);
-        for (const key of ['documentIds', 'worldIds']) if (entry[key] !== undefined && (!Array.isArray(entry[key]) || entry[key].some(value => typeof value !== 'string'))) fail(`${label}.${key}`);
-        if (item.id === 'books-library') records(entry.links, `${label}.links`, link => strings(link, ['loreId', 'type'], label));
-        else {
-          records(entry.parts, `${label}.parts`, (part, partLabel) => { strings(part, ['before', 'after', 'status', 'previousId', 'nextId'], partLabel); if (part.beforeIds !== undefined && (!Array.isArray(part.beforeIds) || part.beforeIds.some(value => typeof value !== 'string'))) fail(`${partLabel}.beforeIds`); records(part.afterBlocks, `${partLabel}.afterBlocks`, block => strings(block, ['html', 'type'], partLabel)); });
-          if (!Array.isArray(entry.parts) || !Array.isArray(entry.issues)) fail(label);
-        }
-      });
-      records(item.presets, `settingsRecords.${item.id}.presets`, (preset, label) => { strings(preset, ['name', 'loreId'], label); for (const key of ['keys', 'documentIds']) if (preset[key] !== undefined && (!Array.isArray(preset[key]) || preset[key].some(value => typeof value !== 'string'))) fail(`${label}.${key}`); });
-    }
+    for (const item of payload.settingsRecords || []) if (item.id === 'app' && item.value !== undefined) settings(item.value, 'settingsRecords.app');
   }
 
   async validateDecodedImportedModels(payload) {
@@ -23497,8 +23469,7 @@ ${raw}`;
     if (dump.checksum && dump.checksum !== await this.checksumText(JSON.stringify(dump.payload))) throw new Error('Контрольная сумма резервной копии не совпала.');
     if (!['replace', 'merge'].includes(mode)) throw new Error('Неизвестный режим импорта.');
     if (this.importingProject) throw new Error('Дождитесь завершения текущего импорта.');
-    await this.books.flush();
-    await Promise.all([this.history.work, this.aiWorkspace.work]);
+    await this.history.work;
     const payload = dump.payload || {};
     await this.validateDecodedImportedModels(payload);
     await this.databaseSync?.work;
@@ -23546,8 +23517,6 @@ ${raw}`;
       throw error;
     } finally { this.importingProject = false; }
     this.validateLoadedState();
-    await this.books.load();
-    await this.aiWorkspace?.load();
     await this.bookmarks.init();
     await this.trash.init();
     this.initWorkspace();
@@ -23624,9 +23593,8 @@ ${raw}`;
       if (Array.isArray(value)) return value.map(remapReferences);
       if (!value || typeof value !== 'object') return value;
       return Object.fromEntries(Object.entries(value).map(([key, child]) => [key,
-        ['id', 'docId', 'linkedId', 'loreId', 'worldId', 'folderId', 'parentId', 'sceneEventId', 'knownFromEventId', 'knownUntilEventId'].includes(key) && typeof child === 'string' ? idMap.get(child) || child
-          : ['documentIds', 'characterIds', 'locationIds', 'chapterIds', 'noteIds', 'worldIds'].includes(key) && Array.isArray(child) ? child.map(id => idMap.get(id) || id)
-          : ['keys', 'selected', 'pinned', 'excluded'].includes(key) && Array.isArray(child) ? child.map(value => { if (typeof value !== 'string' || !value.includes(':')) return value; const index = value.indexOf(':'); return `${value.slice(0, index + 1)}${idMap.get(value.slice(index + 1)) || value.slice(index + 1)}`; })
+        ['id', 'docId', 'linkedId', 'loreId', 'worldId', 'folderId', 'parentId'].includes(key) && typeof child === 'string' ? idMap.get(child) || child
+          : ['documentIds', 'characterIds', 'locationIds', 'chapterIds', 'noteIds'].includes(key) && Array.isArray(child) ? child.map(id => idMap.get(id) || id)
           : key === 'characterRoles' && isPlainObject(child) ? Object.fromEntries(Object.entries(child).map(([id, role]) => [idMap.get(id) || id, role])) : remapReferences(child)]));
     };
     const importedWorlds = worlds.map(remapReferences);
@@ -23643,17 +23611,7 @@ ${raw}`;
     const importedBookmarks = cloneBookmarks(payload.globalBookmarks || importedNotes?.bookmarks || [], '');
     for (const bookmark of importedBookmarks) for (const part of bookmark.parts || []) { part.anchor.from += shift; part.anchor.to += shift; }
     const globalBookmarks = [...this.state.globalBookmarks || [], ...importedBookmarks];
-    const extraSettings = [];
-    for (const id of ['books-library', 'ai-results']) {
-      const incoming = (await decode('settings', (payload.settingsRecords || []).filter(record => record.id === id)))[0];
-      if (!incoming) continue;
-      const current = await this.db.get('settings', id);
-      if (current?.locked) throw new Error('Примените мастер-пароль перед объединением библиотеки.');
-      const imported = remapReferences(incoming);
-      extraSettings.push({ id, items: [...(current?.items || []), ...(imported.items || []).map(item => ({ ...item, id: uid(id === 'books-library' ? 'book' : 'ai-result') }))], presets: [...(current?.presets || []), ...(imported.presets || []).map(item => { const presetId = uid('preset'); idMap.set(item.id, presetId); return { ...item, id: presetId }; })], updatedAt: Date.now() });
-    }
-    for (const doc of docs) { if (doc.sceneEventId) doc.sceneEventId = idMap.get(doc.sceneEventId) || doc.sceneEventId; if (doc.aiContextChoice) { doc.aiContextChoice = remapReferences(doc.aiContextChoice); doc.aiContextChoice.presetId = idMap.get(doc.aiContextChoice.presetId) || doc.aiContextChoice.presetId; } }
-    await this.db.atomicWrite({ folders, docs, lore: importedWorlds, floatingNotes: notes, typoRules, reviewMarks: marks, snapshots, trash, settings: [{ id: 'global-notes', text: globalNotes, bookmarks: globalBookmarks, updatedAt: Date.now() }, ...extraSettings] });
+    await this.db.atomicWrite({ folders, docs, lore: importedWorlds, floatingNotes: notes, typoRules, reviewMarks: marks, snapshots, trash, settings: [{ id: 'global-notes', text: globalNotes, bookmarks: globalBookmarks, updatedAt: Date.now() }] });
     onCommit();
     this.state.folders.push(...folders); this.state.docs.push(...docs);
     this.state.floatingNotes.push(...notes); this.state.typoRules.push(...typoRules); this.state.reviewMarks.push(...marks);
@@ -23757,12 +23715,12 @@ ${raw}`;
     return true;
   }
 
-  buildBookDocx(docIds, { includeNotes = false, title = '', preserveOrder = false } = {}) {
-    const chapters = [...new Set(docIds)].map(id => this.state.docs.find(doc => doc.id === id)).filter(Boolean);
+  buildBookDocx(docIds, { includeNotes = false, title = '' } = {}) {
+    const chapters = this.state.docs.filter(doc => docIds.includes(doc.id));
     if (!chapters.length) throw new Error('Выберите хотя бы одну главу.');
     if (chapters.some(doc => doc.locked)) throw new Error('Расшифруйте выбранные главы перед экспортом.');
     const collator = new Intl.Collator('ru', { numeric: true });
-    if (!preserveOrder) chapters.sort((a, b) => collator.compare(String(a.volume || ''), String(b.volume || '')) || collator.compare(String(a.chapterNumber || ''), String(b.chapterNumber || '')) || (a.order || 0) - (b.order || 0));
+    chapters.sort((a, b) => collator.compare(String(a.volume || ''), String(b.volume || '')) || collator.compare(String(a.chapterNumber || ''), String(b.chapterNumber || '')) || (a.order || 0) - (b.order || 0));
     chapters.forEach(doc => this.nocturneEditor.syncDocFromEditorByDocId(doc.id));
     const blocks = chapters.flatMap(doc => [
       { id: uid('block'), type: 'heading', level: 1, html: escapeHtml(doc.title) },
@@ -23773,7 +23731,41 @@ ${raw}`;
   }
 
   openBookExport() {
-    this.books.exportDialog();
+    const chapters = [...this.state.docs].sort((a, b) => String(a.workTitle || '').localeCompare(String(b.workTitle || '')) || Number(a.chapterNumber || a.order) - Number(b.chapterNumber || b.order));
+    const overlay = document.getElementById('form-overlay');
+    this.presentFormModal(`<div class="form-modal utility-modal book-export-modal"><div class="modal-head-row"><div><h2>Экспорт книги</h2><p>Главы будут расположены по томам и номерам.</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div>
+      <div class="selection-heading"><span>Главы <small id="book-export-count"></small></span><button class="mini-text-btn" data-export-select-all>Снять выбор</button></div>
+      <div class="utility-list chapter-selection">${chapters.map(doc => `<label class="utility-row nocturne-check"><input type="checkbox" data-export-chapter="${escapeHtml(doc.id)}" ${doc.locked ? 'disabled' : 'checked'}><span class="check-mark" aria-hidden="true"></span><div><strong>${escapeHtml(doc.title)}</strong><small>${escapeHtml([doc.workTitle, doc.volume && `Том ${doc.volume}`, doc.chapterNumber && `Глава ${doc.chapterNumber}`, doc.locked && 'Введите пароль'].filter(Boolean).join(' · '))}</small></div></label>`).join('') || '<p class="utility-empty">Сначала создайте или импортируйте главы.</p>'}</div>
+      <label class="nocturne-check export-notes-option"><input type="checkbox" id="book-export-notes"><span class="check-mark" aria-hidden="true"></span><span>Добавить личные заметки к главам</span></label>
+      <div class="form-actions"><button class="pill-btn" data-close-form>Отмена</button><button class="pill-btn ai-btn" data-export-selected-book><i class="bx bx-export"></i> Скачать DOCX</button></div></div>`);
+    overlay.classList.add('active');
+    overlay.querySelectorAll('[data-close-form]').forEach(button => { button.onclick = () => overlay.classList.remove('active'); });
+    const updateSelection = () => {
+      const enabled = [...overlay.querySelectorAll('[data-export-chapter]:not(:disabled)')];
+      const count = enabled.filter(input => input.checked).length;
+      overlay.querySelector('#book-export-count').textContent = `${count} / ${chapters.length}`;
+      overlay.querySelector('[data-export-selected-book]').disabled = !count || !!overlay.querySelector('[data-export-selected-book]').__surfaceAction;
+      overlay.querySelector('[data-export-select-all]').textContent = enabled.length && count === enabled.length ? 'Снять выбор' : 'Выбрать все';
+    };
+    overlay.querySelectorAll('[data-export-chapter]').forEach(input => { input.onchange = updateSelection; });
+    overlay.querySelector('[data-export-select-all]').onclick = () => {
+      const enabled = [...overlay.querySelectorAll('[data-export-chapter]:not(:disabled)')];
+      const checked = !enabled.every(input => input.checked);
+      enabled.forEach(input => { input.checked = checked; }); updateSelection();
+    };
+    updateSelection();
+    const exportButton = overlay.querySelector('[data-export-selected-book]');
+    exportButton.onclick = async () => {
+      try {
+        await this.runSurfaceAction(exportButton, 'Собираем DOCX…', async () => {
+          const ids = [...overlay.querySelectorAll('[data-export-chapter]:checked')].map(input => input.dataset.exportChapter);
+          const blob = await this.buildBookDocx(ids, { includeNotes: overlay.querySelector('#book-export-notes').checked });
+          const result = await this.downloadBlob(blob, `${this.safeFileName(this.state.docs.find(doc => ids.includes(doc.id))?.workTitle || 'Рукопись')}.docx`);
+          if (result) { if (exportButton.isConnected) overlay.classList.remove('active'); this.toast('Рукопись экспортирована.'); }
+        });
+      } catch (error) { this.toast(error.message); }
+      finally { if (exportButton.isConnected) updateSelection(); }
+    };
   }
 
   captureManuscriptPosition() {
@@ -23798,9 +23790,19 @@ ${raw}`;
     });
   }
 
-  openReviewQueue(docIds = null) {
-    this.aiWorkspace.queueDocIds = docIds;
-    this.aiWorkspace.openQueue(docIds);
+  openReviewQueue() {
+    const marks = this.state.reviewMarks.filter(mark => mark.status === 'open' && this.state.docs.some(doc => doc.id === mark.docId));
+    const overlay = document.getElementById('form-overlay');
+    this.presentFormModal(`<div class="form-modal utility-modal"><div class="modal-head-row"><div><h2>Правки всей рукописи</h2><p>${marks.length ? `${marks.length} нерешённых правок. Выберите запись, чтобы перейти к тексту.` : 'Все правки разобраны.'}</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div><div class="utility-list">${marks.map(mark => `<button class="utility-row review-queue-row" data-review-jump="${escapeHtml(mark.id)}"><i class="bx bx-message-square-edit"></i><div><strong>${escapeHtml(this.state.docs.find(doc => doc.id === mark.docId)?.title)}</strong><small>${escapeHtml(this.reviewCategoryLabel(mark.category))} · ${escapeHtml(mark.quote || mark.comment || 'Пометка без цитаты')}</small></div><i class="bx bx-chevron-right"></i></button>`).join('')}</div></div>`);
+    overlay.classList.add('active'); overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
+    overlay.querySelectorAll('[data-review-jump]').forEach(button => button.onclick = () => {
+      const mark = marks.find(item => item.id === button.dataset.reviewJump);
+      overlay.classList.remove('active'); document.getElementById('kb-modal')?.classList.remove('active');
+      if (this.isMobileLayout()) this.switchMobileTab('write'); this.selectDoc(mark.docId);
+      this.setReviewMode('finalization');
+      this.state.currentReviewIndexByDoc[mark.docId] = this.reviewMarksForFocusedDoc().findIndex(item => item.id === mark.id);
+      this.renderReviewNavigator(); this.resolveReviewRange(mark)?.block.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
   }
 
   async openSyncConflicts(selectedId) {
@@ -24129,8 +24131,6 @@ ${raw}`;
       const encryptedRecords = (await Promise.all(['docs', 'lore', 'settings', 'floatingNotes', 'snapshots', 'trash'].map(store => this.db.getAllRaw(store)))).flat().some(record => record.protectedStore);
       if (encryptedRecords) { this.state.settings.e2e = true; await this.migrateEncryption(); }
     }
-    await this.books.load();
-    await this.aiWorkspace?.load();
     await this.bookmarks.init();
     await this.trash.init();
     this.initWorkspace();
@@ -24261,11 +24261,10 @@ ${raw}`;
     clearTimeout(this.databaseSyncTimer);
     this.syncClient?.disconnect();
     this.db.onMutation = null;
-    clearTimeout(this.books.notesTimer);
     clearInterval(this.history.timer);
     this.activeAiRequest?.controller.abort();
     for (const save of this.saveDocDebouncers.values()) save.cancel?.();
-    await Promise.allSettled([...this.docSaves?.values() || [], ...this.draftWrites.values(), this.databaseSync?.work, this.databaseSync?.incomingWork, this.backups?.running, this.history.work, this.books.work, this.aiWorkspace?.work]);
+    await Promise.allSettled([...this.docSaves?.values() || [], ...this.draftWrites.values(), this.databaseSync?.work, this.databaseSync?.incomingWork, this.backups?.running, this.history.work]);
     await this.db.clearAll();
     const localPrefixes = [LIVE_PREFIX, 'goal-done-'];
     const localKeys = [
