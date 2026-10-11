@@ -3,6 +3,7 @@ import test from 'node:test';
 import { characterNameReplacement } from '../src/features/character-rename.js';
 import { collectManuscriptMatches } from '../src/features/manuscript-search.js';
 import { rankLoreItemsByRelevance } from '../src/features/ai-context.js';
+import { characterMentionForms, nameParadigm, inferCharacterGender } from '../src/core/name-inflections.js';
 
 const character = (firstName, lastName = '', extra = {}) => ({ id: 'hero', firstName, lastName, name: [firstName, lastName].filter(Boolean).join(' '), displayName: [firstName, lastName].filter(Boolean).join(' '), ...extra });
 const rename = (from, to, text) => characterNameReplacement(typeof from === 'string' ? character(from) : from, typeof to === 'string' ? character(to) : to).text(text);
@@ -68,4 +69,28 @@ test('manuscript alias search and AI context recognize automatic forms', () => {
   const doc = { id: 'doc', docType: 'book-chapter', workTitle: 'К Павлу Северному. С Павлом Северным. О Льве.', ast: { blocks: [] } };
   assert.equal(collectManuscriptMatches(doc, 'Павел Северный', { aliases: true, wholeWords: true }, [entity]).length, 3);
   assert.deepEqual(rankLoreItemsByRelevance([entity, character('Мария')], 'Разговор с Павлом Северным'), [entity]);
+});
+test('retained old aliases keep their own declension when the new name changes gender', () => {
+  const forms = characterMentionForms(character('Анна', '', { aliases: ['Зейн'] }));
+  assert.ok(forms.includes('Зейну'));
+  assert.ok(forms.includes('Зейном'));
+});
+test('other character full names and ambiguous nominative names are protected', () => {
+  const r = characterNameReplacement(character('Зейн'), character('Оррин'), { characters: [character('Зейна', '', { id: 'other' }), character('Зейн', 'Другой', { id: 'namesake' })] });
+  assert.equal(r.text('Зейна вошла. У Зейна ключ. Вижу Зейна. Зейн Другой вошёл. У Зейна Другого ключ.'), 'Зейна вошла. У Оррина ключ. Вижу Оррина. Зейн Другой вошёл. У Зейна Другого ключ.');
+});
+test('noun and adjective surnames, invariant surnames and explicit gender', () => {
+  assert.equal(rename(character('Лев', 'Берий'), character('Пётр', 'Волков'), 'С Львом Берием; о Льве Берии'), 'С Петром Волковым; о Петре Волкове');
+  for (const surname of ['Ли', 'Цой', 'Черных', 'Дюма', 'Ким']) {
+    const forms = nameParadigm(surname, { gender: 'feminine', kind: 'lastName' });
+    assert.ok(Object.values(forms).flat().every(form => form === surname));
+  }
+  assert.equal(inferCharacterGender(character('Кьэль', '', { gender: 'female' })), 'feminine');
+  assert.equal(inferCharacterGender(character('Тейя', '', { sex: 'male' })), 'masculine');
+});
+test('compound instrumental variants may mix long and short endings', () => {
+  assert.equal(rename('Анна-Мария', 'Мира-Лия', 'С Анной-Мариею. С Анною-Марией.'), 'С Мирой-Лиею. С Мирою-Лией.');
+});
+test('prepositions, modifiers and verb government resolve indeclinable names', () => {
+  assert.equal(rename('Аеири', 'Зейн', 'Нет Аеири. Помог Аеири. Горжусь Аеири. У дорогого Аеири. За Аеири. Через Аеири. Смотрю на Аеири. При Аеири.'), 'Нет Зейна. Помог Зейну. Горжусь Зейном. У дорогого Зейна. За Зейном. Через Зейна. Смотрю на Зейна. При Зейне.');
 });
