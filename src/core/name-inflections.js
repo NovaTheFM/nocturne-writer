@@ -133,7 +133,9 @@ export function resolveNameCase(candidates, text, start, end) {
   const immediatePreposition = genitivePrepositions.has(last) || dativePrepositions.has(last) || instrumentalPrepositions.has(last) || prepositionalPrepositions.has(last) || ['в', 'во', 'на', 'за', 'под', 'подо', 'через', 'про', 'сквозь'].includes(last);
   const genitiveHead = /(?:^|\s)(?:нет|отсутствие|отсутствия|имя|имени|смерть|смерти|голос|голоса|след|следы|жизнь|жизни|письмо|письма|взгляд|взгляда|дом|дома|рука|руки|слова|брат|сестра|друг|друга|не было|не стало)\s*$/u.test(left);
   const right = normalizeName(text.slice(end, end + 70));
-  if (candidates.includes('nominative') && !immediatePreposition && !genitiveHead && !/(?:ого|его|ому|ему|ой|ей|ым|им|ую|юю)$/u.test(last) && /^(?:был[аи]?|будет|есть|стал[аи]?|сид\p{L}*|стоя\p{L}*|приш\p{L}*|пош\p{L}*|вош\p{L}*|выш\p{L}*|сказ\p{L}*|говор\p{L}*|смотр\p{L}*|улыб\p{L}*|засме\p{L}*|остал\p{L}*|появил\p{L}*)(?![\p{L}\p{M}])/u.test(right)) return 'nominative';
+  const adjectiveBefore = /(?:ого|его|ому|ему|ой|ей|ым|им|ую|юю)$/u.test(last);
+  const verbAfter = /^(?:был[аи]?|будет|есть|стал[аи]?|сид\p{L}*|стоя\p{L}*|приш\p{L}*|пош\p{L}*|вош\p{L}*|выш\p{L}*|сказ\p{L}*|говор\p{L}*|смотр\p{L}*|улыб\p{L}*|засме\p{L}*|остал\p{L}*|появил\p{L}*)(?![\p{L}\p{M}])/u.test(right);
+  if (candidates.includes('nominative') && !immediatePreposition && !genitiveHead && !adjectiveBefore && verbAfter) return 'nominative';
   let preferred;
   for (let index = near.length - 1; index >= 0 && !preferred; index--) {
     const word = near[index];
@@ -182,12 +184,15 @@ export function createCharacterNameReplacement(before, after, { characters = [] 
     if (!entries.has(normalizeName(form))) add(form, form, 'nominative', 0, true);
   }
   const oldNames = new Set([before.displayName, before.name, before.firstName, before.lastName].filter(Boolean).map(normalizeName));
+  const replacedForms = [...entries].filter(([name, entry]) => entry.choices.some(choice => normalizeName(choice.to) !== name)).map(([name]) => name);
   for (const character of characters.filter(character => character.id !== before.id)) {
     const gender = inferCharacterGender(character);
     for (const field of ['displayName', 'name', 'firstName', 'lastName']) {
       const name = character[field];
       if (!name || oldNames.has(normalizeName(name))) continue;
-      for (const [nameCase, forms] of Object.entries(nameParadigm(name, { gender, kind: field, lastName: character.lastName }))) forms.forEach((form, variant) => add(form, form, nameCase, variant, false, true));
+      for (const [nameCase, forms] of Object.entries(nameParadigm(name, { gender, kind: field, lastName: character.lastName }))) forms.forEach((form, variant) => {
+        if (replacedForms.some(source => ` ${normalizeName(form)} `.includes(` ${source} `))) add(form, form, nameCase, variant, false, true);
+      });
     }
   }
   const terms = [...entries.values()].sort((a, b) => b.from.length - a.from.length);

@@ -91,7 +91,12 @@ export function collectManuscriptMatches(doc, query, options = {}, entities = []
     const groups = alternatives.map(variants => variants.flatMap(term => findManuscriptText(block.text, term, options)));
     if (mode !== 'any' && groups.some(group => !group.length)) return [];
     const unique = [...new Map(groups.flat().map(match => [`${match.start}:${match.end}`, match])).values()].sort((a, b) => a.start - b.start || b.end - a.end);
-    const matches = unique.filter((match, index) => !unique.slice(0, index).some(previous => previous.start <= match.start && previous.end >= match.end));
+    let coveredEnd = -1;
+    const matches = unique.filter(match => {
+      if (match.end <= coveredEnd) return false;
+      coveredEnd = match.end;
+      return true;
+    });
     return matches.map(match => ({ ...match, docId: doc.id, docTitle: doc.title, blockId: block.blockId, blockIndex: block.blockIndex, query }));
   }).sort((a, b) => a.blockIndex - b.blockIndex || a.start - b.start);
 }
