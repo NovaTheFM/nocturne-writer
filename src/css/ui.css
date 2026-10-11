@@ -5653,6 +5653,13 @@ body.mobile-shell-active .sortable-fallback-drag.timeline-item {
 .confirm-modal { text-align: center; }
 .confirm-modal p { color: var(--text-muted); line-height: 1.6; margin: 0 0 18px; }
 .confirm-modal .form-actions { justify-content: center; }
+.character-rename-modal .character-rename-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.character-rename-actions .pill-btn { width: 100%; min-width: 0; min-height: 44px; justify-content: center; white-space: normal; overflow-wrap: anywhere; }
+.character-rename-actions [data-rename-choice="alias"] { grid-column: 1 / -1; }
+.character-rename-modal { max-height: calc(100dvh - 32px); overflow-y: auto; }
+.character-rename-modal .confirm-icon { color: var(--accent); background: rgba(var(--accent-rgb), .12); border-color: var(--border); }
+.character-rename-modal h2, .character-rename-modal p { overflow-wrap: anywhere; }
+.character-rename-modal .character-rename-status { font-size: 13px; }
 .confirm-icon {
   width: 58px;
   height: 58px;

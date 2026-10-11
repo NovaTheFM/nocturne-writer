@@ -28,6 +28,7 @@ import { detectRuntime, configureNativeBars, bindNativeLifecycle, discoverNative
 import { CommandPalette } from './features/command-palette.js';
 import { buildAiContext, serializeAiContextSafe } from './features/ai-context.js';
 import { KNOWLEDGE_SEARCH_TYPES, findTextMatches, queryTerms, highlightSearchText, searchKnowledge, searchSnippet } from './features/knowledge-search.js';
+import { characterNameReplacement, renameCharacterReferences, renameReviewAnchors } from './features/character-rename.js';
 import { LocalSyncClient, buildHttpBase, SYNC_PROTOCOL_VERSION } from './features/local-sync.js';
 import { DatabaseSync } from './features/database-sync.js';
 import { ProjectBackups } from './features/backups.js';
@@ -3919,7 +3920,7 @@ class NocturneWriter {
     this.capacitorBackBound = true;
     bindNativeLifecycle({
       onBack: ({ canGoBack } = {}) => {
-        this.pendingConfirmation?.(false);
+        if (this.pendingConfirmation) { this.pendingConfirmation(false); return; }
         if (this.closeTopMobileOverlay()) return;
         if (canGoBack) window.history.back(); else this.openExitSheet();
       },
@@ -6473,7 +6474,7 @@ class NocturneWriter {
     }
     if (event.key === 'Shift') this.shiftKeyDown = true;
     if (event.key === 'Escape') {
-      this.pendingConfirmation?.(false);
+      if (this.pendingConfirmation) { this.pendingConfirmation(false); event.preventDefault(); return; }
       if (this.closeTopMobileOverlay()) {
         event.preventDefault();
         return;
@@ -13196,11 +13197,12 @@ class NocturneWriter {
     if (!overlay) return;
     clearTimeout(overlay.__motionCloseTimer); overlay.__motionGeneration = (overlay.__motionGeneration || 0) + 1;
     overlay.classList.remove('motion-exiting');
-    const template = document.createElement('template'); template.innerHTML = html.trim();
-    const next = template.content.firstElementChild, current = overlay.firstElementChild;
+    const template = document.createElement('template');
+    if (typeof html === 'string') template.innerHTML = html.trim();
+    const next = typeof html === 'string' ? template.content.firstElementChild : html, current = overlay.firstElementChild;
     if (!next || !overlay) return;
     const focusWasInside = current?.contains(document.activeElement);
-    if (overlay.classList.contains('active') && current?.tagName === next.tagName) {
+    if (typeof html === 'string' && overlay.classList.contains('active') && current?.tagName === next.tagName) {
       if (current.__surfaceMarkup !== html) {
         if (current.matches('.settings-modal')) this.patchSurface(current, next);
         else this.animateHeightTransition(current.querySelector('.form-modal, .cleaner-modal') || current, () => this.patchSurface(current, next), { width: true });
@@ -13214,8 +13216,10 @@ class NocturneWriter {
       next.offsetHeight;
     }
     const modal = overlay.querySelector('.form-modal, .settings-modal, .command-palette-panel, .cleaner-modal') || overlay.firstElementChild;
-    overlay.firstElementChild.__surfaceMarkup = html;
-    modal.__surfaceMarkup = html;
+    if (typeof html === 'string') {
+      overlay.firstElementChild.__surfaceMarkup = html;
+      modal.__surfaceMarkup = html;
+    }
     const title = modal.querySelector('h1, h2, h3');
     if (title) { title.id ||= `modal-title-${overlay.id || uid('surface')}`; modal.setAttribute('aria-labelledby', title.id); }
     modal.__surfaceKind = `${next.tagName}:${next.className}:${title?.textContent || ''}`;
@@ -18899,6 +18903,141 @@ class NocturneWriter {
     return String(value).split(',').map((item) => item.trim()).filter(Boolean);
   }
 
+  confirmCharacterRename(before, after, form) {
+    this.pendingConfirmation?.(false);
+    return new Promise(resolve => {
+      const overlay = document.getElementById('form-overlay');
+      this.presentFormModal(`
+        <div class="form-modal confirm-modal character-rename-modal" aria-describedby="character-rename-description">
+          <div class="confirm-icon"><i class="bx bx-user-pin" aria-hidden="true"></i></div>
+          <h2>Вы уверены, что хотите изменить имя персонажа?</h2>
+          <p id="character-rename-description">Имя «${escapeHtml(this.entityDisplayName(before))}» будет заменено на «${escapeHtml(this.entityDisplayName(after))}» во всех рукописях, заметках, записях, событиях таймлайна и остальных текстах приложения.</p>
+          <p class="character-rename-status" data-rename-status role="status" aria-live="polite" hidden></p>
+          <div class="form-actions character-rename-actions">
+            <button type="button" class="pill-btn ai-btn" data-rename-choice="rename">Да, изменить</button>
+            <button type="button" class="pill-btn" data-rename-choice="cancel" autofocus>Не изменять</button>
+            <button type="button" class="pill-btn" data-rename-choice="alias">Изменить с сохранением старого имени как алиаса</button>
+          </div>
+        </div>`);
+      let busy = false;
+      const close = value => {
+        if (busy || this.pendingConfirmation !== close) return;
+        this.pendingConfirmation = null;
+        if (value) this.closeOverlay(overlay);
+        else {
+          this.presentOverlay(overlay, form, { activate: true });
+          form.elements.firstName.focus({ preventScroll: true });
+        }
+        resolve(value);
+      };
+      this.pendingConfirmation = close;
+      overlay.querySelectorAll('[data-rename-choice]').forEach(button => {
+        button.onclick = async () => {
+          if (button.dataset.renameChoice === 'cancel') return close(false);
+          if (busy) return;
+          await this.runSurfaceAction(button, 'Изменение имени…', async () => {
+            busy = true;
+            const buttons = [...overlay.querySelectorAll('[data-rename-choice]')];
+            buttons.forEach(item => { item.disabled = true; });
+            const status = overlay.querySelector('[data-rename-status]');
+            status.hidden = false; status.textContent = 'Обновляем имя во всех текстах…';
+            try {
+              await this.renameCharacterEverywhere(before, after, { keepAlias: button.dataset.renameChoice === 'alias' });
+              busy = false; close(true);
+            } catch (error) {
+              status.textContent = error.code === 'SYNC_RETRY'
+                ? 'Данные изменились в другой вкладке или при синхронизации. Обновите их и повторите переименование. Имя не изменено.'
+                : `${error.message || 'Не удалось сохранить изменения.'} Имя не изменено.`;
+              status.setAttribute('role', 'alert');
+            } finally { busy = false; buttons.forEach(item => { item.disabled = false; }); }
+          });
+        };
+      });
+    });
+  }
+
+  async renameCharacterEverywhere(before, after, { keepAlias = false } = {}) {
+    const worldId = this.state.activeLoreId || 'world';
+    if (this.state.lore.locked || this.state.settings.e2e && !this.state.sessionPassword) throw new Error('Введите мастер-пароль для переименования.');
+    await Promise.all([...(this.docSaves?.values() || []), ...this.draftWrites.values(), this.trash.work, this.bookmarks.trashWork, this.databaseSync?.incomingWork]);
+    for (const instance of this.nocturneEditor.instances.values()) this.nocturneEditor.syncDocFromEditor(instance.paneId);
+    const replacement = characterNameReplacement(before, after);
+    const stores = ['docs', 'folders', 'lore', 'floatingNotes', 'reviewMarks', 'drafts', 'trash'];
+    const raw = Object.fromEntries(await Promise.all(stores.map(async store => [store, await this.db.getAllRaw(store)])));
+    const globalRaw = await this.db.getRaw('settings', 'global-notes');
+    raw.settings = globalRaw ? [globalRaw] : [];
+    const decoded = Object.fromEntries(await Promise.all(Object.entries(raw).map(async ([store, records]) => [store, await Promise.all(records.map(record => this.db.decodeRecord(store, record)))])));
+    if (Object.values(decoded).flat().some(record => record.locked || record.protectedStore)) throw new Error('Сначала разблокируйте все зашифрованные записи мастер-паролем.');
+    const baseline = this.loreById?.get(worldId), persistedWorld = decoded.lore.find(world => world.id === worldId);
+    if (baseline && Object.keys({ ...baseline, ...persistedWorld }).filter(key => !['id', 'locked'].includes(key)).some(key => JSON.stringify(baseline[key]) !== JSON.stringify(persistedWorld?.[key]))) {
+      const error = new Error('База знаний изменена в другой вкладке.'); error.code = 'SYNC_RETRY'; throw error;
+    }
+    const merge = (store, current) => {
+      const records = new Map(decoded[store].map(record => [record.id, record]));
+      current.forEach(record => records.set(record.id, structuredClone(record)));
+      decoded[store] = [...records.values()];
+    };
+    merge('docs', this.state.docs); merge('folders', this.state.folders);
+    merge('floatingNotes', this.state.floatingNotes.filter(note => !note.temporary).map(note => ({ ...note, forceVisible: false })));
+    merge('reviewMarks', this.state.reviewMarks);
+    const world = { ...structuredClone(this.state.lore), id: worldId };
+    const character = world.characters.find(item => item.id === before.id);
+    if (!character || this.entityDisplayName(character) !== this.entityDisplayName(before)) throw new Error('Карточка уже изменена. Откройте её заново.');
+    Object.assign(character, after);
+    merge('lore', [world]);
+    merge('settings', [{ ...decoded.settings[0], id: 'global-notes', text: this.state.globalNotes || '', bookmarks: this.state.globalBookmarks || [] }]);
+    const originals = new Map(decoded.docs.map(doc => [doc.id, doc]));
+    const writes = {}, expect = {}, changed = {};
+    for (const [store, records] of Object.entries(decoded)) {
+      changed[store] = records.map(record => {
+        let next = renameCharacterReferences(record, replacement, { characterId: before.id });
+        if (store === 'reviewMarks') next = renameReviewAnchors(next, originals.get(record.docId), replacement);
+        if (store === 'lore' && record.id === worldId && keepAlias) {
+          const target = next.characters.find(item => item.id === before.id), oldName = this.entityDisplayName(before);
+          target.aliases = [...new Set([...(after.aliases || []), oldName])];
+        }
+        const stored = raw[store].find(value => value.id === record.id);
+        const original = store === 'lore' && record.id === worldId ? this.state.lore : record;
+        const modified = JSON.stringify(next) !== JSON.stringify(original) || store === 'lore' && record.id === worldId;
+        if (modified) {
+          if (store === 'docs' && this.db.documentVersions.has(record.id) && JSON.stringify(stored) !== JSON.stringify(this.db.documentVersions.get(record.id))) {
+            const error = new Error('Документ изменён в другой вкладке.'); error.code = 'SYNC_RETRY'; throw error;
+          }
+          next.updatedAt = Date.now();
+          (writes[store] ||= []).push(next);
+          (expect[store] ||= []).push({ id: record.id, value: stored });
+        }
+        return next;
+      });
+    }
+    const committedIds = new Set((writes.docs || []).map(doc => doc.id));
+    if (writes.drafts) writes.drafts = writes.drafts.filter(draft => !committedIds.has(draft.id));
+    const draftGuards = new Map((expect.drafts || []).map(record => [record.id, record]));
+    for (const id of committedIds) draftGuards.set(id, { id, value: raw.drafts.find(draft => draft.id === id) });
+    if (draftGuards.size) expect.drafts = [...draftGuards.values()];
+    await this.db.atomicWrite(writes, { expect, deletes: committedIds.size ? { drafts: [...committedIds] } : {} });
+    for (const next of changed.docs) {
+      const current = this.state.docs.find(doc => doc.id === next.id);
+      if (!current) { this.state.docs.push(next); continue; }
+      const contentChanged = JSON.stringify(current.pmJson || current.ast) !== JSON.stringify(next.pmJson || next.ast);
+      Object.assign(current, next);
+      if (contentChanged) this.nocturneEditor.applyDocumentContent(current, { ast: next.ast, pmJson: next.pmJson, bookmarks: next.bookmarks });
+    }
+    this.state.folders = changed.folders;
+    this.state.floatingNotes = [...changed.floatingNotes, ...this.state.floatingNotes.filter(note => note.temporary).map(note => renameCharacterReferences(note, replacement))];
+    this.state.reviewMarks = changed.reviewMarks;
+    this.state.globalNotes = changed.settings[0].text;
+    this.state.globalBookmarks = changed.settings[0].bookmarks;
+    this.loreById = new Map(changed.lore.map(item => [item.id, item]));
+    this.state.lore = changed.lore.find(item => item.id === worldId);
+    this.state.kbProjects = changed.lore.map(item => ({ id: item.id, title: item.title }));
+    this.bookmarks.worldRecords = structuredClone(changed.lore);
+    this.trash.worlds = new Map(changed.lore.map(item => [item.id, structuredClone(item)]));
+    this.bookmarks.resetPlainTextBaselines();
+    this.bookmarks.refresh();
+    this.refreshVisibleEntityLinks();
+  }
+
   editLore(type, id = null, parentId = null) {
     const isSubtimeline = type === 'subtimeline';
     const parentEvent = isSubtimeline ? this.timelineEvent(parentId || this.state.activeSubtimelineId) : null;
@@ -19239,6 +19378,17 @@ class NocturneWriter {
           documentIds: existingDocs,
           order,
         }, order);
+      }
+      if (id && type === 'characters' && this.entityDisplayName(item) !== this.entityDisplayName(next)) {
+        const form = event.target;
+        if (form.dataset.renamePending) return;
+        form.dataset.renamePending = 'true';
+        try {
+          if (!await this.confirmCharacterRename(item, next, form)) return;
+          this.renderAll();
+          this.toast('Имя персонажа изменено во всех текстах.');
+        } finally { delete form.dataset.renamePending; }
+        return;
       }
       if (id) Object.assign(item, next);
       else {
