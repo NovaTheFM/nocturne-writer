@@ -20,6 +20,13 @@ export function inferCharacterGender(character = {}, fallback = 'masculine') {
   const surname = String(character.lastName || '').toLocaleLowerCase('ru');
   if (/(?:ова|ева|ёва|ина|ына|ая|яя)$/u.test(surname)) return 'feminine';
   if (/(?:ов|ев|ёв|ин|ын|ый|ой|ский|цкий)$/u.test(surname)) return 'masculine';
+  const role = normalizeName(character.role), display = normalizeName(character.displayName || character.name || character.firstName);
+  let introduction = normalizeName(character.body);
+  if (display && introduction.startsWith(display)) introduction = introduction.slice(display.length).replace(/^[\s—–:,\-]+/u, '');
+  const feminineClue = /^(?:(?:молодая|юная|пожилая|старая)\s+)?(?:она|женщина|девушка|девочка|дочь|мать|сестра|королева|принцесса|героиня|воительница|колдунья|ведьма)(?![\p{L}\p{M}])/u;
+  const masculineClue = /^(?:(?:молодой|юный|пожилой|старый)\s+)?(?:он|мужчина|парень|мальчик|сын|отец|брат|король|принц)(?![\p{L}\p{M}])/u;
+  if (feminineClue.test(role) || feminineClue.test(introduction)) return 'feminine';
+  if (masculineClue.test(role) || masculineClue.test(introduction)) return 'masculine';
   if (/[ая]$/u.test(first)) return 'feminine';
   if (/[бвгджзклмнпрстфхцчшщйь]$/u.test(first)) return 'masculine';
   return fallback;
@@ -95,7 +102,7 @@ export function nameParadigm(name = '', { gender = 'masculine', kind = 'firstNam
 }
 
 export function characterMentionForms(character = {}, { includeSurname = true } = {}) {
-  const signature = JSON.stringify([character.displayName, character.name, character.firstName, character.lastName, character.aliases, character.mentionForms, character.gender, character.sex, includeSurname]);
+  const signature = JSON.stringify([character.displayName, character.name, character.firstName, character.lastName, character.aliases, character.mentionForms, character.gender, character.sex, character.role, character.body, includeSurname]);
   const cached = mentionsCache.get(character);
   if (cached?.signature === signature) return cached.forms.slice();
   const gender = inferCharacterGender(character), names = [character.displayName, character.name, character.firstName].filter(Boolean);

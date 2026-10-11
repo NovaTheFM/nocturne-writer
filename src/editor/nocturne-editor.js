@@ -155,7 +155,7 @@ const BlockIdentity = Extension.create({
 });
 
 function isEntityBoundary(char) {
-  return !char || !/[\p{L}\p{N}_]/u.test(char);
+  return !char || !/[\p{L}\p{M}\p{N}_'’‐‑-]/u.test(char);
 }
 
 function buildEntityLookupMap(index) {
