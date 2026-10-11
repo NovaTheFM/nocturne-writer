@@ -4,6 +4,15 @@
 )
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class NocturneReadyWindow {
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr window, int command);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
+    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr window);
+}
+'@
 [System.Windows.Forms.Application]::EnableVisualStyles()
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Nocturne Writer — исправления готовы'
@@ -45,9 +54,13 @@ $closeButton = Add-ReadyButton 'Закрыть' 423 120 { $form.Close() }
 $form.AcceptButton = $reportButton
 $form.CancelButton = $closeButton
 $form.Add_Shown({
+    [void][NocturneReadyWindow]::ShowWindow($form.Handle, 5)
+    [void][NocturneReadyWindow]::SetForegroundWindow($form.Handle)
     $form.Activate()
     $form.BringToFront()
     [System.Media.SystemSounds]::Exclamation.Play()
-    [System.IO.File]::WriteAllText($SignalPath, "shown $([DateTime]::UtcNow.ToString('o')) pid=$PID", [System.Text.Encoding]::UTF8)
+    if ([NocturneReadyWindow]::IsWindowVisible($form.Handle)) {
+        [System.IO.File]::WriteAllText($SignalPath, "shown $([DateTime]::UtcNow.ToString('o')) pid=$PID", [System.Text.Encoding]::UTF8)
+    }
 })
 try { [void]$form.ShowDialog() } finally { $form.Dispose() }
