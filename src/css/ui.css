@@ -21,8 +21,8 @@ body {
 .floating-note textarea::selection,
 input::selection,
 textarea::selection {
-  color: #fff;
-  background: color-mix(in srgb, var(--accent-hover) 44%, rgba(255,255,255,.08));
+  color: var(--text-main);
+  background: color-mix(in srgb, var(--accent) 28%, var(--bg-panel));
 }
 
 .page-content ::selection {
@@ -49,12 +49,11 @@ textarea::selection {
   top: 0;
   left: 0;
   pointer-events: none !important;
-  border: 1px solid color-mix(in srgb, var(--accent-hover) 64%, rgba(255,255,255,.18));
-  border-radius: 7px;
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--accent) 42%, transparent), color-mix(in srgb, var(--accent-hover) 24%, transparent));
-  box-shadow: 0 0 0 1px rgba(255,255,255,.025) inset, 0 0 18px color-mix(in srgb, var(--accent) 28%, transparent);
-  mix-blend-mode: screen;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  box-shadow: none;
+  mix-blend-mode: normal;
   will-change: transform, width, height, opacity;
   transition: transform 120ms cubic-bezier(0.16, 1, 0.3, 1),
               width 120ms cubic-bezier(0.16, 1, 0.3, 1),
@@ -65,7 +64,9 @@ textarea::selection {
 #nocturne-selection-layer.no-transition .nocturne-selection-rect,
 #nocturne-selection-layer.no-transition .nocturne-selection-handle,
 body.is-selecting-text #nocturne-selection-layer .nocturne-selection-rect,
-body.is-scrolling #nocturne-selection-layer .nocturne-selection-rect {
+body.is-scrolling #nocturne-selection-layer .nocturne-selection-rect,
+#nocturne-selection-layer.dragging .nocturne-selection-rect,
+#nocturne-selection-layer .nocturne-selection-rect.selection-entering {
   transition: none !important;
 }
 
@@ -504,11 +505,12 @@ body.material .floating-menu-portal .popover-surface {
   line-height: 1.5;
 }
 .interactive-cb {
-  display: inline-block;
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 9px;
   position: relative;
-  width: 16px;
-  height: 16px;
-  margin-top: 3px;
+  min-height: 32px;
+  padding: 5px 2px;
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -516,29 +518,29 @@ body.material .floating-menu-portal .popover-surface {
   position: absolute;
   opacity: 0;
   cursor: pointer;
-  height: 0;
-  width: 0;
+  height: 1px;
+  width: 1px;
 }
-.interactive-cb span {
-  position: absolute;
-  top: 0;
-  left: 0;
+.interactive-cb > .check-mark {
+  position: relative;
+  flex: 0 0 16px;
+  margin-top: 3px;
   height: 16px;
   width: 16px;
-  background-color: transparent;
-  border: 1px solid var(--text-muted);
+  background-color: var(--bg-panel);
+  border: 1px solid color-mix(in srgb, var(--text-main) 30%, var(--border));
   border-radius: 4px;
   transition: all 0.2s ease;
 }
-.interactive-cb:hover input ~ span {
+.interactive-cb:hover input + .check-mark {
   border-color: var(--accent);
 }
-.interactive-cb input:checked ~ span {
+.interactive-cb input:checked + .check-mark {
   background-color: var(--accent);
   border-color: var(--accent);
   animation: scale-pop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
-.interactive-cb span:after {
+.interactive-cb > .check-mark:after {
   content: "";
   position: absolute;
   display: none;
@@ -546,13 +548,15 @@ body.material .floating-menu-portal .popover-surface {
   top: 2px;
   width: 4px;
   height: 8px;
-  border: solid white;
+  border: solid var(--button-text-strong);
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }
-.interactive-cb input:checked ~ span:after {
+.interactive-cb input:checked + .check-mark:after {
   display: block;
 }
+.interactive-cb:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 5px; }
+.interactive-cb .cb-text { min-width: 0; overflow-wrap: anywhere; }
 
 
 .tool-btn.active { background: var(--border); }
@@ -942,6 +946,9 @@ body.material .floating-menu-portal .popover-surface {
   padding: 14px;
   text-align: left;
   cursor: pointer;
+  transition: background-color 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .review-mode-card i {
   color: var(--accent);
@@ -960,7 +967,7 @@ body.material .floating-menu-portal .popover-surface {
 .custom-select, .modal-select, .form-control {
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  color: white;
+  color: var(--text-main);
   outline: 0;
   border-radius: var(--radius-sm);
 }
@@ -971,7 +978,7 @@ body.material .floating-menu-portal .popover-surface {
   padding: 8px;
   cursor: pointer;
 }
-.custom-select:hover { color: white; }
+.custom-select:hover { color: var(--text-main); }
 .format-dropdown { position: relative; }
 .format-button {
   min-width: 156px;
@@ -2648,9 +2655,9 @@ body.ctrl-pressed .entity-family-link:hover {
   display: grid;
   place-items: center;
   flex: 0 0 16px;
-  border: 1px solid rgba(255,255,255,.16);
+  border: 1px solid color-mix(in srgb, var(--text-main) 30%, var(--border));
   border-radius: 5px;
-  background: rgba(10,10,14,.82);
+  background: var(--bg-panel);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
   transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
 }
@@ -2658,15 +2665,15 @@ body.ctrl-pressed .entity-family-link:hover {
   content: '';
   width: 8px;
   height: 4px;
-  border-left: 2px solid white;
-  border-bottom: 2px solid white;
+  border-left: 2px solid var(--button-text-strong);
+  border-bottom: 2px solid var(--button-text-strong);
   opacity: 0;
   transform: translateY(-1px) rotate(-45deg) scale(.8);
   transition: opacity 140ms ease, transform 140ms ease;
 }
 .nocturne-check input[type="checkbox"]:checked + .check-mark {
   border-color: rgba(var(--accent-hover-rgb, 167, 139, 250),.78);
-  background: linear-gradient(135deg, rgba(var(--accent-rgb, 139, 92, 246),.95), rgba(109,40,217,.95));
+  background: var(--accent);
   box-shadow: 0 0 16px rgba(var(--accent-rgb, 139, 92, 246),.22);
 }
 .nocturne-check input[type="checkbox"]:checked + .check-mark::after {
@@ -2674,7 +2681,7 @@ body.ctrl-pressed .entity-family-link:hover {
   transform: translateY(-1px) rotate(-45deg) scale(1);
 }
 .nocturne-check:has(input[type="checkbox"]:focus-visible) {
-  outline: 2px solid rgba(196,181,253,.58);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 .nocturne-check:has(input[type="checkbox"]:disabled) {
@@ -4277,12 +4284,15 @@ body.resizing-floating-note {
 }
 .range-value-input {
   outline: none;
+  border-color: color-mix(in srgb, var(--text-main) 22%, var(--border));
+  background: var(--field-bg);
   transition: border-color 150ms ease, background-color 150ms ease;
 }
 .range-value-input:focus {
   border-color: rgba(var(--accent-rgb, 139, 92, 246), 0.5);
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--hover-soft);
 }
+.range-value-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .color-input { width: 52px; height: 36px; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); background: transparent; }
 .accent-picker {
   --accent-preview: var(--accent);
@@ -4421,7 +4431,7 @@ body.resizing-floating-note {
   display: block;
   width: 44px;
   height: 24px;
-  background: #2a2a35;
+  background: color-mix(in srgb, var(--text-main) 18%, var(--bg-panel));
   border-radius: 12px;
   position: relative;
   cursor: pointer;
@@ -4442,6 +4452,8 @@ body.resizing-floating-note {
 }
 .toggle.on { background: var(--accent); }
 .toggle.on::after { transform: translateX(20px); }
+.toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 5px; }
+.toggle::before { content: ''; position: absolute; inset: -10px 0; border-radius: inherit; }
 .compact-settings-modal button.toggle {
   appearance: none;
   display: block;
@@ -4980,7 +4992,7 @@ body.sortable-active .note-card,
 .custom-select, .modal-select, .form-control {
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  color: white;
+  color: var(--text-main);
   outline: 0;
   border-radius: var(--radius-sm);
   transition: border-color 180ms ease, box-shadow 180ms ease;
@@ -9081,14 +9093,13 @@ body.theme-paper .accent-preset.active {
 .assoc-tab-btn.active {
   background: rgba(var(--accent-rgb, 139, 92, 246), 0.12);
   border-color: rgba(var(--accent-rgb, 139, 92, 246), 0.3);
-  color: #ddd6fe;
+  color: var(--text-main);
 }
 .assoc-tab-content {
   display: none;
 }
 .assoc-tab-content.active {
   display: block;
-  animation: assocFadeIn 0.3s ease-out forwards;
 }
 @keyframes assocFadeIn {
   from { opacity: 0; transform: translateY(5px); }
@@ -9163,7 +9174,7 @@ body.theme-paper .accent-preset.active {
 }
 .assoc-card.active .assoc-card-icon {
   background: rgba(var(--accent-rgb, 139, 92, 246), 0.15);
-  color: #ddd6fe;
+  color: var(--accent);
 }
 .assoc-card-details {
   display: flex;
@@ -9214,7 +9225,7 @@ body.theme-paper .accent-preset.active {
 .role-btn.active {
   background: rgba(var(--accent-rgb, 139, 92, 246), 0.12);
   border-color: rgba(var(--accent-rgb, 139, 92, 246), 0.5);
-  color: #ddd6fe;
+  color: var(--text-main);
   box-shadow: 0 0 8px rgba(var(--accent-rgb, 139, 92, 246), 0.2);
 }
 .empty-state-text {
@@ -9364,15 +9375,16 @@ body.theme-paper .accent-preset.active {
   transition: 160ms ease;
 }
 .doc-type-radio:hover span {
-  color: white;
+  color: var(--text-main);
   background: rgba(255,255,255,.04);
 }
 .doc-type-radio input:checked + span {
-  color: white;
+  color: var(--text-main);
   border-color: rgba(var(--accent-rgb, 139, 92, 246),.35);
   background: rgba(var(--accent-rgb, 139, 92, 246),.12);
   box-shadow: 0 0 18px rgba(var(--accent-rgb, 139, 92, 246),.16);
 }
+.doc-type-radio input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 /* Modal Switcher Animated Wrapper */
 .book-chapter-fields-wrapper {

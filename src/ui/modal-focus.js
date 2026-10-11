@@ -16,7 +16,7 @@ export function manageModalFocus() {
     }
     for (const toggle of document.querySelectorAll('[data-kind="toggle"]')) {
       toggle.setAttribute('role', 'switch'); toggle.tabIndex = 0; toggle.setAttribute('aria-checked', String(toggle.classList.contains('on') || toggle.classList.contains('active')));
-      toggle.setAttribute('aria-label', (toggle.tagName === 'BUTTON' ? toggle.textContent.trim() : '') || toggle.closest('.setting-row')?.querySelector('.setting-info strong, .setting-info > span')?.textContent || toggle.closest('.ai-context-head')?.querySelector('strong')?.textContent || 'Переключатель');
+      if (!toggle.hasAttribute('aria-label')) toggle.setAttribute('aria-label', (toggle.tagName === 'BUTTON' ? toggle.textContent.trim() : '') || toggle.closest('.setting-row')?.querySelector('.setting-info strong, .setting-info > span')?.textContent || toggle.closest('.dictionary-toggle')?.querySelector('span')?.textContent || toggle.closest('.ai-context-head')?.querySelector('strong')?.textContent || 'Переключатель');
     }
     const overlays = [...document.querySelectorAll('#form-overlay.active, #settings-overlay.active, #kb-modal.active, #mobile-overlay.active, .floating-notes-modal.active, .command-palette-overlay.active')];
     const overlay = overlays.sort((a, b) => (Number(getComputedStyle(a).zIndex) || 0) - (Number(getComputedStyle(b).zIndex) || 0)).at(-1);

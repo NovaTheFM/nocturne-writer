@@ -1945,6 +1945,7 @@ class NocturneWriter {
       button.classList.toggle('active', active);
       button.setAttribute(button.getAttribute('role') === 'menuitemradio' ? 'aria-checked' : 'aria-pressed', String(active));
     });
+    this.updateWorkflowSelections();
     const trigger = document.querySelector('.review-mode-trigger');
     if (trigger) {
       const label = trigger.querySelector('.review-mode-trigger-label');
@@ -2562,6 +2563,7 @@ class NocturneWriter {
     this.preserveMobileViewScroll(scrollRoot, this.mobileViewScrollKey('lore'), () => this.updateSurfaceHTML(surface, this.renderMobileKb({ asTab }), { key: this.state.activeLoreId }));
     requestAnimationFrame(() => surface.classList.remove('mobile-kb-switching'));
     this.setupMobileKbSortables();
+    this.updateWorkflowSelections(surface);
     return true;
   }
 
@@ -2645,7 +2647,7 @@ class NocturneWriter {
         <button class="mobile-action-row" data-ai="sentiment" ${doc && !doc.locked ? '' : 'disabled'}><span class="mobile-action-icon"><i class="bx bx-line-chart"></i></span><span class="mobile-action-copy"><strong>Тональность сцены</strong><small>Эмоциональный ритм текста · без AI-модели</small></span><i class="bx bx-chevron-right mobile-row-chevron"></i></button>
         <canvas class="sentiment-graph mobile-sentiment" data-mobile-sentiment width="360" height="72" aria-label="График эмоционального ритма сцены" ${this.mobileSentimentVisible || this.state.settings.sentimentTimeline ? '' : 'hidden'}></canvas>
         <section class="ai-context-box">
-          <div class="ai-context-head"><div><strong>Контекст базы знаний</strong><span>Без вставки в документ</span></div><div class="toggle ${this.state.settings.aiKnowledgeContext ? 'on' : ''}" data-setting="aiKnowledgeContext" data-kind="toggle"></div></div>
+          <div class="ai-context-head"><div><strong>Контекст базы знаний</strong><span>Без вставки в документ</span></div><button type="button" class="toggle ${this.state.settings.aiKnowledgeContext ? 'on' : ''}" data-setting="aiKnowledgeContext" data-kind="toggle" aria-label="Контекст базы знаний"></button></div>
           <div class="ai-context-toggles">${[['aiContextCharacters', 'Персонажи'], ['aiContextLocations', 'Локации'], ['aiContextTimeline', 'Таймлайн'], ['aiContextSubtimelines', 'Подсобытия'], ['aiContextNotes', 'Записи']].map(([key, label]) => `<button class="context-chip ${this.state.settings[key] ? 'active' : ''}" data-setting="${key}" data-kind="toggle" aria-pressed="${!!this.state.settings[key]}">${label}</button>`).join('')}</div>
           <button class="pill-btn" data-action="preview-ai-context"><i class="bx bx-show"></i> Предпросмотр контекста</button>
           <button class="pill-btn" data-action="mobile-open-ai-settings"><i class="bx bx-cog"></i> Настройки AI</button>
@@ -2689,7 +2691,7 @@ class NocturneWriter {
 
   renderMobileExport() {
     const row = (label, note, control) => `<div class="setting-row"><div class="setting-info"><span>${label}</span>${note ? `<small>${note}</small>` : ''}</div><div class="setting-control">${control}</div></div>`;
-    const toggle = (key) => `<div class="toggle ${this.state.settings[key] ? 'on' : ''}" data-setting="${key}" data-kind="toggle"></div>`;
+    const toggle = (key) => `<button type="button" class="toggle ${this.state.settings[key] ? 'on' : ''}" data-setting="${key}" data-kind="toggle" role="switch" aria-checked="${!!this.state.settings[key]}"></button>`;
     const input = (key, type = 'text') => `<input class="form-control" type="${type}" value="${escapeHtml(this.state.settings[key] || '')}" data-setting="${key}">`;
     return `
       ${this.mobilePanelHeader('Экспорт / резервная копия', 'PDF, DOCX и .nocturnedump')}
@@ -3307,7 +3309,7 @@ class NocturneWriter {
               <section class="ai-context-box">
                 <div class="ai-context-head">
                   <div><strong>Контекст базы знаний</strong><span id="ai-context-budget">KB: off</span></div>
-                  <div class="toggle ${this.state.settings.aiKnowledgeContext ? 'on' : ''}" data-setting="aiKnowledgeContext" data-kind="toggle"></div>
+                  <button type="button" class="toggle ${this.state.settings.aiKnowledgeContext ? 'on' : ''}" data-setting="aiKnowledgeContext" data-kind="toggle" aria-label="Контекст базы знаний"></button>
                 </div>
                 <div class="ai-context-toggles">
                   ${[
@@ -4326,7 +4328,10 @@ class NocturneWriter {
     if (action === 'toggle-nocturned-export') {
       this.state.exportNocturned = !this.state.exportNocturned;
       safeSetStorageItem(localStorage, 'nocturne-export-nocturned', String(this.state.exportNocturned));
-      this.renderSettings();
+      document.querySelectorAll('[data-action="toggle-nocturned-export"]').forEach(toggle => {
+        toggle.classList.toggle('on', this.state.exportNocturned);
+        toggle.setAttribute('aria-checked', String(this.state.exportNocturned));
+      });
       return;
     }
         if (action === 'delete-custom-font') {
@@ -5670,42 +5675,63 @@ class NocturneWriter {
   }
 
   hideNocturneSelectionLayer(layer) {
-    if (!layer) return;
-    layer.classList.remove('active');
-    if (layer._rectPool) {
-      layer._rectPool.forEach(el => {
-        el.style.display = 'none';
-        el.style.opacity = '0';
-      });
-    }
+    if (!layer || layer.__selectionHiding) return;
     if (layer._startHandle) layer._startHandle.style.display = 'none';
     if (layer._endHandle) layer._endHandle.style.display = 'none';
     this._lastSerializedRects = '';
+    const generation = layer.__selectionGeneration = (layer.__selectionGeneration || 0) + 1;
+    const clear = () => {
+      if (layer.__selectionGeneration !== generation) return;
+      layer.__selectionHiding = false;
+      layer.classList.remove('active');
+      layer.__selectionFade?.animation?.cancel(); layer.__selectionFade = null;
+      for (const rect of layer._rectPool || []) {
+        rect.__nocturneMotions?.get('selection-presence')?.animation?.cancel();
+        rect.style.display = 'none'; rect.style.opacity = '0'; rect.__selectionRect = null;
+      }
+    };
+    if (!layer.classList.contains('active') || this.shouldReduceSurfaceMotion()) { clear(); return; }
+    layer.__selectionHiding = true;
+    layer.__selectionFade = this.runMotion(layer, [{ opacity: 1 }, { opacity: 0 }], { channel: 'selection-layer', duration: 120, fill: 'forwards' });
+    layer.__selectionFade.finished.then(clear);
   }
 
   updateNocturneSelectionPool(layer, merged, custom) {
+    const entering = !layer.classList.contains('active') || layer.__selectionHiding;
+    layer.__selectionGeneration = (layer.__selectionGeneration || 0) + 1;
+    layer.__selectionHiding = false;
     layer.classList.add('active');
     if (!layer._rectPool) layer._rectPool = [];
-
-    while (layer._rectPool.length < merged.length) {
-      const rectEl = document.createElement('span');
-      rectEl.className = 'nocturne-selection-rect';
-      layer.appendChild(rectEl);
-      layer._rectPool.push(rectEl);
+    if (entering) layer.__selectionFade = this.runMotion(layer, [{ opacity: 0 }, { opacity: 1 }], { channel: 'selection-layer', duration: 100 });
+    const immediate = this.shouldReduceSurfaceMotion() || layer.classList.contains('dragging') || document.body.matches('.is-selecting-text, .is-scrolling');
+    layer.classList.toggle('no-transition', immediate);
+    const used = new Set();
+    for (const r of merged) {
+      // Keep each line's rectangle while the selection wraps or reverses direction.
+      let rectEl = layer._rectPool.find(el => !used.has(el) && el.__selectionRect && Math.abs(el.__selectionRect.top - r.top) < 4);
+      const fresh = !rectEl;
+      if (!rectEl) rectEl = layer._rectPool.find(el => !used.has(el) && !el.__selectionRect);
+      if (!rectEl) {
+        rectEl = document.createElement('span'); rectEl.className = 'nocturne-selection-rect';
+        layer.appendChild(rectEl); layer._rectPool.push(rectEl);
+      }
+      used.add(rectEl);
+      const generation = rectEl.__selectionGeneration = (rectEl.__selectionGeneration || 0) + 1;
+      if (fresh || immediate) rectEl.classList.add('selection-entering');
+      Object.assign(rectEl.style, { transform: `translate3d(${r.left}px, ${r.top}px, 0)`, width: `${r.width}px`, height: `${r.height}px`, display: 'block', opacity: '1' });
+      rectEl.__selectionRect = r;
+      if (fresh && !immediate && !entering) this.runMotion(rectEl, [{ opacity: 0 }, { opacity: 1 }], { channel: 'selection-presence', duration: 110 });
+      else rectEl.__nocturneMotions?.get('selection-presence')?.animation?.cancel();
+      requestAnimationFrame(() => { if (rectEl.__selectionGeneration === generation) rectEl.classList.remove('selection-entering'); });
     }
-
-    for (let i = 0; i < layer._rectPool.length; i++) {
-      const rectEl = layer._rectPool[i];
-      if (i < merged.length) {
-        const r = merged[i];
-        rectEl.style.transform = `translate3d(${r.left}px, ${r.top}px, 0)`;
-        rectEl.style.width = `${r.width}px`;
-        rectEl.style.height = `${r.height}px`;
-        rectEl.style.display = 'block';
-        rectEl.style.opacity = '1';
-      } else {
-        rectEl.style.display = 'none';
-        rectEl.style.opacity = '0';
+    for (const rectEl of layer._rectPool) if (!used.has(rectEl) && rectEl.__selectionRect) {
+      rectEl.__selectionRect = null;
+      const generation = rectEl.__selectionGeneration = (rectEl.__selectionGeneration || 0) + 1;
+      const hide = () => { if (rectEl.__selectionGeneration === generation) { rectEl.style.display = 'none'; rectEl.style.opacity = '0'; } };
+      if (immediate) hide();
+      else {
+        const motion = this.runMotion(rectEl, [{ opacity: 1 }, { opacity: 0 }], { channel: 'selection-presence', duration: 100, fill: 'forwards' });
+        motion.finished.then(() => { if (rectEl.__selectionGeneration === generation) { hide(); motion.animation?.cancel(); } });
       }
     }
 
@@ -5765,20 +5791,26 @@ class NocturneWriter {
       return;
     }
 
-    const rawRects = this.state.settings.autoPaginate && this.nocturneEditor.getByElement(editable)
+    const rawRects = this.nocturneEditor.getByElement(editable)
       ? this.textSelectionRects(range, editable) : range.getClientRects();
     if (!rawRects || !rawRects.length) {
       this.hideNocturneSelectionLayer(layer);
       return;
     }
 
-    const vh = window.innerHeight || 800;
-    const isLongSelection = rawRects.length > 40;
+    const viewport = window.visualViewport;
+    const clip = { left: viewport?.offsetLeft || 0, top: viewport?.offsetTop || 0, right: (viewport?.offsetLeft || 0) + (viewport?.width || innerWidth), bottom: (viewport?.offsetTop || 0) + (viewport?.height || innerHeight) };
+    for (let parent = editable.parentElement; parent; parent = parent.parentElement) {
+      const style = getComputedStyle(parent), bounds = parent.getBoundingClientRect();
+      if (/auto|scroll|hidden|clip/.test(style.overflowX)) { clip.left = Math.max(clip.left, bounds.left); clip.right = Math.min(clip.right, bounds.right); }
+      if (/auto|scroll|hidden|clip/.test(style.overflowY)) { clip.top = Math.max(clip.top, bounds.top); clip.bottom = Math.min(clip.bottom, bounds.bottom); }
+    }
+    layer.style.clipPath = `inset(${Math.max(0, clip.top)}px ${Math.max(0, innerWidth - clip.right)}px ${Math.max(0, innerHeight - clip.bottom)}px ${Math.max(0, clip.left)}px)`;
     const rects = [];
     for (let i = 0; i < rawRects.length; i++) {
       const rect = rawRects[i];
       if (rect.width > 1 && rect.height > 1) {
-        if (!isLongSelection || (rect.bottom >= -150 && rect.top <= vh + 150)) {
+        if (rect.bottom > clip.top && rect.top < clip.bottom && rect.right > clip.left && rect.left < clip.right) {
           rects.push({
             left: Math.round(rect.left - 2),
             top: Math.round(rect.top - 1),
@@ -5794,7 +5826,7 @@ class NocturneWriter {
       return;
     }
 
-    const serialized = rects.map(r => `${r.left},${r.top},${r.width},${r.height}`).join(';');
+    const serialized = `${custom}:${rects.map(r => `${r.left},${r.top},${r.width},${r.height}`).join(';')}`;
     if (this._lastSerializedRects === serialized) {
       return;
     }
@@ -7978,6 +8010,9 @@ class NocturneWriter {
         const button = fields.querySelector('.assoc-collapse-btn');
         button?.setAttribute('aria-expanded', String(!collapsed));
         button?.setAttribute('aria-label', collapsed ? 'Показать привязки и ассоциации' : 'Скрыть привязки и ассоциации');
+        const content = fields.querySelector('.assoc-collapsible-content');
+        if (content) { content.inert = collapsed; content.setAttribute('aria-hidden', String(collapsed)); }
+        if (!collapsed) this.updateWorkflowSelections(fields);
       },
       'formatting-save-new': () => {
         const trigger = (this.settingsControl('new-rule-trigger')?.value || '').trim();
@@ -12867,7 +12902,7 @@ class NocturneWriter {
     if (node.nodeType !== Node.ELEMENT_NODE) return String(node.nodeType);
     const field = node.dataset.syncField || node.getAttribute('name');
     const childField = node.matches('label, .setting-row') ? (node.querySelector('[data-setting]')?.dataset.setting || node.querySelector('[data-setting-select]')?.dataset.settingSelect || node.querySelector('input, textarea')?.getAttribute('name') || node.querySelector('input[data-sync-field]')?.dataset.syncField) : '';
-    const identity = ['docId', 'loreId', 'folderId', 'noteId', 'commandPaletteRun', 'settingsTab', 'kbTab', 'projectId', 'setting', 'settingSelect', 'mobileTab', 'assocTab', 'assocContent', 'ruleId', 'macroId', 'bookmarkId', 'ctxDoc'].find(key => node.dataset[key]);
+    const identity = ['docId', 'loreId', 'folderId', 'noteId', 'commandPaletteRun', 'settingsTab', 'kbTab', 'projectId', 'setting', 'settingSelect', 'mobileTab', 'mobileKbTab', 'mobileNotesMode', 'dictionaryFilter', 'reviewMode', 'assocTab', 'assocContent', 'ruleId', 'macroId', 'bookmarkId', 'ctxDoc'].find(key => node.dataset[key]);
     const workflowAction = node.dataset.historyMode ? `history-mode:${node.dataset.historyMode}` : '';
     const key = node.dataset.surfaceKey || workflowAction || (identity ? `${identity}:${node.dataset[identity]}` : '') || field || childField || node.dataset.action || node.dataset.value
       || (node.id && !node.id.startsWith('modal-title-') ? node.id : '') || node.classList[0] || '';
@@ -13025,7 +13060,7 @@ class NocturneWriter {
   }
 
   patchSurface(element, next, resize = true, animate = true) {
-    if (element.matches('.workflow-choice, [data-range-field]')) {
+    if (element.matches('.workflow-choice, .dictionary-filters, .mobile-segmented, .assoc-tabs-header, [data-range-field]')) {
       const decoration = element.querySelector(':scope > .knowledge-selection, :scope > .range-motion-rail');
       if (decoration && !next.querySelector(`:scope > .${decoration.classList[0]}`)) next.append(decoration.cloneNode(true));
     }
@@ -13082,13 +13117,13 @@ class NocturneWriter {
         }
       }
       for (const node of oldNodes) if (!used.has(node)) {
-        if (animate && node.nodeType === Node.ELEMENT_NODE && node.matches('.utility-row, .utility-list, .utility-empty, .form-actions, .modal-head-row, .dump-summary-grid, .sync-device-card, .sync-start, .sync-pairing, .sync-connection-form, .sync-options-content, .sync-find-computer, .sync-feedback, .conflict-versions, .mobile-kb-content, .bookmark-manager-row')) this.animateSurfaceContent(node, true);
+        if (animate && node.nodeType === Node.ELEMENT_NODE && node.matches('.utility-row, .utility-list, .utility-empty, .form-actions, .modal-head-row, .dump-summary-grid, .sync-device-card, .sync-start, .sync-pairing, .sync-connection-form, .sync-options-content, .sync-find-computer, .sync-feedback, .conflict-versions, .mobile-kb-content, .bookmark-manager-row, .formatting-item, .dictionary-card, .macro-item, .floating-manager-card, .floating-manager-grid')) this.animateSurfaceContent(node, true);
         node.remove();
       }
     };
     const structural = oldNodes.length !== nextNodes.length || oldNodes.some((node, index) => this.surfaceNodeKey(node) !== this.surfaceNodeKey(nextNodes[index] || next));
     if (animate && structural && element.matches('.sync-mobile-content')) this.animateHeightTransition(element, update);
-    else if (animate && structural && !(this.kbRendering && element.closest('#kb-modal')) && element.matches('.utility-list, .sync-device-list, .docs-list-scroll, .folder-docs, .mobile-folder-docs, .command-group, .command-palette-results, .character-grid, .locations-grid, .timeline-container, .mobile-lore-grid, .bookmark-manager-list, .mobile-bookmarks-list, .pane-bookmarks-list')) this.animateLayoutTransition(element, update);
+    else if (animate && structural && !(this.kbRendering && element.closest('#kb-modal')) && element.matches('.utility-list, .sync-device-list, .docs-list-scroll, .folder-docs, .mobile-folder-docs, .command-group, .command-palette-results, .character-grid, .locations-grid, .timeline-container, .mobile-lore-grid, .bookmark-manager-list, .mobile-bookmarks-list, .pane-bookmarks-list, .formatting-list, .dictionary-list, .macros-list, .floating-manager-grid')) this.animateLayoutTransition(element, update);
     else update();
     if (animate && textChanged && !element.closest('input, textarea, [contenteditable="true"], .page-content') && this.isSurfaceVisible(element)) {
       this.runMotion(element, [{ opacity: .6 }, { opacity: 1 }], { channel: 'text', duration: 160, easing: 'ease-out' });
@@ -14135,8 +14170,8 @@ class NocturneWriter {
     
     // Parse markdown checkboxes to interactive HTML
     const html = text.split('\n').map(line => {
-      if (line.trim().startsWith('- [ ] ')) return `<div class="cb-line"><label class="interactive-cb"><input type="checkbox"><span></span></label> ${escapeHtml(line.replace('- [ ] ', ''))}</div>`;
-      if (line.trim().startsWith('- [x] ')) return `<div class="cb-line"><label class="interactive-cb"><input type="checkbox" checked><span></span></label> ${escapeHtml(line.replace('- [x] ', ''))}</div>`;
+      if (line.trim().startsWith('- [ ] ')) return `<div class="cb-line"><label class="interactive-cb"><input type="checkbox"><span class="check-mark" aria-hidden="true"></span><span class="cb-text">${escapeHtml(line.replace('- [ ] ', ''))}</span></label></div>`;
+      if (line.trim().startsWith('- [x] ')) return `<div class="cb-line"><label class="interactive-cb"><input type="checkbox" checked><span class="check-mark" aria-hidden="true"></span><span class="cb-text">${escapeHtml(line.replace('- [x] ', ''))}</span></label></div>`;
       return `<div>${escapeHtml(line) || '<br>'}</div>`;
     }).join('');
     
@@ -14839,8 +14874,8 @@ class NocturneWriter {
         <p class="settings-tab-desc" style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px; line-height: 1.5;">Локальные правила проверки текста. Встроенную базу можно дополнять, отключать и переопределять под ваш проект.</p>
         <section class="dictionary-controls">
           <div class="dictionary-control-row">
-            <label class="dictionary-toggle"><span>Проверка частых ошибок</span><div class="toggle ${this.state.settings.strictSpellcheck ? 'on' : ''}" data-setting="strictSpellcheck" data-kind="toggle"></div></label>
-            <label class="dictionary-toggle smart-dictionary-toggle"><span>Smart-словарь <em>Экспериментально</em></span><div class="toggle ${this.state.settings.smartDictionary ? 'on' : ''}" data-setting="smartDictionary" data-kind="toggle"></div></label>
+            <label class="dictionary-toggle"><span>Проверка частых ошибок</span><button type="button" class="toggle ${this.state.settings.strictSpellcheck ? 'on' : ''}" data-setting="strictSpellcheck" data-kind="toggle" aria-label="Проверка частых ошибок"></button></label>
+            <label class="dictionary-toggle smart-dictionary-toggle"><span>Smart-словарь <em>Экспериментально</em></span><button type="button" class="toggle ${this.state.settings.smartDictionary ? 'on' : ''}" data-setting="smartDictionary" data-kind="toggle" aria-label="Smart-словарь"></button></label>
           </div>
           <div class="smart-dictionary-subpanel ${this.state.settings.smartDictionary ? 'open' : ''}">
             <div class="smart-dictionary-subpanel-wrapper">
@@ -14899,7 +14934,7 @@ class NocturneWriter {
           </div>
         </section>
         <div class="dictionary-list">
-          ${cards.slice(0, 180).map((rule) => `<article class="dictionary-card ${rule.source}">
+          ${cards.slice(0, 180).map((rule) => `<article class="dictionary-card ${rule.source}" data-surface-key="dictionary:${escapeHtml(rule.id)}">
             <div class="dictionary-rule-main">
               <div class="dictionary-rule-text"><strong>${escapeHtml(rule.wrong)}</strong><i class="bx bx-right-arrow-alt"></i><span>${escapeHtml(rule.correct)}</span></div>
               <small>${escapeHtml(rule.label)} · ${badge(rule.source)}</small>
@@ -14928,6 +14963,7 @@ class NocturneWriter {
     document.querySelectorAll('[data-dictionary-filter]').forEach((button) => {
       button.classList.toggle('active', button.dataset.dictionaryFilter === filter);
     });
+    this.updateWorkflowSelections(this.settingsSurfaceRoot());
     this.updateDictionaryList();
   }
 
@@ -14946,9 +14982,9 @@ class NocturneWriter {
           ${modeCard('editor', 'Редактор', 'Текст защищён, доступны комментарии, пометки и предложения.', 'bx-comment-edit')}
           ${modeCard('finalization', 'Финализация', 'Текст редактируется, видны правки и навигация по ним.', 'bx-check-double')}
         </div>
-        <div class="setting-row">
+        <div class="setting-row setting-row-switch">
           <div class="setting-info"><span>Экспортировать .nocturned рядом с DOCX</span><small>Если у документа есть редакторские правки, рядом с DOCX скачивается JSON-файл обмена правками.</small></div>
-          <div class="setting-control"><div class="toggle ${this.state.exportNocturned ? 'on' : ''}" data-action="toggle-nocturned-export"></div></div>
+          <div class="setting-control"><button type="button" class="toggle ${this.state.exportNocturned ? 'on' : ''}" data-action="toggle-nocturned-export" data-kind="toggle" role="switch" aria-checked="${this.state.exportNocturned}" aria-label="Экспортировать .nocturned рядом с DOCX"></button></div>
         </div>
       </div>
     `;
@@ -16454,6 +16490,9 @@ class NocturneWriter {
   }
 
   positionKnowledgeSelection(group, animate = true) {
+    if (group.matches('.dictionary-filters, .mobile-segmented, .assoc-tabs-header')) {
+      group.querySelectorAll(':scope > button').forEach(button => button.setAttribute('aria-pressed', String(button.classList.contains('active'))));
+    }
     const selection = group.querySelector('.knowledge-selection'), active = group.querySelector('button[aria-pressed="true"]');
     if (!selection || !active || !this.isSurfaceVisible(group)) return;
     const before = selection.__knowledgeSelection ? selection.getBoundingClientRect() : null, bounds = group.getBoundingClientRect();
@@ -16464,14 +16503,15 @@ class NocturneWriter {
     if (!animate || this.shouldReduceSurfaceMotion()) { selection.__nocturneMotions?.get('knowledge-selection')?.animation?.cancel(); return; }
     if (before && (Math.abs(before.left - bounds.left - x) > .5 || Math.abs(before.top - bounds.top - y) > .5 || Math.abs(before.width - width) > .5 || Math.abs(before.height - height) > .5)) {
       this.runMotion(selection, [
-        { transform: `translate(${before.left - bounds.left}px, ${before.top - bounds.top}px) scale(${before.width / width}, ${before.height / height})` },
+        { transform: `translate(${before.left - bounds.left + group.scrollLeft - group.clientLeft}px, ${before.top - bounds.top + group.scrollTop - group.clientTop}px) scale(${before.width / width}, ${before.height / height})` },
         { transform },
       ], { channel: 'knowledge-selection', duration: 340, easing: 'cubic-bezier(.22, 1, .36, 1)', startFromCurrent: false });
     }
   }
 
   updateWorkflowSelections(root = document) {
-    root.querySelectorAll('.workflow-choice').forEach(group => {
+    const groups = root.querySelectorAll('.workflow-choice, .dictionary-filters, .mobile-segmented, .assoc-tabs-header');
+    groups.forEach(group => {
       if (!group.querySelector('.knowledge-selection')) {
         const selection = document.createElement('span'); selection.className = 'knowledge-selection'; selection.setAttribute('aria-hidden', 'true'); group.prepend(selection);
       }
@@ -16482,7 +16522,7 @@ class NocturneWriter {
     });
     this.workflowSelectionGroups ||= new Set();
     for (const group of this.workflowSelectionGroups) if (!group.isConnected) { this.workflowSelectionObserver.unobserve(group); this.workflowSelectionGroups.delete(group); }
-    root.querySelectorAll('.workflow-choice').forEach(group => {
+    groups.forEach(group => {
       if (!this.workflowSelectionGroups.has(group)) { this.workflowSelectionGroups.add(group); this.workflowSelectionObserver.observe(group); }
     });
   }
@@ -18835,7 +18875,7 @@ class NocturneWriter {
                 <button type="button" class="btn-icon assoc-collapse-btn" aria-label="Показать привязки и ассоциации" aria-expanded="false"><i class="bx bx-chevron-down"></i></button>
               </div>
               <div class="assoc-collapsible-wrapper">
-                <div class="assoc-collapsible-content">
+                <div class="assoc-collapsible-content" inert aria-hidden="true">
                   <div class="assoc-tabs-header">
                     <button type="button" class="assoc-tab-btn active" data-assoc-tab="char"><i class="bx bx-user"></i> Персонажи</button>
                     <button type="button" class="assoc-tab-btn" data-assoc-tab="loc"><i class="bx bx-map-alt"></i> Локации</button>
@@ -18865,7 +18905,7 @@ class NocturneWriter {
                           <button type="button" class="role-btn ${checked && role === 'first_appearance' ? 'active' : ''}" data-role="first_appearance" title="Появление">Появл.</button>
                           <button type="button" class="role-btn ${checked && role === 'death' ? 'active' : ''}" data-role="death" title="Смерть">Смерть</button>
                         </div>
-                        <input type="checkbox" name="char_assoc_${char.id}" ${checked ? 'checked' : ''} style="display:none">
+                        <input class="assoc-checkbox" type="checkbox" name="char_assoc_${char.id}" ${checked ? 'checked' : ''} aria-label="Связать с персонажем: ${escapeHtml(this.entityDisplayName(char))}">
                         <input type="hidden" name="char_role_${char.id}" value="${role}" class="assoc-hidden-role">
                       </div>
                     `;
@@ -18886,7 +18926,7 @@ class NocturneWriter {
                           <span class="assoc-card-icon"><i class="bx ${loc.icon || 'bx-map-alt'}"></i></span>
                           <span class="assoc-card-title">${escapeHtml(this.entityDisplayName(loc))}</span>
                         </div>
-                        <input type="checkbox" name="loc_assoc_${loc.id}" ${checked ? 'checked' : ''} style="display:none">
+                        <input class="assoc-checkbox" type="checkbox" name="loc_assoc_${loc.id}" ${checked ? 'checked' : ''} aria-label="Связать с локацией: ${escapeHtml(this.entityDisplayName(loc))}">
                       </div>
                     `;
                   }).join('') || '<div class="empty-state-text">Нет локаций</div>'}
@@ -18906,7 +18946,7 @@ class NocturneWriter {
                           <span class="assoc-card-icon"><i class="bx bx-note"></i></span>
                           <span class="assoc-card-title">${escapeHtml(note.title || 'Без названия')}</span>
                         </div>
-                        <input type="checkbox" name="note_assoc_${note.id}" ${checked ? 'checked' : ''} style="display:none">
+                        <input class="assoc-checkbox" type="checkbox" name="note_assoc_${note.id}" ${checked ? 'checked' : ''} aria-label="Связать с записью: ${escapeHtml(note.title || 'Без названия')}">
                       </div>
                     `;
                   }).join('') || '<div class="empty-state-text">Нет записей</div>'}
@@ -18926,7 +18966,7 @@ class NocturneWriter {
                           <span class="assoc-card-icon"><i class="bx bx-file"></i></span>
                           <span class="assoc-card-title">${escapeHtml(doc.title || 'Без названия')}</span>
                         </div>
-                        <input type="checkbox" name="doc_assoc_${doc.id}" ${checked ? 'checked' : ''} style="display:none">
+                        <input class="assoc-checkbox" type="checkbox" name="doc_assoc_${doc.id}" ${checked ? 'checked' : ''} aria-label="Связать с документом: ${escapeHtml(doc.title || 'Без названия')}">
                       </div>
                     `;
                   }).join('') || '<div class="empty-state-text">Нет документов</div>'}
@@ -18951,10 +18991,15 @@ class NocturneWriter {
       button.onclick = () => {
         const wrapper = overlay.querySelector('.assoc-collapsible-content');
         const update = () => {
-          overlay.querySelectorAll('.assoc-tab-btn').forEach(tab => tab.classList.toggle('active', tab === button));
+          overlay.querySelectorAll('.assoc-tab-btn').forEach(tab => { tab.classList.toggle('active', tab === button); tab.setAttribute('aria-pressed', String(tab === button)); });
           overlay.querySelectorAll('.assoc-tab-content').forEach(body => body.classList.toggle('active', body.dataset.assocContent === button.dataset.assocTab));
+          this.updateWorkflowSelections(overlay);
         };
-        if (wrapper) this.animateHeightTransition(wrapper, () => this.animateViewChange(wrapper, update));
+        if (wrapper) this.animateHeightTransition(wrapper, () => {
+          this.animateSurfaceContent(wrapper.querySelector('.assoc-tab-content.active'), true);
+          update();
+          this.animateSurfaceContent(wrapper.querySelector('.assoc-tab-content.active'));
+        });
         else update();
       };
     });
@@ -18979,7 +19024,7 @@ class NocturneWriter {
           card.querySelectorAll('.role-btn').forEach(btn => btn.classList.toggle('active', btn === roleBtn));
           return;
         }
-        checkbox.checked = !checkbox.checked;
+        if (e.target !== checkbox) checkbox.checked = !checkbox.checked;
         card.classList.toggle('active', checkbox.checked);
         if (checkbox.checked) {
           const currentRole = card.dataset.role || 'regular';
@@ -19616,7 +19661,7 @@ class NocturneWriter {
     const s = this.state.settings;
     const row = (label, note, control) => `<div class="setting-row ${/class="toggle /.test(control) ? 'setting-row-switch' : ''}"><div class="setting-info"><span>${label}${note ? `<i class="bx bx-info-circle info-icon" tabindex="0" data-tip="${escapeHtml(note)}"></i>` : ''}</span>${note ? `<small>${note}</small>` : ''}</div><div class="setting-control">${control}</div></div>`;
     const toggle = (key) => `<button type="button" class="toggle ${s[key] ? 'on' : ''}" data-setting="${key}" data-kind="toggle" role="switch" aria-checked="${!!s[key]}"></button>`;
-    const range = (key, min, max, step = 1, suffix = '') => `<div class="range-field" data-range-field><input class="range-control" type="range" min="${min}" max="${max}" step="${step}" value="${s[key]}" data-setting="${key}" data-suffix="${escapeHtml(suffix)}"><input class="range-value-input" type="text" value="${s[key]}${suffix}" data-setting-input="${key}" data-suffix="${escapeHtml(suffix)}" data-min="${min}" data-max="${max}" data-step="${step}"></div>`;
+    const range = (key, min, max, step = 1, suffix = '') => `<div class="range-field" data-range-field><input class="range-control" type="range" min="${min}" max="${max}" step="${step}" value="${s[key]}" data-setting="${key}" data-suffix="${escapeHtml(suffix)}"><input class="range-value-input" type="text" inputmode="${step < 1 ? 'decimal' : 'numeric'}" value="${s[key]}${suffix}" data-setting-input="${key}" data-suffix="${escapeHtml(suffix)}" data-min="${min}" data-max="${max}" data-step="${step}"></div>`;
     const select = (key, options) => this.renderSettingsSelect(key, options);
     const input = (key, type = 'text') => `<input class="form-control" type="${type}" value="${escapeHtml(s[key] || '')}" data-setting="${key}">`;
     const content = {
@@ -19967,7 +20012,7 @@ class NocturneWriter {
         const s = this.state.settings;
         const row = (label, note, control) => `<div class="setting-row"><div class="setting-info"><span>${label}${note ? `<i class="bx bx-info-circle info-icon" tabindex="0" data-tip="${escapeHtml(note)}"></i>` : ''}</span>${note ? `<small>${note}</small>` : ''}</div><div class="setting-control">${control}</div></div>`;
         const toggle = (key) => `<button type="button" class="toggle ${s[key] ? 'on' : ''}" data-setting="${key}" data-kind="toggle" role="switch" aria-checked="${!!s[key]}"></button>`;
-        const range = (key, min, max, step = 1, suffix = '') => `<div class="range-field" data-range-field><input class="range-control" type="range" min="${min}" max="${max}" step="${step}" value="${s[key]}" data-setting="${key}" data-suffix="${escapeHtml(suffix)}"><input class="range-value-input" type="text" value="${s[key]}${suffix}" data-setting-input="${key}" data-suffix="${escapeHtml(suffix)}" data-min="${min}" data-max="${max}" data-step="${step}"></div>`;
+        const range = (key, min, max, step = 1, suffix = '') => `<div class="range-field" data-range-field><input class="range-control" type="range" min="${min}" max="${max}" step="${step}" value="${s[key]}" data-setting="${key}" data-suffix="${escapeHtml(suffix)}"><input class="range-value-input" type="text" inputmode="${step < 1 ? 'decimal' : 'numeric'}" value="${s[key]}${suffix}" data-setting-input="${key}" data-suffix="${escapeHtml(suffix)}" data-min="${min}" data-max="${max}" data-step="${step}"></div>`;
         const select = (key, options) => this.renderSettingsSelect(key, options);
         const input = (key, type = 'text') => `<input class="form-control" type="${type}" value="${escapeHtml(s[key] || '')}" data-setting="${key}">`;
         
@@ -20071,7 +20116,7 @@ class NocturneWriter {
         const s = this.state.settings;
         const row = (label, note, control) => `<div class="setting-row"><div class="setting-info"><span>${label}${note ? `<i class="bx bx-info-circle info-icon" tabindex="0" data-tip="${escapeHtml(note)}"></i>` : ''}</span>${note ? `<small>${note}</small>` : ''}</div><div class="setting-control">${control}</div></div>`;
         const toggle = (key) => `<button type="button" class="toggle ${s[key] ? 'on' : ''}" data-setting="${key}" data-kind="toggle" role="switch" aria-checked="${!!s[key]}"></button>`;
-        const range = (key, min, max, step = 1, suffix = '') => `<div class="range-field" data-range-field><input class="range-control" type="range" min="${min}" max="${max}" step="${step}" value="${s[key]}" data-setting="${key}" data-suffix="${escapeHtml(suffix)}"><input class="range-value-input" type="text" value="${s[key]}${suffix}" data-setting-input="${key}" data-suffix="${escapeHtml(suffix)}" data-min="${min}" data-max="${max}" data-step="${step}"></div>`;
+        const range = (key, min, max, step = 1, suffix = '') => `<div class="range-field" data-range-field><input class="range-control" type="range" min="${min}" max="${max}" step="${step}" value="${s[key]}" data-setting="${key}" data-suffix="${escapeHtml(suffix)}"><input class="range-value-input" type="text" inputmode="${step < 1 ? 'decimal' : 'numeric'}" value="${s[key]}${suffix}" data-setting-input="${key}" data-suffix="${escapeHtml(suffix)}" data-min="${min}" data-max="${max}" data-step="${step}"></div>`;
         const select = (key, options) => this.renderSettingsSelect(key, options);
         const input = (key, type = 'text') => `<input class="form-control" type="${type}" value="${escapeHtml(s[key] || '')}" data-setting="${key}">`;
         
@@ -20135,7 +20180,7 @@ class NocturneWriter {
             <i class="bx bx-git-pull-request"></i>
             <h4>Пакет правок .nocturned</h4>
             <p>Если у документа есть reviewMarks, рядом с DOCX можно скачать JSON-файл обмена правками.</p>
-            <div class="export-card-action"><div class="inline-export-toggle"><span>Скачивать рядом с DOCX</span><div class="toggle ${this.state.exportNocturned ? 'on' : ''}" data-action="toggle-nocturned-export"></div></div></div>
+            <div class="export-card-action"><div class="inline-export-toggle"><span>Скачивать рядом с DOCX</span><button type="button" class="toggle ${this.state.exportNocturned ? 'on' : ''}" data-action="toggle-nocturned-export" data-kind="toggle" role="switch" aria-checked="${this.state.exportNocturned}" aria-label="Скачивать .nocturned рядом с DOCX"></button></div></div>
           </article>
           <article class="export-format-card project-dump-card">
             <i class="bx bx-archive"></i>
@@ -20197,7 +20242,7 @@ class NocturneWriter {
                 <p>У вас пока нет макросов. Запишите первый макрос выше!</p>
               </div>
             ` : macros.map((macro, idx) => `
-              <div class="macro-item">
+              <div class="macro-item" data-surface-key="macro:${escapeHtml(macro.keys)}">
                 <div class="macro-keys-badge">${escapeHtml(macro.keys)}</div>
                 <div class="macro-arrow"><i class="bx bx-right-arrow-alt"></i></div>
                 <div class="macro-value-badge">${escapeHtml(macro.value)}</div>
@@ -20238,7 +20283,7 @@ class NocturneWriter {
         this.renderMacrosListOnly();
         this.toast('Макрос удалён.');
       };
-      if (row) this.animateShatter(row, remove);
+      if (row && !this.shouldReduceSurfaceMotion()) this.animateShatter(row, remove);
       else remove();
     };
   }
@@ -20259,7 +20304,15 @@ class NocturneWriter {
     }
     const recordInstruct = this.settingsControl('macro-record-instructions');
     if (recordInstruct) {
-      recordInstruct.style.display = this.macroRecordingState ? 'block' : 'none';
+      const visible = !!this.macroRecordingState;
+      if (recordInstruct.__recordingVisible !== visible) {
+        recordInstruct.__recordingVisible = visible;
+        this.animateHeightTransition(recordInstruct.closest('.macro-add-card'), () => {
+          if (!visible) this.animateSurfaceContent(recordInstruct, true);
+          recordInstruct.style.display = visible ? 'block' : 'none';
+          if (visible) this.animateSurfaceContent(recordInstruct);
+        });
+      }
     }
     const keysInput = this.settingsControl('new-macro-keys');
     if (keysInput) keysInput.value = this.macroRecordedKeys || '';
@@ -20272,7 +20325,7 @@ class NocturneWriter {
     this.updateSurfaceHTML(listEl, macros.length === 0
       ? `<div class="macros-empty-state"><i class="bx bx-keyboard"></i><p>У вас пока нет макросов. Запишите первый макрос выше!</p></div>`
       : macros.map((macro, idx) => `
-          <div class="macro-item">
+          <div class="macro-item" data-surface-key="macro:${escapeHtml(macro.keys)}">
             <div class="macro-keys-badge">${escapeHtml(macro.keys)}</div>
             <div class="macro-arrow"><i class="bx bx-right-arrow-alt"></i></div>
             <div class="macro-value-badge">${escapeHtml(macro.value)}</div>
@@ -20340,14 +20393,14 @@ class NocturneWriter {
                 <p style="margin: 0;">У вас пока нет настроенных правил автозамены. Добавьте первое правило выше!</p>
               </div>
             ` : rules.map((rule, idx) => `
-              <div class="formatting-item" style="display: flex; align-items: center; justify-content: space-between; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); padding: 12px 18px; border-radius: 8px; gap: 16px;">
+              <div class="formatting-item" data-surface-key="formatting:${escapeHtml(rule.trigger)}" style="display: flex; align-items: center; justify-content: space-between; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); padding: 12px 18px; border-radius: 8px; gap: 16px;">
                 <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
                   <span style="font-family: monospace; background: rgba(255, 255, 255, 0.05); padding: 4px 8px; border-radius: 4px; font-size: 14px; border: 1px solid rgba(255, 255, 255, 0.08); font-weight: bold; color: var(--accent);">${escapeHtml(rule.trigger)}</span>
                   <i class="bx bx-right-arrow-alt" style="color: var(--text-muted);"></i>
                   <span style="font-size: 13px; font-weight: 500;">${this.getFormattingActionLabel(rule.action, rule.customText)}</span>
                 </div>
                 <div style="display: flex; align-items: center; gap: 16px;">
-                  <div class="toggle ${rule.enabled ? 'on' : ''}" data-action="formatting-toggle-rule" data-rule-idx="${idx}" data-kind="toggle"></div>
+                  <button type="button" class="toggle ${rule.enabled ? 'on' : ''}" data-action="formatting-toggle-rule" data-rule-idx="${idx}" data-kind="toggle" aria-label="Правило автозамены: ${escapeHtml(rule.trigger)}"></button>
                   <button class="btn-icon delete-btn" data-action="formatting-delete" data-rule-idx="${idx}" title="Удалить" style="color: var(--text-muted); cursor: pointer;"><i class="bx bx-trash"></i></button>
                 </div>
               </div>
@@ -20369,14 +20422,14 @@ class NocturneWriter {
     this.updateSurfaceHTML(listEl, rules.length === 0
       ? `<div class="formatting-empty-state" style="text-align: center; padding: 40px 20px; border: 1px dashed var(--border); border-radius: var(--radius-md); color: var(--text-muted);"><i class="bx bx-list-check" style="font-size: 48px; margin-bottom: 8px; opacity: 0.4;"></i><p style="margin: 0;">У вас пока нет настроенных правил автозамены. Добавьте первое правило выше!</p></div>`
       : rules.map((rule, idx) => `
-          <div class="formatting-item" style="display: flex; align-items: center; justify-content: space-between; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); padding: 12px 18px; border-radius: 8px; gap: 16px;">
+          <div class="formatting-item" data-surface-key="formatting:${escapeHtml(rule.trigger)}" style="display: flex; align-items: center; justify-content: space-between; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); padding: 12px 18px; border-radius: 8px; gap: 16px;">
             <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
               <span style="font-family: monospace; background: rgba(255, 255, 255, 0.05); padding: 4px 8px; border-radius: 4px; font-size: 14px; border: 1px solid rgba(255, 255, 255, 0.08); font-weight: bold; color: var(--accent);">${escapeHtml(rule.trigger)}</span>
               <i class="bx bx-right-arrow-alt" style="color: var(--text-muted);"></i>
               <span style="font-size: 13px; font-weight: 500;">${this.getFormattingActionLabel(rule.action, rule.customText)}</span>
             </div>
             <div style="display: flex; align-items: center; gap: 16px;">
-              <div class="toggle ${rule.enabled ? 'on' : ''}" data-action="formatting-toggle-rule" data-rule-idx="${idx}" data-kind="toggle"></div>
+              <button type="button" class="toggle ${rule.enabled ? 'on' : ''}" data-action="formatting-toggle-rule" data-rule-idx="${idx}" data-kind="toggle" aria-label="Правило автозамены: ${escapeHtml(rule.trigger)}"></button>
               <button class="btn-icon delete-btn" data-action="formatting-delete" data-rule-idx="${idx}" title="Удалить" style="color: var(--text-muted); cursor: pointer;"><i class="bx bx-trash"></i></button>
             </div>
           </div>`).join(''), { resize: true });
@@ -20561,22 +20614,40 @@ class NocturneWriter {
   closeSettingsSelects(except = null) {
     document.querySelectorAll('.nocturne-select.open').forEach((select) => {
       if (except && select === except) return;
+      const menu = select.querySelector('.nocturne-select-menu');
+      const current = menu && getComputedStyle(menu);
+      const opacity = current?.opacity, transform = current?.transform;
+      const generation = select.__selectGeneration = (select.__selectGeneration || 0) + 1;
       select.classList.remove('open');
       select.querySelector('[data-setting-select-toggle], [data-form-select-toggle]')?.setAttribute('aria-expanded', 'false');
-      select.querySelector('.nocturne-select-menu')?.setAttribute('aria-hidden', 'true');
-      const menu = select.querySelector('.nocturne-select-menu');
-      if (typeof menu?.hidePopover === 'function' && menu.matches(':popover-open')) menu.hidePopover();
+      if (!menu) return;
+      menu.setAttribute('aria-hidden', 'true'); menu.inert = true;
+      if (menu.contains(document.activeElement)) select.querySelector('.nocturne-select-trigger')?.focus({ preventScroll: true });
+      const hide = () => {
+        if (select.__selectGeneration !== generation) return;
+        select.__selectExit?.animation?.cancel(); select.__selectExit = null;
+        if (typeof menu.hidePopover === 'function' && menu.matches(':popover-open')) menu.hidePopover();
+        menu.classList.remove('select-exiting'); menu.hidden = true;
+      };
+      if (this.shouldReduceSurfaceMotion() || !this.isSurfaceVisible(menu)) { hide(); return; }
+      menu.classList.add('select-exiting');
+      select.__selectExit = this.runMotion(menu, [{ opacity, transform }, { opacity: 0, transform: 'translateY(-3px) scale(.985)' }], { channel: 'select-exit', duration: 150, easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' });
+      select.__selectExit.finished.then(hide);
     });
   }
 
   toggleSettingsSelect(select) {
     if (!select) return;
     const willOpen = !select.classList.contains('open');
+    if (!willOpen) { this.closeSettingsSelects(); return; }
     this.closeSettingsSelects(select);
+    select.__selectGeneration = (select.__selectGeneration || 0) + 1;
+    select.__selectExit?.animation?.cancel(); select.__selectExit = null;
     select.classList.toggle('open', willOpen);
     select.querySelector('[data-setting-select-toggle], [data-form-select-toggle]')?.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
     select.querySelector('.nocturne-select-menu')?.setAttribute('aria-hidden', willOpen ? 'false' : 'true');
     const menu = select.querySelector('.nocturne-select-menu');
+    if (menu) { menu.hidden = false; menu.inert = false; menu.classList.remove('select-exiting'); }
     if (menu && typeof menu.showPopover === 'function') {
       menu.setAttribute('popover', 'manual');
       if (willOpen) { menu.showPopover(); this.positionSettingsSelect(select); }
