@@ -52,6 +52,7 @@ export const ARTIFACT_CHECKS = [
 ];
 
 export const EXTRA_CHECKS = [
+  check('motion-corrections', ['scripts/test-motion-corrections.mjs'], ['settings', 'selection', 'motion', 'responsive', 'accessibility', 'visual'], { modes: [], ports: [5339], timeout: 600_000, ownScenarioReport: 'results.json' }),
   check('visual-fixes', ['scripts/test-visual-fixes.mjs'], ['settings', 'selection', 'motion', 'responsive', 'accessibility', 'visual'], { modes: [], ports: [5338], timeout: 420_000, ownScenarioReport: 'results.json' }),
   check('visual-controls-audit', ['scripts/audit-visual-controls.mjs'], ['settings', 'motion', 'responsive', 'accessibility', 'visual'], { modes: [], ports: [5337], timeout: 420_000, ownScenarioReport: 'results.json' }),
   check('settings-copy-report', ['scripts/test-settings-copy-report.mjs'], ['source', 'settings', 'accessibility', 'responsive'], { platforms: ['desktop'], ownScenarioReport: 'results.json' }),
