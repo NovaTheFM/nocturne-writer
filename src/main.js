@@ -18958,13 +18958,14 @@ class NocturneWriter {
     if (this.state.lore.locked || this.state.settings.e2e && !this.state.sessionPassword) throw new Error('Введите мастер-пароль для переименования.');
     await Promise.all([...(this.docSaves?.values() || []), ...this.draftWrites.values(), this.trash.work, this.bookmarks.trashWork, this.databaseSync?.incomingWork]);
     for (const instance of this.nocturneEditor.instances.values()) this.nocturneEditor.syncDocFromEditor(instance.paneId);
-    const replacement = characterNameReplacement(before, after);
     const stores = ['docs', 'folders', 'lore', 'floatingNotes', 'reviewMarks', 'drafts', 'trash'];
     const raw = Object.fromEntries(await Promise.all(stores.map(async store => [store, await this.db.getAllRaw(store)])));
     const globalRaw = await this.db.getRaw('settings', 'global-notes');
     raw.settings = globalRaw ? [globalRaw] : [];
     const decoded = Object.fromEntries(await Promise.all(Object.entries(raw).map(async ([store, records]) => [store, await Promise.all(records.map(record => this.db.decodeRecord(store, record)))])));
     if (Object.values(decoded).flat().some(record => record.locked || record.protectedStore)) throw new Error('Сначала разблокируйте все зашифрованные записи мастер-паролем.');
+    const characters = [...this.state.lore.characters, ...decoded.lore.filter(world => world.id !== worldId).flatMap(world => world.characters || [])];
+    const replacement = characterNameReplacement(before, after, { characters });
     const baseline = this.loreById?.get(worldId), persistedWorld = decoded.lore.find(world => world.id === worldId);
     if (baseline && Object.keys({ ...baseline, ...persistedWorld }).filter(key => !['id', 'locked'].includes(key)).some(key => JSON.stringify(baseline[key]) !== JSON.stringify(persistedWorld?.[key]))) {
       const error = new Error('База знаний изменена в другой вкладке.'); error.code = 'SYNC_RETRY'; throw error;

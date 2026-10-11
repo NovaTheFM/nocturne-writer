@@ -5,8 +5,8 @@ import { createCharacterNameReplacement } from '../core/name-inflections.js';
 
 const technicalField = /^(?:id|type|scope|status|source|kind|category|color|colorKey|icon|image|encrypted|protectedStore|ownerKey|groupId|reason|characterRoles|attrs|marks|ast|pmJson|bookmarks|fieldBookmarks|start|end|href|src)$|(?:Ids?|URL|Url|Path|Hash)$/;
 const characterIdentity = new Set(['name', 'displayName', 'firstName', 'lastName', 'aliases', 'mentionForms']);
-export function characterNameReplacement(before, after) {
-  return createCharacterNameReplacement(before, after);
+export function characterNameReplacement(before, after, options) {
+  return createCharacterNameReplacement(before, after, options);
 }
 
 export function mapRenamePosition(position, edits, assoc = 1) {

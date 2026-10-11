@@ -45,7 +45,7 @@ function wordParadigm(word, gender, kind) {
     const base = plain.slice(0, -2), soft = lower.endsWith('яя');
     return [plain, ...[soft ? 'ей' : 'ой', soft ? 'ей' : 'ой', soft ? 'юю' : 'ую', soft ? 'ей' : 'ой', soft ? 'ей' : 'ой'].map(suffix => base + suffix)].map(form => [form]);
   }
-  if (kind === 'lastName' && /(?:ый|ой|ий)$/u.test(lower)) {
+  if (kind === 'lastName' && /(?:ый|ой|ский|цкий|ний|гий|хий|жий|чий|ший)$/u.test(lower)) {
     if (gender === 'feminine') return same();
     const base = plain.slice(0, -2), soft = lower.endsWith('ий') && !/[кгх]ий$/u.test(lower);
     return [plain, base + (soft ? 'его' : 'ого'), base + (soft ? 'ему' : 'ому'), base + (soft ? 'его' : 'ого'), base + (/[кгх]ий$/u.test(lower) || soft ? 'им' : 'ым'), base + (soft ? 'ем' : 'ом')].map(form => [form]);
@@ -85,8 +85,8 @@ export function nameParadigm(name = '', { gender = 'masculine', kind = 'firstNam
     return position >= surnameStart ? wordParadigm(part, gender, 'lastName') : apostrophe(part);
   });
   const result = Object.fromEntries(NAME_CASES.map((nameCase, index) => {
-    const width = Math.max(1, ...paradigms.map(part => part[index].length));
-    const forms = Array.from({ length: width }, (_, variant) => paradigms.map(part => part[index][Math.min(variant, part[index].length - 1)]).join(''));
+    let forms = [''];
+    for (const part of paradigms) forms = forms.flatMap(prefix => part[index].map(form => prefix + form)).slice(0, 64);
     return [nameCase, Object.freeze([...new Set(forms)])];
   }));
   if (paradigmCache.size >= 512) paradigmCache.delete(paradigmCache.keys().next().value);
@@ -98,8 +98,9 @@ export function characterMentionForms(character = {}, { includeSurname = true } 
   const signature = JSON.stringify([character.displayName, character.name, character.firstName, character.lastName, character.aliases, character.mentionForms, character.gender, character.sex, includeSurname]);
   const cached = mentionsCache.get(character);
   if (cached?.signature === signature) return cached.forms.slice();
-  const gender = inferCharacterGender(character), names = [character.displayName, character.name, character.firstName, ...(character.aliases || [])].filter(Boolean);
+  const gender = inferCharacterGender(character), names = [character.displayName, character.name, character.firstName].filter(Boolean);
   const forms = names.flatMap(name => Object.values(nameParadigm(name, { gender, lastName: character.lastName })).flat());
+  for (const alias of character.aliases || []) forms.push(...Object.values(nameParadigm(alias, { gender: inferCharacterGender({ name: alias }, gender) })).flat());
   if (includeSurname && character.lastName) forms.push(...Object.values(nameParadigm(character.lastName, { gender, kind: 'lastName' })).flat());
   forms.push(...(character.mentionForms || []));
   const result = [...new Set(forms.map(form => String(form).trim()).filter(Boolean))];
@@ -140,14 +141,14 @@ export function resolveNameCase(candidates, text, start, end) {
 const escapePattern = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const literalPattern = name => [...name.replace(/[\u0300-\u036f]/g, '')].map(char => /\s/u.test(char) ? '\\s+' : /[её]/iu.test(char) ? '[её][\\u0300-\\u036f]*' : /[-‐‑]/u.test(char) ? '[-‐‑]' : /['’]/u.test(char) ? "['’]" : escapePattern(char) + (/\p{L}/u.test(char) ? '[\\u0300-\\u036f]*' : '')).join('');
 
-export function createCharacterNameReplacement(before, after) {
+export function createCharacterNameReplacement(before, after, { characters = [] } = {}) {
   const entries = new Map(), oldGender = inferCharacterGender(before), newGender = inferCharacterGender(after, oldGender);
-  const add = (from, to, nameCase, variant = 0, explicit = false) => {
+  const add = (from, to, nameCase, variant = 0, explicit = false, preserve = false) => {
     const key = normalizeName(from);
     if (!key) return;
     let entry = entries.get(key);
     if (!entry || explicit) { entry = { from, choices: [] }; entries.set(key, entry); }
-    if (!entry.choices.some(choice => choice.nameCase === nameCase && choice.variant === variant)) entry.choices.push({ nameCase, variant, to, explicit });
+    if (!entry.choices.some(choice => choice.nameCase === nameCase && choice.variant === variant)) entry.choices.push({ nameCase, variant, to, preserve });
   };
   for (const field of ['displayName', 'name', 'firstName', 'lastName']) {
     const oldName = String(before[field] || '').trim(), newName = String(after[field] || (field === 'lastName' ? after.firstName : '') || '').trim();
@@ -164,6 +165,15 @@ export function createCharacterNameReplacement(before, after) {
   for (const name of [after.displayName, after.name].filter(Boolean)) for (const forms of Object.values(nameParadigm(name, { gender: newGender, lastName: after.lastName }))) for (const form of forms) {
     if (!entries.has(normalizeName(form))) add(form, form, 'nominative', 0, true);
   }
+  const oldNames = new Set([before.displayName, before.name, before.firstName, before.lastName].filter(Boolean).map(normalizeName));
+  for (const character of characters.filter(character => character.id !== before.id)) {
+    const gender = inferCharacterGender(character);
+    for (const field of ['displayName', 'name', 'firstName', 'lastName']) {
+      const name = character[field];
+      if (!name || oldNames.has(normalizeName(name))) continue;
+      for (const [nameCase, forms] of Object.entries(nameParadigm(name, { gender, kind: field, lastName: character.lastName }))) forms.forEach((form, variant) => add(form, form, nameCase, variant, false, true));
+    }
+  }
   const terms = [...entries.values()].sort((a, b) => b.from.length - a.from.length);
   const boundary = "[\\p{L}\\p{M}\\p{N}_'’\\-‐‑]";
   const pattern = terms.length ? new RegExp(`(?<!${boundary})(?:${terms.map(term => literalPattern(term.from)).join('|')})(?!${boundary})`, 'giu') : null;
@@ -173,7 +183,9 @@ export function createCharacterNameReplacement(before, after) {
     return [...text.matchAll(pattern)].flatMap(match => {
       const entry = entries.get(normalizeName(match[0]));
       const nameCase = resolveNameCase([...new Set(entry.choices.map(choice => choice.nameCase))], text, match.index, match.index + match[0].length);
-      const replacement = caseStyle(entry.choices.find(choice => choice.nameCase === nameCase).to, match[0].replace(/[\u0300-\u036f]/g, ''));
+      const choice = entry.choices.find(choice => choice.nameCase === nameCase);
+      if (choice.preserve) return [];
+      const replacement = caseStyle(choice.to, match[0].replace(/[\u0300-\u036f]/g, ''));
       return replacement === match[0] ? [] : [{ from: match.index, to: match.index + match[0].length, text: replacement }];
     });
   };
