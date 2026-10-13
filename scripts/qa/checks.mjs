@@ -40,6 +40,7 @@ export const PROJECT_CHECKS = [
   check('android-polish', ['scripts/test-android-polish.mjs'], ['writing', 'touch', 'keyboard', 'selection', 'navigation', 'settings', 'lore', 'review', 'import', 'security', 'ai', 'responsive'], { platforms: ['android'], timeout: 240_000, ports: [5293] }),
   check('interface-revision', ['scripts/test-interface-revision.mjs'], ['settings', 'lore', 'navigation'], { ports: [5290, 8890] }),
   check('surface-motion', ['scripts/test-surface-motion.mjs'], ['motion', 'navigation'], { ports: [5292, 8892] }),
+  check('dropdown-motion', ['--import', './scripts/qa/observe-playwright.mjs', 'scripts/test-dropdown-motion.mjs'], ['settings', 'navigation', 'motion', 'responsive', 'keyboard', 'accessibility', 'visual'], { ownScenarioReport: 'results.json' }),
   check('app-motion', ['scripts/test-app-motion.mjs'], ['motion', 'lore', 'navigation'], { ports: [5294, 8894] }),
   check('review-mode-ui', ['--import', './scripts/qa/observe-playwright.mjs', 'scripts/test-review-mode-ui.mjs'], ['writing', 'review', 'motion', 'responsive', 'accessibility'], { ownScenarioReport: 'results.json' }),
   check('knowledge-search', ['--import', './scripts/qa/observe-playwright.mjs', 'scripts/test-knowledge-search.mjs'], ['lore', 'search', 'notes', 'responsive', 'keyboard', 'accessibility'], { ownScenarioReport: 'results.json', timeout: 180_000 }),

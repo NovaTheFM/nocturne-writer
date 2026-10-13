@@ -249,8 +249,30 @@ button.utility-row, label.utility-row { cursor: pointer; }
 .command-palette-overlay.motion-exiting { visibility: visible; pointer-events: none; }
 .command-palette-panel { animation: none; transform: translateY(-10px) scale(.985); transition: transform 220ms cubic-bezier(.16, 1, .3, 1); }
 .command-palette-overlay.active .command-palette-panel { transform: translateY(0) scale(1); }
-.nocturne-select-menu, .kb-project-switcher-dropdown { display: block; opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(5px) scale(.985); animation: none !important; transition: opacity 160ms ease, transform 200ms cubic-bezier(.16, 1, .3, 1), visibility 0s linear 200ms; }
+.nocturne-select-menu, .kb-project-switcher-dropdown { display: block; opacity: 0; visibility: hidden; pointer-events: none; }
 .nocturne-select.open .nocturne-select-menu, .kb-project-switcher.open .kb-project-switcher-dropdown { display: block; opacity: 1; visibility: visible; pointer-events: auto; transform: translateY(0) scale(1); transition-delay: 0s; }
+.nocturne-select-menu,
+.kb-project-switcher-dropdown,
+.portal-floating-menu,
+.doc-context-menu,
+.app-context-menu {
+  transform: translateY(var(--menu-offset-y, -6px)) scale(.98);
+  transform-origin: center top;
+  animation: none !important;
+  transition: opacity var(--menu-exit-duration) var(--menu-exit-easing),
+              transform var(--menu-exit-duration) var(--menu-exit-easing),
+              visibility 0s linear var(--menu-exit-duration);
+}
+.nocturne-select.open .nocturne-select-menu,
+.kb-project-switcher.open .kb-project-switcher-dropdown,
+.portal-floating-menu:is(.active, .open),
+.doc-context-menu.open,
+.app-context-menu.active {
+  transform: translateY(0) scale(1);
+  transition-duration: var(--menu-enter-duration), var(--menu-enter-duration), 0s;
+  transition-timing-function: var(--menu-enter-easing), var(--menu-enter-easing), linear;
+  transition-delay: 0s;
+}
 .char-card, .loc-card { transition: transform 220ms cubic-bezier(.16, 1, .3, 1), border-color 180ms ease, background-color 180ms ease, box-shadow 220ms ease, opacity 180ms ease; }
 .is-flipping { animation: none !important; transition: none !important; }
 .review-navigator { display: flex; opacity: 0; visibility: hidden; transform: translateY(8px); transition: opacity 180ms ease, transform 220ms cubic-bezier(.16, 1, .3, 1), visibility 0s linear 220ms; }
@@ -261,7 +283,7 @@ button.utility-row, label.utility-row { cursor: pointer; }
 .page-sheet-bg { transition: top 240ms cubic-bezier(.16, 1, .3, 1), width 240ms cubic-bezier(.16, 1, .3, 1), height 240ms cubic-bezier(.16, 1, .3, 1), border-color 220ms ease, background-color 220ms ease, box-shadow 220ms ease; }
 .motion-sheet-exiting { pointer-events: none; }
 .resizing-workspace .page-sheet-bg { transition: none; }
-.app-context-menu { display: block; visibility: hidden; transition: opacity 160ms ease, transform 180ms cubic-bezier(.16, 1, .3, 1), visibility 0s linear 180ms; }
+.app-context-menu { display: block; visibility: hidden; }
 .app-context-menu.active, .app-context-menu.motion-exiting { visibility: visible; }
 .app-context-menu.active { transition-delay: 0s; }
 .floating-notes-modal-panel { animation: none; transition: transform 220ms cubic-bezier(.16, 1, .3, 1); }
@@ -368,5 +390,7 @@ button.utility-row, label.utility-row { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   .surface-busy::before, .utility-modal .bx-spin, .mobile-sync-body .bx-spin { animation: none !important; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  .nocturne-select-menu, .kb-project-switcher-dropdown, .portal-floating-menu, .doc-context-menu, .app-context-menu { transform: none !important; }
 }
+body.reduce-mobile-animations :is(.nocturne-select-menu, .kb-project-switcher-dropdown, .portal-floating-menu, .doc-context-menu, .app-context-menu) { transition: none; transform: none; }
 .reduce-mobile-animations .surface-busy::before, .reduce-mobile-animations .mobile-sync-body .bx-spin { animation: none !important; }

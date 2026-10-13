@@ -1486,7 +1486,7 @@ class NocturneWriter {
     if (!surface || !anchor || !['empty', 'folder', 'noteActions', 'library', 'kb', 'mode', 'format', 'split', 'notes', 'search', 'review', 'bookmarkScope', 'bookmarkPane'].includes(key)) return;
     const anchorRect = anchor.getBoundingClientRect();
     if (key === 'noteActions') surface.style.maxHeight = '';
-    const menuRect = surface.getBoundingClientRect();
+    const menuRect = { width: surface.offsetWidth, height: surface.offsetHeight };
     const margin = 10;
     const gap = 10;
     if (key === 'noteActions') {
@@ -1499,6 +1499,8 @@ class NocturneWriter {
       if (menuRect.height > available) surface.style.maxHeight = `${available}px`;
       const menuHeight = Math.min(menuRect.height, available);
       const top = fitsRight ? Math.max(margin, Math.min(anchorRect.top, innerHeight - menuHeight - margin)) : useBelow ? below : cardRect.top - menuHeight - gap;
+      surface.style.transformOrigin = fitsRight ? 'left top' : useBelow ? 'center top' : 'center bottom';
+      surface.style.setProperty('--menu-offset-y', fitsRight || useBelow ? '-6px' : '6px');
       surface.style.left = `${Math.round(left)}px`; surface.style.top = `${Math.round(top)}px`;
       return;
     }
@@ -1509,6 +1511,8 @@ class NocturneWriter {
     const above = anchorRect.top - menuRect.height - gap;
     let top = below + menuRect.height <= window.innerHeight - margin ? below : above;
     top = Math.max(margin, Math.min(top, window.innerHeight - menuRect.height - margin));
+    surface.style.transformOrigin = top >= anchorRect.bottom ? 'center top' : 'center bottom';
+    surface.style.setProperty('--menu-offset-y', top >= anchorRect.bottom ? '-6px' : '6px');
     surface.style.left = `${Math.round(left)}px`;
     surface.style.top = `${Math.round(top)}px`;
   }
@@ -4822,7 +4826,7 @@ class NocturneWriter {
     const menu = portal?.querySelector('.doc-context-menu');
     if (!portal || !menu || !anchor) return;
     const anchorRect = anchor.getBoundingClientRect();
-    const menuRect = menu.getBoundingClientRect();
+    const menuRect = { width: menu.offsetWidth, height: menu.offsetHeight };
     const margin = 10;
     let left = anchorRect.right - menuRect.width;
     left = Math.max(margin, Math.min(left, window.innerWidth - menuRect.width - margin));
@@ -4830,6 +4834,8 @@ class NocturneWriter {
     const above = anchorRect.top - menuRect.height - 8;
     let top = below + menuRect.height <= window.innerHeight - margin ? below : above;
     top = Math.max(margin, Math.min(top, window.innerHeight - menuRect.height - margin));
+    menu.style.transformOrigin = top >= anchorRect.bottom ? 'center top' : 'center bottom';
+    menu.style.setProperty('--menu-offset-y', top >= anchorRect.bottom ? '-6px' : '6px');
     portal.style.left = `${Math.round(left)}px`;
     portal.style.top = `${Math.round(top)}px`;
   }
@@ -20823,6 +20829,10 @@ class NocturneWriter {
       const menu = select.querySelector('.nocturne-select-menu');
       const current = menu && getComputedStyle(menu);
       const opacity = current?.opacity, transform = current?.transform;
+      const visible = menu && this.isSurfaceVisible(menu);
+      const offset = current?.getPropertyValue('--menu-offset-y').trim() || '-6px';
+      const duration = parseFloat(current?.getPropertyValue('--menu-exit-duration')) || 150;
+      const easing = current?.getPropertyValue('--menu-exit-easing').trim() || 'cubic-bezier(.4,0,1,1)';
       const generation = select.__selectGeneration = (select.__selectGeneration || 0) + 1;
       select.classList.remove('open');
       select.querySelector('[data-setting-select-toggle], [data-form-select-toggle]')?.setAttribute('aria-expanded', 'false');
@@ -20835,9 +20845,9 @@ class NocturneWriter {
         if (typeof menu.hidePopover === 'function' && menu.matches(':popover-open')) menu.hidePopover();
         menu.classList.remove('select-exiting'); menu.hidden = true;
       };
-      if (this.shouldReduceSurfaceMotion() || !this.isSurfaceVisible(menu)) { hide(); return; }
+      if (this.shouldReduceSurfaceMotion() || !visible) { hide(); return; }
       menu.classList.add('select-exiting');
-      select.__selectExit = this.runMotion(menu, [{ opacity, transform }, { opacity: 0, transform: 'translateY(-3px) scale(.985)' }], { channel: 'select-exit', duration: 150, easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' });
+      select.__selectExit = this.runMotion(menu, [{ opacity, transform }, { opacity: 0, transform: `translateY(${offset}) scale(.985)` }], { channel: 'select-presence', duration, easing, fill: 'forwards' });
       select.__selectExit.finished.then(hide);
     });
   }
@@ -20846,18 +20856,28 @@ class NocturneWriter {
     if (!select) return;
     const willOpen = !select.classList.contains('open');
     if (!willOpen) { this.closeSettingsSelects(); return; }
+    const menu = select.querySelector('.nocturne-select-menu');
+    const current = menu && this.isSurfaceVisible(menu) ? getComputedStyle(menu) : null;
+    const start = current ? { opacity: current.opacity, transform: current.transform } : null;
     this.closeSettingsSelects(select);
     select.__selectGeneration = (select.__selectGeneration || 0) + 1;
     select.__selectExit?.animation?.cancel(); select.__selectExit = null;
     select.classList.toggle('open', willOpen);
     select.querySelector('[data-setting-select-toggle], [data-form-select-toggle]')?.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
     select.querySelector('.nocturne-select-menu')?.setAttribute('aria-hidden', willOpen ? 'false' : 'true');
-    const menu = select.querySelector('.nocturne-select-menu');
     if (menu) { menu.hidden = false; menu.inert = false; menu.classList.remove('select-exiting'); }
     if (menu && typeof menu.showPopover === 'function') {
       menu.setAttribute('popover', 'manual');
       if (willOpen) { menu.showPopover(); this.positionSettingsSelect(select); }
       else if (menu.matches(':popover-open')) menu.hidePopover();
+    }
+    if (menu) {
+      const style = getComputedStyle(menu);
+      const offset = style.getPropertyValue('--menu-offset-y').trim() || '-6px';
+      this.runMotion(menu, [start || { opacity: 0, transform: `translateY(${offset}) scale(.98)` }, { opacity: 1, transform: 'translateY(0) scale(1)' }], {
+        channel: 'select-presence', duration: parseFloat(style.getPropertyValue('--menu-enter-duration')) || 240,
+        easing: style.getPropertyValue('--menu-enter-easing').trim() || 'cubic-bezier(.22,1,.36,1)', startFromCurrent: false,
+      });
     }
     if (!this.selectPositionBound) {
       this.selectPositionBound = true;
@@ -20875,6 +20895,8 @@ class NocturneWriter {
     const bottom = (viewport?.height || innerHeight) + (viewport?.offsetTop || 0) - 12;
     const below = bottom - rect.bottom - 8, above = rect.top - 20, flip = below < Math.min(220, menu.scrollHeight) && above > below;
     const height = Math.min(300, Math.max(80, flip ? above : below));
+    menu.style.transformOrigin = flip ? 'center bottom' : 'center top';
+    menu.style.setProperty('--menu-offset-y', flip ? '6px' : '-6px');
     Object.assign(menu.style, { width: `${width}px`, maxHeight: `${height}px`, left: `${Math.max(12, Math.min(rect.left, (viewport?.width || innerWidth) - width - 12))}px`, top: `${flip ? Math.max(12, rect.top - Math.min(height, menu.scrollHeight) - 8) : rect.bottom + 8}px` });
   }
 

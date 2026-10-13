@@ -9,6 +9,7 @@
 .setting-control > .nocturne-select, .setting-control > .form-control { width: 224px; min-width: 0; }
 .nocturne-select-menu[popover] { margin: 0; inset: auto; position: fixed; min-width: 0; overflow-y: auto; overscroll-behavior: contain; transform-origin: center top; }
 .nocturne-select-menu[popover]:not(:popover-open) { display: none; }
+.nocturne-select-menu { transition: none; }
 .nocturne-select-menu.select-exiting { visibility: visible; pointer-events: none; }
 .nocturne-select-option > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .nocturne-select-option > i { flex: 0 0 16px; }

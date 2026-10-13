@@ -33,6 +33,10 @@
   --popover-backdrop-filter: blur(32px) saturate(1.34);
   --popover-border: rgba(var(--accent-rgb, 139, 92, 246), .2);
   --popover-shadow: 0 24px 64px rgba(0,0,0,.52), 0 1px 0 rgba(255,255,255,.07) inset, 0 0 0 1px rgba(255,255,255,.026) inset;
+  --menu-enter-duration: 240ms;
+  --menu-exit-duration: 150ms;
+  --menu-enter-easing: cubic-bezier(.22, 1, .36, 1);
+  --menu-exit-easing: cubic-bezier(.4, 0, 1, 1);
   --workspace-bg:
     radial-gradient(circle at 22% 18%, rgba(var(--accent-rgb, 139, 92, 246), .13), transparent 34%),
     radial-gradient(circle at 80% 12%, rgba(var(--accent-rgb, 139, 92, 246), .075), transparent 30%),
