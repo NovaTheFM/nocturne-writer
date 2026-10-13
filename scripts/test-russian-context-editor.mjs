@@ -8,6 +8,7 @@ import { CONTEXT_PUNCTUATION_CASES } from './fixtures/russian-context-punctuatio
 import { CONTEXT_HOLDOUT_CASES } from './fixtures/russian-context-holdout.mjs';
 import { USER_PUNCTUATION_TEXT, USER_REQUIRED_CORRECTIONS } from './fixtures/russian-user-punctuation.mjs';
 import { USER_EXTRA_CORRECTIONS } from './fixtures/russian-user-extra-corrections.mjs';
+import { INFINITIVE_AMBIGUITY_CASES } from './fixtures/russian-infinitive-ambiguity.mjs';
 import { anyCorrectionPlan } from './qa/language-quality-contract.mjs';
 
 const directory = resolve(process.env.NOCTURNE_QA_DIR || 'release/qa/russian-context-editor');
@@ -43,7 +44,7 @@ async function snapshot(page) {
     return { text: e.getText(), html: e.getHTML(), blocks, issues: a.typoMatchIndex.map(issue => ({ ...issue, start: issue.startOffset, end: issue.endOffset })) };
   });
 }
-async function apply(page, issue, suggestion, mobile) {
+async function apply(page, issue, suggestion, mobile, screenshotPath) {
   await page.evaluate(async issue => {
     const a = window.nocturneApp, item = a._typoHighlightRangesMap.get(`${issue.blockId}:${issue.start}:${issue.end}`);
     const area = item.range.startContainer.parentElement.closest('.editor-scroll-area'), rect = item.range.getBoundingClientRect();
@@ -63,6 +64,7 @@ async function apply(page, issue, suggestion, mobile) {
   const before = await snapshot(page);
   await page.mouse.click(point.x, point.y, { button: 'right' });
   const option = page.locator('#app-context-menu.active [data-typo-suggestion-index]').filter({ hasText: `«${suggestion}»` }).first();
+  if (screenshotPath) { await option.waitFor({ state: 'visible' }); await page.screenshot({ path: screenshotPath }); }
   if (mobile) await option.tap(); else await option.click();
   await settle(page);
   const after = await snapshot(page), oldBlock = before.blocks.find(block => block.id === issue.blockId), newBlock = after.blocks.find(block => block.id === issue.blockId);
@@ -129,6 +131,41 @@ try {
     for (const item of CONTEXT_HOLDOUT_CASES.slice(0, 10)) await record(`${profile}/holdout/${item.id}`, async () => {
       await setText(page, `<p>${escape(item.text)}</p>`); const state = await snapshot(page);
       assert.ok(anyCorrectionPlan(state.issues, item.text, [item.gold]));
+    });
+    const providerResponses = [], endpoint = process.env.NOCTURNE_AUDIT_LANGUAGETOOL_URL;
+    if (endpoint) {
+      assert.ok(['127.0.0.1', 'localhost', '[::1]'].includes(new URL(endpoint).hostname));
+      await page.exposeFunction('checkModalProvider', async body => {
+        const response = await fetch(endpoint, { method: 'POST', body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+        const data = await response.json(); providerResponses.push({ status: response.status, parameters: Object.fromEntries(new URLSearchParams(body)), data });
+        return { ok: response.ok, status: response.status, data };
+      });
+      await page.evaluate(() => {
+        const original = window.fetch.bind(window);
+        window.fetch = async (url, options) => {
+          if (!String(url).includes('api.languagetool.org')) return original(url, options);
+          const response = await window.checkModalProvider(options.body);
+          return { ok: response.ok, status: response.status, json: async () => response.data };
+        };
+      });
+    }
+    const modalCase = INFINITIVE_AMBIGUITY_CASES[0];
+    for (const [choice, suggestion] of modalCase.alternatives.entries()) await record(`${profile}/ambiguous-choice-${choice}`, async () => {
+      await setText(page, '<h2>Название главы</h2><p><strong>Казнить</strong> нельзя <em>помиловать</em>.</p>');
+      const state = await snapshot(page), issue = state.issues.find(item => item.ruleId === 'ambiguous-infinitive-boundary');
+      assert.ok(issue); assert.equal(issue.requiresChoice, true); assert.equal(issue.correct, undefined);
+      assert.deepEqual(issue.suggestions, modalCase.alternatives);
+      assert.ok(!state.issues.some(item => item.ruleId === 'DotOrCase'));
+      assert.equal(await page.evaluate(issue => window.nocturneApp.applyTypoReplacement(issue), issue), false);
+      await apply(page, issue, suggestion, mobile, choice === 0 ? join(directory, `${profile}-modal-menu.png`) : undefined);
+      const after = await snapshot(page);
+      assert.match(after.html, /<strong>Казнить(?:[,:])?<\/strong>/u); assert.match(after.html, /<em>помиловать<\/em>/u);
+      return { provider: endpoint ? 'live' : 'empty replay' };
+    });
+    if (endpoint) await record(`${profile}/modal-provider-boundary-evidence`, async () => {
+      assert.ok(providerResponses.some(item => item.data.matches.some(match => match.rule.id === 'DotOrCase')));
+      assert.ok(providerResponses.every(item => item.status === 200 && item.data.software.version === '6.6'));
+      await writeFile(join(directory, `${profile}-modal-provider.json`), JSON.stringify(providerResponses, null, 2));
     });
     await record(`${profile}/runtime`, async () => assert.deepEqual(errors, []));
     await context.close(); console.log(`${profile} context editor completed`);

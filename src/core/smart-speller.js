@@ -106,6 +106,8 @@ async function requestMatches(text, lang, controller, url) {
     for (const match of (Array.isArray(data.matches) ? data.matches : []).slice(0, 2000)) {
       if (!Number.isInteger(match.offset) || !Number.isInteger(match.length) || match.offset < 0 || match.length < 0 || match.offset + match.length > text.length) continue;
       if (match.rule?.issueType === 'style' || ['STYLE', 'REPETITIONS_STYLE', 'REDUNDANCY'].includes(match.rule?.category?.id)) continue;
+      // Editor blocks use newlines; an unfinished heading does not make the next block's capital erroneous.
+      if (match.rule?.id === 'DotOrCase' && /\n[\t \u00a0]*(?:[«“—–][\t ]*)?$/u.test(text.slice(0, match.offset))) continue;
       // The provider classifies this style preference as an uncategorized casing error.
       if (match.rule?.id === 'AllCaps') continue;
       // This opt-in rule enforces consistent ё, rather than resolving contextual е/ё errors.
@@ -216,10 +218,10 @@ export async function getSmartSpellerMatches(words, options = {}) {
       if (existing) {
         const localFirst = existing.source === 'rules' && existing.category !== 'capitalization';
         existing.suggestions = [...new Set(localFirst ? [...existing.suggestions, ...suggestions] : [...suggestions, ...existing.suggestions])];
-        existing.correct = existing.suggestions[0]; existing.message ||= occurrence.message;
+        existing.correct = existing.requiresChoice ? undefined : existing.suggestions[0]; existing.message ||= occurrence.message;
         continue;
       }
-      const overlapsLocal = issue => issue.source === 'rules' && start < issue.end && end > issue.start;
+      const overlapsLocal = issue => issue.source === 'rules' && !issue.requiresChoice && start < issue.end && end > issue.start;
       if (issues.some(overlapsLocal)) {
         if (!suggestions.length) {
           if (issues.some(issue => overlapsLocal(issue) && issue.category !== 'capitalization')) continue;

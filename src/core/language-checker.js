@@ -180,7 +180,7 @@ export async function checkLanguageText(text, options = {}) {
   const issues = [], identifiers = new Set();
   const opaque = [...text.matchAll(/https?:\/\/[^\s]+|\b[\w.+-]+@[\w.-]+\.[\p{L}]+|`[^`]*`/gu)].map(match => [match.index, match.index + match[0].length]);
   const blocked = (start, end, allowAuthor) => opaque.some(([a, b]) => start < b && end > a) || tokens.some(token => (ignored.has(token.word) || !allowAuthor && authorRule(token.lookupKey)) && start < token.end && end > token.start);
-  const add = (start, end, replacements, category, ruleId, message) => {
+  const add = (start, end, replacements, category, ruleId, message, requiresChoice = false) => {
     if (blocked(start, end, ruleId === 'author-typo-dictionary')) return;
     let suggestions = [...new Set(replacements)].filter(value => typeof value === 'string' && value !== text.slice(start, end) && value.length <= 256);
     if (!suggestions.length) return;
@@ -192,7 +192,7 @@ export async function checkLanguageText(text, options = {}) {
     const id = `${start}:${end}:${suggestions[0]}`;
     if (identifiers.has(id)) return;
     identifiers.add(id);
-    issues.push({ start, end, rawText: text.slice(start, end), correct: suggestions[0], suggestions, label: labels[category], category, issueType: category, ruleId, source: 'rules', language, ...(message ? { message } : {}) });
+    issues.push({ start, end, rawText: text.slice(start, end), correct: requiresChoice ? undefined : suggestions[0], suggestions, label: labels[category], category, issueType: category, ruleId, source: 'rules', language, ...(message ? { message } : {}), ...(requiresChoice ? { requiresChoice: true } : {}) });
   };
   const replaceToken = (token, values, category, ruleId) => add(token.start, token.end, values.map(value => preserveCase(token.raw, value)), category, ruleId);
   const matches = (regex, transform, category, ruleId) => { for (const match of text.matchAll(regex)) add(match.index, match.index + match[0].length, [transform(match)], category, ruleId); };
@@ -202,7 +202,7 @@ export async function checkLanguageText(text, options = {}) {
     && !contextualPunctuation?.commaPositions.has(left.end) && !contextualPunctuation?.phraseTokens.has(left.start) && !contextualPunctuation?.phraseTokens.has(right.start);
 
   for (const position of gerundBoundaries) add(position, position, [','], 'punctuation', 'gerund-clause-comma');
-  for (const issue of contextualPunctuation?.issues || []) add(issue.start, issue.end, issue.suggestions, issue.category, issue.ruleId, issue.message);
+  for (const issue of contextualPunctuation?.issues || []) add(issue.start, issue.end, issue.suggestions, issue.category, issue.ruleId, issue.message, issue.requiresChoice);
 
   matches(/\s+[,;:](?=\s|[\p{L}«“])/gu, match => match[0].trimStart(), 'punctuation', 'punctuation-space-before');
   matches(/[,;:](?=[\p{L}«“])/gu, match => match[0] + ' ', 'punctuation', 'punctuation-space-after');

@@ -1,3 +1,5 @@
+import { INFINITIVE_GOVERNORS } from './language-data/russian-infinitive-frames.js';
+
 const personalSubjects = new Set(['я', 'ты', 'он', 'она', 'оно', 'мы', 'вы', 'они']);
 const clauseConjunctions = new Set(['чтобы', 'хотя', 'поскольку', 'когда', 'если', 'пока']);
 const interrogativeAdverbs = new Set(['почему', 'зачем']);
@@ -89,6 +91,19 @@ export function russianContextPunctuation(text, tokens, data) {
   for (let end = 1; end <= tokens.length; end++) {
     if (end < tokens.length && !/[.!?;:\n]/u.test(text.slice(tokens[end - 1].end, tokens[end].start))) continue;
     const sentence = tokens.slice(first, end);
+    if (sentence.length === 3) {
+      const [left, modal, right] = sentence;
+      const independentInfinitive = token => token.analyses.length && token.analyses.every(item => item.pos === 'verb' && item.tense === 'infinitive')
+        && !token.analyses.some(item => INFINITIVE_GOVERNORS.has(item.lemma.toLowerCase().replaceAll('ё', 'е')));
+      if (independentInfinitive(left) && independentInfinitive(right) && left.word !== right.word
+        && modal.analyses.some(item => item.tag === 'PRDC') && gap(left, modal) && gap(modal, right)) {
+        const raw = text.slice(left.start, right.end);
+        const insert = (position, sign) => raw.slice(0, position - left.start) + sign + raw.slice(position - left.start);
+        issues.push({ start: left.start, end: right.end, suggestions: [insert(left.end, ','), insert(modal.end, ','), insert(left.end, ':'), insert(modal.end, ' —')],
+          category: 'punctuation', ruleId: 'ambiguous-infinitive-boundary', requiresChoice: true,
+          message: 'Возможны разные границы между частями предложения. Выберите знак и его место по смыслу: варианты меняют значение фразы.' });
+      }
+    }
     if (interrogativeAdverbs.has(sentence[0]?.word) && sentence.some(item => predicate(item) || item.analyses.some(analysis => analysis.pos === 'verb'))
       && sentence.filter(finite).length <= 1) {
       const mainAfterComma = sentence.some((token, index) => {

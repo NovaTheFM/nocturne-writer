@@ -27,6 +27,8 @@ Proper-name capitalization combines the original dictionary, the case-sensitive 
 
 All assets are loaded locally by the language worker when needed. No test fixture or expected correction is read by the data builder or runtime.
 
+`russian-infinitive-frames.js` supplies lemma-level infinitive-governance frames separately from spelling membership. Phase/modal verbs and infinitive-complement governors license a dependent infinitive and prevent a short INF–PRDC–INF construction from receiving a punctuation ambiguity notice. The grammatical inventory follows Gramota/Litnevskaya (answer 269167) and the infinitive/aspect teaching section in Russian Abroad 1/2024: https://gramota.ru/spravka/vopros/269167, https://search.rads-doi.org/showfile/ru/56337. It does not add recognized words or encode a test phrase/correction. The inventory is incomplete and is not a full valency dictionary.
+
 ## Rebuild
 
 Extract the pinned LanguageTool archive into `release/tools/languagetool/unpacked/LanguageTool-6.6`, and the GeoNames archive into `release/qa-smart-audit/geonames`. Java 21 is used by the build tools only. In PowerShell:

@@ -11905,7 +11905,7 @@ class NocturneWriter {
       label: rule.label || 'Частая ошибка',
       source,
       smartConfidence,
-      ...(source === 'smart' ? { suggestions: rule.suggestions || (typeof rule.correct === 'string' ? [rule.correct] : []), message: rule.message, spellerGeneration: this.spellerGeneration, displayStartOffset: rule.displayStartOffset, displayEndOffset: rule.displayEndOffset } : {}),
+      ...(source === 'smart' ? { suggestions: rule.suggestions || (typeof rule.correct === 'string' ? [rule.correct] : []), message: rule.message, requiresChoice: rule.requiresChoice, spellerGeneration: this.spellerGeneration, displayStartOffset: rule.displayStartOffset, displayEndOffset: rule.displayEndOffset } : {}),
     };
     this.typoMatchIndex.push(item);
     if (!this.typoMatchByBlock) this.typoMatchByBlock = new Map();
@@ -13853,9 +13853,19 @@ class NocturneWriter {
       const { textNodes } = element ? this.textNodesForHighlightBlock(element) : { textNodes: [] };
       const range = this.rangeFromBlockOffsets(textNodes, match.startOffset, match.endOffset);
       if (!range || range.toString() !== match.rawText) return false;
-      const from = editor.view.posAtDOM(range.startContainer, range.startOffset);
-      const to = editor.view.posAtDOM(range.endContainer, range.endOffset);
-      editor.view.dispatch(closeHistory(editor.state.tr.insertText(match.correct, from, to)));
+      let prefix = 0, suffix = 0;
+      if (match.requiresChoice) {
+        while (prefix < Math.min(match.rawText.length, match.correct.length) && match.rawText[prefix] === match.correct[prefix]) prefix++;
+        if (/[\uD800-\uDBFF]/u.test(match.rawText[prefix - 1] || '')) prefix--;
+        while (suffix < Math.min(match.rawText.length, match.correct.length) - prefix
+          && match.rawText[match.rawText.length - suffix - 1] === match.correct[match.correct.length - suffix - 1]) suffix++;
+        if (/[\uDC00-\uDFFF]/u.test(match.rawText[match.rawText.length - suffix] || '')) suffix--;
+      }
+      const editRange = this.rangeFromBlockOffsets(textNodes, match.startOffset + prefix, match.endOffset - suffix);
+      if (!editRange) return false;
+      const from = editor.view.posAtDOM(editRange.startContainer, editRange.startOffset);
+      const to = editor.view.posAtDOM(editRange.endContainer, editRange.endOffset);
+      editor.view.dispatch(closeHistory(editor.state.tr.insertText(match.correct.slice(prefix, match.correct.length - suffix), from, to)));
       editor.view.dispatch(closeHistory(editor.state.tr).setMeta('addToHistory', false));
       this.nocturneEditor.syncDocFromEditor(paneId);
       doc.updatedAt = Date.now();

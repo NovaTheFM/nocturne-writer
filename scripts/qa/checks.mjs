@@ -55,6 +55,7 @@ export const ARTIFACT_CHECKS = [
 ];
 
 export const EXTRA_CHECKS = [
+  check('russian-infinitive-ambiguity', ['scripts/test-russian-infinitive-ambiguity.mjs'], ['dictionary', 'writing', 'stress'], { modes: [], timeout: 240_000, ownScenarioReport: 'results.json' }),
   check('russian-context-live', ['scripts/test-russian-context-live.mjs'], ['dictionary', 'writing', 'stress'], { modes: [], timeout: 240_000, ownScenarioReport: 'results.json' }),
   check('russian-context-editor', ['--import', './scripts/qa/observe-playwright.mjs', 'scripts/test-russian-context-editor.mjs'], ['dictionary', 'writing', 'stress', 'responsive', 'touch', 'keyboard'], { modes: [], timeout: 240_000, ownScenarioReport: 'results.json' }),
   check('russian-context-punctuation', ['scripts/test-russian-context-punctuation.mjs'], ['dictionary', 'writing', 'stress', 'offline'], { modes: [], timeout: 180_000, ownScenarioReport: 'results.json' }),
