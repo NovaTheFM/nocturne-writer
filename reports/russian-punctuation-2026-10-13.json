@@ -1,0 +1,222 @@
+{
+  "generatedAt": "2026-10-13T15:44:27.953Z",
+  "artifact": {
+    "path": "dist/",
+    "files": 330,
+    "bytes": 65478458,
+    "indexBytes": 8900,
+    "verified": [
+      {
+        "path": "src/core/language-checker.js",
+        "bytes": 33588,
+        "sha256": "a76abff57df40c4fc7bd660cfa6753817ee26a525e2ce66fa433d5d2107dfba5"
+      },
+      {
+        "path": "src/core/smart-speller.js",
+        "bytes": 15619,
+        "sha256": "dcd180df81782cf1f07fbfb2f2596bc6a250640491d0ea2324557a36a1669e9b"
+      },
+      {
+        "path": "src/core/language-data/ru.mjs",
+        "bytes": 13995891,
+        "sha256": "d6dcdd560cc9cca1b9501e94138d422a052c3ae37eb7f795488498b41d0b1848"
+      },
+      {
+        "path": "src/core/language-data/classical-rules.js",
+        "bytes": 84956,
+        "sha256": "3ca1c8ab1c1166b7a377fd406ce9d14fa5b975e5db7cd8d4cd6013306f236f18"
+      },
+      {
+        "path": "src/core/language-data/source/build-language-lexicon.mjs",
+        "bytes": 6705,
+        "sha256": "bdfdadbf9fd77d30398d01095fd3c80cb1be8142456b796cd4854e5586e66019"
+      },
+      {
+        "path": "src/core/language-data/source/ExportMorphology.java",
+        "bytes": 3829,
+        "sha256": "eafaeee36e04038dfd31c21d3b916fc277d26c792503da691412216dda950948"
+      }
+    ]
+  },
+  "reports": [
+    "release/qa/app-tester/2026-10-13T14-45-55-159Z/index.html",
+    "release/qa/app-tester/2026-10-13T15-39-03-938Z/index.html",
+    "release/qa/app-tester/2026-10-13T15-42-37-872Z/index.html"
+  ],
+  "live": {
+    "passed": 1200,
+    "failed": 0,
+    "requests": 1184,
+    "providerVersion": [
+      "6.6"
+    ],
+    "byLanguage": {
+      "ru": {
+        "corrections": 200,
+        "cleanControls": 200,
+        "totalCorrections": 200,
+        "totalControls": 200
+      },
+      "uk": {
+        "corrections": 200,
+        "cleanControls": 200,
+        "totalCorrections": 200,
+        "totalControls": 200
+      },
+      "en": {
+        "corrections": 200,
+        "cleanControls": 200,
+        "totalCorrections": 200,
+        "totalControls": 200
+      }
+    }
+  },
+  "rules": {
+    "passed": 4892,
+    "failed": 0,
+    "requests": 4890,
+    "activeRussianRules": 481,
+    "transported": 1015,
+    "hybridCorrectionsPreserved": 864,
+    "hybridDiagnosticsCovered": 151,
+    "styleExcluded": 201,
+    "corpusSha256": "48f0305905962efc036ee662302fda59955cbdc185043574240d445b903e100f",
+    "providerCalibration": {
+      "status": "KNOWN_GAPS",
+      "positives": 1039,
+      "detected": 1016,
+      "controls": 1407,
+      "unexpectedOnControl": 5
+    },
+    "limitation": "Source conformance and recorded HTTP transport are not independent proof of universal Russian accuracy. Controls forbid the target rule, not every possible error in the phrase."
+  },
+  "punctuation": {
+    "passed": 1215,
+    "total": 1215,
+    "failed": 0,
+    "corpusSha256": "da82b4e71cf0228e38eb5e43d8e38446b62f4b1c3e68b1e3c511e9b6b52692b3"
+  },
+  "quality": {
+    "passed": 5261,
+    "failed": 0,
+    "durationMs": 22690,
+    "spellingReferences": {
+      "valid": 599,
+      "invalid": [
+        {
+          "id": "uk-spelling-transfer-151",
+          "lang": "uk",
+          "word": "холостяк",
+          "valid": false,
+          "tags": [
+            "noun:anim:m:v_naz:bad"
+          ]
+        }
+      ]
+    },
+    "referenceNote": "Invalid references are safety checks, not successful spelling corrections",
+    "groups": {
+      "frozen-600": {
+        "passed": 1200,
+        "failed": 0
+      },
+      "unseen-vocabulary": {
+        "passed": 996,
+        "failed": 0
+      },
+      "multiple-errors": {
+        "passed": 60,
+        "failed": 0
+      },
+      "dictionary-integrity": {
+        "passed": 3,
+        "failed": 0
+      },
+      "seeded-spelling-transfer": {
+        "passed": 1797,
+        "failed": 0
+      },
+      "invalid-reference-safety": {
+        "passed": 3,
+        "failed": 0
+      },
+      "isolation": {
+        "passed": 1,
+        "failed": 0
+      },
+      "stress": {
+        "passed": 1,
+        "failed": 0
+      },
+      "empty-online-layer": {
+        "passed": 1200,
+        "failed": 0
+      }
+    }
+  },
+  "performance": [
+    {
+      "name": "desktop/language-performance-without-observer",
+      "passed": true,
+      "cold": [
+        {
+          "lang": "ru",
+          "durationMs": 4936,
+          "issues": 1
+        },
+        {
+          "lang": "uk",
+          "durationMs": 4147,
+          "issues": 1
+        },
+        {
+          "lang": "en",
+          "durationMs": 564,
+          "issues": 1
+        }
+      ],
+      "characters": 107515,
+      "warmMs": 1588,
+      "issues": 1,
+      "maxFrameGapMs": 83,
+      "frames": 664,
+      "cancelled": true,
+      "cancellationMs": 152
+    },
+    {
+      "name": "android/language-performance-without-observer",
+      "passed": true,
+      "cold": [
+        {
+          "lang": "ru",
+          "durationMs": 5425,
+          "issues": 1
+        },
+        {
+          "lang": "uk",
+          "durationMs": 4246,
+          "issues": 1
+        },
+        {
+          "lang": "en",
+          "durationMs": 555,
+          "issues": 1
+        }
+      ],
+      "characters": 107515,
+      "warmMs": 1641,
+      "issues": 1,
+      "maxFrameGapMs": 100,
+      "frames": 725,
+      "cancelled": true,
+      "cancellationMs": 153
+    }
+  ],
+  "unitTests": 43,
+  "verificationGaps": [
+    "No physical Android",
+    "No packaged Electron",
+    "No fresh EXE/APK"
+  ],
+  "note": "Pipeline pass does not erase the recorded provider calibration gaps"
+}

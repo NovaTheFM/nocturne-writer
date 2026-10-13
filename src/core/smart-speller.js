@@ -40,9 +40,22 @@ function localOccurrences(text, matches) {
 }
 
 function contextualChecks(words, text) {
-  if (!words.length) return [];
   text ||= words.join(' ');
+  if (!text.trim()) return [];
   if (text.length <= 4000) return [{ words, text, segments: [{ start: 0, end: text.length, offset: 0 }] }];
+  if (!words.length) {
+    const chunks = [];
+    for (let start = 0; start < text.length;) {
+      let end = Math.min(start + 4000, text.length);
+      if (end < text.length) {
+        const space = text.lastIndexOf(' ', end);
+        if (space > start) end = space;
+      }
+      chunks.push({ words, text: text.slice(start, end), segments: [{ start, end, offset: 0 }] });
+      start = end;
+    }
+    return chunks;
+  }
   const requested = new Set(words), windows = [];
   for (const match of tokens(text)) {
     if (!requested.has(normalize(match[0]))) continue;
@@ -80,7 +93,7 @@ async function requestMatches(text, lang, controller, url) {
   try {
     const response = await fetch(url, {
       method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-      body: new URLSearchParams({ text, language: languageCodes[language], enabledOnly: 'true', enabledRules: enabledRules.join(',') }).toString(), signal: controller.signal,
+      body: new URLSearchParams({ text, language: languageCodes[language], level: 'picky', enabledOnly: 'true', enabledRules: enabledRules.join(',') }).toString(), signal: controller.signal,
     });
     if (!response.ok) {
       if (response.status === 429) {
@@ -93,6 +106,8 @@ async function requestMatches(text, lang, controller, url) {
     for (const match of (Array.isArray(data.matches) ? data.matches : []).slice(0, 2000)) {
       if (!Number.isInteger(match.offset) || !Number.isInteger(match.length) || match.offset < 0 || match.length < 0 || match.offset + match.length > text.length) continue;
       if (match.rule?.issueType === 'style' || ['STYLE', 'REPETITIONS_STYLE', 'REDUNDANCY'].includes(match.rule?.category?.id)) continue;
+      // This opt-in rule enforces consistent ё, rather than resolving contextual е/ё errors.
+      if (match.rule?.id === 'MissingYO') continue;
       if (match.rule?.isPremium || /(?:^|_)AI(?:_|$)|NEURAL|GPT|LLM/iu.test(match.rule?.id || '')) continue;
       if (match.rule?.id && !permittedRules.has(match.rule.id)) continue;
       if (!Array.isArray(match.replacements)) continue;
@@ -170,7 +185,7 @@ export async function getSmartSpellerMatches(words, options = {}) {
   const checked = normalized.filter(word => !text || present.has(word));
   const localWords = mode === 'api' ? checked.filter(word => ['user', 'override'].includes(lookup[word]?.source)) : checked;
   const result = localMatches(localWords, lookup), remaining = checked.filter(word => !result.has(word));
-  const contexts = mode === 'local' ? [] : contextualChecks(remaining, text);
+  const contexts = mode === 'local' || !remaining.length && (normalized.length || ignored.size) ? [] : contextualChecks(remaining, text);
   const requests = contexts.map(context => sharedRequest(context.text, lang, options.signal, options.endpoint || endpoint).then(value => ({ context, value }), error => ({ context, error })));
   let issues = localOccurrences(text, result), localFailed = false;
   if (text && mode !== 'api' && (checked.length || !normalized.length && !ignored.size)) {
@@ -196,8 +211,29 @@ export async function getSmartSpellerMatches(words, options = {}) {
       const suggestions = [...occurrence.suggestions], preferred = lookup[word]?.correct;
       if (occurrence.issueType === 'misspelling' || !occurrence.issueType) suggestions.sort((a, b) => Number(b === preferred) - Number(a === preferred) || editDistance(word, normalize(a)) - editDistance(word, normalize(b)));
       const existing = issues.find(issue => issue.start === start && issue.end === end);
-      if (existing) { existing.suggestions = [...new Set([...existing.suggestions, ...suggestions])]; continue; }
-      if (issues.some(issue => issue.source === 'rules' && start < issue.end && end > issue.start)) continue;
+      if (existing) {
+        const localFirst = existing.source === 'rules' && existing.category !== 'capitalization';
+        existing.suggestions = [...new Set(localFirst ? [...existing.suggestions, ...suggestions] : [...suggestions, ...existing.suggestions])];
+        existing.correct = existing.suggestions[0]; existing.message ||= occurrence.message;
+        continue;
+      }
+      const overlapsLocal = issue => issue.source === 'rules' && start < issue.end && end > issue.start;
+      if (issues.some(overlapsLocal)) {
+        if (!suggestions.length) {
+          if (issues.some(issue => overlapsLocal(issue) && issue.category !== 'capitalization')) continue;
+        } else {
+          const preferred = [], capitalization = [], consumed = new Set();
+          for (const local of issues.filter(overlapsLocal)) {
+            if (local.start < start || local.end > end) continue;
+            const projected = local.suggestions.map(value => text.slice(start, local.start) + value + text.slice(local.end, end));
+            if (!projected.length || !projected.every(validReplacement)) continue;
+            (local.category === 'capitalization' ? capitalization : preferred).push(...projected);
+            consumed.add(local);
+          }
+          suggestions.splice(0, suggestions.length, ...new Set([...preferred, ...suggestions, ...capitalization]));
+          issues = issues.filter(issue => !consumed.has(issue));
+        }
+      }
       issues.push({ ...occurrence, start, end, suggestions, correct: suggestions[0] });
     }
   }

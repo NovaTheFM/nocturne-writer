@@ -176,6 +176,7 @@ test('online requests select declarative rules and reject unrequested or AI rule
   globalThis.fetch = async (_url, options) => {
     const parameters = new URLSearchParams(options.body);
     assert.equal(parameters.get('enabledOnly'), 'true');
+    assert.equal(parameters.get('level'), 'picky');
     assert.equal(parameters.get('language'), 'en-US');
     assert.ok(parameters.get('enabledRules').split(',').includes(ruleId));
     return { ok: true, json: async () => ({ matches: [
@@ -187,6 +188,31 @@ test('online requests select declarative rules and reject unrequested or AI rule
   try {
     const result = await getSmartSpellerMatches(['unique'], { mode: 'api', lang: 'auto', contextText: 'Unique request for declarative checking.' });
     assert.deepEqual(result.issues.map(issue => issue.correct), ['safe']);
+  } finally { globalThis.fetch = original; }
+});
+
+test('numeric punctuation receives contextual online checking without any word tokens', async () => {
+  const ruleId = CLASSICAL_LANGUAGE_RULES.ru[0], text = '№ 7, № 8';
+  await withSpellerResponse([{ offset: 0, length: text.length, replacements: [{ value: '№ 7, 8' }], rule: { id: ruleId, issueType: 'uncategorized' } }], async () => {
+    const result = await getSmartSpellerMatches([], { mode: 'api', lang: 'ru', contextText: text });
+    assert.equal(result.issues[0]?.correct, '№ 7, 8');
+  });
+});
+
+test('long numeric contexts keep bounded requests and original correction ranges', async () => {
+  const original = globalThis.fetch, chunks = [];
+  const suffix = '№ 17, № 18', text = '1 2 3 '.repeat(1200) + suffix;
+  globalThis.fetch = async (_url, options) => {
+    const chunk = new URLSearchParams(options.body).get('text'); chunks.push(chunk);
+    const start = chunk.indexOf(suffix);
+    return { ok: true, json: async () => ({ matches: start < 0 ? [] : [{ offset: start, length: suffix.length, replacements: [{ value: '№ 17, 18' }], rule: { id: CLASSICAL_LANGUAGE_RULES.ru[0], issueType: 'uncategorized' } }] }) };
+  };
+  try {
+    const result = await getSmartSpellerMatches([], { mode: 'api', lang: 'ru', contextText: text });
+    assert.ok(chunks.length > 1 && chunks.every(chunk => chunk.length <= 4000));
+    assert.equal(result.issues[0]?.start, text.indexOf(suffix));
+    assert.equal(result.issues[0]?.end, text.length);
+    assert.equal(result.issues[0]?.correct, '№ 17, 18');
   } finally { globalThis.fetch = original; }
 });
 
@@ -210,6 +236,45 @@ test('cancelling one consumer does not abort a shared check needed by another', 
 test('author replacement wins over a grammatical rule covering the same phrase', async () => {
   const result = await getSmartSpellerMatches(['самий', 'кращий', 'варіант'], { mode: 'local', lang: 'uk', contextText: 'Самий кращий варіант.', localLookup: { самий: { correct: 'Авторский', source: 'user' } } });
   assert.deepEqual(result.issues.map(issue => ({ raw: issue.rawText, correct: issue.correct })), [{ raw: 'Самий', correct: 'Авторский' }]);
+});
+
+test('a contextual online correction is retained when a shorter local rule overlaps it', async () => {
+  const text = 'Она купил хлеб.';
+  await withSpellerResponse([{ offset: 4, length: 10, replacements: [{ value: 'купила хлеб' }], rule: { id: CLASSICAL_LANGUAGE_RULES.ru[0], issueType: 'grammar' } }], async () => {
+    const result = await getSmartSpellerMatches(['она', 'купил', 'хлеб'], { mode: 'hybrid', lang: 'ru', contextText: text });
+    assert.equal(result.issues.find(issue => issue.rawText === 'купил хлеб')?.correct, 'купила хлеб');
+    assert.equal(result.issues.filter(issue => issue.rawText === 'купил').length, 0);
+  });
+});
+
+test('overlapping online phrases retain local deletions and every remote alternative', async () => {
+  const text = 'Она открыла открыла дверь.';
+  await withSpellerResponse([{ offset: 4, length: 15, replacements: [{ value: 'открыла, открыла' }, { value: 'открыла и открыла' }], rule: { id: CLASSICAL_LANGUAGE_RULES.ru[0], issueType: 'uncategorized' } }], async () => {
+    const result = await getSmartSpellerMatches(['она', 'открыла', 'дверь'], { mode: 'hybrid', lang: 'ru', contextText: text });
+    const issue = result.issues.find(issue => issue.rawText === 'открыла открыла');
+    assert.equal(issue?.correct, 'открыла');
+    assert.deepEqual(issue?.suggestions, ['открыла', 'открыла, открыла', 'открыла и открыла']);
+  });
+});
+
+test('capitalization cannot hide a broader grammatical diagnostic without a replacement', async () => {
+  const text = 'он написал письмо.';
+  await withSpellerResponse([{ offset: 0, length: 10, replacements: [], message: 'Check the grammatical construction.', rule: { id: CLASSICAL_LANGUAGE_RULES.ru[0], issueType: 'grammar' } }], async () => {
+    const result = await getSmartSpellerMatches(['он', 'написал', 'письмо'], { mode: 'hybrid', lang: 'ru', contextText: text });
+    assert.ok(result.issues.some(issue => issue.start === 0 && issue.end === 10 && issue.message === 'Check the grammatical construction.'));
+    assert.ok(result.issues.some(issue => issue.correct === 'Он'));
+  });
+});
+
+test('optional consistent ё is a preference while contextual е/ё grammar stays enabled', async () => {
+  const text = 'Все уже готово.', contextual = CLASSICAL_LANGUAGE_RULES.ru.find(id => id !== 'MissingYO');
+  await withSpellerResponse([
+    { offset: 0, length: 3, replacements: [], message: 'Optional consistent ё.', rule: { id: 'MissingYO', issueType: 'uncategorized' } },
+    { offset: 0, length: 3, replacements: [{ value: 'Всё' }], rule: { id: contextual, issueType: 'grammar' } },
+  ], async () => {
+    const result = await getSmartSpellerMatches(['все', 'уже', 'готово'], { mode: 'api', lang: 'ru', contextText: text });
+    assert.deepEqual(result.issues.map(issue => issue.correct), ['Всё']);
+  });
 });
 
 test('short transpositions use dictionary words while informal repetition is preserved', async () => {

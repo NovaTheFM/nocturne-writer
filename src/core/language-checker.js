@@ -17,7 +17,7 @@ const nominative = { ru: 'Nom', uk: 'v_naz', en: '' };
 function features(tag, language) {
   if (language === 'en') return { pos: /^NN/u.test(tag) ? 'noun' : /^VB/u.test(tag) ? 'verb' : /^JJ/u.test(tag) ? 'adjective' : '', number: ['NNS', 'NNPS'].includes(tag) ? 'p' : /^NN/u.test(tag) || tag === 'VBZ' ? 's' : '', tense: ['VBD', 'VBN'].includes(tag) ? 'past' : 'present', person: tag === 'VBZ' ? '3' : '', case: '', gender: '' };
   const parts = tag.split(':');
-  if (language === 'ru') return { pos: parts[0] === 'NN' ? 'noun' : parts[0] === 'VB' ? 'verb' : ['ADJ', 'Ord'].includes(parts[0]) ? 'adjective' : '', number: parts.includes('PL') ? 'p' : parts.includes('Sin') || parts.some(value => ['Masc', 'Fem', 'Neut'].includes(value)) ? 's' : '', gender: parts.includes('Masc') ? 'm' : parts.includes('Fem') ? 'f' : parts.includes('Neut') ? 'n' : '', case: parts.find(value => ['Nom', 'R', 'D', 'V', 'T', 'P'].includes(value)) || '', tense: parts.includes('Past') ? 'past' : parts.includes('Fut') ? 'future' : parts.includes('IMP') ? 'imperative' : parts.includes('INF') ? 'infinitive' : 'present', person: parts.find(value => /^P[123]$/u.test(value))?.slice(1) || '' };
+  if (language === 'ru') return { pos: parts[0] === 'NN' ? 'noun' : parts[0] === 'VB' ? 'verb' : parts[0] === 'DPT' ? 'gerund' : ['ADJ', 'Ord'].includes(parts[0]) ? 'adjective' : '', number: parts.includes('PL') ? 'p' : parts.includes('Sin') || parts.some(value => ['Masc', 'Fem', 'Neut'].includes(value)) ? 's' : '', gender: parts.includes('Masc') ? 'm' : parts.includes('Fem') ? 'f' : parts.includes('Neut') ? 'n' : '', case: parts.find(value => ['Nom', 'R', 'D', 'V', 'T', 'P'].includes(value)) || '', tense: parts.includes('Past') ? 'past' : parts.includes('Fut') ? 'future' : parts.includes('IMP') ? 'imperative' : parts.includes('INF') ? 'infinitive' : 'present', person: parts.find(value => /^P[123]$/u.test(value))?.slice(1) || '' };
   return { pos: ['noun', 'verb', 'adj'].includes(parts[0]) ? { noun: 'noun', verb: 'verb', adj: 'adjective' }[parts[0]] : '', number: parts.includes('p') ? 'p' : parts.some(value => ['s', 'm', 'f', 'n'].includes(value)) ? 's' : '', gender: parts.find(value => ['m', 'f', 'n'].includes(value)) || '', case: parts.find(value => /^v_/u.test(value)) || '', tense: parts.includes('past') ? 'past' : parts.includes('futr') ? 'future' : parts.includes('impr') ? 'imperative' : parts.includes('inf') ? 'infinitive' : 'present', person: parts.find(value => /^[123]$/u.test(value)) || '' };
 }
 
@@ -58,7 +58,7 @@ async function dictionary(language) {
       return result;
     } };
     const membership = createDictionaryMembership(Uint8Array.from(atob(data.membership.encoded), value => value.charCodeAt(0)));
-    return { analyses, lemmas, common, membership, properForms: new Map(data.properForms.map(word => [normalize(word), word])) };
+    return { analyses, lemmas, common, membership, adverbialPhrases: (data.adverbialPhrases || []).map(phrase => phrase.split(/\s+/u).map(normalize)), properForms: new Map(data.properForms.map(word => [normalize(word), word])) };
   })());
   return dictionaries.get(language);
 }
@@ -110,6 +110,59 @@ function spellingCandidates(word, language, data) {
   return [...found];
 }
 
+function russianGerundCommas(text, tokens, phrases) {
+  const positions = new Set();
+  const gap = (left, right) => /^\s+$/u.test(text.slice(left.end, right.start));
+  const finite = token => token?.analyses.some(item => item.pos === 'verb' && item.tense !== 'infinitive') && !token.analyses.some(item => item.tag === 'ADV');
+  const subject = (token, previous) => !previous?.analyses.some(item => item.tag === 'PREP') && (subjectPronouns.ru[token?.word] || token?.analyses.some(item => item.pos === 'noun' && item.case === 'Nom') && !token.analyses.some(item => item.case === 'V'));
+  const modifier = token => token?.analyses.some(item => /^(?:ADV|PART|PTC)$/iu.test(item.tag));
+  const idiomatic = index => [index, index - 1].some(start => start >= 0 && phrases.some(phrase => phrase.every((word, offset) => tokens[start + offset]?.word === word && (!offset || gap(tokens[start + offset - 1], tokens[start + offset])))));
+  const mark = (left, right) => { if (left && right && gap(left, right)) positions.add(left.end); };
+  let first = 0;
+  const inspect = end => {
+    for (let index = first; index < end; index++) {
+      const token = tokens[index];
+      if (!token.analyses.some(item => item.pos === 'gerund') || idiomatic(index)) continue;
+      const homonyms = token.analyses.filter(item => item.pos !== 'gerund');
+      if (homonyms.some(item => item.pos !== 'noun')) continue;
+      const start = index > first && tokens[index - 1].word === 'не' ? index - 1 : index;
+      const before = tokens.slice(first, start), initial = !before.length, afterSubject = subject(before.at(-1), before.at(-2));
+      const priorPredicate = before.some(finite);
+      if (!initial && !afterSubject && !priorPredicate) continue;
+      const conjunction = before.findLastIndex(item => ['и', 'или'].includes(item.word));
+      if (conjunction > 0 && before[conjunction - 1].analyses.some(item => item.tag === 'ADV' || item.case === 'T')) continue;
+      if (tokens.slice(index + 1, end).some(item => /^(?:котор|что$|как$)/u.test(item.word))) continue;
+      let boundary = -1;
+      for (let next = index + 1; next < end; next++) {
+        if (subject(tokens[next], tokens[next - 1])) {
+          let predicate = next + 1;
+          while (predicate < end && modifier(tokens[predicate]) && gap(tokens[predicate - 1], tokens[predicate])) predicate++;
+          if (finite(tokens[predicate]) && gap(tokens[predicate - 1], tokens[predicate])) { boundary = next; break; }
+        }
+        if (finite(tokens[next])) { boundary = next; break; }
+      }
+      if (homonyms.length) {
+        let predicate = boundary;
+        while (predicate >= 0 && predicate < end && !finite(tokens[predicate])) predicate++;
+        if (predicate < 0 || predicate >= end || !tokens[predicate].analyses.some(item => item.pos === 'verb' && item.tag.split(':').includes('TRANS'))) continue;
+        let object = predicate + 1;
+        while (object < end && tokens[object].analyses.some(item => item.pos === 'adjective') && gap(tokens[object - 1], tokens[object])) object++;
+        if (!tokens[object]?.analyses.some(item => item.pos === 'noun' && item.case === 'V') || !gap(tokens[object - 1], tokens[object])) continue;
+      }
+      if (boundary >= index + 1) {
+        if (!initial) mark(tokens[start - 1], tokens[start]);
+        mark(tokens[boundary - 1], tokens[boundary]);
+      } else if (boundary === -1 && priorPredicate && index + 1 < end) {
+        mark(tokens[start - 1], tokens[start]);
+      }
+    }
+  };
+  for (let index = 1; index <= tokens.length; index++) {
+    if (index === tokens.length || /[.!?;:\n]/u.test(text.slice(tokens[index - 1].end, tokens[index].start))) { inspect(index); first = index; }
+  }
+  return positions;
+}
+
 export async function checkLanguageText(text, options = {}) {
   text = String(text || '');
   const language = ['ru', 'uk', 'en'].includes(options.lang) ? options.lang : inferLanguage(text);
@@ -142,7 +195,10 @@ export async function checkLanguageText(text, options = {}) {
   };
   const replaceToken = (token, values, category, ruleId) => add(token.start, token.end, values.map(value => preserveCase(token.raw, value)), category, ruleId);
   const matches = (regex, transform, category, ruleId) => { for (const match of text.matchAll(regex)) add(match.index, match.index + match[0].length, [transform(match)], category, ruleId); };
-  const spaceGap = (left, right) => /^\s+$/u.test(text.slice(left.end, right.start));
+  const gerundBoundaries = language === 'ru' ? russianGerundCommas(text, tokens, data.adverbialPhrases) : new Set();
+  const spaceGap = (left, right) => /^\s+$/u.test(text.slice(left.end, right.start)) && !gerundBoundaries.has(left.end);
+
+  for (const position of gerundBoundaries) add(position, position, [','], 'punctuation', 'gerund-clause-comma');
 
   matches(/\s+[,;:](?=\s|[\p{L}«“])/gu, match => match[0].trimStart(), 'punctuation', 'punctuation-space-before');
   matches(/[,;:](?=[\p{L}«“])/gu, match => match[0] + ' ', 'punctuation', 'punctuation-space-after');
@@ -212,7 +268,7 @@ export async function checkLanguageText(text, options = {}) {
       const pronoun = subjectPronouns[language][token.word];
       const startsClause = !previous || /[.!?;,\n]/u.test(text.slice(previous.end, token.start)) || previous.word === 'the' && (!tokens[index - 2] || /[.!?;,\n]/u.test(text.slice(tokens[index - 2].end, previous.start)));
       const adjectiveModifier = language === 'en' && token.analyses.some(item => item.pos === 'adjective') && next.analyses.some(item => item.pos === 'noun');
-      const nounSubjects = adjectiveModifier || ['коли', 'якщо', 'щоб', 'когда', 'если', 'чтобы'].includes(token.word) ? [] : token.analyses.filter(item => item.pos === 'noun' && !item.tag.includes('&pron') && (language === 'en' ? startsClause : item.case === nominative[language]));
+      const nounSubjects = adjectiveModifier || previous?.analyses.some(item => item.tag === 'PREP') || ['коли', 'якщо', 'щоб', 'когда', 'если', 'чтобы'].includes(token.word) ? [] : token.analyses.filter(item => item.pos === 'noun' && !item.tag.includes('&pron') && (language === 'en' ? startsClause : item.case === nominative[language]));
       const subject = pronoun ? { number: pronoun[0], person: pronoun[1], gender: pronoun[2] || '' } : nounSubjects.length ? { number: nounSubjects[0].number, person: '3', gender: nounSubjects[0].gender } : null;
       const verb = language === 'en' && next.analyses.some(item => item.tag === 'MD') ? null : next.analyses.find(item => item.pos === 'verb' && item.tense !== 'infinitive' && (language !== 'en' || !['VBN', 'VBG'].includes(item.tag)));
       if (subject && verb) {

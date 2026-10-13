@@ -16,7 +16,7 @@ public class ExportMorphology {
       var location = ExportMorphology.class.getClassLoader().getResource("org/languagetool/resource/" + lang + "/" + filename + ".dict");
       if (location == null) throw new IllegalStateException("Missing morphology dictionary: " + lang);
       var dictionary = Dictionary.read(location);
-      Set<String> common = new HashSet<>(), lemmas = new HashSet<>();
+      Set<String> common = new HashSet<>(), lemmas = new HashSet<>(), nominativeWords = new HashSet<>();
       var exactLookup = new DictionaryLookup(dictionary);
       TreeSet<String> properForms = new TreeSet<>();
       for (String word : Files.readAllLines(source.resolve("org/languagetool/resource/" + lang + "/common_words.txt"), StandardCharsets.UTF_8)) {
@@ -30,6 +30,7 @@ public class ExportMorphology {
       while (iterator.hasNext()) {
         var item = iterator.next();
         String tag = item.getTag() == null ? "" : item.getTag().toString();
+        if (lang.equals("ru") && tag.startsWith("NN:") && tag.endsWith(":Nom")) nominativeWords.add(item.getWord().toString().toLowerCase(Locale.ROOT).replace('ё', 'е'));
         if (common.contains(item.getWord().toString().toLowerCase(Locale.ROOT)) || tag.startsWith("VB") || tag.startsWith("verb:")) lemmas.add(item.getStem().toString().toLowerCase(Locale.ROOT));
       }
       TreeSet<String> rows = new TreeSet<>(), allWords = new TreeSet<>();
@@ -41,7 +42,7 @@ public class ExportMorphology {
         if (INVALID_FORM.matcher(tag).find()) continue;
         allWords.add(word.toLowerCase(Locale.ROOT).replace('ё', 'е'));
         if (Character.isUpperCase(word.charAt(0)) && (lang.equals("ru") || tag.contains(":prop:geo") || tag.equals("NNP") || tag.equals("NNPS"))) properForms.add(word);
-        if (!lemmas.contains(stem.toLowerCase(Locale.ROOT))) continue;
+        if (!lemmas.contains(stem.toLowerCase(Locale.ROOT)) && !(lang.equals("ru") && (tag.equals("ADV") || nominativeWords.contains(word.toLowerCase(Locale.ROOT).replace('ё', 'е'))))) continue;
         rows.add(word + "\t" + stem + "\t" + tag);
       }
       Files.write(target.resolve(lang + ".tsv"), rows, StandardCharsets.UTF_8);

@@ -19,9 +19,11 @@ The Russian and Ukrainian derived dictionary assets remain under LGPL; the compl
 
 The exact membership index covers exported dictionary word forms with at least one analysis not marked `bad`. Incorrect source forms are excluded before building the finite-state index; archaic forms remain recognized. Full morphological paradigms are retained for common lemmas; finite verbs are additionally retained across the dictionary. Marked bad/archaic analyses are excluded from the morphology index. Future, present, past, imperative and infinitive forms remain distinct. Shortened and alternative forms remain readable but ordinary forms are suggested first. Runtime lookup folds straight/curly apostrophes while replacements preserve the input's apostrophe style.
 
+Russian morphology also retains gerunds (`DPT`), all adverbs, and every analysis of words with a nominative noun reading. Retaining accompanying accusative and other homonyms prevents truncated data from inventing a subject. Gerunds remain separate from finite verbs. Russian `adverbialPhrases` are `ADV`/`FR` entries from LanguageTool 6.6 `resource/ru/multiwords.txt`; these supply idiomatic exceptions independently of test fixtures. The Russian compressed JSON is 10,496,903 bytes; exact dictionary membership is unchanged.
+
 Proper-name capitalization combines the original dictionary, the case-sensitive common-word list and GeoNames. Inflected forms come from actual paradigms. Ordinary noun readings take priority over a geographic homonym where the language supplies proper-name tags.
 
-`classical-rules.js` contains only rule/rulegroup identifiers declared in LanguageTool 6.6 XML files. Online checks explicitly enable these identifiers; premium, AI and unrequested rule identifiers are rejected. Auto language selection uses character and function-word rules locally, then sends an explicit language to the provider.
+`classical-rules.js` contains active rule/rulegroup identifiers declared in LanguageTool 6.6 XML files: 481 RU, 626 UK, 2815 EN. XML comments, translation-only `bitext.xml` and remote filter catalogs are excluded. Online checks explicitly enable these identifiers and `level=picky`, including additional punctuation rules; premium, AI and unrequested rule identifiers are rejected. Style preferences remain excluded from error diagnostics. Auto language selection uses character and function-word rules locally, then sends an explicit language to the provider.
 
 All assets are loaded locally by the language worker when needed. No test fixture or expected correction is read by the data builder or runtime.
 
@@ -37,7 +39,7 @@ java -Xmx768m -cp "release/qa-smart-audit/java;$languageClasspath" BuildWordFsa 
 node scripts/build-language-lexicon.mjs
 ```
 
-Inputs can be selected with `--source=PATH`, `--provider=PATH`, `--geography=PATH`. Generated TSV and original downloads stay outside runtime assets. The builder includes copies of its conversion sources in `source/`. Standard application builds copy the prepared assets, conversion sources and notices into `dist/src/core/language-data/`; they do not download data or require Java.
+Inputs can be selected with `--source=PATH`, `--provider=PATH`, `--geography=PATH`. `--catalog-only` regenerates rule identifiers without rebuilding morphology. Generated TSV and original downloads stay outside runtime assets. The builder includes copies of its conversion sources in `source/`. Standard application builds copy the prepared assets, conversion sources and notices into `dist/src/core/language-data/`; they do not download data or require Java.
 
 Test corpora are separate, frozen artifacts. `capture-language-spelling-transfer.mjs` captures a new vocabulary benchmark only for an explicitly reviewed contract revision. Normal QA reads the recorded fixture and verifies its hash; it never resamples words from a changed production dictionary.
 

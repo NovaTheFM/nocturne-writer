@@ -1,0 +1,94 @@
+{
+  "provider": "Unmodified LanguageTool 6.6 on localhost, no AI rules",
+  "capturedAt": "2026-10-13T13:53:10.729Z",
+  "parameters": {
+    "text": "Взяв свой член он снял трусы.",
+    "language": "ru-RU",
+    "level": "picky",
+    "enabledOnly": "true",
+    "enabledRules": "ABREV_DOT,ABR_GENDER,ADV_Navstrechu_and_Noun,A_NO_DA,A_VDRUG_NO_COMMA,Adj_NN_number_Software,Adv_vposledstvii,AllCaps,BLAGOZVUCHNOST,BLIZKIJ_BLIZHNIJ,BOLSHAJA_POLOVINA,BUD_CHTO_BUDET,B_S_kosvr,CHAS_PIK,CHREZVICHAJNO_GROMADNIJ,CHTO_COMMA,CHTO_PRAVDA_TO_PRAVDA,COMMA_DEFIS,COMPLEX_SOUZ_NO_COMMA,COMPLEX_SOUZ_NO_COMMA2,COMPLEX_SOUZ_PUNCT,COMPLEX_SOUZ_PUNCT_2,COMPLEX_SOUZ_PUNCT_START_S,Cap_Letters_Fam,Cap_Letters_Name,Cap_Letters_SName,Chastitsa_NI_usilen_negat,Chastitsa_NI_v_ustojchiv_vyrazh,Com_Num,Comma_Chtobi_2VERB,Comma_before_kak,Comma_mol,DATE_WEEKDAY1,DEFIS_COMMA,DOUBLE_PUNCTUATION,DOUBL_KAVITCHKI,DPT_BI,DPT_Unification,DUMU_DUMAT,Defis_to,Digit_comnatnaja,Digit_defis_letter,DotOrCase,DoubleIH,DoubleNE,DoubleNOT,Dvigenie_and_Noun,Dvojnoe_negate_s_NE,EAdj_NN_number_2_4,ESLI_TO,EST_CHEM_ZANJATSA,Frazeologizm_nevernij,GDE_COMMA,GLAVNAJA_SUT,Genitsya,Hyphen_and_spaces,INFORMATIVNIJ_INFORMACIONNIJ,INVALID_DATE,INVALID_TENSE_DATE,ISKLUCHIT_ISKLUCHENIE,IS_POD,I_TO_I_SE,KAK_I,KAK_PRAVILO,KAK_VVODNOE,KAVITCHKI,KRUG_KRUGLIJ,KTO_VB_PL,KV,KWT,KWT.H,K_TAKIM_KAK,Kak_Tak_i,Kak_bi_to_ni_bilo,Kak_budto,Kogda_to1,Kontrol_za_nad,LC_AFTER_PERIOD_RU,LICHNO_JA,Latin_letters,Latin_single_letter,Linguistics_hrabry,Lishnij_sojuz,Logical_biographia_gizni,Logical_bolee_menee,Logical_govorite_vopros,Logical_komandirovochnij,Logical_kurica_nasijivaet_jajca,Logical_odel_nadel,Logical_podnjal_tost,Logical_podorojali_ceny,Logical_prazdnoe_prazdnichnoe,Logical_prignul_s_parashuta,Logical_reshit_zatanuvshujusa_problemu,Logical_samij_gigantskij,Logical_segodnyashnij_den,Logical_skritij_skritnij,Logical_sobiratsya_vmeste,Logical_sochetatsja_vmeste,Logical_sosedstvovat_drug_s_drugom,Logical_svoja_avtobiographija,Logical_uluchshenie_otmechennih_nedostatkov,Logical_vidajuschijsja_as,Logical_zalozheno_xx_derevjev,Lower_Letters_after_comma,MISSING_PUNCT_IN_BULLET,Many_PNN,MissingYO,Missing_punct_colon,Multiple_missing_commas_VB,NEIZVESTNO_KTO,NEMNOGO_PRIOTKRIT,NEUJTO,NE_PREDSTAVL_VOZM,NE_VB_NN_NN,NI_CHTO_NE,NI_NA_GRAN,NN_N_pril_prich,NO_KAK_POPALO,NO_KAK_VVODNOE1,NO_NE_KAK,NO_NE_TO_CHTO,NO_VVODNOE,Nazv_org,Ne_komu_inomu_kak,Ne_narech,Ne_narech2,Ne_narech_ne_horosho,Ne_pril_prich,Ne_pril_prich1,Nepraviln_pristavki,Nesmotrja_na_to_chto,Nesmotrja_na_to_chto2,Ni_mnogo_ni_malo,Ni_to_ni_drugoe,Not_Comma_eto,Num_plus_Noun,Num_plus_Noun1,OCHEN_KROHOTNIJ,OPREDELENIA,O_KOTORIJ,O_OB_OBO,O_P_padeg,O_tom_chto,Oba_obe,Obobchajuchee_slovo,Oborot_ne_kto_inoj_kak,Oborot_nikto_inoj_ne,Obrazovanie_form_pril_i_mestoimenij,Obrazovanie_form_prilagat_sravnit_st,Obrazovanie_form_suschestvitelnykh_prof,Obrazovanije_glagoln_form_imperativ,Obrazovanije_slozhnyh_slov,Okonch_susch_masc_Predlozhn_opredeliteln,Opublikovani_vospominanija,PARTICLE_JE,PARTICLE_JE_J,PNN_Kak_Noun,PNN_ON_END,PODARIT_PODAROK,POJELAT_JELANIE,POTREBOVAT_TREBOVANIE,POZHALUJSTA,PO_MERE_TOGO_KAK,PO_NAD,PREDLOGI_KROME,PREP_C_and_ADJ,PREP_C_and_Noun,PREP_K_and_ADJ,PREP_K_and_Noun,PREP_K_and_Num,PREP_NA_VS_V,PREP_Na_And_Noun,PREP_Nad_and_ADJ,PREP_Nad_and_Noun,PREP_ON_END,PREP_O_and_ADJ,PREP_O_and_Noun,PREP_Ob_And_Noun,PREP_PNN,PREP_POD_And_NOUN,PREP_PO_and_Noun,PREP_Pri_and_ADJ,PREP_Pri_and_Noun,PREP_Pro_And_ADJ,PREP_Pro_And_Noun,PREP_U_and_ADJ,PREP_U_and_Noun,PREP_V_VS_NA,PREP_V_and_Noun,PREP_V_tom_Noun,PREP_Za_And_Noun,PREP_and_DPT,PREP_and_PNN,PREP_and_PNN1,PREP_cherez_and_ADJ,PREP_cherez_and_Noun,PREP_vokrug_and_Noun,PREP_vozle_and_Noun,PROGNOZ_NA_BUDUSHEE,PT_BI,PUNCT_DPT,PUNCT_DPT_2,PUNCT_OBR,PUNCT_VB_INF_OBOROT,PUNKT_KAVITCHKI,PUNKT_KOTORIJ,PUNKT_KOTORIJ1,Para_NN,Parnoje_upotrebl_NI,Paronimy,Pnn_compose_error,Po-bystromu,Postrojenije_slovosochet_mnogo_malo_nemnogo_nemalo,Postrojenije_slovosochetanij_skazuem_sing,Postrojenije_slovosochetanij_sobir_noun,Postrojenije_slovosochetanij_upravlenie1,Potok_and_Noun,Pravopisanie_po-prezhnemu,Pravopisanie_s_odnoj,Pravopisanie_slitno1,Predlog_v_zakluchenije,Predlogi_iz_s,Predlogi_vsledstvije_napodobije,Prep_Soglasno,Prep_i,Prep_i_2,Privet_druzja,Punct_PT_oborot,Punct_PT_oborot_2,Punct_and_spaces,Punct_eh_ti,Punct_nado_polagat,Punct_skazano_sdelano,Punct_skoree_chem,Punct_sobstvenno_govorja,Punct_tochki_zrenija,RIBNAJA_UHA,ROST,Rod_suschestvitelnykh_Fem_and_Masc,Rod_suschestvitelnykh_Neut,Rod_suschestvitelnykh_geograph,Rod_suschestvitelnykh_odush_bird_animal,SPUSKATSJA_VNIZ,SVOBODNAJA_VAKANSIJA,S_SO,Skazuem_sovmestnoje_dejstvije,Sklonenije_NUM_NN,Sklonenije_chislitelnih,Sklonenije_suschestvit_PL,Slovosoch_interesnaja_kniga,Slovosoch_v_proshlom,SoglasovanieNN_Verb,SoglasovaniePNN_Verb,Soglasovanie_ADJ_NN,Soglasovanie_NN_PT,Soglasovanie_NN_PT_2,Stolko_mnogo,Style_gipoteza_ssno_kotoroj,Style_imeet_vid,TAKIM_KAK,TAKOJ_KAK,TAK_JE,TAK_JE_KAK,TIRE,TOLPA_LUDEJ,TO_JE,TYPOGRAF_SYMBOL,TYPO_BOLE,Tak_je_kak_i,Tak_kak_to,Tavtologija,Tavtology_adres_mestojitelstva,Tavtology_bespolezno_propadajut,Tavtology_demobilizovatsja_iz_armii,Tavtology_glavnij_lejtmotiv,Tavtology_kivnul_golovoj,Tavtology_kollega_po_professii,Tavtology_landshaft_mestnosti,Tavtology_mahina,Tavtology_marshrut_sledovanija,Tavtology_mestnij_aborigen,Tavtology_nebolshaja_gorstka,Tavtology_neskolko_pobistree,Tavtology_plani_na_budushee,Tavtology_polnostju_zavershil,Tavtology_prejskurant_cen,Tavtology_prostaivat_bez_dela,Tavtology_samij_edinstvennij,Tavtology_tyomnij_mrak,Tavtology_upal_vniz,Tavtology_v_xx_mesjatse,Tavtology_vernutsja_obratno,Tavtology_vremenno_priostanovlen,Tavtology_zaranee_predchuvstvovat,Tavtology_zaranee_predupredit,Teper_tak_kak,Three_dot,Tire_and_Verbs,Tire_and_spaces,Tire_and_two,Trudn_sluchai_upravl,Two_PREP,Unify_Adj_NN_case,Unify_Adj_NN_gender,Unify_Adj_NN_number,Unify_Mult_Adj,Unify_PADJ_NN_case,Unify_PADJ_NN_gender,Unify_PADJ_NN_number,Upotreblenije_predlogov,Upr_ne_verb_i_ni,Use_prep_O,V.А,VB_O_KOM,VODJANOJ_VODNIJ,VOZVRASHATSJA_OBRATNO,VO_VREMJA,VPERVIJE_ZNAKOMITSJA,VSE_KAK_NA_PODBOR,VVODNOE_SLOVO,V_K_IS,V_OTLICHIE,V_PRODOLJENIЕ,V_TECHENII,V_TECHENIЕ,V_etoj_svyazy,V_sortimente,V_tom_chisle,Vazhno_chto_etogo,Verb_3P_and_inf,Verb_IMP_OR_REAL,Verb_INF_OR_3P,Verb_INF_OR_3P_3,Verb_PT_short_Unification,Verb_and_NomDTV,Verb_and_PNN_Nom,Verb_and_PREP,Verb_and_PT,Verb_and_Verb,Verb_and_wo_P,Verb_comma_Verb,Verb_izbezhat_NN,Verb_number,Verb_tsa_and_ttsya,Vo_chto_by_to_ni_stalo,Vo_izbezhanie,WRONG_INN,Word_root_repeat,Wrong_group_punct,YEAR_20001,ZAKAZAT_ZAKAZ,ZASEDANIJE_ZAJEDANIJE,adv_st,belogo_kalenija,bivshij_biloj,bolee_ili_menee_k,bolotnij_bolotistiy,bolshinstvo_vremeni,budniy_budnichnij,chto_li,comma_and_to_jest,companija_campanija,da_and_da,dlitelnij_dlinnij,dlya_togo_chtoby,dlya_togo_chtoby_2,drug_s_drugom,dva_i_bolee,dvigatel_dvizhetel,economichesky_ekonomichniy,gerojsky_geroichesky,giloj_gilichnij,grammar_Duplication_by_the_pronoun_of_the_noun-subject,grammar_bez_ucheta_and_Noun,grammar_bolee_interesnee,grammar_coordination_of_verbal_participle_phrases,grammar_nemnogo_blednovat,grammar_o_tom_to_chto,grammar_po_sravneniju_s,grammar_poshel_k,grammar_s_dnem_rojdenja,grammar_soobrazno_dat,grammar_uverennost_v,grammar_v_adress_and_Noun,grammar_v_protivorechii_s,grammar_v_sootvetstvii,grammar_v_vedenie_and_Noun,grammar_v_vidah_and_Noun,grammar_v_vide_and_Noun,grammar_vse_li_noun,i_and_i_and_i,i_tak_dalee,ili_and_ili,imeet_mesto,kak_bi,kak_ni_stranno,kavalkada_mashin,kommentirovat_prep,kosvennaja_rech,libo_and_libo,mankirovat_nn,missing_2_verb,missing_noun_at_end,missing_prep_v_vide,na_ladan_dishit,na_poverku,nagnat_strahu,naravne_s,ne_proronila_ni,ni_and_ni_and_ni,ni_v_koem_sluchae,nikto_ioj,noun_genitive_3,nе_igraet_nikakogo_znachenija,obschie_toscki_soprikosnovenija,odin_za_odnim,okazat_zabotu,oplachivat_prep,perehodny_peshehod,plit_lodkoj,plohoj_den,po_povodu_togo,podvesti_rezultaty,podvesti_rezume,postscriptum,pouchastvovat,povisit_svoi_krugozor,predprinjat_meri,predstavlat_soboj,predstavlennie_neudobstva,pretenzia_na,prev_st,prinat_tabеletku,prosit_proshenija,razvevatsja_razvivatsja,reczenzija_na,rugat_rugatsja,sdelat_ukol,skladivaetsja_oschuschenie,skolko_vremeni,skoree_vsego,skrepja_serdce,skuchat_za,sojalet_ob_etom,solnij_instrument,sorvat_ovacii,sovestnij_sovmestnij,strong_m,sud_da_delo,tak_skazat,takim_obrazom,takim_obrazom_chto,talk,tcifra_zanijena,tem_ne_menee,to_and_to,toska_toskovat,translate_carreer_diplomat,udivlyatsja_na,ugasno_krasivij,upravlauchij_NN,uroven_uvelichilsja,urovnjat_uravnjat,v_kontakte_s,v_ruchnuju,v_sochetanii_s,v_sravnenii_s,v_svjazi_s,vlasti_priderjashie,voinstvujuschij_voinstvennij,vopreki_NN,vozmojno_oshibayas,vziskivat_uscherb,vzjat_s_nego_interview,zadat_test,zakonchit_shkolu,zaslujit_NN,zaslujivat_NN,znat_cenu,А.H"
+  },
+  "status": 200,
+  "data": {
+    "software": {
+      "name": "LanguageTool",
+      "version": "6.6",
+      "buildDate": "2025-03-27 20:50:25 +0100",
+      "apiVersion": 1,
+      "premium": false,
+      "premiumHint": "You might be missing errors only the Premium version can find. Contact us at support<at>languagetoolplus.com.",
+      "status": ""
+    },
+    "warnings": {
+      "incompleteResults": false
+    },
+    "language": {
+      "name": "Russian",
+      "code": "ru-RU",
+      "detectedLanguage": {
+        "name": "Russian",
+        "code": "ru-RU",
+        "confidence": 0.999996,
+        "source": "+fallback"
+      }
+    },
+    "matches": [
+      {
+        "message": "Требуется запятая или запятые до конца предложения, обнаружен деепричастный оборот.",
+        "shortMessage": "Требуется запятая",
+        "replacements": [],
+        "offset": 0,
+        "length": 22,
+        "context": {
+          "text": "Взяв свой член он снял трусы.",
+          "offset": 0,
+          "length": 22
+        },
+        "sentence": "Взяв свой член он снял трусы.",
+        "type": {
+          "typeName": "Other"
+        },
+        "rule": {
+          "id": "PUNCT_DPT_2",
+          "subId": "1",
+          "sourceFile": "grammar.xml",
+          "description": "Запятые при деепричастном обороте (2)",
+          "issueType": "uncategorized",
+          "urls": [
+            {
+              "value": "http://new.gramota.ru/biblio/readingroom/rules/151-zap-19-32"
+            }
+          ],
+          "category": {
+            "id": "PUNCTUATION",
+            "name": "Пунктуация"
+          },
+          "tags": [
+            "picky"
+          ]
+        },
+        "ignoreForIncompleteSentence": true,
+        "contextForSureMatch": -1
+      }
+    ],
+    "sentenceRanges": [
+      [
+        0,
+        29
+      ]
+    ],
+    "extendedSentenceRanges": [
+      {
+        "from": 0,
+        "to": 29,
+        "detectedLanguages": [
+          {
+            "language": "ru",
+            "rate": 1
+          }
+        ]
+      }
+    ]
+  },
+  "sha256": "f2ded62595034aea2be4b7c861cbb7b8595ad64f1680e29bd40f80c57bb6e4b3"
+}

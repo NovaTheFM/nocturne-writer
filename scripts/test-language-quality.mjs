@@ -42,6 +42,7 @@ async function quality(item, mode, gate) {
     if (item.expected === 'no-error') assert.equal(issues.length, 0, JSON.stringify({ text: item.text, issues }));
     else assert.ok(anyCorrectionPlan(issues, item.text, item.gold), JSON.stringify({ text: item.text, gold: item.gold, issues }));
     const plan = item.expected === 'correction' && anyCorrectionPlan(issues, item.text, item.gold);
+    if (plan && ['frozen-600', 'empty-online-layer'].includes(gate)) assert.ok(plan.plan.every(issue => issue.suggestions[0] === issue.correct), 'The first correction must produce the frozen gold text');
     return { lang: item.lang, category: item.category, expected: item.expected, issueCount: issues.length, firstSuggestionMatchesGold: plan ? plan.plan.every(issue => issue.suggestions[0] === issue.correct) : undefined };
   });
 }
