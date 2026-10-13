@@ -1,0 +1,5872 @@
+{
+  "contractVersion": 1,
+  "source": "Direct DictionaryLookup in unmodified LanguageTool 6.6 dictionaries, no runtime checker",
+  "originalCorpusSha256": "454fa0bfa6594ae10ec393c409de6f2bf55121648dfe19fb9effaa616a5dd8c5",
+  "validationSha256": "040d10c7b30a3637aa61251bba6fe5aa2c94df6234e46cb0c2b92abe9166d52c",
+  "cases": [
+    {
+      "id": "ru-spelling-transfer-1",
+      "lang": "ru",
+      "word": "ресторане",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Masc:Sin:P"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-2",
+      "lang": "ru",
+      "word": "помощью",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Fem:Sin:T"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-3",
+      "lang": "ru",
+      "word": "объявление",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Neut:Sin:Nom",
+        "NN:Inanim:Neut:Sin:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-4",
+      "lang": "ru",
+      "word": "удобно",
+      "valid": true,
+      "tags": [
+        "ADJ:Short:Neut",
+        "ADV",
+        "PRDC"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-5",
+      "lang": "ru",
+      "word": "почтой",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Fem:Sin:T"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-6",
+      "lang": "ru",
+      "word": "десерт",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Masc:Sin:Nom",
+        "NN:Inanim:Masc:Sin:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-7",
+      "lang": "ru",
+      "word": "планируешь",
+      "valid": true,
+      "tags": [
+        "VB:Real:TRANS:IMPFV:Sin:P2"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-8",
+      "lang": "ru",
+      "word": "кресло",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Neut:Sin:Nom",
+        "NN:Inanim:Neut:Sin:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-9",
+      "lang": "ru",
+      "word": "перебивай",
+      "valid": true,
+      "tags": [
+        "VB:IMP:TRANS:IMPFV:Sin:P2"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-10",
+      "lang": "ru",
+      "word": "быстрая",
+      "valid": true,
+      "tags": [
+        "ADJ:Posit:Fem:Nom"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-11",
+      "lang": "ru",
+      "word": "вернулась",
+      "valid": true,
+      "tags": [
+        "VB:Past:INTR:PFV:Fem"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-12",
+      "lang": "ru",
+      "word": "тарелки",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Fem:PL:Nom",
+        "NN:Inanim:Fem:PL:V",
+        "NN:Inanim:Fem:Sin:R"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-13",
+      "lang": "ru",
+      "word": "вкусный",
+      "valid": true,
+      "tags": [
+        "ADJ:Posit:Masc:Nom",
+        "ADJ:Posit:Masc:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-14",
+      "lang": "ru",
+      "word": "доллар",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Masc:Sin:Nom",
+        "NN:Inanim:Masc:Sin:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-15",
+      "lang": "ru",
+      "word": "сложную",
+      "valid": true,
+      "tags": [
+        "ADJ:Posit:Fem:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-16",
+      "lang": "ru",
+      "word": "удивлению",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Neut:Sin:D"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-17",
+      "lang": "ru",
+      "word": "представить",
+      "valid": true,
+      "tags": [
+        "VB:INF:TRANS:PFV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-18",
+      "lang": "ru",
+      "word": "больно",
+      "valid": true,
+      "tags": [
+        "ADJ:Short:Neut",
+        "ADV",
+        "PRDC"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-19",
+      "lang": "ru",
+      "word": "одиночестве",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Neut:Sin:P"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-20",
+      "lang": "ru",
+      "word": "войска",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Neut:PL:Nom",
+        "NN:Inanim:Neut:PL:V",
+        "NN:Inanim:Neut:Sin:R"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-21",
+      "lang": "ru",
+      "word": "тринадцать",
+      "valid": true,
+      "tags": [
+        "NumC:Nom",
+        "NumC:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-22",
+      "lang": "ru",
+      "word": "снится",
+      "valid": true,
+      "tags": [
+        "VB:Real:INTR:IMPFV:Sin:P3"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-23",
+      "lang": "ru",
+      "word": "красный",
+      "valid": true,
+      "tags": [
+        "ADJ:Posit:Masc:Nom",
+        "ADJ:Posit:Masc:V",
+        "NN:Anim:Masc:Sin:Nom"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-24",
+      "lang": "ru",
+      "word": "вызвало",
+      "valid": true,
+      "tags": [
+        "VB:Past:TRANS:PFV:Neut"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-25",
+      "lang": "ru",
+      "word": "сапоги",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Masc:PL:Nom",
+        "NN:Inanim:Masc:PL:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-26",
+      "lang": "ru",
+      "word": "чистой",
+      "valid": true,
+      "tags": [
+        "ADJ:Posit:Fem:D",
+        "ADJ:Posit:Fem:P",
+        "ADJ:Posit:Fem:R",
+        "ADJ:Posit:Fem:T"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-27",
+      "lang": "ru",
+      "word": "слышала",
+      "valid": true,
+      "tags": [
+        "VB:Past:TRANS:IMPFV:Fem"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-28",
+      "lang": "ru",
+      "word": "приводит",
+      "valid": true,
+      "tags": [
+        "VB:Real:TRANS:IMPFV:Sin:P3"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-29",
+      "lang": "ru",
+      "word": "девушек",
+      "valid": true,
+      "tags": [
+        "NN:Anim:Fem:PL:R",
+        "NN:Anim:Fem:PL:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-30",
+      "lang": "ru",
+      "word": "лечение",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Neut:Sin:Nom",
+        "NN:Inanim:Neut:Sin:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-31",
+      "lang": "ru",
+      "word": "использовал",
+      "valid": true,
+      "tags": [
+        "VB:Past:TRANS:2PFV:Masc"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-32",
+      "lang": "ru",
+      "word": "перезвонить",
+      "valid": true,
+      "tags": [
+        "VB:INF:INTR:PFV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-33",
+      "lang": "ru",
+      "word": "нравилось",
+      "valid": true,
+      "tags": [
+        "VB:Past:INTR:IMPFV:Neut"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-34",
+      "lang": "ru",
+      "word": "немедленно",
+      "valid": true,
+      "tags": [
+        "ADJ:Short:Neut",
+        "ADV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-35",
+      "lang": "ru",
+      "word": "редкость",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Fem:Sin:Nom",
+        "NN:Inanim:Fem:Sin:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-36",
+      "lang": "ru",
+      "word": "использовал",
+      "valid": true,
+      "tags": [
+        "VB:Past:TRANS:2PFV:Masc"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-37",
+      "lang": "ru",
+      "word": "детский",
+      "valid": true,
+      "tags": [
+        "ADJ:Posit:Masc:Nom",
+        "ADJ:Posit:Masc:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-38",
+      "lang": "ru",
+      "word": "открыть",
+      "valid": true,
+      "tags": [
+        "VB:INF:TRANS:PFV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-39",
+      "lang": "ru",
+      "word": "прошлую",
+      "valid": true,
+      "tags": [
+        "ADJ:Posit:Fem:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-40",
+      "lang": "ru",
+      "word": "угрожал",
+      "valid": true,
+      "tags": [
+        "VB:Past:INTR:IMPFV:Masc"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-41",
+      "lang": "ru",
+      "word": "заказать",
+      "valid": true,
+      "tags": [
+        "VB:INF:TRANS:PFV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-42",
+      "lang": "ru",
+      "word": "круглый",
+      "valid": true,
+      "tags": [
+        "ADJ:Posit:Masc:Nom",
+        "ADJ:Posit:Masc:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-43",
+      "lang": "ru",
+      "word": "чердаке",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Masc:Sin:P"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-44",
+      "lang": "ru",
+      "word": "помочь",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Fem:Sin:Nom",
+        "NN:Inanim:Fem:Sin:V",
+        "VB:INF:INTR:PFV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-45",
+      "lang": "ru",
+      "word": "завидую",
+      "valid": true,
+      "tags": [
+        "VB:Real:INTR:IMPFV:Sin:P1"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-46",
+      "lang": "ru",
+      "word": "простить",
+      "valid": true,
+      "tags": [
+        "VB:INF:TRANS:PFV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-47",
+      "lang": "ru",
+      "word": "покончил",
+      "valid": true,
+      "tags": [
+        "VB:Past:TRANS:PFV:Masc"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-48",
+      "lang": "ru",
+      "word": "вашему",
+      "valid": true,
+      "tags": [
+        "ADJ:MPR:Masc:D",
+        "ADJ:MPR:Neut:D"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-49",
+      "lang": "ru",
+      "word": "изучению",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Neut:Sin:D"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-50",
+      "lang": "ru",
+      "word": "минимум",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Masc:Sin:Nom",
+        "NN:Inanim:Masc:Sin:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-51",
+      "lang": "ru",
+      "word": "совершила",
+      "valid": true,
+      "tags": [
+        "VB:Past:TRANS:PFV:Fem"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-52",
+      "lang": "ru",
+      "word": "прости",
+      "valid": true,
+      "tags": [
+        "VB:IMP:TRANS:PFV:Sin:P2"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-53",
+      "lang": "ru",
+      "word": "автомобилей",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Masc:PL:R"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-54",
+      "lang": "ru",
+      "word": "возвращаюсь",
+      "valid": true,
+      "tags": [
+        "VB:Real:INTR:IMPFV:Sin:P1"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-55",
+      "lang": "ru",
+      "word": "причиной",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Fem:Sin:T"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-56",
+      "lang": "ru",
+      "word": "лишился",
+      "valid": true,
+      "tags": [
+        "VB:Past:INTR:PFV:Masc"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-57",
+      "lang": "ru",
+      "word": "скучно",
+      "valid": true,
+      "tags": [
+        "ADJ:Short:Neut",
+        "ADV",
+        "PRDC"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-58",
+      "lang": "ru",
+      "word": "территории",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Fem:PL:Nom",
+        "NN:Inanim:Fem:PL:V",
+        "NN:Inanim:Fem:Sin:D",
+        "NN:Inanim:Fem:Sin:P",
+        "NN:Inanim:Fem:Sin:R"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-59",
+      "lang": "ru",
+      "word": "подарил",
+      "valid": true,
+      "tags": [
+        "VB:Past:TRANS:PFV:Masc"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-60",
+      "lang": "ru",
+      "word": "открытой",
+      "valid": true,
+      "tags": [
+        "ADJ:Posit:Fem:D",
+        "ADJ:Posit:Fem:P",
+        "ADJ:Posit:Fem:R",
+        "ADJ:Posit:Fem:T",
+        "PT:Past:TRANS:PFV:STR:Fem:D",
+        "PT:Past:TRANS:PFV:STR:Fem:P",
+        "PT:Past:TRANS:PFV:STR:Fem:R",
+        "PT:Past:TRANS:PFV:STR:Fem:T"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-61",
+      "lang": "ru",
+      "word": "известия",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Neut:PL:Nom",
+        "NN:Inanim:Neut:PL:V",
+        "NN:Inanim:Neut:Sin:R"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-62",
+      "lang": "ru",
+      "word": "задача",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Fem:Sin:Nom"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-63",
+      "lang": "ru",
+      "word": "баскетбол",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Masc:Sin:Nom",
+        "NN:Inanim:Masc:Sin:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-64",
+      "lang": "ru",
+      "word": "слышите",
+      "valid": true,
+      "tags": [
+        "VB:Real:TRANS:IMPFV:PL:P2"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-65",
+      "lang": "ru",
+      "word": "проснуться",
+      "valid": true,
+      "tags": [
+        "VB:INF:INTR:PFV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-66",
+      "lang": "ru",
+      "word": "поговорите",
+      "valid": true,
+      "tags": [
+        "VB:Fut:INTR:PFV:PL:P2",
+        "VB:IMP:INTR:PFV:PL:P2"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-67",
+      "lang": "ru",
+      "word": "сводить",
+      "valid": true,
+      "tags": [
+        "VB:INF:TRANS:IMPFV",
+        "VB:INF:TRANS:PFV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-68",
+      "lang": "ru",
+      "word": "написание",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Neut:Sin:Nom",
+        "NN:Inanim:Neut:Sin:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-69",
+      "lang": "ru",
+      "word": "градусов",
+      "valid": true,
+      "tags": [
+        "NN:Fam:Masc:Sin:Nom",
+        "NN:Inanim:Masc:PL:R"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-70",
+      "lang": "ru",
+      "word": "плачешь",
+      "valid": true,
+      "tags": [
+        "VB:Real:INTR:IMPFV:Sin:P2"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-71",
+      "lang": "ru",
+      "word": "искренние",
+      "valid": true,
+      "tags": [
+        "ADJ:Posit:PL:Nom",
+        "ADJ:Posit:PL:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-72",
+      "lang": "ru",
+      "word": "виновен",
+      "valid": true,
+      "tags": [
+        "ADJ:Short:Masc"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-73",
+      "lang": "ru",
+      "word": "избежать",
+      "valid": true,
+      "tags": [
+        "VB:INF:INTR:PFV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-74",
+      "lang": "ru",
+      "word": "рыбачить",
+      "valid": true,
+      "tags": [
+        "VB:INF:INTR:IMPFV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-75",
+      "lang": "ru",
+      "word": "математику",
+      "valid": true,
+      "tags": [
+        "NN:Anim:Masc:Sin:D",
+        "NN:Inanim:Fem:Sin:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-76",
+      "lang": "ru",
+      "word": "собираемся",
+      "valid": true,
+      "tags": [
+        "VB:Real:INTR:IMPFV:PL:P1"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-77",
+      "lang": "ru",
+      "word": "третьего",
+      "valid": true,
+      "tags": [
+        "NN:Anim:Masc:Sin:R",
+        "NN:Anim:Masc:Sin:V",
+        "NN:Inanim:Neut:Sin:R",
+        "Ord:Masc:R",
+        "Ord:Masc:V",
+        "Ord:Neut:R"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-78",
+      "lang": "ru",
+      "word": "спрашиваю",
+      "valid": true,
+      "tags": [
+        "VB:Real:TRANS:IMPFV:Sin:P1"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-79",
+      "lang": "ru",
+      "word": "танцевал",
+      "valid": true,
+      "tags": [
+        "VB:Past:TRANS:IMPFV:Masc"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-80",
+      "lang": "ru",
+      "word": "поступила",
+      "valid": true,
+      "tags": [
+        "VB:Past:INTR:PFV:Fem"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-81",
+      "lang": "ru",
+      "word": "названия",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Neut:PL:Nom",
+        "NN:Inanim:Neut:PL:V",
+        "NN:Inanim:Neut:Sin:R"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-82",
+      "lang": "ru",
+      "word": "сестру",
+      "valid": true,
+      "tags": [
+        "NN:Anim:Fem:Sin:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-83",
+      "lang": "ru",
+      "word": "новыми",
+      "valid": true,
+      "tags": [
+        "ADJ:Posit:PL:T",
+        "NN:Fam:PL:T",
+        "NN:Inanim:Neut:PL:T"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-84",
+      "lang": "ru",
+      "word": "плакал",
+      "valid": true,
+      "tags": [
+        "VB:Past:INTR:IMPFV:Masc"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-85",
+      "lang": "ru",
+      "word": "столицей",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Fem:Sin:T"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-86",
+      "lang": "ru",
+      "word": "наивен",
+      "valid": true,
+      "tags": [
+        "ADJ:Short:Masc"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-87",
+      "lang": "ru",
+      "word": "маленькой",
+      "valid": true,
+      "tags": [
+        "ADJ:Posit:Fem:D",
+        "ADJ:Posit:Fem:P",
+        "ADJ:Posit:Fem:R",
+        "ADJ:Posit:Fem:T",
+        "NN:Anim:Fem:Sin:D",
+        "NN:Anim:Fem:Sin:P",
+        "NN:Anim:Fem:Sin:R",
+        "NN:Anim:Fem:Sin:T"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-88",
+      "lang": "ru",
+      "word": "побыстрее",
+      "valid": true,
+      "tags": [
+        "ADJ:Comp"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-89",
+      "lang": "ru",
+      "word": "позови",
+      "valid": true,
+      "tags": [
+        "VB:IMP:TRANS:PFV:Sin:P2"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-90",
+      "lang": "ru",
+      "word": "бесплатный",
+      "valid": true,
+      "tags": [
+        "ADJ:Posit:Masc:Nom",
+        "ADJ:Posit:Masc:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-91",
+      "lang": "ru",
+      "word": "глазам",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Masc:PL:D"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-92",
+      "lang": "ru",
+      "word": "греческий",
+      "valid": true,
+      "tags": [
+        "ADJ:Posit:Masc:Nom",
+        "ADJ:Posit:Masc:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-93",
+      "lang": "ru",
+      "word": "занимался",
+      "valid": true,
+      "tags": [
+        "VB:Past:INTR:IMPFV:Masc"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-94",
+      "lang": "ru",
+      "word": "постепенно",
+      "valid": true,
+      "tags": [
+        "ADJ:Short:Neut",
+        "ADV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-95",
+      "lang": "ru",
+      "word": "разницы",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Fem:PL:Nom",
+        "NN:Inanim:Fem:PL:V",
+        "NN:Inanim:Fem:Sin:R"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-96",
+      "lang": "ru",
+      "word": "ходили",
+      "valid": true,
+      "tags": [
+        "VB:Past:INTR:IMPFV:PL"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-97",
+      "lang": "ru",
+      "word": "запугать",
+      "valid": true,
+      "tags": [
+        "VB:INF:TRANS:PFV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-98",
+      "lang": "ru",
+      "word": "знакомо",
+      "valid": true,
+      "tags": [
+        "ADJ:Short:Neut"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-99",
+      "lang": "ru",
+      "word": "компьютером",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Masc:Sin:T"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-100",
+      "lang": "ru",
+      "word": "пришлось",
+      "valid": true,
+      "tags": [
+        "VB:Past:INTR:PFV:Neut"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-101",
+      "lang": "ru",
+      "word": "тюрьмы",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Fem:PL:Nom",
+        "NN:Inanim:Fem:PL:V",
+        "NN:Inanim:Fem:Sin:R"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-102",
+      "lang": "ru",
+      "word": "паспорта",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Masc:PL:Nom",
+        "NN:Inanim:Masc:PL:V",
+        "NN:Inanim:Masc:Sin:R"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-103",
+      "lang": "ru",
+      "word": "повторил",
+      "valid": true,
+      "tags": [
+        "VB:Past:TRANS:PFV:Masc"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-104",
+      "lang": "ru",
+      "word": "клянусь",
+      "valid": true,
+      "tags": [
+        "VB:Real:INTR:IMPFV:Sin:P1"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-105",
+      "lang": "ru",
+      "word": "недавно",
+      "valid": true,
+      "tags": [
+        "ADV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-106",
+      "lang": "ru",
+      "word": "указал",
+      "valid": true,
+      "tags": [
+        "VB:Past:TRANS:PFV:Masc"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-107",
+      "lang": "ru",
+      "word": "справедливо",
+      "valid": true,
+      "tags": [
+        "ADJ:Short:Neut",
+        "ADV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-108",
+      "lang": "ru",
+      "word": "годами",
+      "valid": true,
+      "tags": [
+        "ADV",
+        "NN:Inanim:Masc:PL:T"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-109",
+      "lang": "ru",
+      "word": "поверили",
+      "valid": true,
+      "tags": [
+        "VB:Past:INTR:PFV:PL",
+        "VB:Past:TRANS:PFV:PL"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-110",
+      "lang": "ru",
+      "word": "впустую",
+      "valid": true,
+      "tags": [
+        "ADV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-111",
+      "lang": "ru",
+      "word": "вернуть",
+      "valid": true,
+      "tags": [
+        "VB:INF:TRANS:PFV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-112",
+      "lang": "ru",
+      "word": "автобусной",
+      "valid": true,
+      "tags": [
+        "ADJ:Posit:Fem:D",
+        "ADJ:Posit:Fem:P",
+        "ADJ:Posit:Fem:R",
+        "ADJ:Posit:Fem:T"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-113",
+      "lang": "ru",
+      "word": "пятого",
+      "valid": true,
+      "tags": [
+        "Ord:Masc:R",
+        "Ord:Masc:V",
+        "Ord:Neut:R"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-114",
+      "lang": "ru",
+      "word": "свободы",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Fem:PL:Nom",
+        "NN:Inanim:Fem:PL:V",
+        "NN:Inanim:Fem:Sin:R"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-115",
+      "lang": "ru",
+      "word": "скучаем",
+      "valid": true,
+      "tags": [
+        "VB:Real:INTR:IMPFV:PL:P1"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-116",
+      "lang": "ru",
+      "word": "бросили",
+      "valid": true,
+      "tags": [
+        "VB:Past:TRANS:PFV:PL"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-117",
+      "lang": "ru",
+      "word": "задумался",
+      "valid": true,
+      "tags": [
+        "VB:Past:INTR:PFV:Masc"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-118",
+      "lang": "ru",
+      "word": "обязанности",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Fem:PL:Nom",
+        "NN:Inanim:Fem:PL:V",
+        "NN:Inanim:Fem:Sin:D",
+        "NN:Inanim:Fem:Sin:P",
+        "NN:Inanim:Fem:Sin:R"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-119",
+      "lang": "ru",
+      "word": "выражение",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Neut:Sin:Nom",
+        "NN:Inanim:Neut:Sin:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-120",
+      "lang": "ru",
+      "word": "анекдоты",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Masc:PL:Nom",
+        "NN:Inanim:Masc:PL:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-121",
+      "lang": "ru",
+      "word": "ручкой",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Fem:Sin:T"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-122",
+      "lang": "ru",
+      "word": "целовать",
+      "valid": true,
+      "tags": [
+        "VB:INF:TRANS:IMPFV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-123",
+      "lang": "ru",
+      "word": "романа",
+      "valid": true,
+      "tags": [
+        "NN:Fam:Masc:Sin:R",
+        "NN:Fam:Masc:Sin:V",
+        "NN:Inanim:Masc:Sin:R",
+        "NN:Name:Fem:Sin:Nom",
+        "NN:Name:Masc:Sin:R",
+        "NN:Name:Masc:Sin:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-124",
+      "lang": "ru",
+      "word": "страшная",
+      "valid": true,
+      "tags": [
+        "ADJ:Posit:Fem:Nom"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-125",
+      "lang": "ru",
+      "word": "старается",
+      "valid": true,
+      "tags": [
+        "VB:Real:INTR:IMPFV:Sin:P3"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-126",
+      "lang": "ru",
+      "word": "близнец",
+      "valid": true,
+      "tags": [
+        "NN:Anim:Masc:Sin:Nom"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-127",
+      "lang": "ru",
+      "word": "хорошенько",
+      "valid": true,
+      "tags": [
+        "ADV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-128",
+      "lang": "ru",
+      "word": "наказание",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Neut:Sin:Nom",
+        "NN:Inanim:Neut:Sin:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-129",
+      "lang": "ru",
+      "word": "заметит",
+      "valid": true,
+      "tags": [
+        "VB:Fut:TRANS:PFV:Sin:P3"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-130",
+      "lang": "ru",
+      "word": "пришлось",
+      "valid": true,
+      "tags": [
+        "VB:Past:INTR:PFV:Neut"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-131",
+      "lang": "ru",
+      "word": "смертельно",
+      "valid": true,
+      "tags": [
+        "ADJ:Short:Neut",
+        "ADV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-132",
+      "lang": "ru",
+      "word": "словно",
+      "valid": true,
+      "tags": [
+        "CONJ",
+        "PARTICLE"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-133",
+      "lang": "ru",
+      "word": "ошибкой",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Fem:Sin:T"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-134",
+      "lang": "ru",
+      "word": "возникает",
+      "valid": true,
+      "tags": [
+        "VB:Real:INTR:IMPFV:Sin:P3"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-135",
+      "lang": "ru",
+      "word": "кричит",
+      "valid": true,
+      "tags": [
+        "VB:Real:INTR:IMPFV:Sin:P3"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-136",
+      "lang": "ru",
+      "word": "изучать",
+      "valid": true,
+      "tags": [
+        "VB:INF:TRANS:IMPFV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-137",
+      "lang": "ru",
+      "word": "украины",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Fem:Sin:R"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-138",
+      "lang": "ru",
+      "word": "возражать",
+      "valid": true,
+      "tags": [
+        "VB:INF:INTR:IMPFV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-139",
+      "lang": "ru",
+      "word": "комиксы",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Masc:PL:Nom",
+        "NN:Inanim:Masc:PL:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-140",
+      "lang": "ru",
+      "word": "привели",
+      "valid": true,
+      "tags": [
+        "VB:Past:TRANS:PFV:PL"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-141",
+      "lang": "ru",
+      "word": "детстве",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Neut:Sin:P"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-142",
+      "lang": "ru",
+      "word": "неплохо",
+      "valid": true,
+      "tags": [
+        "ADJ:Short:Neut",
+        "ADV",
+        "PRDC"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-143",
+      "lang": "ru",
+      "word": "пожалуйста",
+      "valid": true,
+      "tags": [
+        "PARTICLE",
+        "PRDC"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-144",
+      "lang": "ru",
+      "word": "хорошему",
+      "valid": true,
+      "tags": [
+        "ADJ:Posit:Masc:D",
+        "ADJ:Posit:Neut:D",
+        "ADJ:Sup:Masc:D",
+        "ADJ:Sup:Neut:D"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-145",
+      "lang": "ru",
+      "word": "журнал",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Masc:Sin:Nom",
+        "NN:Inanim:Masc:Sin:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-146",
+      "lang": "ru",
+      "word": "станцию",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Fem:Sin:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-147",
+      "lang": "ru",
+      "word": "писателя",
+      "valid": true,
+      "tags": [
+        "NN:Anim:Masc:Sin:R",
+        "NN:Anim:Masc:Sin:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-148",
+      "lang": "ru",
+      "word": "историей",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Fem:Sin:T"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-149",
+      "lang": "ru",
+      "word": "верьте",
+      "valid": true,
+      "tags": [
+        "VB:IMP:INTR:IMPFV:PL:P2"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-150",
+      "lang": "ru",
+      "word": "донести",
+      "valid": true,
+      "tags": [
+        "VB:INF:TRANS:PFV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-151",
+      "lang": "ru",
+      "word": "наблюдают",
+      "valid": true,
+      "tags": [
+        "VB:Real:TRANS:IMPFV:PL:P3"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-152",
+      "lang": "ru",
+      "word": "здоровы",
+      "valid": true,
+      "tags": [
+        "ADJ:Short:PL",
+        "NN:Fam:PL:Nom"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-153",
+      "lang": "ru",
+      "word": "услышали",
+      "valid": true,
+      "tags": [
+        "VB:Past:TRANS:PFV:PL"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-154",
+      "lang": "ru",
+      "word": "уговорить",
+      "valid": true,
+      "tags": [
+        "VB:INF:TRANS:PFV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-155",
+      "lang": "ru",
+      "word": "покинула",
+      "valid": true,
+      "tags": [
+        "VB:Past:TRANS:PFV:Fem"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-156",
+      "lang": "ru",
+      "word": "уговорить",
+      "valid": true,
+      "tags": [
+        "VB:INF:TRANS:PFV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-157",
+      "lang": "ru",
+      "word": "выборы",
+      "valid": true,
+      "tags": [
+        "NN:Inanim::PL:Nom",
+        "NN:Inanim::PL:V",
+        "NN:Inanim:Masc:PL:Nom",
+        "NN:Inanim:Masc:PL:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-158",
+      "lang": "ru",
+      "word": "незаконно",
+      "valid": true,
+      "tags": [
+        "ADJ:Short:Neut",
+        "ADV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-159",
+      "lang": "ru",
+      "word": "иностранцев",
+      "valid": true,
+      "tags": [
+        "NN:Anim:Masc:PL:R",
+        "NN:Anim:Masc:PL:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-160",
+      "lang": "ru",
+      "word": "остальное",
+      "valid": true,
+      "tags": [
+        "ADJ:MPR:Neut:Nom",
+        "ADJ:MPR:Neut:V",
+        "PNN:Sin:Nom",
+        "PNN:Sin:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-161",
+      "lang": "ru",
+      "word": "занятие",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Neut:Sin:Nom",
+        "NN:Inanim:Neut:Sin:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-162",
+      "lang": "ru",
+      "word": "широко",
+      "valid": true,
+      "tags": [
+        "ADJ:Short:Neut",
+        "ADV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-163",
+      "lang": "ru",
+      "word": "страницу",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Fem:Sin:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-164",
+      "lang": "ru",
+      "word": "половине",
+      "valid": true,
+      "tags": [
+        "NN:Anim:Fem:Sin:D",
+        "NN:Anim:Fem:Sin:P",
+        "NN:Inanim:Fem:Sin:D",
+        "NN:Inanim:Fem:Sin:P"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-165",
+      "lang": "ru",
+      "word": "пьяный",
+      "valid": true,
+      "tags": [
+        "ADJ:Posit:Masc:Nom",
+        "ADJ:Posit:Masc:V",
+        "NN:Anim:Masc:Sin:Nom"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-166",
+      "lang": "ru",
+      "word": "газеты",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Fem:PL:Nom",
+        "NN:Inanim:Fem:PL:V",
+        "NN:Inanim:Fem:Sin:R"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-167",
+      "lang": "ru",
+      "word": "уснуть",
+      "valid": true,
+      "tags": [
+        "VB:INF:INTR:PFV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-168",
+      "lang": "ru",
+      "word": "покинула",
+      "valid": true,
+      "tags": [
+        "VB:Past:TRANS:PFV:Fem"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-169",
+      "lang": "ru",
+      "word": "понимал",
+      "valid": true,
+      "tags": [
+        "VB:Past:TRANS:IMPFV:Masc"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-170",
+      "lang": "ru",
+      "word": "продолжайте",
+      "valid": true,
+      "tags": [
+        "VB:IMP:TRANS:IMPFV:PL:P2"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-171",
+      "lang": "ru",
+      "word": "внутрь",
+      "valid": true,
+      "tags": [
+        "ADV",
+        "PREP"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-172",
+      "lang": "ru",
+      "word": "заподозрил",
+      "valid": true,
+      "tags": [
+        "VB:Past:TRANS:PFV:Masc"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-173",
+      "lang": "ru",
+      "word": "заключается",
+      "valid": true,
+      "tags": [
+        "VB:Real:INTR:IMPFV:Sin:P3"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-174",
+      "lang": "ru",
+      "word": "похоронах",
+      "valid": true,
+      "tags": [
+        "NN:Inanim::PL:P"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-175",
+      "lang": "ru",
+      "word": "ресторан",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Masc:Sin:Nom",
+        "NN:Inanim:Masc:Sin:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-176",
+      "lang": "ru",
+      "word": "заключается",
+      "valid": true,
+      "tags": [
+        "VB:Real:INTR:IMPFV:Sin:P3"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-177",
+      "lang": "ru",
+      "word": "предложил",
+      "valid": true,
+      "tags": [
+        "VB:Past:TRANS:PFV:Masc"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-178",
+      "lang": "ru",
+      "word": "ответе",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Masc:Sin:P"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-179",
+      "lang": "ru",
+      "word": "мужчин",
+      "valid": true,
+      "tags": [
+        "NN:Anim:Masc:PL:R",
+        "NN:Anim:Masc:PL:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-180",
+      "lang": "ru",
+      "word": "бассейне",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Masc:Sin:P"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-181",
+      "lang": "ru",
+      "word": "составляет",
+      "valid": true,
+      "tags": [
+        "VB:Real:TRANS:IMPFV:Sin:P3"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-182",
+      "lang": "ru",
+      "word": "работал",
+      "valid": true,
+      "tags": [
+        "VB:Past:INTR:IMPFV:Masc"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-183",
+      "lang": "ru",
+      "word": "подумайте",
+      "valid": true,
+      "tags": [
+        "VB:IMP:INTR:PFV:PL:P2"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-184",
+      "lang": "ru",
+      "word": "срочно",
+      "valid": true,
+      "tags": [
+        "ADJ:Short:Neut",
+        "ADV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-185",
+      "lang": "ru",
+      "word": "уроков",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Masc:PL:R"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-186",
+      "lang": "ru",
+      "word": "работе",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Fem:Sin:D",
+        "NN:Inanim:Fem:Sin:P"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-187",
+      "lang": "ru",
+      "word": "входит",
+      "valid": true,
+      "tags": [
+        "VB:Real:INTR:IMPFV:Sin:P3"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-188",
+      "lang": "ru",
+      "word": "мокрый",
+      "valid": true,
+      "tags": [
+        "ADJ:Posit:Masc:Nom",
+        "ADJ:Posit:Masc:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-189",
+      "lang": "ru",
+      "word": "главный",
+      "valid": true,
+      "tags": [
+        "ADJ:Posit:Masc:Nom",
+        "ADJ:Posit:Masc:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-190",
+      "lang": "ru",
+      "word": "работаю",
+      "valid": true,
+      "tags": [
+        "VB:Real:INTR:IMPFV:Sin:P1"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-191",
+      "lang": "ru",
+      "word": "прекрасное",
+      "valid": true,
+      "tags": [
+        "ADJ:Posit:Neut:Nom",
+        "ADJ:Posit:Neut:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-192",
+      "lang": "ru",
+      "word": "аккуратно",
+      "valid": true,
+      "tags": [
+        "ADJ:Short:Neut",
+        "ADV"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-193",
+      "lang": "ru",
+      "word": "слушай",
+      "valid": true,
+      "tags": [
+        "VB:IMP:TRANS:IMPFV:Sin:P2"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-194",
+      "lang": "ru",
+      "word": "подойди",
+      "valid": true,
+      "tags": [
+        "VB:IMP:INTR:PFV:Sin:P2"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-195",
+      "lang": "ru",
+      "word": "энергии",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Fem:PL:Nom",
+        "NN:Inanim:Fem:PL:V",
+        "NN:Inanim:Fem:Sin:D",
+        "NN:Inanim:Fem:Sin:P",
+        "NN:Inanim:Fem:Sin:R"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-196",
+      "lang": "ru",
+      "word": "улыбку",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Fem:Sin:V"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-197",
+      "lang": "ru",
+      "word": "кончились",
+      "valid": true,
+      "tags": [
+        "VB:Past:INTR:PFV:PL"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-198",
+      "lang": "ru",
+      "word": "обществе",
+      "valid": true,
+      "tags": [
+        "NN:Inanim:Neut:Sin:P"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-199",
+      "lang": "ru",
+      "word": "поможем",
+      "valid": true,
+      "tags": [
+        "VB:Fut:INTR:PFV:PL:P1",
+        "VB:IMP:INTR:PFV:PL:P1"
+      ]
+    },
+    {
+      "id": "ru-spelling-transfer-200",
+      "lang": "ru",
+      "word": "звонишь",
+      "valid": true,
+      "tags": [
+        "VB:Real:INTR:IMPFV:Sin:P2"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-1",
+      "lang": "uk",
+      "word": "повільніше",
+      "valid": true,
+      "tags": [
+        "adj:n:v_kly:compc",
+        "adj:n:v_naz:compc",
+        "adj:n:v_zna:compc",
+        "adv:compc"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-2",
+      "lang": "uk",
+      "word": "побуду",
+      "valid": true,
+      "tags": [
+        "verb:perf:futr:s:1"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-3",
+      "lang": "uk",
+      "word": "приймаю",
+      "valid": true,
+      "tags": [
+        "verb:imperf:pres:s:1"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-4",
+      "lang": "uk",
+      "word": "запитаю",
+      "valid": true,
+      "tags": [
+        "verb:perf:futr:s:1"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-5",
+      "lang": "uk",
+      "word": "обіцянок",
+      "valid": true,
+      "tags": [
+        "noun:inanim:p:v_rod"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-6",
+      "lang": "uk",
+      "word": "розлютило",
+      "valid": true,
+      "tags": [
+        "verb:perf:past:n"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-7",
+      "lang": "uk",
+      "word": "записати",
+      "valid": true,
+      "tags": [
+        "verb:perf:inf"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-8",
+      "lang": "uk",
+      "word": "усякому",
+      "valid": true,
+      "tags": [
+        "adj:m:v_dav:&pron:gen",
+        "adj:m:v_mis:&pron:gen",
+        "adj:n:v_dav:&pron:gen",
+        "adj:n:v_mis:&pron:gen"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-9",
+      "lang": "uk",
+      "word": "вважати",
+      "valid": true,
+      "tags": [
+        "verb:imperf:inf"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-10",
+      "lang": "uk",
+      "word": "одягнула",
+      "valid": true,
+      "tags": [
+        "verb:perf:past:f"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-11",
+      "lang": "uk",
+      "word": "зупинці",
+      "valid": true,
+      "tags": [
+        "noun:inanim:f:v_dav",
+        "noun:inanim:f:v_mis"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-12",
+      "lang": "uk",
+      "word": "поїздом",
+      "valid": true,
+      "tags": [
+        "noun:inanim:m:v_oru"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-13",
+      "lang": "uk",
+      "word": "непроста",
+      "valid": true,
+      "tags": [
+        "adj:f:v_kly",
+        "adj:f:v_naz"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-14",
+      "lang": "uk",
+      "word": "маленькі",
+      "valid": true,
+      "tags": [
+        "adj:p:v_kly",
+        "adj:p:v_naz",
+        "adj:p:v_zna:rinanim"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-15",
+      "lang": "uk",
+      "word": "довести",
+      "valid": true,
+      "tags": [
+        "verb:perf:inf"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-16",
+      "lang": "uk",
+      "word": "відразу",
+      "valid": true,
+      "tags": [
+        "adv",
+        "noun:inanim:f:v_zna"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-17",
+      "lang": "uk",
+      "word": "сиділи",
+      "valid": true,
+      "tags": [
+        "verb:imperf:past:p"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-18",
+      "lang": "uk",
+      "word": "розбудити",
+      "valid": true,
+      "tags": [
+        "verb:perf:inf"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-19",
+      "lang": "uk",
+      "word": "таємницю",
+      "valid": true,
+      "tags": [
+        "noun:inanim:f:v_zna"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-20",
+      "lang": "uk",
+      "word": "зарплатню",
+      "valid": true,
+      "tags": [
+        "noun:inanim:f:v_zna"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-21",
+      "lang": "uk",
+      "word": "сорому",
+      "valid": true,
+      "tags": [
+        "noun:inanim:m:v_dav",
+        "noun:inanim:m:v_mis",
+        "noun:inanim:m:v_rod"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-22",
+      "lang": "uk",
+      "word": "настроєний",
+      "valid": true,
+      "tags": [
+        "adj:m:v_kly:&adjp:pasv:perf",
+        "adj:m:v_naz:&adjp:pasv:perf",
+        "adj:m:v_zna:rinanim:&adjp:pasv:perf"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-23",
+      "lang": "uk",
+      "word": "повечеряли",
+      "valid": true,
+      "tags": [
+        "verb:perf:past:p"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-24",
+      "lang": "uk",
+      "word": "ненавиділа",
+      "valid": true,
+      "tags": [
+        "verb:imperf:past:f"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-25",
+      "lang": "uk",
+      "word": "американці",
+      "valid": true,
+      "tags": [
+        "noun:anim:f:v_dav",
+        "noun:anim:f:v_mis",
+        "noun:anim:m:v_mis",
+        "noun:anim:p:v_kly",
+        "noun:anim:p:v_naz",
+        "noun:anim:p:v_zna:rare",
+        "noun:inanim:f:v_dav",
+        "noun:inanim:f:v_mis"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-26",
+      "lang": "uk",
+      "word": "обговорюємо",
+      "valid": true,
+      "tags": [
+        "verb:imperf:pres:p:1"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-27",
+      "lang": "uk",
+      "word": "зраджував",
+      "valid": true,
+      "tags": [
+        "verb:imperf:past:m"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-28",
+      "lang": "uk",
+      "word": "картина",
+      "valid": true,
+      "tags": [
+        "noun:inanim:f:v_naz"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-29",
+      "lang": "uk",
+      "word": "застрягла",
+      "valid": true,
+      "tags": [
+        "adj:f:v_kly:&adjp:actv:perf",
+        "adj:f:v_naz:&adjp:actv:perf",
+        "verb:perf:past:f"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-30",
+      "lang": "uk",
+      "word": "яблуко",
+      "valid": true,
+      "tags": [
+        "noun:inanim:n:v_kly",
+        "noun:inanim:n:v_naz",
+        "noun:inanim:n:v_zna"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-31",
+      "lang": "uk",
+      "word": "знімати",
+      "valid": true,
+      "tags": [
+        "verb:imperf:inf"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-32",
+      "lang": "uk",
+      "word": "пропоную",
+      "valid": true,
+      "tags": [
+        "verb:imperf:pres:s:1"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-33",
+      "lang": "uk",
+      "word": "восьмому",
+      "valid": true,
+      "tags": [
+        "adj:m:v_dav:&numr",
+        "adj:m:v_mis:&numr",
+        "adj:n:v_dav:&numr",
+        "adj:n:v_mis:&numr"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-34",
+      "lang": "uk",
+      "word": "серйозні",
+      "valid": true,
+      "tags": [
+        "adj:p:v_kly:compb",
+        "adj:p:v_naz:compb",
+        "adj:p:v_zna:rinanim:compb"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-35",
+      "lang": "uk",
+      "word": "відправився",
+      "valid": true,
+      "tags": [
+        "verb:rev:perf:past:m"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-36",
+      "lang": "uk",
+      "word": "зубного",
+      "valid": true,
+      "tags": [
+        "adj:m:v_rod",
+        "adj:m:v_zna:ranim",
+        "adj:n:v_rod"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-37",
+      "lang": "uk",
+      "word": "скаржитися",
+      "valid": true,
+      "tags": [
+        "verb:rev:imperf:inf"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-38",
+      "lang": "uk",
+      "word": "капелюх",
+      "valid": true,
+      "tags": [
+        "noun:inanim:m:v_naz",
+        "noun:inanim:m:v_zna"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-39",
+      "lang": "uk",
+      "word": "кращій",
+      "valid": true,
+      "tags": [
+        "adj:f:v_dav:compc",
+        "adj:f:v_mis:compc"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-40",
+      "lang": "uk",
+      "word": "останніх",
+      "valid": true,
+      "tags": [
+        "adj:p:v_mis:compb",
+        "adj:p:v_rod:compb",
+        "adj:p:v_zna:ranim:compb"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-41",
+      "lang": "uk",
+      "word": "підписати",
+      "valid": true,
+      "tags": [
+        "verb:perf:inf"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-42",
+      "lang": "uk",
+      "word": "зазнати",
+      "valid": true,
+      "tags": [
+        "verb:perf:inf"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-43",
+      "lang": "uk",
+      "word": "кажіть",
+      "valid": true,
+      "tags": [
+        "verb:imperf:impr:p:2"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-44",
+      "lang": "uk",
+      "word": "хворий",
+      "valid": true,
+      "tags": [
+        "adj:m:v_kly:compb",
+        "adj:m:v_naz:compb",
+        "adj:m:v_zna:rinanim:compb",
+        "noun:anim:m:v_kly",
+        "noun:anim:m:v_naz"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-45",
+      "lang": "uk",
+      "word": "улюбленим",
+      "valid": true,
+      "tags": [
+        "adj:m:v_oru:&adjp:pasv:perf:compb",
+        "adj:n:v_oru:&adjp:pasv:perf:compb",
+        "adj:p:v_dav:&adjp:pasv:perf:compb"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-46",
+      "lang": "uk",
+      "word": "обрали",
+      "valid": true,
+      "tags": [
+        "verb:perf:past:p"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-47",
+      "lang": "uk",
+      "word": "капелюшок",
+      "valid": true,
+      "tags": [
+        "noun:inanim:m:v_naz",
+        "noun:inanim:m:v_zna"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-48",
+      "lang": "uk",
+      "word": "огидно",
+      "valid": true,
+      "tags": [
+        "adv:compb"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-49",
+      "lang": "uk",
+      "word": "зачинила",
+      "valid": true,
+      "tags": [
+        "verb:perf:past:f"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-50",
+      "lang": "uk",
+      "word": "гостях",
+      "valid": true,
+      "tags": [
+        "noun:anim:p:v_mis"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-51",
+      "lang": "uk",
+      "word": "покращилася",
+      "valid": true,
+      "tags": [
+        "verb:rev:perf:past:f"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-52",
+      "lang": "uk",
+      "word": "справдилися",
+      "valid": true,
+      "tags": [
+        "verb:rev:perf:past:p"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-53",
+      "lang": "uk",
+      "word": "захочу",
+      "valid": true,
+      "tags": [
+        "verb:perf:futr:s:1"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-54",
+      "lang": "uk",
+      "word": "вродлива",
+      "valid": true,
+      "tags": [
+        "adj:f:v_kly:compb",
+        "adj:f:v_naz:compb"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-55",
+      "lang": "uk",
+      "word": "інстинктам",
+      "valid": true,
+      "tags": [
+        "noun:inanim:p:v_dav"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-56",
+      "lang": "uk",
+      "word": "незабаром",
+      "valid": true,
+      "tags": [
+        "adv"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-57",
+      "lang": "uk",
+      "word": "гарніший",
+      "valid": true,
+      "tags": [
+        "adj:m:v_kly:compc",
+        "adj:m:v_naz:compc",
+        "adj:m:v_zna:rinanim:compc"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-58",
+      "lang": "uk",
+      "word": "пташку",
+      "valid": true,
+      "tags": [
+        "noun:anim:f:v_zna"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-59",
+      "lang": "uk",
+      "word": "ближче",
+      "valid": true,
+      "tags": [
+        "adj:n:v_kly:compc",
+        "adj:n:v_naz:compc",
+        "adj:n:v_zna:compc",
+        "adv:compc"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-60",
+      "lang": "uk",
+      "word": "збираються",
+      "valid": true,
+      "tags": [
+        "verb:rev:imperf:pres:p:3"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-61",
+      "lang": "uk",
+      "word": "дражнили",
+      "valid": true,
+      "tags": [
+        "verb:imperf:past:p"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-62",
+      "lang": "uk",
+      "word": "пообідати",
+      "valid": true,
+      "tags": [
+        "verb:perf:inf"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-63",
+      "lang": "uk",
+      "word": "зачекаємо",
+      "valid": true,
+      "tags": [
+        "verb:perf:futr:p:1"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-64",
+      "lang": "uk",
+      "word": "пирога",
+      "valid": true,
+      "tags": [
+        "noun:inanim:m:v_rod",
+        "noun:inanim:m:v_zna:var"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-65",
+      "lang": "uk",
+      "word": "поставлю",
+      "valid": true,
+      "tags": [
+        "verb:perf:futr:s:1"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-66",
+      "lang": "uk",
+      "word": "поспішав",
+      "valid": true,
+      "tags": [
+        "verb:imperf:past:m"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-67",
+      "lang": "uk",
+      "word": "екстраверт",
+      "valid": true,
+      "tags": [
+        "noun:anim:m:v_naz"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-68",
+      "lang": "uk",
+      "word": "усвідомлює",
+      "valid": true,
+      "tags": [
+        "verb:imperf:pres:s:3"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-69",
+      "lang": "uk",
+      "word": "спричиняє",
+      "valid": true,
+      "tags": [
+        "verb:imperf:pres:s:3"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-70",
+      "lang": "uk",
+      "word": "однакові",
+      "valid": true,
+      "tags": [
+        "adj:p:v_kly",
+        "adj:p:v_naz",
+        "adj:p:v_zna:rinanim"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-71",
+      "lang": "uk",
+      "word": "побажати",
+      "valid": true,
+      "tags": [
+        "verb:perf:inf"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-72",
+      "lang": "uk",
+      "word": "розповіла",
+      "valid": true,
+      "tags": [
+        "verb:perf:past:f"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-73",
+      "lang": "uk",
+      "word": "поклади",
+      "valid": true,
+      "tags": [
+        "noun:inanim:p:v_kly",
+        "noun:inanim:p:v_naz",
+        "noun:inanim:p:v_zna",
+        "verb:perf:impr:s:2"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-74",
+      "lang": "uk",
+      "word": "втратив",
+      "valid": true,
+      "tags": [
+        "verb:perf:past:m"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-75",
+      "lang": "uk",
+      "word": "дешеві",
+      "valid": true,
+      "tags": [
+        "adj:p:v_kly:compb",
+        "adj:p:v_naz:compb",
+        "adj:p:v_zna:rinanim:compb"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-76",
+      "lang": "uk",
+      "word": "літають",
+      "valid": true,
+      "tags": [
+        "verb:imperf:pres:p:3"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-77",
+      "lang": "uk",
+      "word": "уперед",
+      "valid": true,
+      "tags": [
+        "adv"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-78",
+      "lang": "uk",
+      "word": "талановиті",
+      "valid": true,
+      "tags": [
+        "adj:p:v_kly:compb",
+        "adj:p:v_naz:compb",
+        "adj:p:v_zna:rinanim:compb"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-79",
+      "lang": "uk",
+      "word": "безкоштовно",
+      "valid": true,
+      "tags": [
+        "adv"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-80",
+      "lang": "uk",
+      "word": "передала",
+      "valid": true,
+      "tags": [
+        "verb:perf:past:f"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-81",
+      "lang": "uk",
+      "word": "покінчила",
+      "valid": true,
+      "tags": [
+        "verb:perf:past:f"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-82",
+      "lang": "uk",
+      "word": "перекладача",
+      "valid": true,
+      "tags": [
+        "noun:anim:m:v_rod",
+        "noun:anim:m:v_zna"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-83",
+      "lang": "uk",
+      "word": "купатися",
+      "valid": true,
+      "tags": [
+        "verb:rev:imperf:inf"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-84",
+      "lang": "uk",
+      "word": "поїхав",
+      "valid": true,
+      "tags": [
+        "verb:perf:past:m"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-85",
+      "lang": "uk",
+      "word": "зупинка",
+      "valid": true,
+      "tags": [
+        "noun:inanim:f:v_naz"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-86",
+      "lang": "uk",
+      "word": "перестаньте",
+      "valid": true,
+      "tags": [
+        "verb:perf:impr:p:2"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-87",
+      "lang": "uk",
+      "word": "різницю",
+      "valid": true,
+      "tags": [
+        "noun:inanim:f:v_zna"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-88",
+      "lang": "uk",
+      "word": "камеру",
+      "valid": true,
+      "tags": [
+        "noun:inanim:f:v_zna"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-89",
+      "lang": "uk",
+      "word": "спробували",
+      "valid": true,
+      "tags": [
+        "verb:perf:past:p"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-90",
+      "lang": "uk",
+      "word": "ніякого",
+      "valid": true,
+      "tags": [
+        "adj:m:v_rod:&pron:neg",
+        "adj:m:v_zna:ranim:&pron:neg",
+        "adj:n:v_rod:&pron:neg"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-91",
+      "lang": "uk",
+      "word": "напиши",
+      "valid": true,
+      "tags": [
+        "verb:perf:impr:s:2"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-92",
+      "lang": "uk",
+      "word": "обіцяла",
+      "valid": true,
+      "tags": [
+        "verb:imperf:past:f"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-93",
+      "lang": "uk",
+      "word": "людини",
+      "valid": true,
+      "tags": [
+        "noun:anim:f:v_rod",
+        "noun:anim:p:v_kly",
+        "noun:anim:p:v_naz",
+        "noun:anim:p:v_zna"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-94",
+      "lang": "uk",
+      "word": "помити",
+      "valid": true,
+      "tags": [
+        "verb:perf:inf"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-95",
+      "lang": "uk",
+      "word": "найвищий",
+      "valid": true,
+      "tags": [
+        "adj:m:v_kly:comps",
+        "adj:m:v_naz:comps",
+        "adj:m:v_zna:rinanim:comps"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-96",
+      "lang": "uk",
+      "word": "сумуєте",
+      "valid": true,
+      "tags": [
+        "verb:imperf:pres:p:2"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-97",
+      "lang": "uk",
+      "word": "проблема",
+      "valid": true,
+      "tags": [
+        "noun:inanim:f:v_naz"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-98",
+      "lang": "uk",
+      "word": "справжнього",
+      "valid": true,
+      "tags": [
+        "adj:m:v_rod:compb",
+        "adj:m:v_zna:ranim:compb",
+        "adj:n:v_rod:compb"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-99",
+      "lang": "uk",
+      "word": "класах",
+      "valid": true,
+      "tags": [
+        "noun:inanim:p:v_mis"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-100",
+      "lang": "uk",
+      "word": "кожному",
+      "valid": true,
+      "tags": [
+        "adj:m:v_dav:&pron:gen",
+        "adj:m:v_mis:&pron:gen",
+        "adj:n:v_dav:&pron:gen",
+        "adj:n:v_mis:&pron:gen",
+        "noun:anim:m:v_dav:&pron:gen",
+        "noun:anim:m:v_mis:&pron:gen"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-101",
+      "lang": "uk",
+      "word": "знервованим",
+      "valid": true,
+      "tags": [
+        "adj:m:v_oru:&adjp:pasv:perf:compb",
+        "adj:n:v_oru:&adjp:pasv:perf:compb",
+        "adj:p:v_dav:&adjp:pasv:perf:compb"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-102",
+      "lang": "uk",
+      "word": "машини",
+      "valid": true,
+      "tags": [
+        "noun:inanim:f:v_rod",
+        "noun:inanim:p:v_kly",
+        "noun:inanim:p:v_naz",
+        "noun:inanim:p:v_zna"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-103",
+      "lang": "uk",
+      "word": "вдячна",
+      "valid": true,
+      "tags": [
+        "adj:f:v_kly:compb",
+        "adj:f:v_naz:compb"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-104",
+      "lang": "uk",
+      "word": "вчаться",
+      "valid": true,
+      "tags": [
+        "verb:rev:imperf:pres:p:3"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-105",
+      "lang": "uk",
+      "word": "марнуєте",
+      "valid": true,
+      "tags": [
+        "verb:imperf:pres:p:2"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-106",
+      "lang": "uk",
+      "word": "скасувала",
+      "valid": true,
+      "tags": [
+        "verb:perf:past:f"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-107",
+      "lang": "uk",
+      "word": "забули",
+      "valid": true,
+      "tags": [
+        "verb:perf:past:p"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-108",
+      "lang": "uk",
+      "word": "доглядаю",
+      "valid": true,
+      "tags": [
+        "verb:imperf:pres:s:1"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-109",
+      "lang": "uk",
+      "word": "полюбляє",
+      "valid": true,
+      "tags": [
+        "verb:imperf:pres:s:3"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-110",
+      "lang": "uk",
+      "word": "поверну",
+      "valid": true,
+      "tags": [
+        "verb:perf:futr:s:1"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-111",
+      "lang": "uk",
+      "word": "зробіть",
+      "valid": true,
+      "tags": [
+        "verb:perf:impr:p:2"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-112",
+      "lang": "uk",
+      "word": "автобусі",
+      "valid": true,
+      "tags": [
+        "noun:inanim:m:v_mis"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-113",
+      "lang": "uk",
+      "word": "поранили",
+      "valid": true,
+      "tags": [
+        "verb:perf:past:p"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-114",
+      "lang": "uk",
+      "word": "біологію",
+      "valid": true,
+      "tags": [
+        "noun:inanim:f:v_zna"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-115",
+      "lang": "uk",
+      "word": "пацієнтів",
+      "valid": true,
+      "tags": [
+        "noun:anim:p:v_rod",
+        "noun:anim:p:v_zna"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-116",
+      "lang": "uk",
+      "word": "червонієш",
+      "valid": true,
+      "tags": [
+        "verb:imperf:pres:s:2"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-117",
+      "lang": "uk",
+      "word": "встановили",
+      "valid": true,
+      "tags": [
+        "verb:perf:past:p"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-118",
+      "lang": "uk",
+      "word": "поквапишся",
+      "valid": true,
+      "tags": [
+        "verb:rev:perf:futr:s:2"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-119",
+      "lang": "uk",
+      "word": "любила",
+      "valid": true,
+      "tags": [
+        "verb:imperf:past:f"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-120",
+      "lang": "uk",
+      "word": "людства",
+      "valid": true,
+      "tags": [
+        "noun:inanim:n:v_rod"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-121",
+      "lang": "uk",
+      "word": "зателефонує",
+      "valid": true,
+      "tags": [
+        "verb:perf:futr:s:3"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-122",
+      "lang": "uk",
+      "word": "наймолодший",
+      "valid": true,
+      "tags": [
+        "adj:m:v_kly:comps",
+        "adj:m:v_naz:comps",
+        "adj:m:v_zna:rinanim:comps"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-123",
+      "lang": "uk",
+      "word": "підліток",
+      "valid": true,
+      "tags": [
+        "noun:anim:m:v_naz",
+        "noun:anim:p:v_rod",
+        "noun:anim:p:v_zna"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-124",
+      "lang": "uk",
+      "word": "погано",
+      "valid": true,
+      "tags": [
+        "adv:compb:&predic"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-125",
+      "lang": "uk",
+      "word": "квітку",
+      "valid": true,
+      "tags": [
+        "noun:inanim:f:v_zna"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-126",
+      "lang": "uk",
+      "word": "захочеш",
+      "valid": true,
+      "tags": [
+        "verb:perf:futr:s:2"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-127",
+      "lang": "uk",
+      "word": "почистити",
+      "valid": true,
+      "tags": [
+        "verb:perf:inf"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-128",
+      "lang": "uk",
+      "word": "тканина",
+      "valid": true,
+      "tags": [
+        "noun:inanim:f:v_naz"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-129",
+      "lang": "uk",
+      "word": "президент",
+      "valid": true,
+      "tags": [
+        "noun:anim:m:v_naz"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-130",
+      "lang": "uk",
+      "word": "літаку",
+      "valid": true,
+      "tags": [
+        "noun:inanim:m:v_dav",
+        "noun:inanim:m:v_kly",
+        "noun:inanim:m:v_mis"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-131",
+      "lang": "uk",
+      "word": "елегантна",
+      "valid": true,
+      "tags": [
+        "adj:f:v_kly:compb",
+        "adj:f:v_naz:compb"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-132",
+      "lang": "uk",
+      "word": "дозволяв",
+      "valid": true,
+      "tags": [
+        "verb:imperf:past:m"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-133",
+      "lang": "uk",
+      "word": "побачимо",
+      "valid": true,
+      "tags": [
+        "verb:perf:futr:p:1"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-134",
+      "lang": "uk",
+      "word": "японці",
+      "valid": true,
+      "tags": [
+        "noun:anim:f:v_dav",
+        "noun:anim:f:v_mis",
+        "noun:anim:m:v_mis",
+        "noun:anim:p:v_kly",
+        "noun:anim:p:v_naz",
+        "noun:anim:p:v_zna:rare"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-135",
+      "lang": "uk",
+      "word": "розповідати",
+      "valid": true,
+      "tags": [
+        "verb:imperf:inf"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-136",
+      "lang": "uk",
+      "word": "дивлюсь",
+      "valid": true,
+      "tags": [
+        "verb:rev:imperf:pres:s:1"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-137",
+      "lang": "uk",
+      "word": "складу",
+      "valid": true,
+      "tags": [
+        "noun:inanim:m:v_dav",
+        "noun:inanim:m:v_mis",
+        "noun:inanim:m:v_rod",
+        "verb:perf:futr:s:1"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-138",
+      "lang": "uk",
+      "word": "усміхається",
+      "valid": true,
+      "tags": [
+        "verb:rev:imperf:pres:s:3"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-139",
+      "lang": "uk",
+      "word": "джинсах",
+      "valid": true,
+      "tags": [
+        "noun:inanim:p:v_mis:ns"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-140",
+      "lang": "uk",
+      "word": "поговорити",
+      "valid": true,
+      "tags": [
+        "verb:perf:inf"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-141",
+      "lang": "uk",
+      "word": "вершків",
+      "valid": true,
+      "tags": [
+        "noun:inanim:p:v_rod"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-142",
+      "lang": "uk",
+      "word": "ввімкненим",
+      "valid": true,
+      "tags": [
+        "adj:m:v_oru:&adjp:pasv:perf",
+        "adj:n:v_oru:&adjp:pasv:perf",
+        "adj:p:v_dav:&adjp:pasv:perf"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-143",
+      "lang": "uk",
+      "word": "снідала",
+      "valid": true,
+      "tags": [
+        "verb:imperf:past:f"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-144",
+      "lang": "uk",
+      "word": "відчував",
+      "valid": true,
+      "tags": [
+        "verb:imperf:past:m"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-145",
+      "lang": "uk",
+      "word": "залишилися",
+      "valid": true,
+      "tags": [
+        "verb:rev:perf:past:p"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-146",
+      "lang": "uk",
+      "word": "працюють",
+      "valid": true,
+      "tags": [
+        "verb:imperf:pres:p:3"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-147",
+      "lang": "uk",
+      "word": "гаряча",
+      "valid": true,
+      "tags": [
+        "adj:f:v_kly:compb",
+        "adj:f:v_naz:compb"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-148",
+      "lang": "uk",
+      "word": "холоду",
+      "valid": true,
+      "tags": [
+        "noun:inanim:m:v_dav",
+        "noun:inanim:m:v_mis",
+        "noun:inanim:m:v_rod"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-149",
+      "lang": "uk",
+      "word": "ускладнення",
+      "valid": true,
+      "tags": [
+        "noun:inanim:n:v_kly",
+        "noun:inanim:n:v_naz",
+        "noun:inanim:n:v_rod",
+        "noun:inanim:n:v_zna",
+        "noun:inanim:p:v_kly",
+        "noun:inanim:p:v_naz",
+        "noun:inanim:p:v_zna"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-150",
+      "lang": "uk",
+      "word": "теорії",
+      "valid": true,
+      "tags": [
+        "noun:inanim:f:v_dav",
+        "noun:inanim:f:v_mis",
+        "noun:inanim:f:v_rod",
+        "noun:inanim:p:v_kly",
+        "noun:inanim:p:v_naz",
+        "noun:inanim:p:v_zna"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-151",
+      "lang": "uk",
+      "word": "холостяк",
+      "valid": false,
+      "tags": [
+        "noun:anim:m:v_naz:bad"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-152",
+      "lang": "uk",
+      "word": "інженером",
+      "valid": true,
+      "tags": [
+        "noun:anim:m:v_oru"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-153",
+      "lang": "uk",
+      "word": "мільйонів",
+      "valid": true,
+      "tags": [
+        "noun:inanim:p:v_rod:&numr"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-154",
+      "lang": "uk",
+      "word": "звільнитися",
+      "valid": true,
+      "tags": [
+        "verb:rev:perf:inf"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-155",
+      "lang": "uk",
+      "word": "сніданком",
+      "valid": true,
+      "tags": [
+        "noun:inanim:m:v_oru"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-156",
+      "lang": "uk",
+      "word": "спілкування",
+      "valid": true,
+      "tags": [
+        "noun:inanim:n:v_kly",
+        "noun:inanim:n:v_naz",
+        "noun:inanim:n:v_rod",
+        "noun:inanim:n:v_zna",
+        "noun:inanim:p:v_kly",
+        "noun:inanim:p:v_naz",
+        "noun:inanim:p:v_zna"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-157",
+      "lang": "uk",
+      "word": "діалект",
+      "valid": true,
+      "tags": [
+        "noun:inanim:m:v_naz",
+        "noun:inanim:m:v_zna"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-158",
+      "lang": "uk",
+      "word": "незабаром",
+      "valid": true,
+      "tags": [
+        "adv"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-159",
+      "lang": "uk",
+      "word": "почуваєтеся",
+      "valid": true,
+      "tags": [
+        "verb:rev:imperf:pres:p:2"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-160",
+      "lang": "uk",
+      "word": "напишіть",
+      "valid": true,
+      "tags": [
+        "verb:perf:impr:p:2"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-161",
+      "lang": "uk",
+      "word": "гладкою",
+      "valid": true,
+      "tags": [
+        "adj:f:v_oru:compb"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-162",
+      "lang": "uk",
+      "word": "побачення",
+      "valid": true,
+      "tags": [
+        "noun:inanim:n:v_kly",
+        "noun:inanim:n:v_naz",
+        "noun:inanim:n:v_rod",
+        "noun:inanim:n:v_zna",
+        "noun:inanim:p:v_kly",
+        "noun:inanim:p:v_naz",
+        "noun:inanim:p:v_zna"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-163",
+      "lang": "uk",
+      "word": "розлучилася",
+      "valid": true,
+      "tags": [
+        "verb:rev:perf:past:f"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-164",
+      "lang": "uk",
+      "word": "приблизно",
+      "valid": true,
+      "tags": [
+        "adv:compb"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-165",
+      "lang": "uk",
+      "word": "концерти",
+      "valid": true,
+      "tags": [
+        "noun:inanim:p:v_kly",
+        "noun:inanim:p:v_naz",
+        "noun:inanim:p:v_zna"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-166",
+      "lang": "uk",
+      "word": "склянки",
+      "valid": true,
+      "tags": [
+        "noun:inanim:f:v_rod",
+        "noun:inanim:p:v_kly",
+        "noun:inanim:p:v_naz",
+        "noun:inanim:p:v_zna"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-167",
+      "lang": "uk",
+      "word": "помилилися",
+      "valid": true,
+      "tags": [
+        "verb:rev:perf:past:p"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-168",
+      "lang": "uk",
+      "word": "почула",
+      "valid": true,
+      "tags": [
+        "verb:perf:past:f"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-169",
+      "lang": "uk",
+      "word": "встановив",
+      "valid": true,
+      "tags": [
+        "verb:perf:past:m"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-170",
+      "lang": "uk",
+      "word": "вразив",
+      "valid": true,
+      "tags": [
+        "verb:perf:past:m:xp1",
+        "verb:perf:past:m:xp2"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-171",
+      "lang": "uk",
+      "word": "перестала",
+      "valid": true,
+      "tags": [
+        "verb:perf:past:f"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-172",
+      "lang": "uk",
+      "word": "дізнаємося",
+      "valid": true,
+      "tags": [
+        "verb:rev:imperf:pres:p:1",
+        "verb:rev:perf:futr:p:1"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-173",
+      "lang": "uk",
+      "word": "відомою",
+      "valid": true,
+      "tags": [
+        "adj:f:v_oru:compb"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-174",
+      "lang": "uk",
+      "word": "боровся",
+      "valid": true,
+      "tags": [
+        "verb:rev:imperf:past:m"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-175",
+      "lang": "uk",
+      "word": "полюбляєш",
+      "valid": true,
+      "tags": [
+        "verb:imperf:pres:s:2"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-176",
+      "lang": "uk",
+      "word": "задоволення",
+      "valid": true,
+      "tags": [
+        "noun:inanim:n:v_kly",
+        "noun:inanim:n:v_naz",
+        "noun:inanim:n:v_rod",
+        "noun:inanim:n:v_zna",
+        "noun:inanim:p:v_kly",
+        "noun:inanim:p:v_naz",
+        "noun:inanim:p:v_zna"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-177",
+      "lang": "uk",
+      "word": "запобігти",
+      "valid": true,
+      "tags": [
+        "verb:perf:inf"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-178",
+      "lang": "uk",
+      "word": "концерти",
+      "valid": true,
+      "tags": [
+        "noun:inanim:p:v_kly",
+        "noun:inanim:p:v_naz",
+        "noun:inanim:p:v_zna"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-179",
+      "lang": "uk",
+      "word": "розбудила",
+      "valid": true,
+      "tags": [
+        "verb:perf:past:f"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-180",
+      "lang": "uk",
+      "word": "повному",
+      "valid": true,
+      "tags": [
+        "adj:m:v_dav:compb",
+        "adj:m:v_mis:compb",
+        "adj:n:v_dav:compb",
+        "adj:n:v_mis:compb"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-181",
+      "lang": "uk",
+      "word": "граматика",
+      "valid": true,
+      "tags": [
+        "noun:anim:m:v_rod",
+        "noun:anim:m:v_zna",
+        "noun:inanim:f:v_naz"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-182",
+      "lang": "uk",
+      "word": "досконалий",
+      "valid": true,
+      "tags": [
+        "adj:m:v_kly:compb",
+        "adj:m:v_naz:compb",
+        "adj:m:v_zna:rinanim:compb"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-183",
+      "lang": "uk",
+      "word": "політиком",
+      "valid": true,
+      "tags": [
+        "noun:anim:m:v_oru"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-184",
+      "lang": "uk",
+      "word": "пошкодує",
+      "valid": true,
+      "tags": [
+        "verb:perf:futr:s:3"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-185",
+      "lang": "uk",
+      "word": "виростають",
+      "valid": true,
+      "tags": [
+        "verb:imperf:pres:p:3"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-186",
+      "lang": "uk",
+      "word": "налякати",
+      "valid": true,
+      "tags": [
+        "verb:perf:inf"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-187",
+      "lang": "uk",
+      "word": "красою",
+      "valid": true,
+      "tags": [
+        "adj:f:v_oru",
+        "noun:inanim:f:v_oru"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-188",
+      "lang": "uk",
+      "word": "зазнати",
+      "valid": true,
+      "tags": [
+        "verb:perf:inf"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-189",
+      "lang": "uk",
+      "word": "прямий",
+      "valid": true,
+      "tags": [
+        "adj:m:v_kly:compb",
+        "adj:m:v_naz:compb",
+        "adj:m:v_zna:rinanim:compb"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-190",
+      "lang": "uk",
+      "word": "серйозна",
+      "valid": true,
+      "tags": [
+        "adj:f:v_kly:compb",
+        "adj:f:v_naz:compb"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-191",
+      "lang": "uk",
+      "word": "вважається",
+      "valid": true,
+      "tags": [
+        "verb:rev:imperf:pres:s:3"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-192",
+      "lang": "uk",
+      "word": "хвилину",
+      "valid": true,
+      "tags": [
+        "noun:inanim:f:v_zna"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-193",
+      "lang": "uk",
+      "word": "зламалася",
+      "valid": true,
+      "tags": [
+        "verb:rev:perf:past:f"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-194",
+      "lang": "uk",
+      "word": "подивився",
+      "valid": true,
+      "tags": [
+        "verb:rev:perf:past:m"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-195",
+      "lang": "uk",
+      "word": "дізнатися",
+      "valid": true,
+      "tags": [
+        "verb:rev:perf:inf"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-196",
+      "lang": "uk",
+      "word": "онлайн",
+      "valid": true,
+      "tags": [
+        "adv",
+        "noun:inanim:m:v_naz",
+        "noun:inanim:m:v_zna"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-197",
+      "lang": "uk",
+      "word": "процес",
+      "valid": true,
+      "tags": [
+        "noun:inanim:m:v_naz",
+        "noun:inanim:m:v_zna"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-198",
+      "lang": "uk",
+      "word": "існують",
+      "valid": true,
+      "tags": [
+        "verb:imperf:pres:p:3"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-199",
+      "lang": "uk",
+      "word": "повернуться",
+      "valid": true,
+      "tags": [
+        "verb:rev:perf:futr:p:3",
+        "verb:rev:perf:inf:short"
+      ]
+    },
+    {
+      "id": "uk-spelling-transfer-200",
+      "lang": "uk",
+      "word": "очікували",
+      "valid": true,
+      "tags": [
+        "verb:imperf:past:p"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-1",
+      "lang": "en",
+      "word": "commotion",
+      "valid": true,
+      "tags": [
+        "NN:UN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-2",
+      "lang": "en",
+      "word": "resource",
+      "valid": true,
+      "tags": [
+        "NN:UN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-3",
+      "lang": "en",
+      "word": "stunning",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "VBG"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-4",
+      "lang": "en",
+      "word": "practices",
+      "valid": true,
+      "tags": [
+        "NNS",
+        "VBZ"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-5",
+      "lang": "en",
+      "word": "survivor",
+      "valid": true,
+      "tags": [
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-6",
+      "lang": "en",
+      "word": "insulting",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "VBG"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-7",
+      "lang": "en",
+      "word": "terrific",
+      "valid": true,
+      "tags": [
+        "JJ"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-8",
+      "lang": "en",
+      "word": "majority",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-9",
+      "lang": "en",
+      "word": "spectators",
+      "valid": true,
+      "tags": [
+        "NNS"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-10",
+      "lang": "en",
+      "word": "obtained",
+      "valid": true,
+      "tags": [
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-11",
+      "lang": "en",
+      "word": "screwed",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-12",
+      "lang": "en",
+      "word": "tornado",
+      "valid": true,
+      "tags": [
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-13",
+      "lang": "en",
+      "word": "inferior",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-14",
+      "lang": "en",
+      "word": "electric",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-15",
+      "lang": "en",
+      "word": "criminals",
+      "valid": true,
+      "tags": [
+        "NNS"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-16",
+      "lang": "en",
+      "word": "distracted",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-17",
+      "lang": "en",
+      "word": "satisfied",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-18",
+      "lang": "en",
+      "word": "scenario",
+      "valid": true,
+      "tags": [
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-19",
+      "lang": "en",
+      "word": "supermarket",
+      "valid": true,
+      "tags": [
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-20",
+      "lang": "en",
+      "word": "phoned",
+      "valid": true,
+      "tags": [
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-21",
+      "lang": "en",
+      "word": "stalker",
+      "valid": true,
+      "tags": [
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-22",
+      "lang": "en",
+      "word": "climate",
+      "valid": true,
+      "tags": [
+        "NN:UN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-23",
+      "lang": "en",
+      "word": "politicians",
+      "valid": true,
+      "tags": [
+        "NNS"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-24",
+      "lang": "en",
+      "word": "ruling",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN:UN",
+        "VBG"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-25",
+      "lang": "en",
+      "word": "studying",
+      "valid": true,
+      "tags": [
+        "NN:UN",
+        "VBG"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-26",
+      "lang": "en",
+      "word": "without",
+      "valid": true,
+      "tags": [
+        "IN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-27",
+      "lang": "en",
+      "word": "effect",
+      "valid": true,
+      "tags": [
+        "NN:UN",
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-28",
+      "lang": "en",
+      "word": "probation",
+      "valid": true,
+      "tags": [
+        "NN:U"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-29",
+      "lang": "en",
+      "word": "barrier",
+      "valid": true,
+      "tags": [
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-30",
+      "lang": "en",
+      "word": "fearful",
+      "valid": true,
+      "tags": [
+        "JJ"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-31",
+      "lang": "en",
+      "word": "equivalent",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-32",
+      "lang": "en",
+      "word": "congress",
+      "valid": true,
+      "tags": [
+        "NN",
+        "NN:U"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-33",
+      "lang": "en",
+      "word": "yellow",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN:UN",
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-34",
+      "lang": "en",
+      "word": "intervals",
+      "valid": true,
+      "tags": [
+        "NNS"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-35",
+      "lang": "en",
+      "word": "feeding",
+      "valid": true,
+      "tags": [
+        "NN:UN",
+        "VBG"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-36",
+      "lang": "en",
+      "word": "vintage",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN:UN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-37",
+      "lang": "en",
+      "word": "convenient",
+      "valid": true,
+      "tags": [
+        "JJ"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-38",
+      "lang": "en",
+      "word": "purely",
+      "valid": true,
+      "tags": [
+        "RB"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-39",
+      "lang": "en",
+      "word": "listening",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "VBG"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-40",
+      "lang": "en",
+      "word": "tournament",
+      "valid": true,
+      "tags": [
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-41",
+      "lang": "en",
+      "word": "communities",
+      "valid": true,
+      "tags": [
+        "NNS"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-42",
+      "lang": "en",
+      "word": "package",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN",
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-43",
+      "lang": "en",
+      "word": "volcanoes",
+      "valid": true,
+      "tags": [
+        "NNS"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-44",
+      "lang": "en",
+      "word": "shivered",
+      "valid": true,
+      "tags": [
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-45",
+      "lang": "en",
+      "word": "subscribe",
+      "valid": true,
+      "tags": [
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-46",
+      "lang": "en",
+      "word": "dictator",
+      "valid": true,
+      "tags": [
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-47",
+      "lang": "en",
+      "word": "donuts",
+      "valid": true,
+      "tags": [
+        "NNS"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-48",
+      "lang": "en",
+      "word": "knocked",
+      "valid": true,
+      "tags": [
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-49",
+      "lang": "en",
+      "word": "testing",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN:UN",
+        "VBG"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-50",
+      "lang": "en",
+      "word": "vertical",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-51",
+      "lang": "en",
+      "word": "express",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN:UN",
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-52",
+      "lang": "en",
+      "word": "religions",
+      "valid": true,
+      "tags": [
+        "NNS"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-53",
+      "lang": "en",
+      "word": "captain",
+      "valid": true,
+      "tags": [
+        "NN",
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-54",
+      "lang": "en",
+      "word": "longed",
+      "valid": true,
+      "tags": [
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-55",
+      "lang": "en",
+      "word": "incompetent",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-56",
+      "lang": "en",
+      "word": "pessimist",
+      "valid": true,
+      "tags": [
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-57",
+      "lang": "en",
+      "word": "influential",
+      "valid": true,
+      "tags": [
+        "JJ"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-58",
+      "lang": "en",
+      "word": "revenge",
+      "valid": true,
+      "tags": [
+        "NN:U",
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-59",
+      "lang": "en",
+      "word": "avoids",
+      "valid": true,
+      "tags": [
+        "VBZ"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-60",
+      "lang": "en",
+      "word": "loudly",
+      "valid": true,
+      "tags": [
+        "RB"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-61",
+      "lang": "en",
+      "word": "twenties",
+      "valid": true,
+      "tags": [
+        "NNS"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-62",
+      "lang": "en",
+      "word": "colorblind",
+      "valid": true,
+      "tags": [
+        "JJ"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-63",
+      "lang": "en",
+      "word": "stolen",
+      "valid": true,
+      "tags": [
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-64",
+      "lang": "en",
+      "word": "castle",
+      "valid": true,
+      "tags": [
+        "NN",
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-65",
+      "lang": "en",
+      "word": "underage",
+      "valid": true,
+      "tags": [
+        "JJ"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-66",
+      "lang": "en",
+      "word": "cradle",
+      "valid": true,
+      "tags": [
+        "NN",
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-67",
+      "lang": "en",
+      "word": "punctuation",
+      "valid": true,
+      "tags": [
+        "NN:U"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-68",
+      "lang": "en",
+      "word": "universe",
+      "valid": true,
+      "tags": [
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-69",
+      "lang": "en",
+      "word": "plausible",
+      "valid": true,
+      "tags": [
+        "JJ"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-70",
+      "lang": "en",
+      "word": "member",
+      "valid": true,
+      "tags": [
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-71",
+      "lang": "en",
+      "word": "adjust",
+      "valid": true,
+      "tags": [
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-72",
+      "lang": "en",
+      "word": "volunteers",
+      "valid": true,
+      "tags": [
+        "NNS",
+        "VBZ"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-73",
+      "lang": "en",
+      "word": "finance",
+      "valid": true,
+      "tags": [
+        "NN:UN",
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-74",
+      "lang": "en",
+      "word": "doorbell",
+      "valid": true,
+      "tags": [
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-75",
+      "lang": "en",
+      "word": "cartoon",
+      "valid": true,
+      "tags": [
+        "NN",
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-76",
+      "lang": "en",
+      "word": "objection",
+      "valid": true,
+      "tags": [
+        "NN:UN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-77",
+      "lang": "en",
+      "word": "eventually",
+      "valid": true,
+      "tags": [
+        "RB"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-78",
+      "lang": "en",
+      "word": "physicist",
+      "valid": true,
+      "tags": [
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-79",
+      "lang": "en",
+      "word": "conceal",
+      "valid": true,
+      "tags": [
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-80",
+      "lang": "en",
+      "word": "included",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-81",
+      "lang": "en",
+      "word": "bandage",
+      "valid": true,
+      "tags": [
+        "NN",
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-82",
+      "lang": "en",
+      "word": "deliberate",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-83",
+      "lang": "en",
+      "word": "flustered",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-84",
+      "lang": "en",
+      "word": "uploaded",
+      "valid": true,
+      "tags": [
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-85",
+      "lang": "en",
+      "word": "excitement",
+      "valid": true,
+      "tags": [
+        "NN:UN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-86",
+      "lang": "en",
+      "word": "syndrome",
+      "valid": true,
+      "tags": [
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-87",
+      "lang": "en",
+      "word": "humiliate",
+      "valid": true,
+      "tags": [
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-88",
+      "lang": "en",
+      "word": "federal",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-89",
+      "lang": "en",
+      "word": "bottles",
+      "valid": true,
+      "tags": [
+        "NNS",
+        "VBZ"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-90",
+      "lang": "en",
+      "word": "favors",
+      "valid": true,
+      "tags": [
+        "NNS",
+        "VBZ"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-91",
+      "lang": "en",
+      "word": "fasten",
+      "valid": true,
+      "tags": [
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-92",
+      "lang": "en",
+      "word": "remarked",
+      "valid": true,
+      "tags": [
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-93",
+      "lang": "en",
+      "word": "marked",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-94",
+      "lang": "en",
+      "word": "malice",
+      "valid": true,
+      "tags": [
+        "NN:U"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-95",
+      "lang": "en",
+      "word": "laughing",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN:U",
+        "VBG"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-96",
+      "lang": "en",
+      "word": "calculator",
+      "valid": true,
+      "tags": [
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-97",
+      "lang": "en",
+      "word": "fireworks",
+      "valid": true,
+      "tags": [
+        "NNS"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-98",
+      "lang": "en",
+      "word": "classified",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN",
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-99",
+      "lang": "en",
+      "word": "center",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN",
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-100",
+      "lang": "en",
+      "word": "earthquake",
+      "valid": true,
+      "tags": [
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-101",
+      "lang": "en",
+      "word": "promising",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "VBG"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-102",
+      "lang": "en",
+      "word": "definite",
+      "valid": true,
+      "tags": [
+        "JJ"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-103",
+      "lang": "en",
+      "word": "devout",
+      "valid": true,
+      "tags": [
+        "JJ"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-104",
+      "lang": "en",
+      "word": "yielded",
+      "valid": true,
+      "tags": [
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-105",
+      "lang": "en",
+      "word": "defendant",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-106",
+      "lang": "en",
+      "word": "causing",
+      "valid": true,
+      "tags": [
+        "VBG"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-107",
+      "lang": "en",
+      "word": "device",
+      "valid": true,
+      "tags": [
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-108",
+      "lang": "en",
+      "word": "affair",
+      "valid": true,
+      "tags": [
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-109",
+      "lang": "en",
+      "word": "pancakes",
+      "valid": true,
+      "tags": [
+        "NNS",
+        "VBZ"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-110",
+      "lang": "en",
+      "word": "feature",
+      "valid": true,
+      "tags": [
+        "NN",
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-111",
+      "lang": "en",
+      "word": "afford",
+      "valid": true,
+      "tags": [
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-112",
+      "lang": "en",
+      "word": "someplace",
+      "valid": true,
+      "tags": [
+        "RB"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-113",
+      "lang": "en",
+      "word": "hunger",
+      "valid": true,
+      "tags": [
+        "NN:UN",
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-114",
+      "lang": "en",
+      "word": "sleeper",
+      "valid": true,
+      "tags": [
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-115",
+      "lang": "en",
+      "word": "criticized",
+      "valid": true,
+      "tags": [
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-116",
+      "lang": "en",
+      "word": "astronaut",
+      "valid": true,
+      "tags": [
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-117",
+      "lang": "en",
+      "word": "hottest",
+      "valid": true,
+      "tags": [
+        "JJS"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-118",
+      "lang": "en",
+      "word": "necessarily",
+      "valid": true,
+      "tags": [
+        "RB"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-119",
+      "lang": "en",
+      "word": "rebellion",
+      "valid": true,
+      "tags": [
+        "NN:UN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-120",
+      "lang": "en",
+      "word": "resistance",
+      "valid": true,
+      "tags": [
+        "NN:UN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-121",
+      "lang": "en",
+      "word": "prisoners",
+      "valid": true,
+      "tags": [
+        "NNS"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-122",
+      "lang": "en",
+      "word": "princess",
+      "valid": true,
+      "tags": [
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-123",
+      "lang": "en",
+      "word": "courtesy",
+      "valid": true,
+      "tags": [
+        "NN:UN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-124",
+      "lang": "en",
+      "word": "restrain",
+      "valid": true,
+      "tags": [
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-125",
+      "lang": "en",
+      "word": "relaxed",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-126",
+      "lang": "en",
+      "word": "discussions",
+      "valid": true,
+      "tags": [
+        "NNS"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-127",
+      "lang": "en",
+      "word": "motorcycle",
+      "valid": true,
+      "tags": [
+        "NN",
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-128",
+      "lang": "en",
+      "word": "abruptly",
+      "valid": true,
+      "tags": [
+        "RB"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-129",
+      "lang": "en",
+      "word": "cocaine",
+      "valid": true,
+      "tags": [
+        "NN:U"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-130",
+      "lang": "en",
+      "word": "folding",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN:UN",
+        "VBG"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-131",
+      "lang": "en",
+      "word": "graduation",
+      "valid": true,
+      "tags": [
+        "NN",
+        "NN:U"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-132",
+      "lang": "en",
+      "word": "celebrity",
+      "valid": true,
+      "tags": [
+        "NN:UN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-133",
+      "lang": "en",
+      "word": "invalid",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN",
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-134",
+      "lang": "en",
+      "word": "milked",
+      "valid": true,
+      "tags": [
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-135",
+      "lang": "en",
+      "word": "shampoo",
+      "valid": true,
+      "tags": [
+        "NN",
+        "NN:U",
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-136",
+      "lang": "en",
+      "word": "tropical",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-137",
+      "lang": "en",
+      "word": "monster",
+      "valid": true,
+      "tags": [
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-138",
+      "lang": "en",
+      "word": "licked",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-139",
+      "lang": "en",
+      "word": "memory",
+      "valid": true,
+      "tags": [
+        "NN:UN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-140",
+      "lang": "en",
+      "word": "smoking",
+      "valid": true,
+      "tags": [
+        "NN:U",
+        "VBG"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-141",
+      "lang": "en",
+      "word": "stamped",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-142",
+      "lang": "en",
+      "word": "divine",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN",
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-143",
+      "lang": "en",
+      "word": "temptation",
+      "valid": true,
+      "tags": [
+        "NN:UN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-144",
+      "lang": "en",
+      "word": "tempting",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN:UN",
+        "VBG"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-145",
+      "lang": "en",
+      "word": "ceremony",
+      "valid": true,
+      "tags": [
+        "NN:UN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-146",
+      "lang": "en",
+      "word": "somehow",
+      "valid": true,
+      "tags": [
+        "RB"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-147",
+      "lang": "en",
+      "word": "pitched",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-148",
+      "lang": "en",
+      "word": "football",
+      "valid": true,
+      "tags": [
+        "NN:UN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-149",
+      "lang": "en",
+      "word": "allows",
+      "valid": true,
+      "tags": [
+        "VBZ"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-150",
+      "lang": "en",
+      "word": "arrangement",
+      "valid": true,
+      "tags": [
+        "NN:UN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-151",
+      "lang": "en",
+      "word": "cabinet",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-152",
+      "lang": "en",
+      "word": "discovered",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-153",
+      "lang": "en",
+      "word": "seatbelt",
+      "valid": true,
+      "tags": [
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-154",
+      "lang": "en",
+      "word": "psychiatric",
+      "valid": true,
+      "tags": [
+        "JJ"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-155",
+      "lang": "en",
+      "word": "nonstop",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "RB"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-156",
+      "lang": "en",
+      "word": "evacuate",
+      "valid": true,
+      "tags": [
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-157",
+      "lang": "en",
+      "word": "solitary",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN:U"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-158",
+      "lang": "en",
+      "word": "numbered",
+      "valid": true,
+      "tags": [
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-159",
+      "lang": "en",
+      "word": "gardener",
+      "valid": true,
+      "tags": [
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-160",
+      "lang": "en",
+      "word": "managed",
+      "valid": true,
+      "tags": [
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-161",
+      "lang": "en",
+      "word": "drowned",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-162",
+      "lang": "en",
+      "word": "prison",
+      "valid": true,
+      "tags": [
+        "NN:UN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-163",
+      "lang": "en",
+      "word": "spectacle",
+      "valid": true,
+      "tags": [
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-164",
+      "lang": "en",
+      "word": "pillow",
+      "valid": true,
+      "tags": [
+        "NN",
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-165",
+      "lang": "en",
+      "word": "hostages",
+      "valid": true,
+      "tags": [
+        "NNS"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-166",
+      "lang": "en",
+      "word": "estimated",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-167",
+      "lang": "en",
+      "word": "ridicule",
+      "valid": true,
+      "tags": [
+        "NN:UN",
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-168",
+      "lang": "en",
+      "word": "failed",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-169",
+      "lang": "en",
+      "word": "compulsive",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-170",
+      "lang": "en",
+      "word": "resting",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN:UN",
+        "VBG"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-171",
+      "lang": "en",
+      "word": "impact",
+      "valid": true,
+      "tags": [
+        "NN:UN",
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-172",
+      "lang": "en",
+      "word": "combine",
+      "valid": true,
+      "tags": [
+        "NN",
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-173",
+      "lang": "en",
+      "word": "subject",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN:UN",
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-174",
+      "lang": "en",
+      "word": "prediction",
+      "valid": true,
+      "tags": [
+        "NN:UN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-175",
+      "lang": "en",
+      "word": "sarcasm",
+      "valid": true,
+      "tags": [
+        "NN:UN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-176",
+      "lang": "en",
+      "word": "loaves",
+      "valid": true,
+      "tags": [
+        "NNS"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-177",
+      "lang": "en",
+      "word": "strong",
+      "valid": true,
+      "tags": [
+        "JJ"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-178",
+      "lang": "en",
+      "word": "contempt",
+      "valid": true,
+      "tags": [
+        "NN:U"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-179",
+      "lang": "en",
+      "word": "microwave",
+      "valid": true,
+      "tags": [
+        "NN",
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-180",
+      "lang": "en",
+      "word": "possessive",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-181",
+      "lang": "en",
+      "word": "fooling",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN:UN",
+        "VBG"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-182",
+      "lang": "en",
+      "word": "automatic",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-183",
+      "lang": "en",
+      "word": "abusive",
+      "valid": true,
+      "tags": [
+        "JJ"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-184",
+      "lang": "en",
+      "word": "filter",
+      "valid": true,
+      "tags": [
+        "NN",
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-185",
+      "lang": "en",
+      "word": "detectives",
+      "valid": true,
+      "tags": [
+        "NNS"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-186",
+      "lang": "en",
+      "word": "dragged",
+      "valid": true,
+      "tags": [
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-187",
+      "lang": "en",
+      "word": "racist",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-188",
+      "lang": "en",
+      "word": "emperor",
+      "valid": true,
+      "tags": [
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-189",
+      "lang": "en",
+      "word": "signing",
+      "valid": true,
+      "tags": [
+        "NN:UN",
+        "VBG"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-190",
+      "lang": "en",
+      "word": "biscuits",
+      "valid": true,
+      "tags": [
+        "NNS"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-191",
+      "lang": "en",
+      "word": "telephone",
+      "valid": true,
+      "tags": [
+        "NN:UN",
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-192",
+      "lang": "en",
+      "word": "groaned",
+      "valid": true,
+      "tags": [
+        "VBD",
+        "VBN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-193",
+      "lang": "en",
+      "word": "cigarette",
+      "valid": true,
+      "tags": [
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-194",
+      "lang": "en",
+      "word": "whichever",
+      "valid": true,
+      "tags": [
+        "WDT"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-195",
+      "lang": "en",
+      "word": "comparison",
+      "valid": true,
+      "tags": [
+        "NN:UN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-196",
+      "lang": "en",
+      "word": "natural",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "NN"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-197",
+      "lang": "en",
+      "word": "likely",
+      "valid": true,
+      "tags": [
+        "JJ",
+        "RB"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-198",
+      "lang": "en",
+      "word": "foreign",
+      "valid": true,
+      "tags": [
+        "JJ"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-199",
+      "lang": "en",
+      "word": "extend",
+      "valid": true,
+      "tags": [
+        "VB",
+        "VBP"
+      ]
+    },
+    {
+      "id": "en-spelling-transfer-200",
+      "lang": "en",
+      "word": "question",
+      "valid": true,
+      "tags": [
+        "NN:UN",
+        "VB",
+        "VBP"
+      ]
+    }
+  ]
+}

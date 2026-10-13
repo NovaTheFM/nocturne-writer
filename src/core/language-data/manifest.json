@@ -1,0 +1,50 @@
+{
+  "provider": "LanguageTool 6.6 morphology dictionaries",
+  "geography": {
+    "source": "https://download.geonames.org/export/dump/cities15000.zip",
+    "license": "CC BY 4.0",
+    "sha256": "94120f4fcd00272a344c3a11ea9f4e9b1c069a58b90a526236ec395266e1aedf"
+  },
+  "runtime": "Dictionary lookup and grammatical rules; no neural/statistical model",
+  "languages": {
+    "ru": {
+      "forms": 504509,
+      "validatedForms": 4058500,
+      "membership": "exact UTF-8 finite-state dictionary",
+      "wordIndexBytes": 1426340,
+      "analyses": 602955,
+      "lemmas": 34143,
+      "tags": 904,
+      "uncompressedBytes": 22822563,
+      "gzipBytes": 4627830,
+      "sourceSha256": "c27e8b284e0f88b95563e76dcffaa63b3d374871b161a299cd1b895cb75d3ffd",
+      "assetSha256": "0253ac4494c4809a946ec282cd7e93d337f3aff303bb0854cd5b250d6cbd85ac"
+    },
+    "uk": {
+      "forms": 1026047,
+      "validatedForms": 3650826,
+      "membership": "exact UTF-8 finite-state dictionary",
+      "wordIndexBytes": 1572774,
+      "analyses": 1120487,
+      "lemmas": 46668,
+      "tags": 2622,
+      "uncompressedBytes": 46494126,
+      "gzipBytes": 7375684,
+      "sourceSha256": "3418420e9c9513c09999d1929ee78bad198bb75cc1d162b6c76d4d13e9e72114",
+      "assetSha256": "702f219dcc678561474b28e8dd1ce51870eee3db425638dda89c444871436ec1"
+    },
+    "en": {
+      "forms": 52589,
+      "validatedForms": 209632,
+      "membership": "exact UTF-8 finite-state dictionary",
+      "wordIndexBytes": 485962,
+      "analyses": 81828,
+      "lemmas": 16583,
+      "tags": 79,
+      "uncompressedBytes": 3546348,
+      "gzipBytes": 1300673,
+      "sourceSha256": "2de1ad288cf92fbde63441f7bc0b1f3268c69a474557070d1fbaa651df3d4cd4",
+      "assetSha256": "44930d225037977827318eea5bd245b6e845951c7230ba2fbb56357abd2e0bc5"
+    }
+  }
+}

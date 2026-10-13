@@ -7,7 +7,8 @@ const words = text => [...new Set((text.match(/\p{L}+(?:[’'\-]\p{L}+)*/gu) || 
 const caseOf = (source, value) => source === source.toUpperCase() ? value.toUpperCase() : source[0] === source[0]?.toUpperCase() ? value[0]?.toUpperCase() + value.slice(1) : value;
 
 export function flattenSpellerIssues(result, text) {
-  const issues = [...(Array.isArray(result?.issues) ? result.issues : [])];
+  if (Array.isArray(result?.issues)) return result.issues.filter(issue => Number.isInteger(issue.start) && Number.isInteger(issue.end) && issue.start >= 0 && issue.end >= issue.start && issue.end <= text.length);
+  const issues = [];
   if (result instanceof Map) for (const [key, value] of result) {
     if (Array.isArray(value?.occurrences)) { issues.push(...value.occurrences); continue; }
     if (Number.isInteger(value?.start) && Number.isInteger(value?.end)) { issues.push(value); continue; }
@@ -38,7 +39,8 @@ export async function runCoreAudit(fixtures, record) {
   globalThis.fetch = async (_url, options) => {
     requestCount++;
     const params = new URLSearchParams(options.body), text = params.get('text'), lang = language(params.get('language'));
-    const data = byText.get(`${lang}:${text}`);
+    const automatic = fixtures.find(item => item.lang === 'auto' && item.text === text && language(item.response.language?.code || '') === lang);
+    const data = byText.get(`${lang}:${text}`) || automatic?.response;
     assert.ok(data, `A recorded real provider response must exist for ${lang}: ${text}`);
     return { ok: true, json: async () => structuredClone(data) };
   };

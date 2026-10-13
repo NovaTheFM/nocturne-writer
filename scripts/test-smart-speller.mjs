@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { getSmartSpellerMatches } from '../src/core/smart-speller.js';
+import { CLASSICAL_LANGUAGE_RULES } from '../src/core/language-data/classical-rules.js';
 
 const spellingRule = { issueType: 'misspelling', category: { id: 'TYPOS', name: 'Spelling' } };
 async function withSpellerResponse(matches, run) {
@@ -168,4 +169,83 @@ test('repeated typos in distant context windows retain their original positions'
     ]);
     assert.ok(requests.every(chunk => chunk.length <= 4000));
   } finally { globalThis.fetch = original; }
+});
+
+test('online requests select declarative rules and reject unrequested or AI rules', async () => {
+  const original = globalThis.fetch, ruleId = CLASSICAL_LANGUAGE_RULES.en[0];
+  globalThis.fetch = async (_url, options) => {
+    const parameters = new URLSearchParams(options.body);
+    assert.equal(parameters.get('enabledOnly'), 'true');
+    assert.equal(parameters.get('language'), 'en-US');
+    assert.ok(parameters.get('enabledRules').split(',').includes(ruleId));
+    return { ok: true, json: async () => ({ matches: [
+      { offset: 0, length: 6, replacements: [{ value: 'safe' }], rule: { id: ruleId, issueType: 'grammar' } },
+      { offset: 0, length: 6, replacements: [{ value: 'unsafe' }], rule: { id: 'NEURAL_NEW_RULE', issueType: 'grammar' } },
+      { offset: 0, length: 6, replacements: [{ value: 'unknown' }], rule: { id: 'NEW_UNREQUESTED_RULE', issueType: 'grammar' } },
+    ] }) };
+  };
+  try {
+    const result = await getSmartSpellerMatches(['unique'], { mode: 'api', lang: 'auto', contextText: 'Unique request for declarative checking.' });
+    assert.deepEqual(result.issues.map(issue => issue.correct), ['safe']);
+  } finally { globalThis.fetch = original; }
+});
+
+test('cancelling one consumer does not abort a shared check needed by another', async () => {
+  const original = globalThis.fetch, controller = new AbortController(); let release, requests = 0, transportSignal;
+  globalThis.fetch = async (_url, options) => {
+    requests++; transportSignal = options.signal;
+    await new Promise(resolve => { release = resolve; });
+    return { ok: true, json: async () => ({ matches: [{ offset: 0, length: 13, replacements: [{ value: 'correction' }] }] }) };
+  };
+  try {
+    const options = { mode: 'api', contextText: 'coalescedword context.' };
+    const first = getSmartSpellerMatches(['coalescedword'], { ...options, signal: controller.signal });
+    const second = getSmartSpellerMatches(['coalescedword'], options);
+    controller.abort(); assert.equal(transportSignal.aborted, false); release();
+    await assert.rejects(first, { name: 'AbortError' });
+    assert.equal((await second).get('coalescedword')?.correct, 'correction'); assert.equal(requests, 1);
+  } finally { globalThis.fetch = original; }
+});
+
+test('author replacement wins over a grammatical rule covering the same phrase', async () => {
+  const result = await getSmartSpellerMatches(['самий', 'кращий', 'варіант'], { mode: 'local', lang: 'uk', contextText: 'Самий кращий варіант.', localLookup: { самий: { correct: 'Авторский', source: 'user' } } });
+  assert.deepEqual(result.issues.map(issue => ({ raw: issue.rawText, correct: issue.correct })), [{ raw: 'Самий', correct: 'Авторский' }]);
+});
+
+test('short transpositions use dictionary words while informal repetition is preserved', async () => {
+  const result = await getSmartSpellerMatches(['teh', 'adn', 'lol'], { mode: 'local', lang: 'en', contextText: 'I have teh book. Bread adn milk. He typed lol.' });
+  assert.equal(result.get('teh')?.correct, 'the'); assert.equal(result.get('adn')?.correct, 'and'); assert.equal(result.has('lol'), false);
+});
+
+test('API-only mode exposes author replacements through the canonical occurrence contract', async () => {
+  const result = await getSmartSpellerMatches(['authoralias'], { mode: 'api', contextText: 'Authoralias.', localLookup: { authoralias: { correct: 'Literal choice', source: 'user' } } });
+  assert.deepEqual(result.issues.map(issue => ({ start: issue.start, raw: issue.rawText, correct: issue.correct })), [{ start: 0, raw: 'Authoralias', correct: 'Literal choice' }]);
+});
+
+test('worker startup failure retains local rules without claiming a complete check', async () => {
+  const previousWindow = globalThis.window, previousWorker = globalThis.Worker;
+  globalThis.window = {}; globalThis.Worker = class { constructor() { throw new Error('Dictionary asset unavailable'); } };
+  try {
+    const result = await getSmartSpellerMatches(['вообщем', 'uncheckabletoken'], { mode: 'local', lang: 'ru', contextText: 'Вообщем uncheckabletoken.' });
+    assert.ok(result.degraded);
+    assert.equal(result.checkedWords.has('uncheckabletoken'), false);
+    assert.ok(result.issues.some(issue => issue.rawText === 'Вообщем' && issue.correct === 'В общем'));
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window; else globalThis.window = previousWindow;
+    if (previousWorker === undefined) delete globalThis.Worker; else globalThis.Worker = previousWorker;
+  }
+});
+
+test('apostrophe mistakes use real forms and correct English contractions remain unchanged', async () => {
+  for (const [text, gold] of [
+    ['Це новий підїзд.', "Це новий під'їзд."], ['Це новий компютер.', "Це новий комп'ютер."],
+    ['Це новий обєкт.', "Це новий об'єкт."], ["Слово: п’ятницця.", 'Слово: п’ятниця.'],
+  ]) {
+    const result = await getSmartSpellerMatches(text.match(/\p{L}+(?:[’']\p{L}+)*/gu), { mode: 'local', lang: 'uk', contextText: text });
+    assert.ok(result.issues.some(issue => issue.suggestions.some(value => text.slice(0, issue.start) + value + text.slice(issue.end) === gold)), text);
+  }
+  for (const text of ["I don't know.", 'I don’t know.', "She can't swim.", "We won't go.", "They're here.", "John's book is here."]) {
+    const result = await getSmartSpellerMatches(text.match(/\p{L}+(?:[’']\p{L}+)*/gu), { mode: 'local', lang: 'en', contextText: text });
+    assert.equal(result.issues.length, 0, JSON.stringify({ text, issues: result.issues }));
+  }
 });

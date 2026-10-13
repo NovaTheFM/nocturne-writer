@@ -21,7 +21,7 @@ try {
   for (let i = 0; i < 60; i++) { try { if ((await fetch(url)).ok) break; } catch {} await new Promise(resolve => setTimeout(resolve, 100)); }
   await check('F12 smart speller checks queued words in the active manuscript', async page => {
     await page.evaluate(() => { const a = window.nocturneApp; a.state.settings.smartDictionary = true; a.nocturneEditor.get('primary').commands.setContent('<p>teh</p>'); a.nocturneEditor.syncDocFromEditor('primary'); a.updateTypoHighlights(); a.spellerQueue.add('teh'); a.scheduleSpellerCheck(); });
-    await page.waitForTimeout(400);
+    await page.waitForFunction(() => window.nocturneApp.spellerCache.has('teh') && !window.nocturneApp.spellerRequest, null, { timeout: 12000 });
     assert.equal(await page.evaluate(() => window.nocturneApp.spellerCache.has('teh')), true);
   });
   await check('F13 analysis decorations span marked text and settings never alter manuscript JSON', async page => {

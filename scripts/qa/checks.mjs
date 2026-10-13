@@ -55,6 +55,9 @@ export const ARTIFACT_CHECKS = [
 ];
 
 export const EXTRA_CHECKS = [
+  check('language-quality', ['scripts/test-language-quality.mjs'], ['dictionary', 'writing', 'stress', 'performance', 'offline'], { modes: [], timeout: 600_000, ownScenarioReport: 'results.json' }),
+  check('language-quality-editor', ['--import', './scripts/qa/observe-playwright.mjs', 'scripts/test-language-quality-editor.mjs'], ['dictionary', 'writing', 'responsive', 'keyboard', 'stress', 'performance'], { modes: [], timeout: 600_000, ownScenarioReport: 'results.json' }),
+  check('language-performance', ['scripts/benchmark-language-checker.mjs'], ['dictionary', 'performance', 'offline'], { modes: [], timeout: 180_000, ownScenarioReport: 'results.json' }),
   check('smart-dictionary-provider-comparison', ['scripts/test-smart-dictionary-provider-comparison.mjs'], ['dictionary', 'writing', 'stress'], { modes: [], timeout: 600_000, ownScenarioReport: 'results.json' }),
   check('smart-dictionary-adversarial', ['--import', './scripts/qa/observe-playwright.mjs', 'scripts/test-smart-dictionary-adversarial.mjs'], ['dictionary', 'writing', 'settings', 'security', 'responsive', 'keyboard', 'stress', 'performance'], { modes: [], timeout: 600_000, ownScenarioReport: 'results.json' }),
   check('motion-corrections', ['scripts/test-motion-corrections.mjs'], ['settings', 'selection', 'motion', 'responsive', 'accessibility', 'visual'], { modes: [], ports: [5339], timeout: 600_000, ownScenarioReport: 'results.json' }),

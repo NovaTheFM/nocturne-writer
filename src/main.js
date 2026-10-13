@@ -6742,8 +6742,8 @@ class NocturneWriter {
       match.docId === docId
       && match.paneId === paneId
       && match.blockId === targetBlockId
-      && offset >= match.startOffset
-      && offset <= match.endOffset
+      && offset >= (match.displayStartOffset ?? match.startOffset)
+      && offset <= (match.displayEndOffset ?? match.endOffset)
     )) || null;
 
     if (!candidate || !this._typoHighlightRangesMap) return null;
@@ -6757,8 +6757,8 @@ class NocturneWriter {
       let rect = item.range ? item.range.getBoundingClientRect() : null;
       if (!rect || !rect.width || !rect.height) {
         const fragmentBase = Number(block.dataset.fragmentStart || 0);
-        const localStart = candidate.startOffset >= fragmentBase ? candidate.startOffset - fragmentBase : candidate.startOffset;
-        const localEnd = candidate.endOffset >= fragmentBase ? candidate.endOffset - fragmentBase : candidate.endOffset;
+        const localStart = (candidate.displayStartOffset ?? candidate.startOffset) - fragmentBase;
+        const localEnd = (candidate.displayEndOffset ?? candidate.endOffset) - fragmentBase;
         const { textNodes } = this.textNodesForHighlightBlock(block);
         const freshRange = this.rangeFromBlockOffsets(textNodes, localStart, localEnd);
         if (freshRange && this.isRangeValid(freshRange)) {
@@ -6980,10 +6980,11 @@ class NocturneWriter {
     const typoBlock = ctx.typoMatch ? `
       <div class="context-section-title">${ctx.typoMatch.source === 'smart' ? 'Smart-словарь: возможная ошибка' : 'Словарь ошибок'}</div>
       ${ctx.typoMatch.source === 'smart' && ctx.typoMatch.suggestions?.length
-        ? ctx.typoMatch.suggestions.map((suggestion, index) => item('context-apply-smart-typo-suggestion', 'bx-check-shield', `Заменить на «${escapeHtml(suggestion)}»`, !canEdit, `data-typo-suggestion-index="${index}"`)).join('')
+        ? ctx.typoMatch.suggestions.map((suggestion, index) => item('context-apply-smart-typo-suggestion', 'bx-check-shield', suggestion ? `Заменить на «${escapeHtml(suggestion)}»` : 'Удалить лишний фрагмент', !canEdit, `data-typo-suggestion-index="${index}"`)).join('')
         : ctx.typoMatch.correct ? item('context-apply-typo-replacement', 'bx-check-shield', `Заменить на «${escapeHtml(ctx.typoMatch.correct)}»`) : ''}
-      ${item('context-ignore-typo-word', 'bx-minus-circle', `Игнорировать «${escapeHtml(ctx.typoMatch.rawText)}»`)}
-      ${item('context-add-word-to-lexicon', 'bx-plus-circle', `Добавить «${escapeHtml(ctx.typoMatch.rawText)}» в словарь`)}
+      ${ctx.typoMatch.source === 'smart' && !ctx.typoMatch.suggestions?.length ? `<div class="context-subtitle">${escapeHtml(ctx.typoMatch.message || ctx.typoMatch.label)}</div>` : ''}
+      ${item('context-ignore-typo-word', 'bx-minus-circle', /^\p{L}+(?:[’'\-]\p{L}+)*$/u.test(ctx.typoMatch.rawText || '') ? `Игнорировать «${escapeHtml(ctx.typoMatch.rawText)}»` : 'Игнорировать замечание')}
+      ${/^\p{L}+(?:[’'\-]\p{L}+)*$/u.test(ctx.typoMatch.rawText || '') ? item('context-add-word-to-lexicon', 'bx-plus-circle', `Добавить «${escapeHtml(ctx.typoMatch.rawText)}» в словарь`) : ''}
       <div class="context-separator"></div>
     ` : '';
     this.updateSurfaceHTML(menu, `
@@ -7081,11 +7082,16 @@ class NocturneWriter {
     } else if (action === 'context-apply-smart-typo-suggestion') {
       const index = Number(button.dataset.typoSuggestionIndex);
       const suggestion = Number.isInteger(index) && ctx.typoMatch?.suggestions?.[index];
-      if (ctx.reviewMode !== 'editor' && typeof suggestion === 'string' && this.applyTypoReplacement({ ...ctx.typoMatch, correct: suggestion })) this.toast(`Заменено на «${suggestion}».`);
+      if (ctx.reviewMode !== 'editor' && typeof suggestion === 'string' && this.applyTypoReplacement({ ...ctx.typoMatch, correct: suggestion })) this.toast(suggestion ? `Заменено на «${suggestion}».` : 'Лишний фрагмент удалён.');
       this.closeContextMenu();
       return;
     } else if (action === 'context-ignore-typo-word') {
-      if (ctx.typoMatch?.rawText) {
+      if (ctx.typoMatch?.source === 'smart' && !/^\p{L}+(?:[’'\-]\p{L}+)*$/u.test(ctx.typoMatch.rawText || '')) {
+        this.ignoredTypoIssues ||= new Set();
+        this.ignoredTypoIssues.add(this.smartTypoIssueKey(ctx.typoMatch));
+        this.updateTypoHighlights();
+        this.toast('Замечание проигнорировано на время сессии.');
+      } else if (ctx.typoMatch?.rawText) {
         const norm = normalizeTypoToken(ctx.typoMatch.rawText);
         if (!this.ignoredTypoWords) this.ignoredTypoWords = new Set();
         this.ignoredTypoWords.add(norm);
@@ -11616,7 +11622,7 @@ class NocturneWriter {
     const tokenLookup = this.getEffectiveTypoLookup();
     const phraseRules = this.state.settings.strictSpellcheck ? this.getEffectiveTypoPhraseRules() : [];
     if (this.state.settings.smartDictionary) this.syncSmartSpellerContext(tokenLookup, protectedLexicon);
-    const signature = JSON.stringify([tokenLookup, phraseRules, [...protectedLexicon], this.state.settings.smartDictionary, this.spellerGeneration, [...(this.spellerCache || new Map())]]);
+    const signature = JSON.stringify([tokenLookup, phraseRules, [...protectedLexicon], this.state.settings.smartDictionary, this.spellerGeneration, this.spellerResultRevision, [...(this.spellerCache || new Map())], [...(this.ignoredTypoIssues || new Set())]]);
     this.typoBlockCache ||= new WeakMap();
     const typoRanges = [];
     const smartRanges = [];
@@ -11729,6 +11735,9 @@ class NocturneWriter {
     this.spellerPending = new Set();
     this.spellerContext = null;
     this.spellerDocuments = [];
+    this.spellerIssues = [];
+    this.spellerContextChecked = false;
+    this.spellerResultRevision = 0;
   }
 
   syncSmartSpellerContext(tokenLookup, protectedLexicon) {
@@ -11768,18 +11777,18 @@ class NocturneWriter {
     if (this.spellerTimer || this.spellerRequest || !this.state.settings.smartDictionary) return;
     this.spellerTimer = setTimeout(async () => {
       this.spellerTimer = null;
-      if (!this.spellerQueue || !this.spellerQueue.size) return;
+      if (!this.spellerQueue || (!this.spellerQueue.size && this.spellerContextChecked)) return;
       const generation = this.spellerGeneration;
       const controller = new AbortController();
       this.spellerRequest = controller;
-      const words = Array.from(this.spellerQueue).slice(0, 50);
+      const words = Array.from(this.spellerQueue);
       words.forEach((w) => {
         this.spellerQueue.delete(w);
         this.spellerPending.add(w);
       });
       
       try {
-        const context = this.state.settings.smartDictionaryMode === 'local' ? { text: '', blocks: [] } : this.buildSmartSpellerRequestContext();
+        const context = this.buildSmartSpellerRequestContext();
         const matches = await getSmartSpellerMatches(words, {
           mode: this.state.settings.smartDictionaryMode || 'local',
           provider: this.state.settings.smartDictionaryProvider || 'languagetool',
@@ -11794,6 +11803,13 @@ class NocturneWriter {
           this.updateTypoHighlights();
           return;
         }
+        this.spellerIssues = (matches.issues || []).flatMap(issue => {
+          const block = context.blocks.find(block => issue.start >= block.start && issue.end <= block.end);
+          return block ? [{ ...issue, docId: block.docId, paneId: block.paneId, blockId: block.blockId, start: issue.start - block.start, end: issue.end - block.start }] : [];
+        });
+        this.spellerContextChecked = true;
+        this.spellerResultRevision++;
+        if (matches.degraded) this.toast(matches.degraded);
         words.forEach((w) => {
           if (matches.checkedWords && !matches.checkedWords.has(w)) return;
           if (matches.has(w)) {
@@ -11819,7 +11835,9 @@ class NocturneWriter {
       } catch (e) {
         if (generation === this.spellerGeneration && !controller.signal.aborted) {
           this.typoBlockCache = new WeakMap();
-          console.error('Smart Speller error:', e);
+          this.spellerContextChecked = false;
+          this.spellerResultRevision++;
+          this.toast(e.message || 'Онлайн-проверка сейчас недоступна.');
         }
         return;
       } finally {
@@ -11832,7 +11850,7 @@ class NocturneWriter {
   }
 
   registerTypoMatch({ docId, paneId, blockId, start, end, rawText, rule, source = 'exact', smartConfidence = null }) {
-    if (!docId || !blockId || !rule?.correct) return null;
+    if (!docId || !blockId || !rule || (typeof rule.correct !== 'string' && !Array.isArray(rule.suggestions))) return null;
     const item = {
       id: uid('typo-match'),
       docId,
@@ -11844,11 +11862,11 @@ class NocturneWriter {
       normalizedText: normalizeTypoToken(rawText),
       ruleId: rule.id,
       builtinKey: rule.builtinKey,
-      correct: rule.correct,
+      correct: source === 'exact' && !['user', 'override'].includes(rule.source) ? this.smartSpellerReplacementCase(rawText, rule.correct) : rule.correct,
       label: rule.label || 'Частая ошибка',
       source,
       smartConfidence,
-      ...(source === 'smart' ? { suggestions: rule.suggestions || [rule.correct], spellerGeneration: this.spellerGeneration } : {}),
+      ...(source === 'smart' ? { suggestions: rule.suggestions || (typeof rule.correct === 'string' ? [rule.correct] : []), message: rule.message, spellerGeneration: this.spellerGeneration, displayStartOffset: rule.displayStartOffset, displayEndOffset: rule.displayEndOffset } : {}),
     };
     this.typoMatchIndex.push(item);
     if (!this.typoMatchByBlock) this.typoMatchByBlock = new Map();
@@ -11857,86 +11875,52 @@ class NocturneWriter {
     return item;
   }
 
-  collectSmartTypoMatches({ block, textNodes, fullText, occupied, protectedLexicon, tokenLookup, active, docId, paneId, fragmentBase = 0, smartRanges }) {
-    this.spellerCache = this.spellerCache || new Map();
-    this.spellerQueue = this.spellerQueue || new Set();
-    this.spellerPending = this.spellerPending || new Set();
-    
-    const tokenRegex = /\p{L}+(?:[’'\-]\p{L}+)*/gu;
-    let match = tokenRegex.exec(fullText);
-    const wordsToQueue = [];
-    
-    while (match) {
-      const rawWord = match[0];
-      const start = match.index;
-      const end = start + rawWord.length;
-      const normalized = normalizeTypoToken(rawWord);
-      
-      if (
-        normalized.length >= 3
-        && !protectedLexicon.has(normalized)
-        && !this.spellerIgnoredWords?.has(normalized)
-        && !tokenLookup[normalized]
-        && !this.typoRangeOverlaps(occupied, start, end)
-        && this.isCompletedTypoToken(fullText, start, end, active, block.dataset.blockId)
-      ) {
-        if (this.spellerCache.has(normalized)) {
-          const cached = this.spellerCache.get(normalized);
-          const blockId = block.dataset.sourceBlockId || block.dataset.blockId;
-          const cachedTypo = cached?.occurrences
-            ? cached.occurrences.find(item => item.docId === docId && item.paneId === paneId && item.blockId === blockId && item.start === fragmentBase + start && item.end === fragmentBase + end && item.rawText === rawWord)
-            : cached;
-          if (cachedTypo && cachedTypo.correct && normalizeTypoToken(cachedTypo.correct) !== normalized) {
-            const range = this.rangeFromBlockOffsets(textNodes, start, end);
-            if (range) {
-              const startOffset = fragmentBase + start;
-              const endOffset = fragmentBase + end;
-              const blockId = block.dataset.sourceBlockId || block.dataset.blockId;
-              const key = `${blockId}:${startOffset}:${endOffset}`;
-              if (this._typoHighlightRangesMap) {
-                this._typoHighlightRangesMap.set(key, { range, blockId, startOffset, endOffset, type: 'smart' });
-              }
-              smartRanges.push(range);
-              occupied.push([start, end]);
-              const suggestions = (cachedTypo.suggestions || [cachedTypo.correct]).map(value => cachedTypo.preserveCase ? this.smartSpellerReplacementCase(rawWord, value) : value);
-              this.registerTypoMatch({
-                docId,
-                paneId,
-                blockId,
-                start: startOffset,
-                end: endOffset,
-                rawText: rawWord,
-                rule: {
-                  id: `smart-${normalized}`,
-                  wrong: rawWord,
-                  correct: suggestions[0],
-                  suggestions,
-                  label: cachedTypo.label,
-                  builtinKey: normalized
-                },
-                source: 'smart'
-              });
-            }
-          }
-        } else {
-          if (!this.spellerQueue.has(normalized) && !this.spellerPending.has(normalized)) {
-            wordsToQueue.push(normalized);
-          }
-        }
+  collectSmartTypoMatches({ block, textNodes, fullText, occupied, protectedLexicon, active, docId, paneId, fragmentBase = 0, smartRanges }) {
+    this.spellerQueue ||= new Set();
+    this.spellerPending ||= new Set();
+    const blockId = block.dataset.sourceBlockId || block.dataset.blockId;
+    if (!this.spellerContextChecked) {
+      for (const token of fullText.matchAll(/\p{L}[\p{L}\p{M}]*(?:[’'\-][\p{L}\p{M}]+)*/gu)) {
+        const word = normalizeTypoToken(token[0].normalize('NFC'));
+        if (!protectedLexicon.has(word) && !this.spellerIgnoredWords?.has(word)
+          && !this.spellerPending.has(word)
+          && this.isCompletedTypoToken(fullText, token.index, token.index + token[0].length, active, block.dataset.blockId)) this.spellerQueue.add(word);
       }
-      match = tokenRegex.exec(fullText);
-    }
-    
-    if (wordsToQueue.length) {
-      wordsToQueue.forEach(w => this.spellerQueue.add(w));
       this.scheduleSpellerCheck();
+    }
+    for (const issue of this.spellerIssues || []) {
+      if (issue.docId !== docId || issue.paneId !== paneId || issue.blockId !== blockId) continue;
+      if (this.ignoredTypoIssues?.has(this.smartTypoIssueKey({ ...issue, ruleId: issue.ruleId || `smart-${issue.start}-${issue.end}` }))) continue;
+      const start = issue.start - fragmentBase, end = issue.end - fragmentBase;
+      if (start < 0 || end > fullText.length || fullText.slice(start, end) !== issue.rawText
+        || this.typoRangeOverlaps(occupied, start, end)
+        || /[\p{L}\p{M}]/u.test(issue.rawText) && !/\s$/u.test(issue.rawText) && !this.isCompletedTypoToken(fullText, start, end, active, block.dataset.blockId)) continue;
+      let displayStart = start, displayEnd = end;
+      if (start === end) {
+        displayStart = Math.max(0, start - 1);
+        if (/[\uDC00-\uDFFF]/u.test(fullText[displayStart] || '')) displayStart--;
+        displayEnd = start || Math.min(fullText.length, 1);
+      }
+      const range = this.rangeFromBlockOffsets(textNodes, displayStart, displayEnd);
+      if (!range) continue;
+      const key = `${blockId}:${issue.start}:${issue.end}`;
+      this._typoHighlightRangesMap?.set(key, { range, blockId, startOffset: issue.start, endOffset: issue.end, type: 'smart' });
+      smartRanges.push(range);
+      occupied.push([start, end]);
+      this.registerTypoMatch({ docId, paneId, blockId, start: issue.start, end: issue.end, rawText: issue.rawText,
+        rule: { ...issue, id: issue.ruleId || `smart-${issue.start}-${issue.end}`, displayStartOffset: fragmentBase + displayStart, displayEndOffset: fragmentBase + displayEnd }, source: 'smart' });
     }
   }
 
   smartSpellerReplacementCase(rawText, replacement) {
+    if (!rawText || !replacement) return replacement;
     if (rawText === rawText.toUpperCase()) return replacement.toUpperCase();
     if (rawText[0] === rawText[0].toUpperCase() && rawText.slice(1) === rawText.slice(1).toLowerCase()) return replacement[0].toUpperCase() + replacement.slice(1);
     return replacement;
+  }
+
+  smartTypoIssueKey(issue) {
+    return JSON.stringify([issue.docId, issue.paneId, issue.blockId, issue.ruleId, issue.startOffset ?? issue.start, issue.endOffset ?? issue.end, issue.rawText]);
   }
 
   findSmartTypoCandidate(normalized, rules) {
@@ -13807,22 +13791,22 @@ class NocturneWriter {
   }
 
   applyTypoReplacement(match) {
-    if (!match?.docId || !match.blockId || !match.rawText || !match.correct) return false;
+    if (!match?.docId || !match.blockId || typeof match.rawText !== 'string' || typeof match.correct !== 'string') return false;
     const paneId = match.paneId || this.state.workspace?.focusedPaneId || 'primary';
+    this.nocturneEditor?.syncDocFromEditor(paneId);
     if (match.source === 'smart') {
-      this.nocturneEditor?.syncDocFromEditor(paneId);
       this.syncSmartSpellerContext(this.getEffectiveTypoLookup(), this.buildProtectedLexicon());
     }
     const doc = this.state.docs.find((item) => item.id === match.docId);
     const block = doc?.ast?.blocks?.find((item) => item.id === match.blockId);
     if (!doc || !block) return false;
-    if (match.source === 'smart' && (match.spellerGeneration !== this.spellerGeneration || blockText(block).slice(match.startOffset, match.endOffset) !== match.rawText)) {
+    if ((match.source === 'smart' && match.spellerGeneration !== this.spellerGeneration) || blockText(block).slice(match.startOffset, match.endOffset) !== match.rawText) {
       this.toast('Фрагмент уже изменился. Повторите действие.');
       this.updateTypoHighlights();
       return false;
     }
 
-    if (match.source === 'smart') {
+    if (match.source === 'smart' || this.nocturneEditor?.instances.get(paneId)?.docId === match.docId) {
       const instance = this.nocturneEditor?.instances.get(paneId);
       const editor = instance?.docId === match.docId ? instance.editor : null;
       const element = editor?.view.dom.querySelector(`[data-block-id="${CSS.escape(match.blockId)}"]`);
@@ -14958,7 +14942,7 @@ class NocturneWriter {
                     ])}
                   </div>
                   <div class="smart-dictionary-field">
-                    <span class="smart-dictionary-label">Язык онлайн-проверки:</span>
+                    <span class="smart-dictionary-label">Язык проверки:</span>
                     ${this.renderSettingsSelect('smartDictionaryLang', [
                       ['auto', 'Авто-определение'],
                       ['uk', 'Українська'],
@@ -14973,7 +14957,7 @@ class NocturneWriter {
                   <div class="smart-dictionary-notice notice-success ${this.state.settings.smartDictionaryMode === 'local' ? 'active' : ''}">
                     <i class="bx bx-shield-check"></i>
                     <div>
-                      <strong>Офлайн:</strong> Проверяет известные ошибки и правила проекта. Для более широкой проверки слов используйте онлайн-режимы. Текст не передаётся в сеть.
+                      <strong>Офлайн:</strong> Проверяет орфографию, грамматику и пунктуацию по языковым словарям и правилам. Учитывает словарь проекта. Текст не передаётся в сеть.
                     </div>
                   </div>
                   <div class="smart-dictionary-notice notice-info ${this.state.settings.smartDictionaryMode !== 'local' ? 'active' : ''}">

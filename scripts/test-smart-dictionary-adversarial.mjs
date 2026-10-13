@@ -78,7 +78,7 @@ try {
         if (window.auditFault) return { ok: false, status: window.auditFault, headers: new Headers({ 'Retry-After': '2' }) };
         if (window.auditDynamic) return { ok: true, json: async () => ({ matches: [...text.matchAll(/adress/giu)].map(match => ({ offset: match.index, length: match[0].length, replacements: [{ value: match[0] === match[0].toUpperCase() ? 'ADDRESS' : 'address' }], rule: { issueType: 'misspelling', category: { id: 'TYPOS', name: 'Spelling' } } })) }) };
         const lang = language === 'auto' ? 'auto' : language.startsWith('ru') ? 'ru' : language.startsWith('uk') ? 'uk' : 'en';
-        const fixture = fixtures.find(item => item.lang === lang && item.text === text);
+        const fixture = fixtures.find(item => item.lang === lang && item.text === text) || fixtures.find(item => item.lang === 'auto' && item.text === text && item.response.language?.code?.startsWith(lang));
         if (!fixture) throw new Error(`No frozen provider response for ${lang}: ${text}`);
         return { ok: true, json: async () => structuredClone(fixture.response) };
       };

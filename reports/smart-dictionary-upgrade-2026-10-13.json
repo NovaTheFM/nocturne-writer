@@ -1,0 +1,334 @@
+{
+  "status": "PASS",
+  "report": "release/qa/app-tester/2026-10-13T12-10-56-825Z/index.html",
+  "checks": [
+    {
+      "id": "syntax",
+      "status": "PASS"
+    },
+    {
+      "id": "unit",
+      "status": "PASS"
+    },
+    {
+      "id": "smart-dictionary",
+      "status": "PASS"
+    },
+    {
+      "id": "audit-editor",
+      "status": "PASS"
+    },
+    {
+      "id": "editor-adapter",
+      "status": "PASS"
+    },
+    {
+      "id": "offline-assets",
+      "status": "PASS"
+    },
+    {
+      "id": "dropdown-motion",
+      "status": "PASS"
+    },
+    {
+      "id": "language-quality",
+      "status": "PASS"
+    },
+    {
+      "id": "language-quality-editor",
+      "status": "PASS"
+    },
+    {
+      "id": "language-performance",
+      "status": "PASS"
+    },
+    {
+      "id": "smart-dictionary-adversarial",
+      "status": "PASS"
+    },
+    {
+      "id": "source-integrity",
+      "status": "PASS"
+    }
+  ],
+  "languageCases": {
+    "ru": {
+      "correct": 200,
+      "firstSuggestion": 200,
+      "total": 200
+    },
+    "uk": {
+      "correct": 200,
+      "firstSuggestion": 200,
+      "total": 200
+    },
+    "en": {
+      "correct": 200,
+      "firstSuggestion": 200,
+      "total": 200
+    }
+  },
+  "qualityChecks": {
+    "passed": 5261,
+    "total": 5261,
+    "groups": {
+      "frozen-600": {
+        "passed": 1200,
+        "failed": 0
+      },
+      "unseen-vocabulary": {
+        "passed": 996,
+        "failed": 0
+      },
+      "multiple-errors": {
+        "passed": 60,
+        "failed": 0
+      },
+      "dictionary-integrity": {
+        "passed": 3,
+        "failed": 0
+      },
+      "seeded-spelling-transfer": {
+        "passed": 1797,
+        "failed": 0
+      },
+      "invalid-reference-safety": {
+        "passed": 3,
+        "failed": 0
+      },
+      "isolation": {
+        "passed": 1,
+        "failed": 0
+      },
+      "stress": {
+        "passed": 1,
+        "failed": 0
+      },
+      "empty-online-layer": {
+        "passed": 1200,
+        "failed": 0
+      }
+    }
+  },
+  "editorChecks": {
+    "passed": 2528,
+    "total": 2528
+  },
+  "originalAudit": {
+    "erroneousSentences": 99,
+    "correctControls": 111,
+    "nocturneGoldAvailable": 99,
+    "lostProviderCorrections": 0,
+    "falsePositiveControls": 0,
+    "byCategory": {
+      "spelling": {
+        "errors": 41,
+        "providerGoldAvailable": 39,
+        "nocturneGoldAvailable": 41,
+        "lostProviderCorrections": 0,
+        "localDictionaryGains": 2
+      },
+      "grammar": {
+        "errors": 21,
+        "providerGoldAvailable": 11,
+        "nocturneGoldAvailable": 21,
+        "lostProviderCorrections": 0,
+        "localDictionaryGains": 10
+      },
+      "punctuation": {
+        "errors": 25,
+        "providerGoldAvailable": 12,
+        "nocturneGoldAvailable": 25,
+        "lostProviderCorrections": 0,
+        "localDictionaryGains": 13
+      },
+      "capitalization": {
+        "errors": 5,
+        "providerGoldAvailable": 4,
+        "nocturneGoldAvailable": 5,
+        "lostProviderCorrections": 0,
+        "localDictionaryGains": 1
+      },
+      "repetition": {
+        "errors": 5,
+        "providerGoldAvailable": 4,
+        "nocturneGoldAvailable": 5,
+        "lostProviderCorrections": 0,
+        "localDictionaryGains": 1
+      },
+      "usage": {
+        "errors": 2,
+        "providerGoldAvailable": 0,
+        "nocturneGoldAvailable": 2,
+        "lostProviderCorrections": 0,
+        "localDictionaryGains": 2
+      }
+    }
+  },
+  "liveHTTP": {
+    "selected": true,
+    "testedProfiles": [
+      {
+        "name": "desktop/live/real HTTP combines author dictionary and LanguageTool",
+        "passed": true
+      },
+      {
+        "name": "android/live/real HTTP combines author dictionary and LanguageTool",
+        "passed": true
+      }
+    ]
+  },
+  "performance": [
+    {
+      "name": "desktop/language-performance-without-observer",
+      "passed": true,
+      "cold": [
+        {
+          "lang": "ru",
+          "durationMs": 2018,
+          "issues": 1
+        },
+        {
+          "lang": "uk",
+          "durationMs": 4031,
+          "issues": 1
+        },
+        {
+          "lang": "en",
+          "durationMs": 526,
+          "issues": 1
+        }
+      ],
+      "characters": 107515,
+      "warmMs": 1566,
+      "issues": 1,
+      "maxFrameGapMs": 83,
+      "frames": 482,
+      "cancelled": true,
+      "cancellationMs": 150
+    },
+    {
+      "name": "android/language-performance-without-observer",
+      "passed": true,
+      "cold": [
+        {
+          "lang": "ru",
+          "durationMs": 2009,
+          "issues": 1
+        },
+        {
+          "lang": "uk",
+          "durationMs": 4024,
+          "issues": 1
+        },
+        {
+          "lang": "en",
+          "durationMs": 619,
+          "issues": 1
+        }
+      ],
+      "characters": 107515,
+      "warmMs": 1613,
+      "issues": 1,
+      "maxFrameGapMs": 100,
+      "frames": 509,
+      "cancelled": true,
+      "cancellationMs": 150
+    }
+  ],
+  "build": {
+    "path": "dist",
+    "bytes": 57649122,
+    "indexBytes": 8900,
+    "files": {
+      "src/main.js": {
+        "bytes": 1401646,
+        "sha256": "d478314130184a121cbe1d7569fd5c4d019d71d8bd3d4f7e02bdda659a03b110"
+      },
+      "src/core/smart-speller.js": {
+        "bytes": 13748,
+        "sha256": "8ffde33a6a5b57960dd93c259bd8899a2cf72a8fd599da92afca6bc4785e8e22"
+      },
+      "src/core/language-checker.js": {
+        "bytes": 29395,
+        "sha256": "f342381fa38256fbac990d479af73276efe06419652f572b0ce6583108c10dd2"
+      },
+      "src/core/language-checker-client.js": {
+        "bytes": 1456,
+        "sha256": "42893f5ebfea76de38fd44db369aa5a7af3cb8609f637954497f5359d08c7930"
+      },
+      "src/core/language-checker-worker.js": {
+        "bytes": 641,
+        "sha256": "7d36e24ad160c36d8679d582efd20e3f80199244847050fb90b258d9392b26a3"
+      },
+      "src/core/language-detection.js": {
+        "bytes": 694,
+        "sha256": "25d3b1e2562082addfe72ded408539436b46d3d2009e2e2f753c51d94708775a"
+      },
+      "src/core/language-data/ru.mjs": {
+        "bytes": 6170459,
+        "sha256": "be7dbefb0faaf9c38bb8fa0326bf692fd8373aa353606a9f111d6f5ea349464f"
+      },
+      "src/core/language-data/uk.mjs": {
+        "bytes": 9834267,
+        "sha256": "34953191739759931d2068b2fdf3253e629d191a3cf2cacaf159879b748bb7f1"
+      },
+      "src/core/language-data/en.mjs": {
+        "bytes": 1734251,
+        "sha256": "21133cd140d6405cf6cba3a8c6a0490ed87ef5d9e3fb8d87e2b112a47bdd1f6d"
+      },
+      "src/core/language-data/classical-rules.js": {
+        "bytes": 90780,
+        "sha256": "6af48e74eb665ab6445b881eafc166397e2538ceba3126762737f880a91bba4f"
+      },
+      "src/core/language-data/manifest.json": {
+        "bytes": 1804,
+        "sha256": "6bbd43f1cbc7462117111d1c6dc737ca4ed2ddbddcb764c6fac46e32a754ec1b"
+      },
+      "src/core/language-data/README.md": {
+        "bytes": 5711,
+        "sha256": "5f4cfa52d25e1ae0c4deb3de169a5679c1af8916bdc9dc12a210177602494b97"
+      },
+      "src/core/language-data/source/ExportMorphology.java": {
+        "bytes": 3495,
+        "sha256": "32dfbac01cb8a6f108bd0e328c649d47c69d4b29ee26b74041f8db5c06efd959"
+      },
+      "src/core/language-data/source/BuildWordFsa.java": {
+        "bytes": 915,
+        "sha256": "27d3991f46129a579671cb0ab6ea27dfc3a963802874070293233e3948c2e481"
+      },
+      "src/core/language-data/source/build-language-lexicon.mjs": {
+        "bytes": 5462,
+        "sha256": "b41386b1e5c4f9d377a9b2563ef23ce34daff7f5325f9bbe9e5cf550f62b9df1"
+      }
+    }
+  },
+  "limitations": [
+    "Browser mobile emulation; physical Android not tested",
+    "Installed/packaged Electron not tested",
+    "Public cloud availability and internal implementation not tested",
+    "Fixed cases do not establish universal linguistic accuracy"
+  ],
+  "finishedAt": "2026-10-13T12:17:50.722Z",
+  "spellingReferenceAudit": {
+    "validReferences": 599,
+    "invalidReferences": [
+      {
+        "id": "uk-spelling-transfer-151",
+        "lang": "uk",
+        "word": "холостяк",
+        "valid": false,
+        "tags": [
+          "noun:anim:m:v_naz:bad"
+        ]
+      }
+    ],
+    "successfulMutationScenarios": 1797,
+    "invalidReferenceSafetyScenarios": 3,
+    "note": "Invalid references are safety checks, not successful spelling corrections",
+    "validationFixture": "scripts/fixtures/language-spelling-source-validation.json",
+    "validationSha256": "040d10c7b30a3637aa61251bba6fe5aa2c94df6234e46cb0c2b92abe9166d52c",
+    "originalCorpusUnchanged": true
+  },
+  "unitTests": 37
+}
