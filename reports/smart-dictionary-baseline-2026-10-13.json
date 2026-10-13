@@ -1,0 +1,1803 @@
+{
+  "capturedAt": "2026-10-13T06:26:03.870Z",
+  "applicationCommit": "b337ea7",
+  "applicationChanged": false,
+  "report": "release/qa/app-tester/2026-10-13T05-54-21-819Z/index.html",
+  "cases": "release/qa/app-tester/2026-10-13T05-54-21-819Z/smart-dictionary-adversarial/results.json",
+  "summary": {
+    "status": "FAIL",
+    "contractVersion": 1,
+    "seed": 20261013,
+    "corpusSha256": "2998f6f511fec03f486b3d40fd69823d7727a37abea109348d0765d9c6bfd54c",
+    "corpusSentences": 210,
+    "generatedOffsetCases": 1000,
+    "generatedEditorEdits": 100,
+    "total": 292,
+    "passed": 194,
+    "failed": 98,
+    "durationMs": 52339,
+    "byGate": {
+      "core-quality": {
+        "passed": 157,
+        "total": 211
+      },
+      "core-safety": {
+        "passed": 5,
+        "total": 7
+      },
+      "core-reliability": {
+        "passed": 1,
+        "total": 6
+      },
+      "core-efficiency": {
+        "passed": 1,
+        "total": 2
+      },
+      "editor-quality": {
+        "passed": 18,
+        "total": 48
+      },
+      "editor-safety": {
+        "passed": 8,
+        "total": 8
+      },
+      "editor-reliability": {
+        "passed": 2,
+        "total": 8
+      },
+      "live-integration": {
+        "passed": 2,
+        "total": 2
+      }
+    },
+    "byCategory": {
+      "spelling": {
+        "passed": 95,
+        "total": 100
+      },
+      "grammar": {
+        "passed": 29,
+        "total": 50
+      },
+      "punctuation": {
+        "passed": 27,
+        "total": 60
+      },
+      "capitalization": {
+        "passed": 5,
+        "total": 14
+      },
+      "repetition": {
+        "passed": 5,
+        "total": 14
+      },
+      "usage": {
+        "passed": 2,
+        "total": 4
+      },
+      "author-style": {
+        "passed": 12,
+        "total": 12
+      }
+    },
+    "byLanguage": {
+      "ru": {
+        "passed": 83,
+        "total": 124
+      },
+      "uk": {
+        "passed": 33,
+        "total": 47
+      },
+      "en": {
+        "passed": 49,
+        "total": 71
+      },
+      "auto": {
+        "passed": 10,
+        "total": 12
+      }
+    },
+    "provider": {
+      "corpusRequests": 208,
+      "source": "LanguageTool 6.6, self-hosted HTTP API",
+      "software": {
+        "name": "LanguageTool",
+        "version": "6.6",
+        "buildDate": "2025-03-27 20:50:25 +0100",
+        "apiVersion": 1,
+        "premium": false,
+        "premiumHint": "You might be missing errors only the Premium version can find. Contact us at support<at>languagetoolplus.com.",
+        "status": ""
+      },
+      "capturedAt": "2026-10-13T05:36:25.443Z",
+      "corpusCorrectionsFound": 70,
+      "corpusCorrectionsTotal": 99
+    },
+    "quality": {
+      "erroneousSentences": 99,
+      "correctControls": 111,
+      "nocturneGoldAvailable": 46,
+      "lostProviderCorrections": 26,
+      "falsePositiveControls": 0,
+      "byCategory": {
+        "spelling": {
+          "errors": 41,
+          "providerGoldAvailable": 39,
+          "nocturneGoldAvailable": 40,
+          "lostProviderCorrections": 1,
+          "localDictionaryGains": 2
+        },
+        "grammar": {
+          "errors": 21,
+          "providerGoldAvailable": 11,
+          "nocturneGoldAvailable": 6,
+          "lostProviderCorrections": 5,
+          "localDictionaryGains": 0
+        },
+        "punctuation": {
+          "errors": 25,
+          "providerGoldAvailable": 12,
+          "nocturneGoldAvailable": 0,
+          "lostProviderCorrections": 12,
+          "localDictionaryGains": 0
+        },
+        "capitalization": {
+          "errors": 5,
+          "providerGoldAvailable": 4,
+          "nocturneGoldAvailable": 0,
+          "lostProviderCorrections": 4,
+          "localDictionaryGains": 0
+        },
+        "repetition": {
+          "errors": 5,
+          "providerGoldAvailable": 4,
+          "nocturneGoldAvailable": 0,
+          "lostProviderCorrections": 4,
+          "localDictionaryGains": 0
+        },
+        "usage": {
+          "errors": 2,
+          "providerGoldAvailable": 0,
+          "nocturneGoldAvailable": 0,
+          "lostProviderCorrections": 0,
+          "localDictionaryGains": 0
+        }
+      }
+    },
+    "liveIntegration": {
+      "selected": true,
+      "testedProfiles": [
+        {
+          "name": "desktop/live/real HTTP combines author dictionary and LanguageTool",
+          "passed": true
+        },
+        {
+          "name": "android/live/real HTTP combines author dictionary and LanguageTool",
+          "passed": true
+        }
+      ]
+    }
+  },
+  "fingerprints": {
+    "scripts/fixtures/smart-dictionary-corpus.mjs": {
+      "bytes": 12454,
+      "sha256": "15378dade66ac93ee3ab6efa8558009da64f51781590a4fbfc325470b5ced53b"
+    },
+    "scripts/fixtures/smart-dictionary-provider.json": {
+      "bytes": 370821,
+      "sha256": "d02189a2b012277f009daff6e54dda007182d0e41b45dad76951af0ca70bfb6c"
+    },
+    "scripts/qa/smart-dictionary-audit-core.mjs": {
+      "bytes": 15326,
+      "sha256": "cfc73331f1b93bb9eb1a1a4f457a186d8a6dc7d4d818a0895248a39b9942c008"
+    },
+    "scripts/test-smart-dictionary-adversarial.mjs": {
+      "bytes": 21443,
+      "sha256": "9bb6ad694ca74f36ae273185d441d64becdf2b06ac7a37cbbc7e87825b0e96af"
+    },
+    "src/core/smart-speller.js": {
+      "bytes": 7674,
+      "sha256": "84e1a3681c213456e70368094b20cac8f3f045f82997f8f874136889898514d8"
+    },
+    "src/main.js": {
+      "bytes": 1400164,
+      "sha256": "d39d3f070d3842cae24e5153a9540e8607cc884026f3d4839b8e7c4060914b93"
+    }
+  },
+  "verification": [
+    {
+      "id": "syntax",
+      "status": "PASS",
+      "exitCode": 0
+    },
+    {
+      "id": "smart-dictionary-adversarial",
+      "status": "FAIL",
+      "exitCode": 1
+    },
+    {
+      "id": "source-integrity",
+      "status": "PASS"
+    }
+  ],
+  "existingRegressionChecks": [
+    {
+      "id": "unit",
+      "status": "PASS",
+      "exitCode": 0
+    },
+    {
+      "id": "smart-dictionary",
+      "status": "PASS",
+      "exitCode": 0
+    }
+  ],
+  "gaps": [
+    "Mobile Chromium emulation, not physical Android",
+    "No installed Electron verification",
+    "No public cloud accuracy or Ukrainian network availability measurements",
+    "No EXE/APK build",
+    "Hunspell and Harper candidates have not been integrated or benchmarked"
+  ],
+  "failedScenarios": [
+    {
+      "name": "corpus/ru-spelling-09",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/ru-grammar-01",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/ru-grammar-02",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/ru-grammar-03",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/ru-grammar-04",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/ru-grammar-05",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/ru-grammar-06",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/ru-grammar-07",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/ru-grammar-08",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/ru-grammar-09",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/ru-grammar-10",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/ru-punctuation-01",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/ru-punctuation-02",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/ru-punctuation-03",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/ru-punctuation-04",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/ru-punctuation-05",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/ru-punctuation-06",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/ru-punctuation-07",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/ru-punctuation-08",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/ru-punctuation-09",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/ru-punctuation-10",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/ru-punctuation-11",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/ru-punctuation-12",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/ru-punctuation-13",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/ru-punctuation-14",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/ru-capitalization-01",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/ru-capitalization-02",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/ru-repetition-01",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/ru-repetition-02",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/uk-grammar-01",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/uk-usage-01",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/uk-usage-02",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/uk-grammar-02",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/uk-punctuation-01",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/uk-punctuation-02",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/uk-punctuation-03",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/uk-punctuation-04",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/uk-punctuation-05",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/uk-punctuation-06",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/uk-capitalization-01",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/uk-repetition-01",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/en-grammar-02",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/en-grammar-07",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/en-grammar-08",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/en-punctuation-01",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/en-punctuation-02",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/en-punctuation-03",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/en-punctuation-04",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/en-punctuation-05",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/en-capitalization-01",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/en-capitalization-02",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/en-repetition-01",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "corpus/en-repetition-02",
+      "gate": "core-quality",
+      "error": "Expected correction is unavailable after the Nocturne adapter"
+    },
+    {
+      "name": "fault/HTTP 429 retains local results",
+      "gate": "core-reliability",
+      "error": "Error: Проверка словаря недоступна (429). Можно повторить позже."
+    },
+    {
+      "name": "fault/HTTP 500 retains local results",
+      "gate": "core-reliability",
+      "error": "Error: Проверка словаря недоступна (500). Можно повторить позже."
+    },
+    {
+      "name": "fault/HTTP 503 retains local results",
+      "gate": "core-reliability",
+      "error": "Error: Проверка словаря недоступна (503). Можно повторить позже."
+    },
+    {
+      "name": "fault/network rejection retains local results",
+      "gate": "core-reliability",
+      "error": "TypeError: Network disconnected"
+    },
+    {
+      "name": "fault/incomplete results never declare unchecked words clean",
+      "gate": "core-reliability",
+      "error": "AssertionError [ERR_ASSERTION]: A partial response is not proof that a word has been checked"
+    },
+    {
+      "name": "fault/no suggestions still reports a known spelling error",
+      "gate": "core-quality",
+      "error": "AssertionError [ERR_ASSERTION]: Absence of a replacement must not erase a confirmed diagnostic"
+    },
+    {
+      "name": "fault/excessively long alternatives are rejected",
+      "gate": "core-safety",
+      "error": "AssertionError [ERR_ASSERTION]: A corrupted provider must not populate the menu with an 8192-character replacement"
+    },
+    {
+      "name": "cache/concurrent identical checks share one provider request",
+      "gate": "core-efficiency",
+      "error": "AssertionError [ERR_ASSERTION]: Identical in-flight checks must be coalesced"
+    },
+    {
+      "name": "window/oversized token never bypasses the 4000-character request limit",
+      "gate": "core-safety",
+      "error": "AssertionError [ERR_ASSERTION]: Requests exceed the configured window: 10008, 407"
+    },
+    {
+      "name": "desktop/editor/ru-spelling-18",
+      "gate": "editor-quality",
+      "error": "Expected issue is missing from the editor highlight/correction index"
+    },
+    {
+      "name": "desktop/editor/ru-grammar-04",
+      "gate": "editor-quality",
+      "error": "Expected issue is missing from the editor highlight/correction index"
+    },
+    {
+      "name": "desktop/editor/ru-punctuation-01",
+      "gate": "editor-quality",
+      "error": "Expected issue is missing from the editor highlight/correction index"
+    },
+    {
+      "name": "desktop/editor/ru-punctuation-10",
+      "gate": "editor-quality",
+      "error": "Expected issue is missing from the editor highlight/correction index"
+    },
+    {
+      "name": "desktop/editor/ru-capitalization-01",
+      "gate": "editor-quality",
+      "error": "Expected issue is missing from the editor highlight/correction index"
+    },
+    {
+      "name": "desktop/editor/ru-repetition-01",
+      "gate": "editor-quality",
+      "error": "Expected issue is missing from the editor highlight/correction index"
+    },
+    {
+      "name": "desktop/editor/uk-punctuation-01",
+      "gate": "editor-quality",
+      "error": "Expected issue is missing from the editor highlight/correction index"
+    },
+    {
+      "name": "desktop/editor/en-grammar-01",
+      "gate": "editor-quality",
+      "error": "Expected issue is missing from the editor highlight/correction index"
+    },
+    {
+      "name": "desktop/editor/en-grammar-04",
+      "gate": "editor-quality",
+      "error": "Expected issue is missing from the editor highlight/correction index"
+    },
+    {
+      "name": "desktop/editor/en-punctuation-01",
+      "gate": "editor-quality",
+      "error": "Expected issue is missing from the editor highlight/correction index"
+    },
+    {
+      "name": "desktop/editor/en-capitalization-01",
+      "gate": "editor-quality",
+      "error": "Expected issue is missing from the editor highlight/correction index"
+    },
+    {
+      "name": "desktop/editor/en-repetition-01",
+      "gate": "editor-quality",
+      "error": "Expected issue is missing from the editor highlight/correction index"
+    },
+    {
+      "name": "desktop/editor/auto-spelling-02",
+      "gate": "editor-quality",
+      "error": "Expected issue is missing from the editor highlight/correction index"
+    },
+    {
+      "name": "desktop/replacement/missing-comma insertion is offered and undoable",
+      "gate": "editor-quality",
+      "error": "AssertionError [ERR_ASSERTION]: A comma correction must reach the editor"
+    },
+    {
+      "name": "desktop/replacement/duplicate-word deletion is offered and undoable",
+      "gate": "editor-quality",
+      "error": "AssertionError [ERR_ASSERTION]: A deletion correction must reach the editor"
+    },
+    {
+      "name": "desktop/offline/hybrid retains dictionary correction strict=false",
+      "gate": "editor-reliability",
+      "error": "The local layer loses its correction when an uncached remote request fails"
+    },
+    {
+      "name": "desktop/network/429 respects Retry-After instead of repeated requests",
+      "gate": "editor-reliability",
+      "error": "Retry-After=2 was ignored: 4 immediate requests"
+    },
+    {
+      "name": "desktop/network/provider failure has visible user feedback",
+      "gate": "editor-reliability",
+      "error": "AssertionError [ERR_ASSERTION]: Console-only logging does not tell the writer that checking failed"
+    },
+    {
+      "name": "android/editor/ru-spelling-18",
+      "gate": "editor-quality",
+      "error": "Expected issue is missing from the editor highlight/correction index"
+    },
+    {
+      "name": "android/editor/ru-grammar-04",
+      "gate": "editor-quality",
+      "error": "Expected issue is missing from the editor highlight/correction index"
+    },
+    {
+      "name": "android/editor/ru-punctuation-01",
+      "gate": "editor-quality",
+      "error": "Expected issue is missing from the editor highlight/correction index"
+    },
+    {
+      "name": "android/editor/ru-punctuation-10",
+      "gate": "editor-quality",
+      "error": "Expected issue is missing from the editor highlight/correction index"
+    },
+    {
+      "name": "android/editor/ru-capitalization-01",
+      "gate": "editor-quality",
+      "error": "Expected issue is missing from the editor highlight/correction index"
+    },
+    {
+      "name": "android/editor/ru-repetition-01",
+      "gate": "editor-quality",
+      "error": "Expected issue is missing from the editor highlight/correction index"
+    },
+    {
+      "name": "android/editor/uk-punctuation-01",
+      "gate": "editor-quality",
+      "error": "Expected issue is missing from the editor highlight/correction index"
+    },
+    {
+      "name": "android/editor/en-grammar-01",
+      "gate": "editor-quality",
+      "error": "Expected issue is missing from the editor highlight/correction index"
+    },
+    {
+      "name": "android/editor/en-grammar-04",
+      "gate": "editor-quality",
+      "error": "Expected issue is missing from the editor highlight/correction index"
+    },
+    {
+      "name": "android/editor/en-punctuation-01",
+      "gate": "editor-quality",
+      "error": "Expected issue is missing from the editor highlight/correction index"
+    },
+    {
+      "name": "android/editor/en-capitalization-01",
+      "gate": "editor-quality",
+      "error": "Expected issue is missing from the editor highlight/correction index"
+    },
+    {
+      "name": "android/editor/en-repetition-01",
+      "gate": "editor-quality",
+      "error": "Expected issue is missing from the editor highlight/correction index"
+    },
+    {
+      "name": "android/editor/auto-spelling-02",
+      "gate": "editor-quality",
+      "error": "Expected issue is missing from the editor highlight/correction index"
+    },
+    {
+      "name": "android/replacement/missing-comma insertion is offered and undoable",
+      "gate": "editor-quality",
+      "error": "AssertionError [ERR_ASSERTION]: A comma correction must reach the editor"
+    },
+    {
+      "name": "android/replacement/duplicate-word deletion is offered and undoable",
+      "gate": "editor-quality",
+      "error": "AssertionError [ERR_ASSERTION]: A deletion correction must reach the editor"
+    },
+    {
+      "name": "android/offline/hybrid retains dictionary correction strict=false",
+      "gate": "editor-reliability",
+      "error": "The local layer loses its correction when an uncached remote request fails"
+    },
+    {
+      "name": "android/network/429 respects Retry-After instead of repeated requests",
+      "gate": "editor-reliability",
+      "error": "Retry-After=2 was ignored: 4 immediate requests"
+    },
+    {
+      "name": "android/network/provider failure has visible user feedback",
+      "gate": "editor-reliability",
+      "error": "AssertionError [ERR_ASSERTION]: Console-only logging does not tell the writer that checking failed"
+    }
+  ],
+  "lostProviderCorrections": [
+    {
+      "name": "corpus/ru-spelling-09",
+      "lang": "ru",
+      "category": "spelling",
+      "text": "Мы читали интересную книку.",
+      "gold": [
+        "Мы читали интересную книгу."
+      ],
+      "issues": [
+        {
+          "rawText": "книку",
+          "start": 21,
+          "end": 26,
+          "correct": "книзу",
+          "suggestions": [
+            "книзу",
+            "анику",
+            "каику",
+            "кику",
+            "кинику"
+          ],
+          "label": "Проверка орфографии",
+          "source": "online"
+        }
+      ],
+      "providerIssues": [
+        {
+          "start": 21,
+          "end": 26,
+          "suggestions": [
+            "книзу",
+            "анику",
+            "аннику",
+            "каику",
+            "кику",
+            "кинику",
+            "клику",
+            "кницу",
+            "книгу",
+            "книжку",
+            "конику",
+            "крику",
+            "кунику",
+            "нику",
+            "онику",
+            "янику",
+            "яннику",
+            "унику",
+            "шнеку",
+            "Анику",
+            "Аннику",
+            "Енику",
+            "Онику",
+            "Янику",
+            "Яннику",
+            "к нику"
+          ],
+          "category": "TYPOS",
+          "issueType": "misspelling"
+        }
+      ]
+    },
+    {
+      "name": "corpus/ru-grammar-02",
+      "lang": "ru",
+      "category": "grammar",
+      "text": "Она купил хлеб.",
+      "gold": [
+        "Она купила хлеб."
+      ],
+      "issues": [],
+      "providerIssues": [
+        {
+          "start": 0,
+          "end": 9,
+          "suggestions": [
+            "Она купила"
+          ],
+          "category": "GRAMMAR",
+          "issueType": "uncategorized"
+        }
+      ]
+    },
+    {
+      "name": "corpus/ru-punctuation-08",
+      "lang": "ru",
+      "category": "punctuation",
+      "text": "Это дом который построил мой отец.",
+      "gold": [
+        "Это дом, который построил мой отец."
+      ],
+      "issues": [],
+      "providerIssues": [
+        {
+          "start": 4,
+          "end": 15,
+          "suggestions": [
+            "дом, который"
+          ],
+          "category": "PUNCTUATION",
+          "issueType": "uncategorized"
+        }
+      ]
+    },
+    {
+      "name": "corpus/ru-punctuation-09",
+      "lang": "ru",
+      "category": "punctuation",
+      "text": "Он прочитал книгу, которую я ему дал..",
+      "gold": [
+        "Он прочитал книгу, которую я ему дал."
+      ],
+      "issues": [],
+      "providerIssues": [
+        {
+          "start": 36,
+          "end": 38,
+          "suggestions": [
+            ".",
+            "…"
+          ],
+          "category": "PUNCTUATION",
+          "issueType": "uncategorized"
+        }
+      ]
+    },
+    {
+      "name": "corpus/ru-punctuation-10",
+      "lang": "ru",
+      "category": "punctuation",
+      "text": "Она пришла,, а он ушёл.",
+      "gold": [
+        "Она пришла, а он ушёл."
+      ],
+      "issues": [],
+      "providerIssues": [
+        {
+          "start": 10,
+          "end": 12,
+          "suggestions": [
+            ","
+          ],
+          "category": "PUNCTUATION",
+          "issueType": "uncategorized"
+        }
+      ]
+    },
+    {
+      "name": "corpus/ru-punctuation-11",
+      "lang": "ru",
+      "category": "punctuation",
+      "text": "Он знал ответ , но молчал.",
+      "gold": [
+        "Он знал ответ, но молчал."
+      ],
+      "issues": [],
+      "providerIssues": [
+        {
+          "start": 13,
+          "end": 15,
+          "suggestions": [
+            ","
+          ],
+          "category": "TYPOGRAPHY",
+          "issueType": "whitespace"
+        }
+      ]
+    },
+    {
+      "name": "corpus/ru-punctuation-12",
+      "lang": "ru",
+      "category": "punctuation",
+      "text": "Я увидел его,и улыбнулся.",
+      "gold": [
+        "Я увидел его, и улыбнулся."
+      ],
+      "issues": [],
+      "providerIssues": [
+        {
+          "start": 12,
+          "end": 14,
+          "suggestions": [
+            ", и"
+          ],
+          "category": "TYPOGRAPHY",
+          "issueType": "whitespace"
+        }
+      ]
+    },
+    {
+      "name": "corpus/ru-punctuation-13",
+      "lang": "ru",
+      "category": "punctuation",
+      "text": "Привет,мир!",
+      "gold": [
+        "Привет, мир!"
+      ],
+      "issues": [],
+      "providerIssues": [
+        {
+          "start": 6,
+          "end": 10,
+          "suggestions": [
+            ", мир"
+          ],
+          "category": "TYPOGRAPHY",
+          "issueType": "whitespace"
+        }
+      ]
+    },
+    {
+      "name": "corpus/ru-capitalization-01",
+      "lang": "ru",
+      "category": "capitalization",
+      "text": "мы вернулись домой.",
+      "gold": [
+        "Мы вернулись домой."
+      ],
+      "issues": [],
+      "providerIssues": [
+        {
+          "start": 0,
+          "end": 2,
+          "suggestions": [
+            "Мы"
+          ],
+          "category": "CASING",
+          "issueType": "typographical"
+        }
+      ]
+    },
+    {
+      "name": "corpus/ru-repetition-02",
+      "lang": "ru",
+      "category": "repetition",
+      "text": "Он увидел очень очень яркий свет.",
+      "gold": [
+        "Он увидел очень яркий свет."
+      ],
+      "issues": [],
+      "providerIssues": [
+        {
+          "start": 10,
+          "end": 21,
+          "suggestions": [
+            "очень"
+          ],
+          "category": "MISC",
+          "issueType": "duplication"
+        }
+      ]
+    },
+    {
+      "name": "corpus/uk-grammar-01",
+      "lang": "uk",
+      "category": "grammar",
+      "text": "Згідно наказу ми пішли.",
+      "gold": [
+        "Згідно з наказом ми пішли."
+      ],
+      "issues": [],
+      "providerIssues": [
+        {
+          "start": 7,
+          "end": 13,
+          "suggestions": [
+            "з наказом"
+          ],
+          "category": "GRAMMAR",
+          "issueType": "uncategorized"
+        }
+      ]
+    },
+    {
+      "name": "corpus/uk-grammar-02",
+      "lang": "uk",
+      "category": "grammar",
+      "text": "Це самий кращий варіант.",
+      "gold": [
+        "Це найкращий варіант."
+      ],
+      "issues": [],
+      "providerIssues": [
+        {
+          "start": 3,
+          "end": 15,
+          "suggestions": [
+            "найкращий"
+          ],
+          "category": "GRAMMAR",
+          "issueType": "uncategorized"
+        }
+      ]
+    },
+    {
+      "name": "corpus/uk-punctuation-05",
+      "lang": "uk",
+      "category": "punctuation",
+      "text": "Привіт,світе!",
+      "gold": [
+        "Привіт, світе!"
+      ],
+      "issues": [],
+      "providerIssues": [
+        {
+          "start": 6,
+          "end": 12,
+          "suggestions": [
+            ", світе"
+          ],
+          "category": "TYPOGRAPHY",
+          "issueType": "whitespace"
+        }
+      ]
+    },
+    {
+      "name": "corpus/uk-capitalization-01",
+      "lang": "uk",
+      "category": "capitalization",
+      "text": "ми повернулися додому.",
+      "gold": [
+        "Ми повернулися додому."
+      ],
+      "issues": [],
+      "providerIssues": [
+        {
+          "start": 0,
+          "end": 2,
+          "suggestions": [
+            "Ми"
+          ],
+          "category": "CASING",
+          "issueType": "typographical"
+        }
+      ]
+    },
+    {
+      "name": "corpus/uk-repetition-01",
+      "lang": "uk",
+      "category": "repetition",
+      "text": "Вона відкрила відкрила двері.",
+      "gold": [
+        "Вона відкрила двері."
+      ],
+      "issues": [],
+      "providerIssues": [
+        {
+          "start": 5,
+          "end": 22,
+          "suggestions": [
+            "відкрила"
+          ],
+          "category": "MISC",
+          "issueType": "duplication"
+        }
+      ]
+    },
+    {
+      "name": "corpus/en-grammar-02",
+      "lang": "en",
+      "category": "grammar",
+      "text": "These cat are asleep.",
+      "gold": [
+        "These cats are asleep."
+      ],
+      "issues": [
+        {
+          "rawText": "are",
+          "start": 10,
+          "end": 13,
+          "correct": "is",
+          "suggestions": [
+            "is"
+          ],
+          "label": "Grammar",
+          "source": "online"
+        }
+      ],
+      "providerIssues": [
+        {
+          "start": 0,
+          "end": 9,
+          "suggestions": [
+            "This cat",
+            "These cats"
+          ],
+          "category": "GRAMMAR",
+          "issueType": "grammar"
+        },
+        {
+          "start": 10,
+          "end": 13,
+          "suggestions": [
+            "is"
+          ],
+          "category": "GRAMMAR",
+          "issueType": "grammar"
+        }
+      ]
+    },
+    {
+      "name": "corpus/en-grammar-07",
+      "lang": "en",
+      "category": "grammar",
+      "text": "There is three books here.",
+      "gold": [
+        "There are three books here."
+      ],
+      "issues": [],
+      "providerIssues": [
+        {
+          "start": 0,
+          "end": 20,
+          "suggestions": [
+            "There are three books"
+          ],
+          "category": "GRAMMAR",
+          "issueType": "grammar"
+        }
+      ]
+    },
+    {
+      "name": "corpus/en-punctuation-01",
+      "lang": "en",
+      "category": "punctuation",
+      "text": "Hello,world!",
+      "gold": [
+        "Hello, world!"
+      ],
+      "issues": [],
+      "providerIssues": [
+        {
+          "start": 5,
+          "end": 11,
+          "suggestions": [
+            ", world"
+          ],
+          "category": "TYPOGRAPHY",
+          "issueType": "whitespace"
+        }
+      ]
+    },
+    {
+      "name": "corpus/en-punctuation-02",
+      "lang": "en",
+      "category": "punctuation",
+      "text": "However we decided to stay.",
+      "gold": [
+        "However, we decided to stay."
+      ],
+      "issues": [],
+      "providerIssues": [
+        {
+          "start": 0,
+          "end": 7,
+          "suggestions": [
+            "However,"
+          ],
+          "category": "PUNCTUATION",
+          "issueType": "uncategorized"
+        }
+      ]
+    },
+    {
+      "name": "corpus/en-punctuation-03",
+      "lang": "en",
+      "category": "punctuation",
+      "text": "She arrived,, and he left.",
+      "gold": [
+        "She arrived, and he left."
+      ],
+      "issues": [],
+      "providerIssues": [
+        {
+          "start": 11,
+          "end": 13,
+          "suggestions": [
+            ","
+          ],
+          "category": "PUNCTUATION",
+          "issueType": "typographical"
+        }
+      ]
+    },
+    {
+      "name": "corpus/en-punctuation-04",
+      "lang": "en",
+      "category": "punctuation",
+      "text": "It happened yesterday..",
+      "gold": [
+        "It happened yesterday."
+      ],
+      "issues": [],
+      "providerIssues": [
+        {
+          "start": 21,
+          "end": 23,
+          "suggestions": [
+            ".",
+            "…"
+          ],
+          "category": "PUNCTUATION",
+          "issueType": "typographical"
+        }
+      ]
+    },
+    {
+      "name": "corpus/en-punctuation-05",
+      "lang": "en",
+      "category": "punctuation",
+      "text": "He knew the answer , but stayed silent.",
+      "gold": [
+        "He knew the answer, but stayed silent."
+      ],
+      "issues": [],
+      "providerIssues": [
+        {
+          "start": 18,
+          "end": 20,
+          "suggestions": [
+            ","
+          ],
+          "category": "TYPOGRAPHY",
+          "issueType": "whitespace"
+        }
+      ]
+    },
+    {
+      "name": "corpus/en-capitalization-01",
+      "lang": "en",
+      "category": "capitalization",
+      "text": "we went home.",
+      "gold": [
+        "We went home."
+      ],
+      "issues": [],
+      "providerIssues": [
+        {
+          "start": 0,
+          "end": 2,
+          "suggestions": [
+            "We"
+          ],
+          "category": "CASING",
+          "issueType": "typographical"
+        }
+      ]
+    },
+    {
+      "name": "corpus/en-capitalization-02",
+      "lang": "en",
+      "category": "capitalization",
+      "text": "She lives in london.",
+      "gold": [
+        "She lives in London."
+      ],
+      "issues": [
+        {
+          "rawText": "london",
+          "start": 13,
+          "end": 19,
+          "correct": "Lyndon",
+          "suggestions": [
+            "Lyndon",
+            "Landon",
+            "Lindon",
+            "Condon",
+            "Londony"
+          ],
+          "label": "Possible Typo",
+          "source": "online"
+        }
+      ],
+      "providerIssues": [
+        {
+          "start": 13,
+          "end": 19,
+          "suggestions": [
+            "London",
+            "Lyndon",
+            "Landon",
+            "Lindon",
+            "Condon",
+            "Londony",
+            "Loudon",
+            "Gordon",
+            "Lennon",
+            "onion",
+            "tendon",
+            "codon",
+            "condo",
+            "cordon",
+            "Jonson",
+            "Langdon",
+            "Linton",
+            "condone",
+            "condor",
+            "condos",
+            "linden",
+            "lotion",
+            "rondo",
+            "Hondo",
+            "logon",
+            "loon",
+            "Glendon",
+            "Landor",
+            "Londoner",
+            "wonton",
+            "bonbon",
+            "Houdon",
+            "lowdown",
+            "rondos",
+            "lardon",
+            "Andon",
+            "Blondin",
+            "Bordon",
+            "Conlon",
+            "Conon",
+            "Hendon",
+            "Lando",
+            "Lanyon",
+            "Linden",
+            "Lundin",
+            "Lynden",
+            "Ponton",
+            "Sandon",
+            "condom",
+            "loden",
+            "logion",
+            "longan"
+          ],
+          "category": "TYPOS",
+          "issueType": "misspelling"
+        }
+      ]
+    },
+    {
+      "name": "corpus/en-repetition-01",
+      "lang": "en",
+      "category": "repetition",
+      "text": "She opened the the door.",
+      "gold": [
+        "She opened the door."
+      ],
+      "issues": [],
+      "providerIssues": [
+        {
+          "start": 11,
+          "end": 18,
+          "suggestions": [
+            "the"
+          ],
+          "category": "MISC",
+          "issueType": "duplication"
+        }
+      ]
+    },
+    {
+      "name": "corpus/en-repetition-02",
+      "lang": "en",
+      "category": "repetition",
+      "text": "We went went home.",
+      "gold": [
+        "We went home."
+      ],
+      "issues": [],
+      "providerIssues": [
+        {
+          "start": 3,
+          "end": 12,
+          "suggestions": [
+            "went"
+          ],
+          "category": "MISC",
+          "issueType": "duplication"
+        }
+      ]
+    }
+  ],
+  "missingProviderAlternatives": [
+    {
+      "name": "corpus/ru-spelling-02",
+      "text": "Он хотел учавствовать.",
+      "gold": [
+        "Он хотел участвовать."
+      ],
+      "localDictionaryProvidedGold": true,
+      "providerIssues": [
+        {
+          "start": 9,
+          "end": 21,
+          "suggestions": [],
+          "category": "TYPOS",
+          "issueType": "misspelling"
+        }
+      ]
+    },
+    {
+      "name": "corpus/ru-spelling-18",
+      "text": "Вообщем, мы согласны.",
+      "gold": [
+        "В общем, мы согласны."
+      ],
+      "localDictionaryProvidedGold": true,
+      "providerIssues": [
+        {
+          "start": 0,
+          "end": 7,
+          "suggestions": [
+            "Сообщим",
+            "Во общем",
+            "Вообще м"
+          ],
+          "category": "TYPOS",
+          "issueType": "misspelling"
+        }
+      ]
+    },
+    {
+      "name": "corpus/ru-grammar-01",
+      "text": "Эти книга лежат на столе.",
+      "gold": [
+        "Эти книги лежат на столе."
+      ],
+      "localDictionaryProvidedGold": false,
+      "providerIssues": [
+        {
+          "start": 4,
+          "end": 15,
+          "suggestions": [],
+          "category": "GRAMMAR",
+          "issueType": "uncategorized"
+        }
+      ]
+    },
+    {
+      "name": "corpus/ru-grammar-03",
+      "text": "Он пришла домой.",
+      "gold": [
+        "Он пришёл домой.",
+        "Он пришел домой.",
+        "Она пришла домой."
+      ],
+      "localDictionaryProvidedGold": false,
+      "providerIssues": []
+    },
+    {
+      "name": "corpus/ru-grammar-04",
+      "text": "Это моя новый книга.",
+      "gold": [
+        "Это моя новая книга."
+      ],
+      "localDictionaryProvidedGold": false,
+      "providerIssues": [
+        {
+          "start": 8,
+          "end": 19,
+          "suggestions": [],
+          "category": "GRAMMAR",
+          "issueType": "uncategorized"
+        }
+      ]
+    },
+    {
+      "name": "corpus/ru-grammar-05",
+      "text": "Мы живёт у реки.",
+      "gold": [
+        "Мы живём у реки.",
+        "Мы живем у реки."
+      ],
+      "localDictionaryProvidedGold": false,
+      "providerIssues": [
+        {
+          "start": 0,
+          "end": 8,
+          "suggestions": [],
+          "category": "GRAMMAR",
+          "issueType": "uncategorized"
+        }
+      ]
+    },
+    {
+      "name": "corpus/ru-grammar-06",
+      "text": "Я скучаю за тобой.",
+      "gold": [
+        "Я скучаю по тебе."
+      ],
+      "localDictionaryProvidedGold": false,
+      "providerIssues": [
+        {
+          "start": 2,
+          "end": 11,
+          "suggestions": [],
+          "category": "GRAMMAR",
+          "issueType": "uncategorized"
+        }
+      ]
+    },
+    {
+      "name": "corpus/ru-grammar-07",
+      "text": "Согласно приказа мы ушли.",
+      "gold": [
+        "Согласно приказу мы ушли."
+      ],
+      "localDictionaryProvidedGold": false,
+      "providerIssues": []
+    },
+    {
+      "name": "corpus/ru-grammar-08",
+      "text": "Он оплатил за билет.",
+      "gold": [
+        "Он оплатил билет."
+      ],
+      "localDictionaryProvidedGold": false,
+      "providerIssues": [
+        {
+          "start": 3,
+          "end": 13,
+          "suggestions": [
+            "оплатить"
+          ],
+          "category": "EXTEND",
+          "issueType": "uncategorized"
+        }
+      ]
+    },
+    {
+      "name": "corpus/ru-grammar-09",
+      "text": "Дети играет во дворе.",
+      "gold": [
+        "Дети играют во дворе."
+      ],
+      "localDictionaryProvidedGold": false,
+      "providerIssues": []
+    },
+    {
+      "name": "corpus/ru-grammar-10",
+      "text": "Это более лучшее решение.",
+      "gold": [
+        "Это лучшее решение."
+      ],
+      "localDictionaryProvidedGold": false,
+      "providerIssues": [
+        {
+          "start": 4,
+          "end": 16,
+          "suggestions": [
+            "более хорошее"
+          ],
+          "category": "EXTEND",
+          "issueType": "uncategorized"
+        }
+      ]
+    },
+    {
+      "name": "corpus/ru-punctuation-01",
+      "text": "Я знаю что он вернётся.",
+      "gold": [
+        "Я знаю, что он вернётся."
+      ],
+      "localDictionaryProvidedGold": false,
+      "providerIssues": []
+    },
+    {
+      "name": "corpus/ru-punctuation-02",
+      "text": "Когда стемнело мы вернулись.",
+      "gold": [
+        "Когда стемнело, мы вернулись."
+      ],
+      "localDictionaryProvidedGold": false,
+      "providerIssues": []
+    },
+    {
+      "name": "corpus/ru-punctuation-03",
+      "text": "Если пойдёт дождь мы останемся дома.",
+      "gold": [
+        "Если пойдёт дождь, мы останемся дома."
+      ],
+      "localDictionaryProvidedGold": false,
+      "providerIssues": []
+    },
+    {
+      "name": "corpus/ru-punctuation-04",
+      "text": "Я думаю что всё получится.",
+      "gold": [
+        "Я думаю, что всё получится."
+      ],
+      "localDictionaryProvidedGold": false,
+      "providerIssues": []
+    },
+    {
+      "name": "corpus/ru-punctuation-05",
+      "text": "Он сказал что придёт завтра.",
+      "gold": [
+        "Он сказал, что придёт завтра."
+      ],
+      "localDictionaryProvidedGold": false,
+      "providerIssues": []
+    },
+    {
+      "name": "corpus/ru-punctuation-06",
+      "text": "Мы ушли потому что стало поздно.",
+      "gold": [
+        "Мы ушли, потому что стало поздно."
+      ],
+      "localDictionaryProvidedGold": false,
+      "providerIssues": []
+    },
+    {
+      "name": "corpus/ru-punctuation-07",
+      "text": "Чтобы успеть мы вышли раньше.",
+      "gold": [
+        "Чтобы успеть, мы вышли раньше."
+      ],
+      "localDictionaryProvidedGold": false,
+      "providerIssues": [
+        {
+          "start": 0,
+          "end": 21,
+          "suggestions": [],
+          "category": "PUNCTUATION",
+          "issueType": "uncategorized"
+        }
+      ]
+    },
+    {
+      "name": "corpus/ru-punctuation-14",
+      "text": "Он ответил:«Да».",
+      "gold": [
+        "Он ответил: «Да»."
+      ],
+      "localDictionaryProvidedGold": false,
+      "providerIssues": []
+    },
+    {
+      "name": "corpus/ru-capitalization-02",
+      "text": "Она приехала в москву.",
+      "gold": [
+        "Она приехала в Москву."
+      ],
+      "localDictionaryProvidedGold": false,
+      "providerIssues": []
+    },
+    {
+      "name": "corpus/ru-repetition-01",
+      "text": "Она открыла открыла дверь.",
+      "gold": [
+        "Она открыла дверь."
+      ],
+      "localDictionaryProvidedGold": false,
+      "providerIssues": [
+        {
+          "start": 4,
+          "end": 19,
+          "suggestions": [
+            "открыла, открыла",
+            "открыла и открыла"
+          ],
+          "category": "PUNCTUATION",
+          "issueType": "uncategorized"
+        }
+      ]
+    },
+    {
+      "name": "corpus/uk-usage-01",
+      "text": "Вона приймала участь у виставі.",
+      "gold": [
+        "Вона брала участь у виставі."
+      ],
+      "localDictionaryProvidedGold": false,
+      "providerIssues": [
+        {
+          "start": 5,
+          "end": 13,
+          "suggestions": [
+            "брати",
+            "взяти"
+          ],
+          "category": "BARBARISM",
+          "issueType": "uncategorized"
+        }
+      ]
+    },
+    {
+      "name": "corpus/uk-usage-02",
+      "text": "Ми прийняли міри для захисту будинку.",
+      "gold": [
+        "Ми вжили заходів для захисту будинку."
+      ],
+      "localDictionaryProvidedGold": false,
+      "providerIssues": [
+        {
+          "start": 3,
+          "end": 16,
+          "suggestions": [
+            "вживати заходів"
+          ],
+          "category": "BARBARISM",
+          "issueType": "uncategorized"
+        }
+      ]
+    },
+    {
+      "name": "corpus/uk-punctuation-01",
+      "text": "Я знаю що він прийде.",
+      "gold": [
+        "Я знаю, що він прийде."
+      ],
+      "localDictionaryProvidedGold": false,
+      "providerIssues": []
+    },
+    {
+      "name": "corpus/uk-punctuation-02",
+      "text": "Коли стемніло ми повернулися.",
+      "gold": [
+        "Коли стемніло, ми повернулися."
+      ],
+      "localDictionaryProvidedGold": false,
+      "providerIssues": []
+    },
+    {
+      "name": "corpus/uk-punctuation-03",
+      "text": "Якщо піде дощ ми залишимося вдома.",
+      "gold": [
+        "Якщо піде дощ, ми залишимося вдома."
+      ],
+      "localDictionaryProvidedGold": false,
+      "providerIssues": []
+    },
+    {
+      "name": "corpus/uk-punctuation-04",
+      "text": "Вона сказала що повернеться.",
+      "gold": [
+        "Вона сказала, що повернеться."
+      ],
+      "localDictionaryProvidedGold": false,
+      "providerIssues": []
+    },
+    {
+      "name": "corpus/uk-punctuation-06",
+      "text": "Вона прийшла,, а він пішов.",
+      "gold": [
+        "Вона прийшла, а він пішов."
+      ],
+      "localDictionaryProvidedGold": false,
+      "providerIssues": [
+        {
+          "start": 12,
+          "end": 14,
+          "suggestions": [
+            ", ,"
+          ],
+          "category": "PUNCTUATION",
+          "issueType": "uncategorized"
+        }
+      ]
+    },
+    {
+      "name": "corpus/en-grammar-08",
+      "text": "I am interested on history.",
+      "gold": [
+        "I am interested in history."
+      ],
+      "localDictionaryProvidedGold": false,
+      "providerIssues": []
+    }
+  ]
+}
