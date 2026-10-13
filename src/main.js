@@ -11936,7 +11936,8 @@ class NocturneWriter {
         || /[\p{L}\p{M}]/u.test(issue.rawText) && !/\s$/u.test(issue.rawText) && !this.isCompletedTypoToken(fullText, start, end, active, block.dataset.blockId)) continue;
       let displayStart = start, displayEnd = end;
       if (start === end) {
-        displayStart = Math.max(0, start - 1);
+        const previousWord = fullText.slice(0, start).match(/\p{L}[\p{L}\p{M}]*(?:[’'\-][\p{L}\p{M}]+)*[»”]?$/u);
+        displayStart = previousWord ? start - previousWord[0].length : Math.max(0, start - 1);
         if (/[\uDC00-\uDFFF]/u.test(fullText[displayStart] || '')) displayStart--;
         displayEnd = start || Math.min(fullText.length, 1);
       }

@@ -30,7 +30,7 @@ public class ExportMorphology {
       while (iterator.hasNext()) {
         var item = iterator.next();
         String tag = item.getTag() == null ? "" : item.getTag().toString();
-        if (lang.equals("ru") && tag.startsWith("NN:") && tag.endsWith(":Nom")) nominativeWords.add(item.getWord().toString().toLowerCase(Locale.ROOT).replace('ё', 'е'));
+        if (lang.equals("ru") && (tag.startsWith("NN:") || tag.startsWith("ADJ:")) && tag.endsWith(":Nom")) nominativeWords.add(item.getWord().toString().toLowerCase(Locale.ROOT).replace('ё', 'е'));
         if (common.contains(item.getWord().toString().toLowerCase(Locale.ROOT)) || tag.startsWith("VB") || tag.startsWith("verb:")) lemmas.add(item.getStem().toString().toLowerCase(Locale.ROOT));
       }
       TreeSet<String> rows = new TreeSet<>(), allWords = new TreeSet<>();

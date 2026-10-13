@@ -106,6 +106,8 @@ async function requestMatches(text, lang, controller, url) {
     for (const match of (Array.isArray(data.matches) ? data.matches : []).slice(0, 2000)) {
       if (!Number.isInteger(match.offset) || !Number.isInteger(match.length) || match.offset < 0 || match.length < 0 || match.offset + match.length > text.length) continue;
       if (match.rule?.issueType === 'style' || ['STYLE', 'REPETITIONS_STYLE', 'REDUNDANCY'].includes(match.rule?.category?.id)) continue;
+      // The provider classifies this style preference as an uncategorized casing error.
+      if (match.rule?.id === 'AllCaps') continue;
       // This opt-in rule enforces consistent ё, rather than resolving contextual е/ё errors.
       if (match.rule?.id === 'MissingYO') continue;
       if (match.rule?.isPremium || /(?:^|_)AI(?:_|$)|NEURAL|GPT|LLM/iu.test(match.rule?.id || '')) continue;

@@ -8,17 +8,17 @@
   "runtime": "Dictionary lookup and grammatical rules; no neural/statistical model",
   "languages": {
     "ru": {
-      "forms": 1121504,
+      "forms": 1288535,
       "validatedForms": 4058500,
       "membership": "exact UTF-8 finite-state dictionary",
       "wordIndexBytes": 1426340,
-      "analyses": 1639004,
-      "lemmas": 242872,
-      "tags": 935,
-      "uncompressedBytes": 53163451,
-      "gzipBytes": 10496903,
-      "sourceSha256": "5cdc7822ab958ef90c652ee3f10e66eb208226ef1c858e6ce16a7ff26658b416",
-      "assetSha256": "330df9416968b77a480b797f0608a673e1b2d6ebedd5932e5420e532ac8ea932"
+      "analyses": 1947496,
+      "lemmas": 282323,
+      "tags": 939,
+      "uncompressedBytes": 62701601,
+      "gzipBytes": 12165612,
+      "sourceSha256": "9c0dd5c1c0ca2672bd7354c55eff161a6b943aac8a7e5182f64a0986e2022ef0",
+      "assetSha256": "b2776e2571cadfff1c2c0db6b7f2471944413473d52af888af6e176e2c66651e"
     },
     "uk": {
       "forms": 1026047,

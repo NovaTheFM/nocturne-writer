@@ -1,6 +1,7 @@
 import { normalizeTypoToken, TYPO_LOOKUP } from './typos.js';
 import { dictionaryContains, createDictionaryMembership } from './language-data/membership.js';
 import { inferLanguage } from './language-detection.js';
+import { russianContextPunctuation } from './russian-punctuation.js';
 
 const dictionaries = new Map();
 const wordPattern = /\p{L}[\p{L}\p{M}]*(?:[’'\-][\p{L}\p{M}]+)*/gu;
@@ -179,7 +180,7 @@ export async function checkLanguageText(text, options = {}) {
   const issues = [], identifiers = new Set();
   const opaque = [...text.matchAll(/https?:\/\/[^\s]+|\b[\w.+-]+@[\w.-]+\.[\p{L}]+|`[^`]*`/gu)].map(match => [match.index, match.index + match[0].length]);
   const blocked = (start, end, allowAuthor) => opaque.some(([a, b]) => start < b && end > a) || tokens.some(token => (ignored.has(token.word) || !allowAuthor && authorRule(token.lookupKey)) && start < token.end && end > token.start);
-  const add = (start, end, replacements, category, ruleId) => {
+  const add = (start, end, replacements, category, ruleId, message) => {
     if (blocked(start, end, ruleId === 'author-typo-dictionary')) return;
     let suggestions = [...new Set(replacements)].filter(value => typeof value === 'string' && value !== text.slice(start, end) && value.length <= 256);
     if (!suggestions.length) return;
@@ -191,14 +192,17 @@ export async function checkLanguageText(text, options = {}) {
     const id = `${start}:${end}:${suggestions[0]}`;
     if (identifiers.has(id)) return;
     identifiers.add(id);
-    issues.push({ start, end, rawText: text.slice(start, end), correct: suggestions[0], suggestions, label: labels[category], category, issueType: category, ruleId, source: 'rules', language });
+    issues.push({ start, end, rawText: text.slice(start, end), correct: suggestions[0], suggestions, label: labels[category], category, issueType: category, ruleId, source: 'rules', language, ...(message ? { message } : {}) });
   };
   const replaceToken = (token, values, category, ruleId) => add(token.start, token.end, values.map(value => preserveCase(token.raw, value)), category, ruleId);
   const matches = (regex, transform, category, ruleId) => { for (const match of text.matchAll(regex)) add(match.index, match.index + match[0].length, [transform(match)], category, ruleId); };
   const gerundBoundaries = language === 'ru' ? russianGerundCommas(text, tokens, data.adverbialPhrases) : new Set();
-  const spaceGap = (left, right) => /^\s+$/u.test(text.slice(left.end, right.start)) && !gerundBoundaries.has(left.end);
+  const contextualPunctuation = language === 'ru' ? russianContextPunctuation(text, tokens, data) : null;
+  const spaceGap = (left, right) => /^\s+$/u.test(text.slice(left.end, right.start)) && !gerundBoundaries.has(left.end)
+    && !contextualPunctuation?.commaPositions.has(left.end) && !contextualPunctuation?.phraseTokens.has(left.start) && !contextualPunctuation?.phraseTokens.has(right.start);
 
   for (const position of gerundBoundaries) add(position, position, [','], 'punctuation', 'gerund-clause-comma');
+  for (const issue of contextualPunctuation?.issues || []) add(issue.start, issue.end, issue.suggestions, issue.category, issue.ruleId, issue.message);
 
   matches(/\s+[,;:](?=\s|[\p{L}«“])/gu, match => match[0].trimStart(), 'punctuation', 'punctuation-space-before');
   matches(/[,;:](?=[\p{L}«“])/gu, match => match[0] + ' ', 'punctuation', 'punctuation-space-after');
@@ -215,9 +219,19 @@ export async function checkLanguageText(text, options = {}) {
     if (authorRule(token.lookupKey)) continue;
     if (previous && previous.word === token.word && spaceGap(previous, token) && !(language === 'en' && ['had', 'that', 'is'].includes(token.word))) add(previous.end, token.end, [''], 'repetition', 'repeated-adjacent-word');
     const before = text.slice(0, token.start);
-    const dialogueAttribution = language !== 'en' && /[.!?…][»”]?\s+[—–]\s*$/u.test(before) && token.analyses.some(item => item.pos === 'verb') && subjectPronouns[language][next?.word];
+    const dialogueAttribution = contextualPunctuation?.authorStarts.has(token.start) || language !== 'en' && /[.!?…][»”]?\s+[—–]\s*$/u.test(before) && token.analyses.some(item => item.pos === 'verb') && subjectPronouns[language][next?.word];
     if (!dialogueAttribution && token.analyses.length && (options.sentenceStart !== false || before.trim()) && token.raw[0] === token.raw[0].toLowerCase() && /(?:^|[.!?…]\s+|\n)\s*(?:[—–«“]\s*)?$/u.test(before)) replaceToken(token, [token.raw[0].toUpperCase() + token.raw.slice(1)], 'capitalization', 'sentence-capitalization');
     const proper = data.properForms.get(token.word);
+    if (language === 'ru' && token.raw[0] === token.raw[0].toLowerCase()) {
+      const personalName = token.analyses.some(item => /:(?:Name|Patr|Fam):/u.test(item.tag));
+      const ordinaryReading = token.analyses.some(item => !/:(?:Name|Patr|Fam):/u.test(item.tag));
+      if (personalName && !ordinaryReading) {
+        const clauseStart = Math.max(...['.', '!', '?', ';', ':', '\n'].map(mark => text.lastIndexOf(mark, token.start - 1))) + 1;
+        const verbalContext = next?.analyses.some(item => item.pos === 'verb' && item.tense !== 'infinitive')
+          || tokens.slice(0, index).some(item => item.start >= clauseStart && item.analyses.some(analysis => analysis.pos === 'verb' && analysis.tense !== 'infinitive'));
+        if (verbalContext) replaceToken(token, [proper || token.raw[0].toUpperCase() + token.raw.slice(1)], 'capitalization', 'personal-name-capitalization');
+      }
+    }
     const locationContext = previous && ['в', 'во', 'у', 'до', 'из', 'із', 'in', 'to', 'from'].includes(previous.word);
     const ordinaryNoun = language === 'uk' && token.analyses.some(item => item.pos === 'noun' && !item.tag.includes(':prop:')) || language === 'en' && token.analyses.some(item => ['NN', 'NNS'].includes(item.tag));
     if (proper && locationContext && !ordinaryNoun && token.raw[0] === token.raw[0].toLowerCase()) replaceToken(token, [proper], 'capitalization', 'dictionary-proper-name-capitalization');
@@ -234,6 +248,10 @@ export async function checkLanguageText(text, options = {}) {
 
     if (next && spaceGap(token, next)) {
       let nouns = next.analyses.filter(item => item.pos === 'noun' && !item.tag.includes('&pron') && !(next.raw === next.raw.toLowerCase() && /(?:^|:)(?:Fam|Name)(?::|$)|:prop:(?:fname|lname)/u.test(item.tag)));
+      const following = tokens[index + 2];
+      const modifierHead = following && spaceGap(next, following) && next.analyses.some(item => item.pos === 'adjective' && item.case
+        && following.analyses.some(head => head.pos === 'noun' && head.case === item.case && head.number === item.number && (head.number === 'p' || head.gender === item.gender)));
+      if (modifierHead) nouns = [];
       if (nouns.some(item => item.case !== 'v_kly')) nouns = nouns.filter(item => item.case !== 'v_kly');
       const possessives = previous && spaceGap(previous, token) ? previous.analyses.filter(item => item.pos === 'adjective' && ['мой', 'твой', 'наш', 'ваш', 'мій', 'твій', 'свій'].includes(normalize(item.lemma))) : [];
       const possessive = possessives.find(item => item.case === nominative[language]) || possessives[0];
@@ -245,7 +263,8 @@ export async function checkLanguageText(text, options = {}) {
         const values = nouns.flatMap(item => inflections(data, item, { number: 'p', case: nominative[language] }));
         replaceToken(next, values, 'grammar', 'determiner-noun-number');
       }
-      const adjectives = token.analyses.filter(item => item.pos === 'adjective' && item.case);
+      const imperativeObject = token.analyses.some(item => item.pos === 'verb' && item.tense === 'imperative') && nouns.some(item => item.case === 'V');
+      const adjectives = imperativeObject ? [] : token.analyses.filter(item => item.pos === 'adjective' && item.case);
       const alreadyAgrees = adjectives.some(adjective => nouns.some(noun => (!adjective.number || noun.number === adjective.number) && (!noun.gender || noun.gender === adjective.gender || noun.number === 'p') && noun.case === adjective.case));
       if (language !== 'en' && nouns.length && !alreadyAgrees && !['это', 'це'].includes(token.word)) for (const adjective of adjectives) {
         if (pluralDeterminers[language].has(token.word)) continue;
@@ -268,7 +287,11 @@ export async function checkLanguageText(text, options = {}) {
       const pronoun = subjectPronouns[language][token.word];
       const startsClause = !previous || /[.!?;,\n]/u.test(text.slice(previous.end, token.start)) || previous.word === 'the' && (!tokens[index - 2] || /[.!?;,\n]/u.test(text.slice(tokens[index - 2].end, previous.start)));
       const adjectiveModifier = language === 'en' && token.analyses.some(item => item.pos === 'adjective') && next.analyses.some(item => item.pos === 'noun');
-      const nounSubjects = adjectiveModifier || previous?.analyses.some(item => item.tag === 'PREP') || ['коли', 'якщо', 'щоб', 'когда', 'если', 'чтобы'].includes(token.word) ? [] : token.analyses.filter(item => item.pos === 'noun' && !item.tag.includes('&pron') && (language === 'en' ? startsClause : item.case === nominative[language]));
+      const genitiveDependent = language === 'ru' && previous && spaceGap(previous, token)
+        && token.analyses.some(item => item.pos === 'noun' && item.case === 'R')
+        && (previous.analyses.some(item => item.pos === 'noun') || !previous.analyses.length && containsWord(data, previous.word)
+          && tokens[index - 2]?.analyses.some(item => item.pos === 'noun') && spaceGap(tokens[index - 2], previous));
+      const nounSubjects = adjectiveModifier || genitiveDependent || previous?.analyses.some(item => item.tag === 'PREP') || ['коли', 'якщо', 'щоб', 'когда', 'если', 'чтобы'].includes(token.word) ? [] : token.analyses.filter(item => item.pos === 'noun' && !item.tag.includes('&pron') && (language === 'en' ? startsClause : item.case === nominative[language]));
       const subject = pronoun ? { number: pronoun[0], person: pronoun[1], gender: pronoun[2] || '' } : nounSubjects.length ? { number: nounSubjects[0].number, person: '3', gender: nounSubjects[0].gender } : null;
       const verb = language === 'en' && next.analyses.some(item => item.tag === 'MD') ? null : next.analyses.find(item => item.pos === 'verb' && item.tense !== 'infinitive' && (language !== 'en' || !['VBN', 'VBG'].includes(item.tag)));
       if (subject && verb) {

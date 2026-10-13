@@ -41,7 +41,7 @@ for (const language of ['ru', 'uk', 'en']) {
   const rows = raw.trim().split(/\r?\n/u).map(line => line.split('\t'));
   const frequent = new Set(common.map(word => word.toLowerCase()));
   const frequentLemmas = new Set(rows.filter(([word]) => frequent.has(word.toLowerCase())).map(([, lemma]) => lemma.toLowerCase()));
-  const nominativeWords = new Set(language === 'ru' ? rows.filter(([, , tag = '']) => tag.startsWith('NN:') && tag.endsWith(':Nom')).map(([word]) => word.toLowerCase().replaceAll('ё', 'е')) : []);
+  const nominativeWords = new Set(language === 'ru' ? rows.filter(([, , tag = '']) => /^(?:NN|ADJ):/u.test(tag) && tag.endsWith(':Nom')).map(([word]) => word.toLowerCase().replaceAll('ё', 'е')) : []);
   const identify = (values, ids, value) => { if (!ids.has(value)) { ids.set(value, values.length); values.push(value); } return ids.get(value); };
   for (const [word, lemma, tag = ''] of rows) {
     if (properStems.has(lemma.toLowerCase())) properForms.add(word[0].toUpperCase() + word.slice(1));
