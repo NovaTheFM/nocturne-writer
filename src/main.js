@@ -14943,7 +14943,7 @@ class NocturneWriter {
             <div class="smart-dictionary-subpanel-wrapper">
               <div class="smart-dictionary-subpanel-inner">
                 <div class="smart-dictionary-row">
-                  <div class="smart-dictionary-field" style="flex:1.2; min-width:230px;">
+                  <div class="smart-dictionary-field">
                     <span class="smart-dictionary-label">Режим:</span>
                     ${this.renderSettingsSelect('smartDictionaryMode', [
                       ['local', 'Офлайн: словарь и правила'],
@@ -14951,7 +14951,7 @@ class NocturneWriter {
                       ['api', 'Онлайн: LanguageTool']
                     ])}
                   </div>
-                  <div class="smart-dictionary-field" style="flex:1; min-width:180px;">
+                  <div class="smart-dictionary-field">
                     <span class="smart-dictionary-label">Язык онлайн-проверки:</span>
                     ${this.renderSettingsSelect('smartDictionaryLang', [
                       ['auto', 'Авто-определение'],

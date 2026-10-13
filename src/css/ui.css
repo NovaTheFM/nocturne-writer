@@ -2069,10 +2069,10 @@ body.ctrl-pressed .entity-family-link:hover {
 }
 
 .smart-dictionary-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
   gap: 12px;
   align-items: center;
-  flex-wrap: wrap;
   position: relative;
   z-index: 10;
 }
@@ -2083,13 +2083,24 @@ body.ctrl-pressed .entity-family-link:hover {
 
 .smart-dictionary-field {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: 8px;
+  min-width: 0;
+}
+
+.smart-dictionary-field .nocturne-select {
   flex: 1;
-  min-width: 180px;
+  width: auto;
+  min-width: 0;
+}
+
+.smart-dictionary-field .nocturne-select-trigger {
+  min-width: 0;
 }
 
 .smart-dictionary-label {
+  flex-shrink: 0;
   font-size: 12px;
   color: var(--text-muted);
   font-weight: 500;
@@ -2097,8 +2108,8 @@ body.ctrl-pressed .entity-family-link:hover {
 }
 
 .smart-dictionary-notices-shell {
+  display: grid;
   position: relative;
-  height: 48px;
   margin-top: 2px;
 }
 
@@ -2113,10 +2124,8 @@ body.ctrl-pressed .entity-family-link:hover {
 }
 
 .smart-dictionary-notice {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  position: relative;
+  grid-area: 1 / 1;
   display: flex;
   align-items: flex-start;
   gap: 10px;
