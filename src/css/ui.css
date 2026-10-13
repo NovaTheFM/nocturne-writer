@@ -1967,7 +1967,8 @@ body.ctrl-pressed .entity-family-link:hover {
   font: 600 13px var(--font-ui);
   cursor: pointer;
 }
-.context-menu-item:hover:not(:disabled) {
+.context-menu-item:hover:not(:disabled),
+.context-menu-item:focus-visible:not(:disabled) {
   background: rgba(var(--accent-rgb, 139, 92, 246), .16);
 }
 .context-menu-item:disabled {
@@ -2043,7 +2044,7 @@ body.ctrl-pressed .entity-family-link:hover {
   opacity: 1;
   transform: translateY(0);
   margin-top: 8px;
-  pointer-events: auto;
+  pointer-events: inherit;
 }
 
 .smart-dictionary-subpanel-wrapper {

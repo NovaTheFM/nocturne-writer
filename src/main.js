@@ -416,7 +416,7 @@ class NocturneWriter {
     this.renderAll();
     this.startPreloader();
     this.bindGlobalEvents();
-    this.disposeModalFocus = manageModalFocus();
+    this.disposeModalFocus = manageModalFocus({ onOverlayClose: overlay => this.closeSettingsSelects(null, { root: overlay, immediate: true, restoreFocus: false }) });
     this.databaseSync = new DatabaseSync({ db: this.db, deviceId: this.state.sync.deviceId,
       onChange: result => this.refreshAfterDatabaseSync(result),
       onPending: () => this.scheduleDatabaseSync(),
@@ -3974,8 +3974,11 @@ class NocturneWriter {
   closeTopMobileOverlay() {
     const openSelect = document.querySelector('.nocturne-select.open, .kb-project-switcher.open');
     if (openSelect) {
-      openSelect.classList.remove('open');
-      openSelect.querySelector('[aria-expanded]')?.setAttribute('aria-expanded', 'false');
+      if (openSelect.matches('.nocturne-select')) this.closeSettingsSelects();
+      else {
+        openSelect.classList.remove('open');
+        openSelect.querySelector('[aria-expanded]')?.setAttribute('aria-expanded', 'false');
+      }
       return true;
     }
     if (this.activeFloatingMenuKey || document.querySelector('.portal-floating-menu.active, #doc-menu-portal.open, #app-context-menu.active')) {
@@ -20807,8 +20810,8 @@ class NocturneWriter {
       </div>`;
   }
 
-  closeSettingsSelects(except = null) {
-    document.querySelectorAll('.nocturne-select.open').forEach((select) => {
+  closeSettingsSelects(except = null, { root = document, immediate = false, restoreFocus = true } = {}) {
+    root.querySelectorAll(immediate ? '.nocturne-select' : '.nocturne-select.open').forEach((select) => {
       if (except && select === except) return;
       const menu = select.querySelector('.nocturne-select-menu');
       const current = menu && getComputedStyle(menu);
@@ -20821,15 +20824,16 @@ class NocturneWriter {
       select.classList.remove('open');
       select.querySelector('[data-setting-select-toggle], [data-form-select-toggle]')?.setAttribute('aria-expanded', 'false');
       if (!menu) return;
+      const focusWithinMenu = menu.contains(document.activeElement);
       menu.setAttribute('aria-hidden', 'true'); menu.inert = true;
-      if (menu.contains(document.activeElement)) select.querySelector('.nocturne-select-trigger')?.focus({ preventScroll: true });
+      if (restoreFocus && focusWithinMenu) select.querySelector('.nocturne-select-trigger')?.focus({ preventScroll: true });
       const hide = () => {
         if (select.__selectGeneration !== generation) return;
         select.__selectExit?.animation?.cancel(); select.__selectExit = null;
         if (typeof menu.hidePopover === 'function' && menu.matches(':popover-open')) menu.hidePopover();
         menu.classList.remove('select-exiting'); menu.hidden = true;
       };
-      if (this.shouldReduceSurfaceMotion() || !visible) { hide(); return; }
+      if (immediate || this.shouldReduceSurfaceMotion() || !visible) { hide(); return; }
       menu.classList.add('select-exiting');
       select.__selectExit = this.runMotion(menu, [{ opacity, transform }, { opacity: 0, transform: `translateY(${offset}) scale(.985)` }], { channel: 'select-presence', duration, easing, fill: 'forwards' });
       select.__selectExit.finished.then(hide);
@@ -20837,7 +20841,7 @@ class NocturneWriter {
   }
 
   toggleSettingsSelect(select) {
-    if (!select) return;
+    if (!select || !this.isSurfaceVisible(select) || select.closest('[inert]')) return;
     const willOpen = !select.classList.contains('open');
     if (!willOpen) { this.closeSettingsSelects(); return; }
     const menu = select.querySelector('.nocturne-select-menu');

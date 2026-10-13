@@ -1,4 +1,4 @@
-export function manageModalFocus() {
+export function manageModalFocus({ onOverlayClose } = {}) {
   let active = null;
   let activeModal = null;
   let previousFocus = null;
@@ -18,13 +18,25 @@ export function manageModalFocus() {
       toggle.setAttribute('role', 'switch'); toggle.tabIndex = 0; toggle.setAttribute('aria-checked', String(toggle.classList.contains('on') || toggle.classList.contains('active')));
       if (!toggle.hasAttribute('aria-label')) toggle.setAttribute('aria-label', (toggle.tagName === 'BUTTON' ? toggle.textContent.trim() : '') || toggle.closest('.setting-row')?.querySelector('.setting-info strong, .setting-info > span')?.textContent || toggle.closest('.dictionary-toggle')?.querySelector('span')?.textContent || toggle.closest('.ai-context-head')?.querySelector('strong')?.textContent || 'Переключатель');
     }
-    const overlays = [...document.querySelectorAll('#form-overlay.active, #settings-overlay.active, #kb-modal.active, #mobile-overlay.active, .floating-notes-modal.active, .command-palette-overlay.active')];
+    const surfaces = [...document.querySelectorAll('#form-overlay, #settings-overlay, #kb-modal, #mobile-overlay, .floating-notes-modal, .command-palette-overlay')];
+    const overlays = surfaces.filter(element => element.classList.contains('active'));
     const overlay = overlays.sort((a, b) => (Number(getComputedStyle(a).zIndex) || 0) - (Number(getComputedStyle(b).zIndex) || 0)).at(-1);
     const modal = overlay?.id === 'kb-modal' ? overlay : overlay?.querySelector('.form-modal, .settings-modal, .kb-modal-dialog, [role="dialog"]') || overlay?.firstElementChild || overlay;
-    if (overlay === active && modal === activeModal) return;
-    if (active) {
+    const changed = overlay !== active || modal !== activeModal;
+    if (changed && active) {
       for (const element of document.querySelectorAll('[data-modal-inert]')) { element.inert = false; delete element.dataset.modalInert; }
     }
+    for (const surface of surfaces) {
+      const closed = !surface.classList.contains('active');
+      surface.inert = closed || surface.hasAttribute('data-modal-inert');
+      surface.setAttribute('aria-hidden', String(closed));
+      if (closed) {
+        const openSelect = surface.querySelector('.nocturne-select.open, .nocturne-select-menu.select-exiting');
+        const nativePopover = [...surface.querySelectorAll('.nocturne-select-menu[popover]')].some(menu => typeof menu.hidePopover === 'function' && menu.matches(':popover-open'));
+        if (openSelect || nativePopover) onOverlayClose?.(surface);
+      }
+    }
+    if (!changed) return;
     const focusWithinModal = modal?.contains(document.activeElement);
     active = overlay || null;
     activeModal = modal || null;

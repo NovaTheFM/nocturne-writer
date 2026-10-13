@@ -55,6 +55,7 @@ export const ARTIFACT_CHECKS = [
 ];
 
 export const EXTRA_CHECKS = [
+  check('dictionary-menu-interaction', ['--import', './scripts/qa/observe-playwright.mjs', 'scripts/test-dictionary-menu-interaction.mjs'], ['dictionary', 'settings', 'writing', 'keyboard', 'responsive', 'touch'], { modes: [], timeout: 180_000, ownScenarioReport: 'results.json' }),
   check('language-quality', ['scripts/test-language-quality.mjs'], ['dictionary', 'writing', 'stress', 'performance', 'offline'], { modes: [], timeout: 600_000, ownScenarioReport: 'results.json' }),
   check('language-quality-editor', ['--import', './scripts/qa/observe-playwright.mjs', 'scripts/test-language-quality-editor.mjs'], ['dictionary', 'writing', 'responsive', 'keyboard', 'stress', 'performance'], { modes: [], timeout: 600_000, ownScenarioReport: 'results.json' }),
   check('language-performance', ['scripts/benchmark-language-checker.mjs'], ['dictionary', 'performance', 'offline'], { modes: [], timeout: 180_000, ownScenarioReport: 'results.json' }),
