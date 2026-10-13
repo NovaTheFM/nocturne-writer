@@ -6716,6 +6716,27 @@ class NocturneWriter {
     }
   }
 
+  typoLineRects(range) {
+    const fragments = Array.from(range?.getClientRects() || [])
+      .filter(rect => rect.width > 0 && rect.height > 0)
+      .map(({ left, right, top, bottom }) => ({ left, right, top, bottom }))
+      .sort((a, b) => a.top - b.top || a.left - b.left);
+    const lines = [];
+    for (const rect of fragments) {
+      const previous = lines[lines.length - 1];
+      if (previous && Math.abs(previous.bottom - rect.bottom) <= 2
+        && rect.left <= previous.right + 1 && rect.right >= previous.left - 1) {
+        previous.left = Math.min(previous.left, rect.left);
+        previous.right = Math.max(previous.right, rect.right);
+        previous.top = Math.min(previous.top, rect.top);
+        previous.bottom = Math.max(previous.bottom, rect.bottom);
+      } else {
+        lines.push(rect);
+      }
+    }
+    return lines;
+  }
+
   findTypoMatchAtPoint(x, y, editable) {
     if (document.elementFromPoint?.(x, y)?.closest?.('#app-context-menu, .popover-surface, .cleaner-overlay, .form-modal, .settings-modal')) {
       return null;
@@ -6776,7 +6797,10 @@ class NocturneWriter {
       const padX = 2;
       const padTop = 2;
       const padBottom = 6;
-      if (x < rect.left - padX || x > rect.right + padX || y < rect.top - padTop || y > rect.bottom + padBottom) {
+      if (!this.typoLineRects(item.range).some(fragment => (
+        x >= fragment.left - padX && x <= fragment.right + padX
+        && y >= fragment.top - padTop && y <= fragment.bottom + padBottom
+      ))) {
         return null;
       }
     }
@@ -6833,6 +6857,8 @@ class NocturneWriter {
         }
       }
       if (!rect || !rect.width || !rect.height) continue;
+      const lineRects = this.typoLineRects(range);
+      if (!lineRects.length) continue;
 
       const pageShell = editable.closest('.visual-page-shell') || editable.closest('.page') || editable.parentElement;
       const pageOverlay = pageShell?.querySelector('.page-overlay') || pageShell;
@@ -6848,9 +6874,8 @@ class NocturneWriter {
 
       const overlayRect = pageOverlay.getBoundingClientRect();
       const left = rect.left - overlayRect.left;
-      const top = (rect.bottom - overlayRect.top) - 1.5;
+      const top = rect.top - overlayRect.top;
       const width = rect.width;
-      const wavePathD = this.generateWavySvgPath(width);
       const isHovered = key === contextKey || key === this._hoveredTypoKey;
 
       let defs = pageOverlay.querySelector('#typo-custom-defs');
@@ -6878,21 +6903,32 @@ class NocturneWriter {
       if (!svgEl) {
         svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         svgEl.setAttribute('data-key', key);
-        svgEl.setAttribute('height', '12');
-        svgEl.innerHTML = `
-          <path class="typo-svg-path-glow" d="${wavePathD}" />
-          <path class="typo-svg-path-base" d="${wavePathD}" />
-        `;
         pageOverlay.appendChild(svgEl);
-      } else {
-        const glow = svgEl.querySelector('.typo-svg-path-glow');
-        const base = svgEl.querySelector('.typo-svg-path-base');
-        if (glow && glow.getAttribute('d') !== wavePathD) glow.setAttribute('d', wavePathD);
-        if (base && base.getAttribute('d') !== wavePathD) base.setAttribute('d', wavePathD);
       }
+
+      lineRects.forEach((fragment, index) => {
+        let segment = svgEl.children[index];
+        if (!segment) {
+          segment = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+          for (const className of ['typo-svg-path-glow', 'typo-svg-path-base']) {
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('class', className);
+            segment.appendChild(path);
+          }
+          svgEl.appendChild(segment);
+        }
+        const wavePathD = this.generateWavySvgPath(fragment.right - fragment.left);
+        const transform = `translate(${fragment.left - rect.left} ${fragment.bottom - rect.top - 1.5})`;
+        if (segment.getAttribute('transform') !== transform) segment.setAttribute('transform', transform);
+        for (const path of segment.children) {
+          if (path.getAttribute('d') !== wavePathD) path.setAttribute('d', wavePathD);
+        }
+      });
+      while (svgEl.children.length > lineRects.length) svgEl.lastElementChild.remove();
 
       svgEl.setAttribute('class', `typo-svg-overlay${isHovered ? ' hovered' : ''}`);
       svgEl.setAttribute('width', `${width}`);
+      svgEl.setAttribute('height', `${rect.height + 12}`);
       svgEl.style.left = `${left}px`;
       svgEl.style.top = `${top}px`;
       svgEl.style.width = `${width}px`;

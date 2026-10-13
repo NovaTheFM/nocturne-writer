@@ -55,6 +55,7 @@ export const ARTIFACT_CHECKS = [
 ];
 
 export const EXTRA_CHECKS = [
+  check('dictionary-underline', ['--import', './scripts/qa/observe-playwright.mjs', 'scripts/test-dictionary-underline.mjs'], ['dictionary', 'writing', 'visual', 'responsive', 'touch'], { modes: [], timeout: 120_000, ownScenarioReport: 'results.json' }),
   check('language-quality-live', ['scripts/test-language-quality-live.mjs'], ['dictionary', 'writing', 'stress'], { modes: [], timeout: 600_000, ownScenarioReport: 'results.json' }),
   check('russian-rule-contract', ['scripts/test-russian-rule-contract.mjs'], ['dictionary', 'writing', 'stress'], { modes: [], timeout: 180_000, ownScenarioReport: 'results.json' }),
   check('russian-punctuation-editor', ['--import', './scripts/qa/observe-playwright.mjs', 'scripts/test-russian-punctuation-editor.mjs'], ['dictionary', 'writing', 'stress', 'responsive', 'keyboard', 'touch'], { modes: [], timeout: 300_000, ownScenarioReport: 'results.json' }),
