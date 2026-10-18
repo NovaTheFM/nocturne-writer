@@ -10,6 +10,7 @@ export const PROJECT_CHECKS = [
   check('interface-language-unit', ['--test', 'scripts/test-interface-language.mjs'], ['settings', 'database', 'localization'], { modes: ['smoke', 'full'] }),
   check('interface-language-ui', ['scripts/test-interface-language-ui.mjs'], ['settings', 'database', 'localization', 'responsive', 'keyboard', 'writing', 'security'], { ports: [5351], ownScenarioReport: 'results.json', timeout: 180_000, modes: ['smoke', 'full'] }),
   check('language-page', ['scripts/test-language-page.mjs'], ['settings', 'localization', 'writing', 'pagination', 'responsive', 'visual'], { ports: [5353], ownScenarioReport: 'results.json', timeout: 120_000, modes: ['smoke', 'full'] }),
+  check('editor-fonts', ['scripts/test-editor-fonts.mjs'], ['settings', 'writing', 'responsive', 'visual'], { ports: [5354], ownScenarioReport: 'results.json', timeout: 120_000, modes: ['smoke', 'full'] }),
   check('syntax', ['scripts/check-source.mjs'], ['source'], { modes: ['smoke', 'full'] }),
   check('unit', ['--test', 'scripts/test-database-sync.mjs', 'scripts/test-project-backups.mjs', 'scripts/test-smart-speller.mjs', 'scripts/test-sync-auth.mjs'], ['database', 'sync', 'backups', 'dictionary', 'security']),
   check('smart-dictionary', ['--import', './scripts/qa/observe-playwright.mjs', 'scripts/test-smart-dictionary.mjs'], ['dictionary', 'writing', 'settings'], { ownScenarioReport: 'results.json' }),
