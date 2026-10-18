@@ -1,6 +1,7 @@
+import { t, ui, msg, localizedLabels, localizedOptions } from '../core/i18n.js';
 import { escapeHtml } from '../core/utils.js';
 
-export const KNOWLEDGE_SEARCH_TYPES = [
+export const KNOWLEDGE_SEARCH_TYPES = localizedOptions([
   ['characters', 'bx-user-pin', 'Персонажи'],
   ['locations', 'bx-map-alt', 'Локации'],
   ['timeline', 'bx-git-commit', 'События'],
@@ -8,14 +9,14 @@ export const KNOWLEDGE_SEARCH_TYPES = [
   ['notes', 'bx-note', 'Записи'],
   ['rules', 'bx-list-check', 'Правила мира'],
   ['world', 'bx-book-bookmark', 'Произведения'],
-];
+], 2);
 
-const FIELD_LABELS = {
+const FIELD_LABELS = localizedLabels({
   title: 'Название', name: 'Имя', displayName: 'Имя', firstName: 'Имя', lastName: 'Фамилия',
   role: 'Роль', body: 'Описание / текст', text: 'Текст', description: 'Описание',
   aliases: 'Псевдонимы', mentionForms: 'Варианты упоминания', date: 'Дата',
   bookmarks: 'Закладки', tags: 'Метки', notes: 'Заметки', characterRoles: 'Участие в событии',
-};
+});
 const SKIP_FIELD = /^(?:id|type|order|image|icon|encrypted|protectedStore|locked|createdAt|updatedAt|completed|subEvents)$|(?:Ids?|URL|Url)$/;
 const fold = text => String(text).toLocaleLowerCase('ru').replace(/ё/g, 'е');
 
@@ -76,20 +77,20 @@ export function searchKnowledge(worlds, query, { docs = [], floatingNotes = [] }
     const add = (type, item, parent = null) => {
       if (!item || item.locked || item.protectedStore) return;
       const fields = collectFields(item);
-      for (const [key, records, label] of [['characterIds', world.characters, 'Связанные персонажи'], ['locationIds', world.locations, 'Связанные локации'], ['noteIds', world.notes, 'Связанные записи'], ['chapterIds', docs, 'Связанные главы'], ['documentIds', docs, 'Связанные документы']]) {
+      for (const [key, records, label] of [['characterIds', world.characters, t('Связанные персонажи')], ['locationIds', world.locations, t('Связанные локации')], ['noteIds', world.notes, t('Связанные записи')], ['chapterIds', docs, t('Связанные главы')], ['documentIds', docs, t('Связанные документы')]]) {
         const names = (item[key] || []).map(id => (records || []).find(record => record.id === id)).filter(Boolean).map(record => record.displayName || record.name || record.title || '').join(', ');
         if (names) fields.push({ label, text: names });
       }
       for (const note of floatingNotes) {
         if (!note.locked && !note.protectedStore && note.linkedId === item.id && ['character', 'location', 'note'].includes(note.scope)) {
-          fields.push(...collectFields({ title: note.title, body: note.body }, 'Плавающая заметка'));
+          fields.push(...collectFields({ title: note.title, body: note.body }, t('Плавающая заметка')));
         }
       }
       const haystack = fold(fields.map(field => field.text).join('\n'));
       if (!normalized.every(term => haystack.includes(term))) return;
       const matchingFields = fields.filter(field => normalized.some(term => fold(field.text).includes(term)));
-      const title = item.displayName || item.name || item.title || (type === 'rules' ? 'Правило мира' : 'Без названия');
-      results.push({ worldId: world.id, worldTitle: world.title || 'Произведение', type, id: item.id, parentId: parent?.id,
+      const title = item.displayName || item.name || item.title || (type === 'rules' ? t('Правило мира') : t('Без названия'));
+      results.push({ worldId: world.id, worldTitle: world.title || t('Произведение'), type, id: item.id, parentId: parent?.id,
         parentTitle: parent?.title, title, fields: matchingFields,
         score: normalized.filter(term => fold(title).includes(term)).length * 10 + matchingFields.length });
     };

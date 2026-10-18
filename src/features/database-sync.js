@@ -1,3 +1,4 @@
+import { t, ui, msg } from '../core/i18n.js';
 const STORES = ['folders', 'docs', 'lore', 'floatingNotes', 'reviewMarks', 'typoRules', 'snapshots', 'stats', 'trash', 'settings'];
 const safeId = value => typeof value === 'string' && /^[\w.:-]{1,240}$/u.test(value);
 const allowed = (store, id) => STORES.includes(store) && (store !== 'settings' || id === 'global-notes');
@@ -27,15 +28,15 @@ async function contentHash(value) {
   return Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, '0')).join('');
 }
 function validateRecord(record) {
-  if (!record || !allowed(record.store, record.id) || !safeId(record.id) || !record.clock || typeof record.clock !== 'object' || !/^[a-f0-9]{64}$/.test(record.hash)) throw new Error('Некорректная запись синхронизации.');
-  for (const [device, revision] of Object.entries(record.clock)) if (!safeId(device) || !Number.isSafeInteger(revision) || revision < 0) throw new Error('Некорректная версия записи.');
-  if (!record.deleted && (!record.value || record.value.id !== record.id)) throw new Error('Данные записи синхронизации отсутствуют.');
+  if (!record || !allowed(record.store, record.id) || !safeId(record.id) || !record.clock || typeof record.clock !== 'object' || !/^[a-f0-9]{64}$/.test(record.hash)) throw new Error(t('Некорректная запись синхронизации.'));
+  for (const [device, revision] of Object.entries(record.clock)) if (!safeId(device) || !Number.isSafeInteger(revision) || revision < 0) throw new Error(t('Некорректная версия записи.'));
+  if (!record.deleted && (!record.value || record.value.id !== record.id)) throw new Error(t('Данные записи синхронизации отсутствуют.'));
   const walk = (value, depth = 0) => {
-    if (depth > 100) throw new Error('Слишком глубокая структура.');
+    if (depth > 100) throw new Error(t('Слишком глубокая структура.'));
     if (!value || typeof value !== 'object') return;
     for (const [key, child] of Object.entries(value)) {
-      if (['__proto__', 'constructor', 'prototype'].includes(key)) throw new Error('Недопустимое поле.');
-      if (['id', 'blockId', 'docId', 'folderId', 'linkedId'].includes(key) && child && !safeId(child)) throw new Error('Недопустимый ID.');
+      if (['__proto__', 'constructor', 'prototype'].includes(key)) throw new Error(t('Недопустимое поле.'));
+      if (['id', 'blockId', 'docId', 'folderId', 'linkedId'].includes(key) && child && !safeId(child)) throw new Error(t('Недопустимый ID.'));
       walk(child, depth + 1);
     }
   };
@@ -141,7 +142,7 @@ export class DatabaseSync {
     return this.incomingWork;
   }
   async reconcileState(state) {
-    if (state?.protocol !== 2 || !safeId(state.deviceId) || !Array.isArray(state.records)) throw new Error('Неподдерживаемое состояние базы.');
+    if (state?.protocol !== 2 || !safeId(state.deviceId) || !Array.isArray(state.records)) throw new Error(t('Неподдерживаемое состояние базы.'));
     state.records.forEach(validateRecord);
     await this.work;
     let received = 0, conflicts = 0;
@@ -209,7 +210,7 @@ export class DatabaseSync {
   async resolveConflict(id, choice, mergedValue = null) {
     await this.work;
     const conflict = await this.db.get('syncConflicts', id);
-    if (!conflict || conflict.locked) throw new Error('Конфликт недоступен.');
+    if (!conflict || conflict.locked) throw new Error(t('Конфликт недоступен.'));
     const variant = choice === 'remote' ? conflict.remote : conflict.local;
     const clock = mergeClocks(conflict.local.clock, conflict.remote.clock);
     clock[this.deviceId] = (clock[this.deviceId] || 0) + 1;

@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
@@ -23,12 +24,12 @@ function bytesToBase64(bytes) {
 }
 
 function base64ToBytes(value) {
-  if (typeof value !== 'string' || !value) throw new Error('Encrypted payload is incomplete.');
+  if (typeof value !== 'string' || !value) throw new Error(t('Зашифрованные данные неполны.'));
   return Uint8Array.from(atob(value), (c) => c.charCodeAt(0));
 }
 
 export async function encryptJson(payload, password) {
-  if (!password) throw new Error('Master password is required for encryption.');
+  if (!password) throw new Error(t('Введите мастер-пароль для шифрования.'));
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const key = await keyFromPassword(password, salt);
@@ -37,8 +38,8 @@ export async function encryptJson(payload, password) {
 }
 
 export async function decryptJson(payload, password) {
-  if (!password) throw new Error('Master password is required for decryption.');
-  if (!payload?.salt || !payload?.iv || !payload?.data) throw new Error('Encrypted payload is incomplete.');
+  if (!password) throw new Error(t('Введите мастер-пароль для расшифровки.'));
+  if (!payload?.salt || !payload?.iv || !payload?.data) throw new Error(t('Зашифрованные данные неполны.'));
   const salt = base64ToBytes(payload.salt);
   const iv = base64ToBytes(payload.iv);
   const key = await keyFromPassword(password, salt);
@@ -46,6 +47,6 @@ export async function decryptJson(payload, password) {
     const data = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, base64ToBytes(payload.data));
     return JSON.parse(dec.decode(data));
   } catch {
-    throw new Error('Не удалось расшифровать данные. Проверьте мастер-пароль.');
+    throw new Error(t('Не удалось расшифровать данные. Проверьте мастер-пароль.'));
   }
 }

@@ -1,3 +1,4 @@
+import { t, ui, msg } from './i18n.js';
 /**
  * Nocturne Horizon Preloader Engine
  * Ultra-minimalist Luxury Editorial Interface with Horizon Hairline Physics
@@ -17,7 +18,7 @@ export class PreloaderEngine {
     this.container = document.createElement('div');
     this.container.id = 'cosmic-preloader';
     this.container.className = 'cosmic-preloader-overlay horizon-mode';
-    this.container.innerHTML = `
+    this.container.innerHTML = ui`
       <div class="horizon-spotlight"></div>
       <div class="horizon-ambient-ring"></div>
       <div class="horizon-content">

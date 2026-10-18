@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 import { encryptJson, decryptJson } from './crypto.js';
 
 const SENSITIVE = new Set(['docs', 'drafts', 'lore', 'snapshots', 'floatingNotes', 'reviewMarks', 'typoRules', 'trash', 'backups', 'syncQueue', 'syncConflicts']);
@@ -22,7 +23,7 @@ export async function revealRecord(store, record, password) {
 }
 
 export async function protectRecord(store, record, { enabled = false, password = '' } = {}) {
-  if (!record || typeof record !== 'object') throw new Error('Некорректная запись базы.');
+  if (!record || typeof record !== 'object') throw new Error(t('Некорректная запись базы.'));
   if (record.protectedStore) {
     return record;
   }
@@ -37,7 +38,7 @@ export async function protectRecord(store, record, { enabled = false, password =
   if (!(SENSITIVE.has(store) || (store === 'settings' && ['global-notes', 'books-library', 'ai-results'].includes(record.id)))) return record;
   if (!password) {
     if (record.encrypted && record.locked) return record;
-    throw new Error('Введите мастер-пароль для защищённого сохранения.');
+    throw new Error(t('Введите мастер-пароль для защищённого сохранения.'));
   }
   const clean = structuredClone(record);
   delete clean.encrypted; delete clean.locked; delete clean._needsModelSync;

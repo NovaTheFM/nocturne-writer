@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
@@ -153,6 +153,7 @@
   <link rel="stylesheet" href="./src/css/mobile.css?v=1.2.1" />
   <link rel="stylesheet" href="./src/css/bookmarks.css?v=1.2.1" />
   <link rel="stylesheet" href="./src/css/workflows.css?v=1.2.1" />
+  <link rel="stylesheet" href="./src/css/languages.css?v=1.2.1" />
   <script>
     try {
       const s = localStorage.getItem('nocturne_settings');
@@ -179,7 +180,7 @@
         <div class="preloader-logo-img"></div>
         <div class="preloader-brand">NOCTURNE</div>
       </div>
-      <div class="preloader-subtitle">FOCUS & INSPIRATION</div>
+      <div class="preloader-subtitle" data-i18n="Вдохновение и сосредоточенность">Inspiration and focus</div>
       <div class="preloader-progress-track">
         <div class="preloader-progress-fill"></div>
       </div>
@@ -210,13 +211,13 @@
       <span class="doc-name" style="display: none;"></span>
     </div>
     <div class="titlebar-controls">
-      <button class="titlebar-btn minimize" id="titlebar-minimize" title="Свернуть">
+      <button class="titlebar-btn minimize" id="titlebar-minimize" title="Свернуть" data-i18n-title="Свернуть">
         <svg width="12" height="12" viewBox="0 0 12 12"><rect x="1.5" y="5.5" width="9" height="1" fill="currentColor"/></svg>
       </button>
-      <button class="titlebar-btn maximize" id="titlebar-maximize" title="Развернуть">
+      <button class="titlebar-btn maximize" id="titlebar-maximize" title="Развернуть" data-i18n-title="Развернуть">
         <svg width="12" height="12" viewBox="0 0 12 12" id="titlebar-maximize-icon"><rect x="2" y="2" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
       </button>
-      <button class="titlebar-btn close" id="titlebar-close" title="Закрыть">
+      <button class="titlebar-btn close" id="titlebar-close" title="Закрыть" data-i18n-title="Закрыть">
         <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2.5,2.5 L9.5,9.5 M9.5,2.5 L2.5,9.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
       </button>
     </div>

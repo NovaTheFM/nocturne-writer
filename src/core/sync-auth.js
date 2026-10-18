@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 export const SYNC_PROTOCOL_VERSION = 3;
 const encoder = new TextEncoder();
 
@@ -6,12 +7,12 @@ export function pairingNonce() {
 }
 
 async function pairingKey(token) {
-  if (typeof token !== 'string' || !token.trim()) throw new Error('Код подключения отсутствует.');
+  if (typeof token !== 'string' || !token.trim()) throw new Error(t('Код подключения отсутствует.'));
   return crypto.subtle.importKey('raw', encoder.encode(token.trim().toUpperCase()), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
 }
 
 function transcript(role, challenge, clientNonce, deviceId) {
-  if (!['client', 'server'].includes(role) || !/^[a-f\d]{64}$/u.test(challenge) || !/^[a-f\d]{64}$/u.test(clientNonce) || typeof deviceId !== 'string' || !/^[\w.:-]{1,240}$/u.test(deviceId)) throw new Error('Некорректный запрос подключения.');
+  if (!['client', 'server'].includes(role) || !/^[a-f\d]{64}$/u.test(challenge) || !/^[a-f\d]{64}$/u.test(clientNonce) || typeof deviceId !== 'string' || !/^[\w.:-]{1,240}$/u.test(deviceId)) throw new Error(t('Некорректный запрос подключения.'));
   return encoder.encode(JSON.stringify(['nocturne-pair', SYNC_PROTOCOL_VERSION, role, challenge, clientNonce, deviceId]));
 }
 

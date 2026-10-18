@@ -1,3 +1,4 @@
+import { t } from '../core/i18n.js';
 export function updateRangeMotion(app, control, percentage) {
   const field = control.closest('[data-range-field]');
   if (!field) return;
@@ -10,7 +11,7 @@ export function updateRangeMotion(app, control, percentage) {
   }
   control.classList.add('range-motion-ready');
   field.classList.add('range-motion-field');
-  if (!control.hasAttribute('aria-label')) control.setAttribute('aria-label', field.closest('.setting-row')?.querySelector('.setting-info > span')?.textContent || 'Значение');
+  if (!control.hasAttribute('aria-label')) control.setAttribute('aria-label', field.closest('.setting-row')?.querySelector('.setting-info > span')?.textContent || t('Значение'));
   const rect = control.getBoundingClientRect(), bounds = field.getBoundingClientRect();
   rail.style.width = `${rect.width}px`; rail.style.left = `${rect.left - bounds.left}px`;
   const state = field.__rangeMotion ||= { displayed: percentage, target: percentage, frame: null, time: performance.now() };

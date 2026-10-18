@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   LOCALE_RECORD_ID, getLocale, setLocale, t, ui, formatCount,
-  loadLocalePreference, saveLocalePreference,
+  loadLocalePreference, saveLocalePreference, msg, formatDate, getLocaleName,
+  localizedLabels, localizedOptions, localizedSettings, getMissingTranslations,
 } from '../src/core/i18n.js';
+import { messages } from '../src/locales/messages.js';
 
 test('all supported languages have natural interface translations', () => {
   for (const [locale, close, settings] of [['ru', 'Закрыть', 'Настройки'], ['uk', 'Закрити', 'Налаштування'], ['en', 'Close', 'Settings']]) {
@@ -14,6 +16,15 @@ test('all supported languages have natural interface translations', () => {
   }
   assert.throws(() => setLocale('unknown'), /locale/i);
   setLocale('ru');
+});
+
+test('preloader copy can use the destination language without changing the current interface', () => {
+  setLocale('uk');
+  assert.equal(t('Применяем язык интерфейса…', 'ru'), 'Применяем язык интерфейса…');
+  assert.equal(getLocale(), 'uk');
+  setLocale('ru');
+  assert.equal(t('Применяем язык интерфейса…', 'uk'), 'Застосовуємо мову інтерфейсу…');
+  assert.equal(getLocale(), 'ru');
 });
 
 test('UI templates translate static copy while preserving author text and markup exactly', () => {
@@ -57,7 +68,7 @@ test('upgrading a profile reads a local preference without modifying existing re
     put: async (store, record) => records.set(`${store}:${record.id}`, structuredClone(record)),
   };
   const before = structuredClone([...records]);
-  assert.deepEqual(await loadLocalePreference(db), { locale: 'ru', confirmed: false });
+  assert.deepEqual(await loadLocalePreference(db), { locale: 'en', confirmed: false });
   assert.deepEqual([...records], before);
   await saveLocalePreference(db, 'uk');
   assert.deepEqual(await loadLocalePreference(db), { locale: 'uk', confirmed: true });
@@ -78,6 +89,44 @@ test('failed preference writes do not change the active language or erase existi
 test('malformed preferences ask again and never trigger database recreation', async () => {
   for (const value of [undefined, {}, { locale: 'zz', confirmed: true }, { locale: 'uk', confirmed: false }]) {
     const db = { get: async () => value };
-    assert.deepEqual(await loadLocalePreference(db), { locale: 'ru', confirmed: false });
+    assert.deepEqual(await loadLocalePreference(db), { locale: 'en', confirmed: false });
   }
+});
+
+test('module-level registries follow language changes without changing stored option values', () => {
+  const labels = localizedLabels({ close: 'Закрыть' });
+  const options = localizedOptions([['closed', 'Закрыть']]);
+  const settings = localizedSettings([{ key: 'history', label: 'Настройки', note: 'Закрыть', suffix: ' мин', options: [['closed', 'Закрыть']] }]);
+  for (const [locale, close, title] of [['uk', 'Закрити', 'Налаштування'], ['en', 'Close', 'Settings'], ['ru', 'Закрыть', 'Настройки']]) {
+    setLocale(locale);
+    assert.equal(labels.close, close); assert.equal(options[0][1], close);
+    assert.equal(settings[0].label, title); assert.equal(settings[0].note, close);
+    assert.equal(settings[0].options[0][0], 'closed'); assert.equal(settings[0].options[0][1], close);
+    assert.ok(settings[0].suffix.startsWith(' '));
+  }
+});
+
+test('translations cover both languages and preserve every interpolation slot', () => {
+  assert.ok(Object.keys(messages).length > 2300);
+  const slots = value => [...value.matchAll(/\{\d+\}/g)].map(match => match[0]).sort();
+  for (const [source, variants] of Object.entries(messages)) {
+    assert.equal(variants.length, 2, source);
+    for (const translated of variants) {
+      assert.ok(translated.trim(), source);
+      assert.deepEqual(slots(translated), slots(source), source);
+    }
+  }
+});
+
+test('dynamic messages reorder opaque values safely and formatting follows the chosen locale', () => {
+  setLocale('en');
+  const result = msg`Импортировано в раздел "${'Настройки'}": ${5} записей.`;
+  assert.equal(result, 'Imported 5 entries into “Настройки”.');
+  assert.equal(getLocaleName(), 'en-US');
+  assert.equal(formatDate('2026-10-18T12:00:00Z', { timeZone: 'UTC', year: 'numeric' }), '2026');
+  assert.equal(formatCount(1, 'characters'), '1 character');
+  assert.equal(formatCount(2, 'pages'), '2 pages');
+  assert.throws(() => formatCount(1, 'missing'), /Unknown count unit/);
+  assert.ok(Array.isArray(getMissingTranslations()));
+  setLocale('ru');
 });

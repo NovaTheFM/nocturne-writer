@@ -1,3 +1,4 @@
+import { msg } from '../core/i18n.js';
 const layers = new WeakMap();
 function updateHover(record) {
   const pointer = record.pointer;
@@ -146,7 +147,7 @@ export function drawBookmarkLayer(root, bookmarks, { rangeAt, paragraphAt, onJum
             fill.setAttribute('viewBox', `0 0 ${width} ${height}`); fill.setAttribute('preserveAspectRatio', 'none'); fill.setAttribute('aria-hidden', 'true');
             fill.innerHTML = `<path d="${boundary} L${width - 9} ${y(99)} Q${width} ${y(99)} ${width} ${Math.max(y(1), height - 9)} L${width} ${Math.min(y(99), 9)} Q${width} ${y(1)} ${width - 9} ${y(1)} Z"/>`;
             Object.assign(fill.style, { left: `${position.left - 18}px`, top: `${position.top}px`, width: `${width}px`, height: `${height}px` });
-            const bracket = document.createElement('button'); bracket.type = 'button'; bracket.className = 'bookmark-paragraph-bracket'; bracket.setAttribute('aria-label', `Закладка абзаца: ${part.title}`);
+            const bracket = document.createElement('button'); bracket.type = 'button'; bracket.className = 'bookmark-paragraph-bracket'; bracket.setAttribute('aria-label', msg`Закладка абзаца: ${part.title}`);
             bracket.innerHTML = '<svg viewBox="0 0 12 100" preserveAspectRatio="none" aria-hidden="true"><path d="M11 1 Q4 1 4 12 L4 39 Q4 48 1 50 Q4 52 4 61 L4 88 Q4 99 11 99" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>';
             Object.assign(bracket.style, { left: `${position.left - 18}px`, top: `${position.top}px`, height: `${position.height}px` });
             bracket.onpointerdown = event => event.preventDefault(); bracket.onclick = () => onJump(bookmark.id);
@@ -156,7 +157,7 @@ export function drawBookmarkLayer(root, bookmarks, { rangeAt, paragraphAt, onJum
         }
         const marker = document.createElement('button'); marker.type = 'button';
         marker.className = `bookmark-position-mark bookmark-kind-${anchor.kind}`;
-        marker.setAttribute('aria-label', `${part.title}. Перейти к закладке`);
+        marker.setAttribute('aria-label', msg`${part.title}. Перейти к закладке`);
         const position = relative({ left: point.left, top: point.top, width: 0, height: 0, bottom: point.top });
         Object.assign(marker.style, { left: `${position.left}px`, top: `${position.top}px` });
         const small = document.createElement('span'); small.className = 'bookmark-position-tick';

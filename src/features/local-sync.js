@@ -1,3 +1,4 @@
+import { t, ui, msg } from '../core/i18n.js';
 import { uid } from '../core/utils.js';
 import { encryptJson, decryptJson } from '../core/crypto.js';
 import { SYNC_PROTOCOL_VERSION, pairingNonce, pairingProof, verifyPairingProof } from '../core/sync-auth.js';
@@ -5,9 +6,9 @@ import { SYNC_PROTOCOL_VERSION, pairingNonce, pairingProof, verifyPairingProof }
 export { SYNC_PROTOCOL_VERSION };
 
 export function defaultDeviceName(runtime = {}) {
-  if (runtime.isAndroid) return 'Android телефон';
-  if (runtime.isCapacitor) return 'Мобильное устройство';
-  return 'Компьютер';
+  if (runtime.isAndroid) return t('Android телефон');
+  if (runtime.isCapacitor) return t('Мобильное устройство');
+  return t('Компьютер');
 }
 
 export function publicDeviceId(deviceId = '') {
@@ -63,9 +64,9 @@ export class LocalSyncClient {
   }
 
   fail(stage, detail) {
-    this.setStatus('error', `Этап ${stage}: ${detail}`, stage);
+    this.setStatus('error', msg`Этап ${stage}: ${detail}`, stage);
     if (this.connectAttempt?.reject) {
-      this.connectAttempt.reject(new Error(`Этап ${stage}: ${detail}`));
+      this.connectAttempt.reject(new Error(msg`Этап ${stage}: ${detail}`));
       this.connectAttempt = null;
     }
   }
@@ -82,7 +83,7 @@ export class LocalSyncClient {
     this.app.state.sync.host = host;
     this.app.state.sync.port = port || '8787';
     this.app.state.sync.token = token;
-    this.setStatus('waiting', 'Этап ws open: открываю WebSocket...', 'ws open');
+    this.setStatus('waiting', t('Этап ws open: открываю WebSocket...'), 'ws open');
 
     return new Promise((resolve, reject) => {
       this.connectAttempt = { resolve, reject };
@@ -91,28 +92,28 @@ export class LocalSyncClient {
 
       const timeout = window.setTimeout(() => {
         if (this.connectAttempt && sequence === this.sequence) {
-          this.fail(opened ? 'pair' : 'ws open', 'Сервер не ответил вовремя. Проверьте Wi‑Fi, адрес и код подключения.');
+          this.fail(opened ? 'pair' : 'ws open', t('Сервер не ответил вовремя. Проверьте Wi‑Fi, адрес и код подключения.'));
           this.disconnect(false);
         }
       }, 9000);
 
       this.ws.onopen = () => {
         opened = true;
-        this.setStatus('waiting', 'Этап pair: проверяю pairing code...', 'pair');
+        this.setStatus('waiting', t('Этап pair: проверяю pairing code...'), 'pair');
       };
 
       this.ws.onmessage = (event) => {
         if (sequence !== this.sequence) return;
         try { if (JSON.parse(event.data)?.type === 'paired') window.clearTimeout(timeout); }
-        catch { this.fail('protocol', 'Сервер прислал некорректный ответ.'); return; }
+        catch { this.fail('protocol', t('Сервер прислал некорректный ответ.')); return; }
         this.handleMessage(event.data).catch(error => this.fail('protocol', error.message));
       };
       this.ws.onerror = () => {
         window.clearTimeout(timeout);
         if (this.status !== 'error') {
           this.fail(opened ? 'pair' : 'ws open', opened
-            ? 'WebSocket открылся, но сервер вернул сетевую ошибку во время pairing.'
-            : 'Ошибка WebSocket. Проверьте IP, порт, Wi-Fi, firewall и LAN HTTP/WS.');
+            ? t('WebSocket открылся, но сервер вернул сетевую ошибку во время pairing.')
+            : t('Ошибка WebSocket. Проверьте IP, порт, Wi-Fi, firewall и LAN HTTP/WS.'));
         }
       };
       this.ws.onclose = () => {
@@ -120,13 +121,13 @@ export class LocalSyncClient {
         window.clearTimeout(timeout);
         for (const ping of this.pendingPings.values()) {
           window.clearTimeout(ping.timeout);
-          ping.reject(new Error('Соединение закрыто до pong.'));
+          ping.reject(new Error(t('Соединение закрыто до pong.')));
         }
         this.pendingPings.clear();
         this.peers.clear();
-        this.connectAttempt?.reject(new Error('Соединение закрыто.')); this.connectAttempt = null;
+        this.connectAttempt?.reject(new Error(t('Соединение закрыто.'))); this.connectAttempt = null;
         if (this.status !== 'offline' && this.status !== 'error') {
-          this.setStatus('offline', 'Соединение потеряно. Очередь изменений сохранена локально.', 'close');
+          this.setStatus('offline', t('Соединение потеряно. Очередь изменений сохранена локально.'), 'close');
         }
         if (!this.manuallyDisconnected && this.connection?.trusted) {
           clearTimeout(this.reconnectTimer);
@@ -140,18 +141,18 @@ export class LocalSyncClient {
     this.sequence++;
     this.manuallyDisconnected = updateStatus;
     clearTimeout(this.reconnectTimer);
-    this.connectAttempt?.reject(new Error('Подключение отменено.')); this.connectAttempt = null;
+    this.connectAttempt?.reject(new Error(t('Подключение отменено.'))); this.connectAttempt = null;
     if (this.ws) {
       try { this.ws.close(); } catch {}
     }
     this.ws = null;
     for (const ping of this.pendingPings.values()) {
       window.clearTimeout(ping.timeout);
-      ping.reject(new Error('Соединение закрыто.'));
+      ping.reject(new Error(t('Соединение закрыто.')));
     }
     this.pendingPings.clear();
     this.peers.clear();
-    if (updateStatus) this.setStatus('offline', 'Отключено.', 'offline');
+    if (updateStatus) this.setStatus('offline', t('Отключено.'), 'offline');
   }
 
   isOpen() {
@@ -166,13 +167,13 @@ export class LocalSyncClient {
 
   ping(timeoutMs = 2600) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      return Promise.reject(new Error('WebSocket не открыт.'));
+      return Promise.reject(new Error(t('WebSocket не открыт.')));
     }
     const id = `ping-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     return new Promise((resolve, reject) => {
       const timeout = window.setTimeout(() => {
         this.pendingPings.delete(id);
-        reject(new Error('Pong не получен за время ожидания.'));
+        reject(new Error(t('Pong не получен за время ожидания.')));
       }, timeoutMs);
       this.pendingPings.set(id, { resolve, reject, timeout });
       this.send({ type: 'ping', id, at: Date.now() });
@@ -182,14 +183,14 @@ export class LocalSyncClient {
   async verifyAfterPair(message) {
     this.peers = new Map((message.peers || []).map(peer => [peer.deviceId, peer]));
     this.connectedDevice = message.peer || message.server || null;
-    this.setStatus('waiting', 'Этап ping/pong: проверяю обмен сообщениями...', 'ping/pong');
+    this.setStatus('waiting', t('Этап ping/pong: проверяю обмен сообщениями...'), 'ping/pong');
     try {
       await this.ping();
     } catch (error) {
-      this.fail('ping/pong', error?.message || 'Сервер не ответил на ping.');
+      this.fail('ping/pong', error?.message || t('Сервер не ответил на ping.'));
       return;
     }
-    this.setStatus('connected', 'Связь установлена. Discovery, WebSocket, pair и ping/pong пройдены.', 'connected');
+    this.setStatus('connected', t('Связь установлена. Discovery, WebSocket, pair и ping/pong пройдены.'), 'connected');
     await this.app.persistSyncDevice?.({ ...(message.peer || message.server || {}), trusted: true, autoReconnect: true, pairingStatus: 'paired' });
     if (!this.app.isMobileLayout?.()) this.app.renderSyncSurfaces?.({ preserveInputs: true });
     await this.app.flushSyncQueue?.();
@@ -221,12 +222,12 @@ export class LocalSyncClient {
     try {
       message = JSON.parse(raw);
     } catch {
-      this.fail('protocol', 'Сервер прислал некорректное JSON-сообщение.');
+      this.fail('protocol', t('Сервер прислал некорректное JSON-сообщение.'));
       return;
     }
-    if (!message || typeof message !== 'object' || Array.isArray(message) || typeof message.type !== 'string') throw new Error('Некорректный ответ сервера.');
+    if (!message || typeof message !== 'object' || Array.isArray(message) || typeof message.type !== 'string') throw new Error(t('Некорректный ответ сервера.'));
     if (message.type === 'pair-challenge') {
-      if (message.protocolVersion !== SYNC_PROTOCOL_VERSION || this.pairChallenge) throw new Error('Версия протокола локальной связи не совпадает.');
+      if (message.protocolVersion !== SYNC_PROTOCOL_VERSION || this.pairChallenge) throw new Error(t('Версия протокола локальной связи не совпадает.'));
       this.pairChallenge = message.challenge;
       const clientNonce = this.pairClientNonce, deviceId = this.app.state.sync.deviceId;
       this.send({ type: 'pair', protocolVersion: SYNC_PROTOCOL_VERSION, clientNonce, deviceId,
@@ -235,7 +236,7 @@ export class LocalSyncClient {
         deviceType: this.app.runtime?.isAndroid ? 'phone' : 'computer', runtime: this.app.runtime?.platform || 'browser' });
       return;
     }
-    if (!this.authenticated && !['paired', 'error'].includes(message.type)) throw new Error('Сервер ещё не подтвердил подключение.');
+    if (!this.authenticated && !['paired', 'error'].includes(message.type)) throw new Error(t('Сервер ещё не подтвердил подключение.'));
     if (message.type === 'pong') {
       const pending = this.pendingPings.get(message.id);
       if (pending) {
@@ -246,7 +247,7 @@ export class LocalSyncClient {
       return;
     }
     if (message.type === 'paired') {
-      if (!await verifyPairingProof(message.proof, this.connection.token, 'server', this.pairChallenge, this.pairClientNonce, this.app.state.sync.deviceId)) throw new Error('Сервер не подтвердил код подключения.');
+      if (!await verifyPairingProof(message.proof, this.connection.token, 'server', this.pairChallenge, this.pairClientNonce, this.app.state.sync.deviceId)) throw new Error(t('Сервер не подтвердил код подключения.'));
       this.authenticated = true;
       await this.verifyAfterPair(message);
       return;
@@ -255,14 +256,14 @@ export class LocalSyncClient {
       this.peers.set(message.peer.deviceId, message.peer);
       this.connectedDevice = message.peer || null;
       await this.app.persistSyncDevice?.(message.peer || {});
-      this.setStatus('connected', `${message.peer?.deviceName || 'Устройство'} подключено.`, 'connected');
+      this.setStatus('connected', msg`${message.peer?.deviceName || t('Устройство')} подключено.`, 'connected');
       if (!this.app.isMobileLayout?.()) this.app.renderSyncSurfaces?.({ preserveInputs: true });
       await this.app.sendSyncProjectState?.();
       return;
     }
     if (message.type === 'peer-left') {
       this.peers.delete(message.peer?.deviceId);
-      this.setStatus('connected', 'Ожидаю второе устройство. Изменения сохраняются локально.', 'connected');
+      this.setStatus('connected', t('Ожидаю второе устройство. Изменения сохраняются локально.'), 'connected');
       return;
     }
     if (message.type === 'relay-ack') {
@@ -274,7 +275,7 @@ export class LocalSyncClient {
       if (message.to !== this.app.state.sync.deviceId || !this.peers.has(message.from)) return;
       this.incoming = this.incoming.catch(() => {}).then(async () => {
         const decoded = await decryptJson(message.payload, this.connection.token);
-        if (decoded.type !== 'database-state' || decoded.state.deviceId !== message.from) throw new Error('Отправитель сообщения не совпадает.');
+        if (decoded.type !== 'database-state' || decoded.state.deviceId !== message.from) throw new Error(t('Отправитель сообщения не совпадает.'));
         await this.app.flushOpenDocuments();
         await this.app.databaseSync.receiveState(decoded.state);
         this.send({ type: 'relay-ack', to: message.from, messageId: message.messageId });
@@ -299,7 +300,7 @@ export class LocalSyncClient {
       return;
     }
     if (message.type === 'error') {
-      this.fail(this.status === 'waiting' ? 'pair' : 'protocol', message.message || 'Ошибка локальной связи.');
+      this.fail(this.status === 'waiting' ? 'pair' : 'protocol', t(message.message) || t('Ошибка локальной связи.'));
     }
   }
 }

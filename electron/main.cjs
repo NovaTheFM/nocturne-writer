@@ -11,6 +11,14 @@ const { simpleGit } = require('simple-git');
 const { Bonjour } = require('bonjour-service');
 
 const root = path.resolve(__dirname, '..');
+let t = source => source;
+const interfaceLanguagePath = path.join(root, existsSync(path.join(root, 'app_src', 'src')) ? 'app_src/src/core/i18n.js' : 'src/core/i18n.js');
+const interfaceLanguageReady = import(pathToFileURL(interfaceLanguagePath).href).then(module => { t = module.t; return module; });
+ipcMain.handle('nocturne:interface-language', async (_event, locale) => {
+  if (!['ru', 'uk', 'en'].includes(locale)) throw new Error('Unsupported interface language.');
+  (await interfaceLanguageReady).setLocale(locale);
+  return true;
+});
 const devUrl = process.env.NOCTURNE_DEV_URL || process.env.ELECTRON_DEV_URL || '';
 if (process.env.NOCTURNE_TEST_PROFILE) app.setPath('userData', path.resolve(process.env.NOCTURNE_TEST_PROFILE));
 const associatedExtensions = new Set(['.nocturnedump', '.nocturnmemory', '.nocturnecharacters', '.nocturneplaces', '.nocturnetimelines', '.nocturnenotes', '.nocturnechar', '.nocturneplace', '.nocturnetime', '.nocturnenote', '.nocturned']);
@@ -36,7 +44,7 @@ ipcMain.handle('nocturne:take-open-files', async () => {
   for (const filename of pendingOpenFiles.splice(0)) {
     try {
       const stat = await fs.stat(filename);
-      if (!stat.isFile() || stat.size > 80 * 1024 * 1024) throw new Error('Файл слишком большой или недоступен.');
+      if (!stat.isFile() || stat.size > 80 * 1024 * 1024) throw new Error(t('Файл слишком большой или недоступен.'));
       files.push({ name: path.basename(filename), data: await fs.readFile(filename, 'utf8'), size: stat.size });
     } catch (error) { files.push({ name: path.basename(filename), error: error.message }); }
   }
@@ -53,14 +61,14 @@ async function backupDirectory() {
   return directory;
 }
 ipcMain.handle('nocturne:backup-directory', async () => {
-  const result = await dialog.showOpenDialog({ title: 'Папка резервных копий', properties: ['openDirectory', 'createDirectory'] });
+  const result = await dialog.showOpenDialog({ title: t('Папка резервных копий'), properties: ['openDirectory', 'createDirectory'] });
   if (result.canceled) return null;
   chosenBackupDirectory = result.filePaths[0];
   await fs.writeFile(path.join(app.getPath('userData'), 'backup-directory.json'), JSON.stringify({ path: chosenBackupDirectory }));
   return { path: chosenBackupDirectory };
 });
 ipcMain.handle('nocturne:backup-write', async (_event, data, name) => {
-  if (!validBackupName(name) || typeof data !== 'string' || data.length > 80 * 1024 * 1024) throw new Error('Invalid backup.');
+  if (!validBackupName(name) || typeof data !== 'string' || data.length > 80 * 1024 * 1024) throw new Error(t('Некорректная резервная копия.'));
   const directory = await backupDirectory(), target = path.join(directory, name), temporary = `${target}.pending`;
   await fs.writeFile(temporary, data, { encoding: 'utf8', flag: 'wx' });
   await fs.rename(temporary, target);
@@ -69,9 +77,9 @@ ipcMain.handle('nocturne:backup-write', async (_event, data, name) => {
   return { external: true, path: target };
 });
 ipcMain.handle('nocturne:backup-read', async (_event, name) => {
-  if (!validBackupName(name)) throw new Error('Invalid backup name.');
+  if (!validBackupName(name)) throw new Error(t('Некорректное имя резервной копии.'));
   const target = path.join(await backupDirectory(), name);
-  if ((await fs.stat(target)).size > 80 * 1024 * 1024) throw new Error('Backup is too large.');
+  if ((await fs.stat(target)).size > 80 * 1024 * 1024) throw new Error(t('Резервная копия слишком большая.'));
   return fs.readFile(target, 'utf8');
 });
 
@@ -429,27 +437,27 @@ ipcMain.handle('nocturne:get-platform-info', () => ({
 
 ipcMain.handle('nocturne:open-dump-file', async () => {
   const result = await dialog.showOpenDialog({
-    title: 'Open Nocturne dump',
+    title: t('Открыть резервную копию Nocturne'),
     properties: ['openFile'],
     filters: [
-      { name: 'Nocturne Dump', extensions: ['nocturnedump', 'json'] },
-      { name: 'All Files', extensions: ['*'] },
+      { name: t('Резервная копия Nocturne'), extensions: ['nocturnedump', 'json'] },
+      { name: t('Все файлы'), extensions: ['*'] },
     ],
   });
   if (result.canceled || !result.filePaths[0]) return null;
   const filePath = result.filePaths[0];
   const stat = await fs.stat(filePath);
-  if (stat.size > 80 * 1024 * 1024) throw new Error('Dump file is too large.');
+  if (stat.size > 80 * 1024 * 1024) throw new Error(t('Резервная копия слишком большая.'));
   return { name: path.basename(filePath), path: filePath, size: stat.size, data: await fs.readFile(filePath, 'utf8') };
 });
 
 ipcMain.handle('nocturne:save-dump-file', async (_event, data, suggestedName = 'nocturne-project.nocturnedump') => {
-  if (typeof data !== 'string') throw new Error('Invalid dump data.');
+  if (typeof data !== 'string') throw new Error(t('Некорректные данные резервной копии.'));
   const safeName = String(suggestedName || 'nocturne-project.nocturnedump').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 120);
   const result = await dialog.showSaveDialog({
-    title: 'Save Nocturne dump',
+    title: t('Сохранить резервную копию Nocturne'),
     defaultPath: safeName.endsWith('.nocturnedump') ? safeName : `${safeName}.nocturnedump`,
-    filters: [{ name: 'Nocturne Dump', extensions: ['nocturnedump'] }],
+    filters: [{ name: t('Резервная копия Nocturne'), extensions: ['nocturnedump'] }],
   });
   if (result.canceled || !result.filePath) return null;
   await fs.writeFile(result.filePath, data, 'utf8');

@@ -1,3 +1,4 @@
+import { t, ui, msg } from '../core/i18n.js';
 export class ProjectBackups {
   constructor({ db, files, buildDump, enabled = () => true }) {
     Object.assign(this, { db, files, buildDump, enabled });
@@ -20,7 +21,7 @@ export class ProjectBackups {
     return record;
   }
   async read(record) {
-    if (record.locked) throw new Error('Введите мастер-пароль, чтобы открыть копию.');
+    if (record.locked) throw new Error(t('Введите мастер-пароль, чтобы открыть копию.'));
     return record.dump || JSON.parse(await this.files.readBackup(record.name));
   }
 }

@@ -1,3 +1,4 @@
+import { t, ui, msg } from '../core/i18n.js';
 import { detectRuntime, getRuntimeInfo, nativePlugins } from './runtime.js';
 
 function downloadBlob(blob, suggestedName = 'nocturne-file.txt') {
@@ -61,7 +62,7 @@ export async function saveBlobFile(blob, suggestedName) {
     for (let i = 0; i < bytes.length; i += 32768) binary += String.fromCharCode(...bytes.subarray(i, i + 32768));
     const fileName = String(suggestedName).replace(/[\\/:*?"<>|]/g, '_');
     const saved = await nativePlugins.Filesystem.writeFile({ path: `exports/${fileName}`, data: btoa(binary), directory: 'CACHE', recursive: true });
-    await nativePlugins.Share.share({ title: fileName, url: saved.uri, dialogTitle: 'Сохранить или отправить файл' });
+    await nativePlugins.Share.share({ title: fileName, url: saved.uri, dialogTitle: t('Сохранить или отправить файл') });
     return { path: saved.uri };
   }
   downloadBlob(blob, suggestedName);
@@ -75,7 +76,7 @@ export async function saveTextFile(data, suggestedName = 'nocturne.txt', mime = 
   }
   if (runtime.isCapacitor) {
     const result = await saveWithCapacitor(data, suggestedName, mime);
-    if (!result) throw new Error('Не удалось сохранить файл на телефоне.');
+    if (!result) throw new Error(t('Не удалось сохранить файл на телефоне.'));
     return result;
   }
   downloadBlob(new Blob([String(data || '')], { type: mime }), suggestedName);
@@ -126,20 +127,20 @@ export function onOpenFilesPending(callback) {
 let backupDirectoryHandle = null;
 export async function controlSyncServer(action = 'status') {
   const methods = { status: 'syncServerStatus', start: 'syncServerStart', stop: 'syncServerStop', 'refresh-token': 'syncServerRefreshToken', 'connection-info': 'syncServerConnectionInfo' };
-  if (!methods[action]) throw new Error('Unknown server action.');
+  if (!methods[action]) throw new Error(t('Неизвестное действие сервера.'));
   if (detectRuntime().isElectron) return window.nocturneElectron[methods[action]]();
-  if (detectRuntime().isCapacitor || !['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)) throw new Error('Сервер запускается в приложении на компьютере.');
+  if (detectRuntime().isCapacitor || !['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)) throw new Error(t('Сервер запускается в приложении на компьютере.'));
   const capability = await (await fetch('/sync/control-token', { signal: AbortSignal.timeout(5000) })).json();
-  if (!capability.token) throw new Error('Управление сервером недоступно.');
+  if (!capability.token) throw new Error(t('Управление сервером недоступно.'));
   const response = await fetch(`/sync/server/${action}`, { method: ['status', 'connection-info'].includes(action) ? 'GET' : 'POST', headers: { 'x-nocturne-control-token': capability.token }, signal: AbortSignal.timeout(5000) });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error || 'Не удалось управлять сервером.');
+  if (!response.ok) throw new Error(result.error || t('Не удалось управлять сервером.'));
   return result;
 }
 export async function printHtmlDocument(html, title) {
   if (detectRuntime().isCapacitor) return nativePlugins.NocturneLan.printHtml({ html, title });
   const win = window.open('', '_blank');
-  if (!win) throw new Error('Разрешите открытие окна печати в браузере.');
+  if (!win) throw new Error(t('Разрешите открытие окна печати в браузере.'));
   win.document.write(html); win.document.close();
   await win.document.fonts.ready;
   win.focus(); win.print();
@@ -149,7 +150,7 @@ const backupName = name => /^nocturne-[\dTZ.-]+\.nocturnedump$/.test(name);
 export async function chooseBackupDirectory(db) {
   if (detectRuntime().isElectron) return window.nocturneElectron.chooseBackupDirectory();
   if (detectRuntime().isCapacitor) return { path: 'Documents/Nocturne Backups' };
-  if (!window.showDirectoryPicker) throw new Error('Автоматические внешние копии доступны в Chrome, Edge и приложениях для ПК и Android. Здесь можно скачать копию проекта.');
+  if (!window.showDirectoryPicker) throw new Error(t('Автоматические внешние копии доступны в Chrome, Edge и приложениях для ПК и Android. Здесь можно скачать копию проекта.'));
   backupDirectoryHandle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'nocturne-backups' });
   await db.put('settings', { id: 'backup-directory', handle: backupDirectoryHandle });
   return { path: backupDirectoryHandle.name };
@@ -158,7 +159,7 @@ export async function initializeBackupDirectory(db) {
   backupDirectoryHandle = (await db.get('settings', 'backup-directory'))?.handle || null;
 }
 export async function writeBackup(data, name) {
-  if (!backupName(name)) throw new Error('Invalid backup name.');
+  if (!backupName(name)) throw new Error(t('Некорректное имя резервной копии.'));
   if (detectRuntime().isElectron) return window.nocturneElectron.writeBackup(data, name);
   if (detectRuntime().isCapacitor) {
     const fs = nativePlugins.Filesystem, path = 'Nocturne Backups';
@@ -177,10 +178,10 @@ export async function writeBackup(data, name) {
   return { external: true, path: `${backupDirectoryHandle.name}/${name}` };
 }
 export async function readBackup(name) {
-  if (!backupName(name)) throw new Error('Invalid backup name.');
+  if (!backupName(name)) throw new Error(t('Некорректное имя резервной копии.'));
   if (detectRuntime().isElectron) return window.nocturneElectron.readBackup(name);
   if (detectRuntime().isCapacitor) return (await nativePlugins.Filesystem.readFile({ path: `Nocturne Backups/${name}`, directory: 'DOCUMENTS', encoding: 'utf8' })).data;
-  if (!backupDirectoryHandle) throw new Error('Подключите папку, в которой хранится копия.');
+  if (!backupDirectoryHandle) throw new Error(t('Подключите папку, в которой хранится копия.'));
   return (await (await backupDirectoryHandle.getFileHandle(name)).getFile()).text();
 }
 
@@ -204,6 +205,7 @@ export async function saveGitSnapshot(data, projectName) {
 }
 
 export const platformFiles = {
+  setInterfaceLanguage: locale => window.nocturneElectron?.setInterfaceLanguage?.(locale) ?? Promise.resolve(),
   takeOpenFiles, onOpenFilesPending,
   controlSyncServer,
   printHtmlDocument,

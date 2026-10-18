@@ -34,7 +34,7 @@ test('Every registered suite has a unique ID, valid area, command and timeout', 
   assert.equal(new Set(catalog.map(check => check.id)).size, catalog.length);
   for (const check of catalog) {
     assert.ok(check.args.length && check.executable && check.timeout > 0, check.id);
-    assert.ok(check.platforms.length && check.modes.length, check.id);
+    assert.ok(check.platforms.length && Array.isArray(check.modes) && check.modes.every(mode => ['smoke', 'full'].includes(mode)), check.id);
     assert.ok(check.areas.every(area => AREA_LABELS[area]), check.id);
     assert.ok(check.ports.every(port => Number.isInteger(port) && port > 0 && port < 65536), check.id);
   }
@@ -135,7 +135,7 @@ test('Report filters work and expanded long feature names fit narrow screens', a
     results:[{id:'writing-case',status:'PASS'},{id:'native-case',status:'SKIP',reason:'No device'}],
     features:{methods:[{name:'handleMobileEditorSelectionPointerDown'.repeat(3),file:'src/main.js',line:1,observed:false}]},
   });
-  const browser=await chromium.launch({headless:true});
+  const browser=await chromium.launch({headless:true,...(process.env.NOCTURNE_QA_BROWSER_CHANNEL?{channel:process.env.NOCTURNE_QA_BROWSER_CHANNEL}:{})});
   try {
     const page=await browser.newPage();
     for(const width of [1440,390,320]){

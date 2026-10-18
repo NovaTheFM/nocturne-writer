@@ -12,13 +12,17 @@ await mkdir(profile, { recursive: true }); await mkdir(backups, { recursive: tru
 await writeFile(`${profile}/backup-directory.json`, JSON.stringify({ path: backups }));
 const server = spawn(process.execPath, ['server.mjs'], { env: { ...process.env, PORT: String(port) }, stdio: 'ignore', windowsHide: true });
 let desktop, browser;
+async function saveDesktopScreenshot(path) {
+  const png = await desktop.evaluate(async ({ BrowserWindow }) => (await BrowserWindow.getAllWindows()[0].webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG().toString('base64'));
+  await writeFile(path, Buffer.from(png, 'base64'));
+}
 async function checkHeader(pc) {
   const directory = 'release/qa/electron-header';
   await mkdir(directory, { recursive: true });
   await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.setBackgroundThrottling(false));
   await pc.waitForSelector('#whats-new-overlay.active');
   assert.equal(await pc.locator('.whats-new-body > p').first().innerText(), `Версия ${JSON.parse(await readFile('package.json', 'utf8')).version}`);
-  await pc.screenshot({ path: `${directory}/whats-new-${packaged ? 'packaged' : 'dev'}.png` });
+  await saveDesktopScreenshot(`${directory}/whats-new-${packaged ? 'packaged' : 'dev'}.png`);
   await pc.getByRole('button', { name: 'Спасибо, Луна' }).click();
   await pc.waitForSelector('#whats-new-overlay', { state: 'detached' });
   await pc.waitForSelector('#electron-titlebar', { state: 'visible' });
@@ -51,10 +55,11 @@ async function checkHeader(pc) {
       assert.ok(geometry.left > 0 && geometry.right <= geometry.parentRight && geometry.top >= 0 && geometry.bottom <= geometry.titlebarBottom, JSON.stringify(geometry));
       const trigger = pc.locator('[data-action="toggle-library-menu"]');
       await trigger.click(); await pc.waitForSelector('#library-menu.active');
+      await pc.waitForFunction(() => !document.getElementById('library-menu').getAnimations({ subtree: true }).some(animation => animation.playState === 'running'));
       const menu = await pc.locator('#library-menu').boundingBox(), anchor = await trigger.boundingBox();
       assert.ok(Math.abs(menu.x - anchor.x) < 2 && Math.abs(menu.y - anchor.y - anchor.height - 10) < 2, JSON.stringify({ menu, anchor }));
       assert.equal(await trigger.getAttribute('aria-expanded'), 'true');
-      await pc.screenshot({ path: `${directory}/${theme}-${compact ? 'compact' : 'regular'}-${packaged ? 'packaged' : 'dev'}.png` });
+      await saveDesktopScreenshot(`${directory}/${theme}-${compact ? 'compact' : 'regular'}-${packaged ? 'packaged' : 'dev'}.png`);
       await pc.keyboard.press('Escape'); await pc.waitForSelector('#library-menu', { state: 'hidden' });
       assert.equal(await trigger.evaluate(element => element === document.activeElement), true);
       await pc.locator('#electron-titlebar [data-action="open-settings"]').click();
@@ -81,6 +86,17 @@ try {
   assert.equal(await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible()), false);
   browser = await chromium.launch({ headless: true });
   await checkHeader(pc);
+  await desktop.evaluate(({ dialog }) => { global.__languageOriginalOpenDialog = dialog.showOpenDialog; dialog.showOpenDialog = async options => { global.__languageNativeDialogTitle = options.title; return { canceled: true, filePaths: [] }; }; });
+  try {
+    for (const [locale, title] of [['uk', 'Папка резервних копій'], ['en', 'Backup folder']]) {
+      await pc.evaluate(async locale => { await window.nocturneApp.interfaceLanguage.change(locale); await window.nocturneElectron.chooseBackupDirectory(); }, locale);
+      assert.equal(await desktop.evaluate(() => global.__languageNativeDialogTitle), title);
+      assert.equal(await pc.locator('[data-action="toggle-library-menu"]').count(), 1, 'Language switching duplicated native toolbar controls');
+      assert.equal(await pc.locator('#electron-titlebar [data-action="open-settings"]').count(), 1);
+    }
+    assert.equal(await pc.evaluate(async () => { try { await window.nocturneElectron.setInterfaceLanguage('invalid'); return false; } catch { return true; } }), true);
+    await pc.evaluate(() => window.nocturneApp.interfaceLanguage.change('ru'));
+  } finally { await desktop.evaluate(({ dialog }) => { dialog.showOpenDialog = global.__languageOriginalOpenDialog; delete global.__languageOriginalOpenDialog; delete global.__languageNativeDialogTitle; }); }
   await pc.evaluate(async () => {
     const a = window.nocturneApp; await a.createDoc(a.defaultFolderId(), 'Native desktop manuscript', '');
     a.nocturneEditor.get('primary').commands.setContent('<p>Electron document persisted externally.</p>'); await a.saveActiveDoc({ silent: true });

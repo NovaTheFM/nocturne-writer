@@ -3,6 +3,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import path from 'node:path';
+import { chooseDefaultInterfaceLanguage } from './qa/first-run-language.mjs';
 
 const argument = (name, fallback) => process.argv.find(arg => arg.startsWith(`--${name}=`))?.split('=').slice(1).join('=') || fallback;
 const label = argument('label', 'current').replace(/[^a-z0-9_-]/gi, '-');
@@ -19,7 +20,7 @@ assert.ok(['all', 'single-paragraph', 'many-paragraphs'].includes(shapeFilter));
 assert.ok(Number.isFinite(budgetMs) && budgetMs > 0);
 const url = 'http://localhost:5322';
 const server = spawn(process.execPath, ['server.mjs'], { cwd: source, env: { ...process.env, PORT: '5322', SYNC_PORT: '8922' }, stdio: 'ignore', windowsHide: true });
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ headless: true, ...(process.env.NOCTURNE_QA_BROWSER_CHANNEL ? { channel: process.env.NOCTURNE_QA_BROWSER_CHANNEL } : {}) });
 const results = [];
 await mkdir('release/qa/pagination-performance', { recursive: true });
 const filename = `release/qa/pagination-performance/${label}.json`;
@@ -34,6 +35,7 @@ try {
     page.setDefaultTimeout(120000);
     try {
       await page.goto(url); await page.waitForSelector('#preloader.hidden', { state: 'attached' });
+      await chooseDefaultInterfaceLanguage(page);
       await page.evaluate(async ({ shape, words }) => {
         const a = window.nocturneApp; a.state.settings.automaticBackups = false;
         await a.createDoc(a.defaultFolderId(), 'Large split benchmark', '');

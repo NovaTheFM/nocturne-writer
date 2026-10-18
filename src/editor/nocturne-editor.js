@@ -1,3 +1,4 @@
+import { msg } from '../core/i18n.js';
 import { BookmarkExtension, BookmarkStep, bookmarkPluginKey } from './bookmark-plugin.js';
 import { normalizeBookmarks, editorIndex } from '../features/bookmark-model.js';
 import { Editor, Extension, StarterKit, TextAlign, Underline, Placeholder, Plugin, PluginKey, Decoration, DecorationSet, HorizontalRule, TextSelection } from '../vendor/tiptap/nocturne-tiptap.bundle.js';
@@ -257,7 +258,7 @@ const NocturneEntityMentions = Extension.create({
               attrs['data-entity-kind'] = 'family';
               attrs['data-family-name'] = match.familyName;
               attrs['data-entity-label'] = `Семья ${match.familyName}`;
-              attrs['aria-label'] = `Семья ${match.familyName}`;
+              attrs['aria-label'] = msg`Семья ${match.familyName}`;
             } else {
               attrs['data-entity-kind'] = match.kind;
               attrs['data-entity-id'] = match.entity.id;

@@ -1,3 +1,4 @@
+import { t, ui, msg } from '../core/i18n.js';
 export function manageModalFocus({ onOverlayClose } = {}) {
   let active = null;
   let activeModal = null;
@@ -12,11 +13,11 @@ export function manageModalFocus({ onOverlayClose } = {}) {
   const update = () => {
     for (const button of document.querySelectorAll('[data-settings-tab], [data-kb-tab], .kb-close-btn, .kb-project-switcher, .kb-project-item, .kb-project-action')) {
       button.setAttribute('role', 'button'); button.tabIndex = 0;
-      if (button.classList.contains('kb-close-btn')) button.setAttribute('aria-label', 'Вернуться к рукописи');
+      if (button.classList.contains('kb-close-btn')) button.setAttribute('aria-label', t('Вернуться к рукописи'));
     }
     for (const toggle of document.querySelectorAll('[data-kind="toggle"]')) {
       toggle.setAttribute('role', 'switch'); toggle.tabIndex = 0; toggle.setAttribute('aria-checked', String(toggle.classList.contains('on') || toggle.classList.contains('active')));
-      if (!toggle.hasAttribute('aria-label')) toggle.setAttribute('aria-label', (toggle.tagName === 'BUTTON' ? toggle.textContent.trim() : '') || toggle.closest('.setting-row')?.querySelector('.setting-info strong, .setting-info > span')?.textContent || toggle.closest('.dictionary-toggle')?.querySelector('span')?.textContent || toggle.closest('.ai-context-head')?.querySelector('strong')?.textContent || 'Переключатель');
+      if (!toggle.hasAttribute('aria-label')) toggle.setAttribute('aria-label', (toggle.tagName === 'BUTTON' ? toggle.textContent.trim() : '') || toggle.closest('.setting-row')?.querySelector('.setting-info strong, .setting-info > span')?.textContent || toggle.closest('.dictionary-toggle')?.querySelector('span')?.textContent || toggle.closest('.ai-context-head')?.querySelector('strong')?.textContent || t('Переключатель'));
     }
     const surfaces = [...document.querySelectorAll('#form-overlay, #settings-overlay, #kb-modal, #mobile-overlay, .floating-notes-modal, .command-palette-overlay')];
     const overlays = surfaces.filter(element => element.classList.contains('active'));
@@ -46,10 +47,10 @@ export function manageModalFocus({ onOverlayClose } = {}) {
     const title = modal.querySelector('h1,h2,h3');
     if (title) { title.id ||= `modal-title-${active.id || 'command'}`; modal.setAttribute('aria-labelledby', title.id); }
     for (const button of modal.querySelectorAll('button')) {
-      if (!button.textContent.trim() && !button.hasAttribute('aria-label')) button.setAttribute('aria-label', button.title || (button.querySelector('.bx-x') ? 'Закрыть' : 'Действие'));
+      if (!button.textContent.trim() && !button.hasAttribute('aria-label')) button.setAttribute('aria-label', button.title || (button.querySelector('.bx-x') ? t('Закрыть') : t('Действие')));
     }
     for (const input of modal.querySelectorAll('input:not([type="hidden"]), textarea, select')) {
-      if (!input.labels?.length && !input.hasAttribute('aria-label')) input.setAttribute('aria-label', input.closest('.setting-row')?.querySelector('.setting-info strong, .setting-info > span')?.textContent || input.placeholder || input.name || 'Поле ввода');
+      if (!input.labels?.length && !input.hasAttribute('aria-label')) input.setAttribute('aria-label', input.closest('.setting-row')?.querySelector('.setting-info strong, .setting-info > span')?.textContent || input.placeholder || input.name || t('Поле ввода'));
     }
     for (const element of document.querySelectorAll('#app, .main-workspace, .sidebar, .toolbar, .mobile-bottom-nav, .mobile-topbar, .mobile-system-bar, .mobile-tab-surface, #mobile-overlay, .floating-notes-modal')) {
       if (!element.contains(active) && !active.contains(element)) { element.inert = true; element.dataset.modalInert = 'true'; }

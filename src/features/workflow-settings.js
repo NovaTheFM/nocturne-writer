@@ -1,3 +1,4 @@
+import { t, ui, msg, localizedSettings } from '../core/i18n.js';
 import { escapeHtml } from '../core/utils.js';
 
 export const workflowDefaults = {
@@ -9,7 +10,7 @@ export const workflowDefaults = {
   searchResultsMode: 'return', searchFilterFirst: 'all', searchShowAll: false,
 };
 
-export const workflowSettings = [
+export const workflowSettings = localizedSettings([
   { tab: 'history', key: 'historyOpenMode', label: 'Открывать версию', note: 'Первый экран после выбора сохранённой версии.', type: 'select', options: [['text', 'Просмотр текста'], ['compare', 'Сравнение'], ['copy', 'Отдельная копия главы']] },
   { tab: 'history', key: 'timeMachine', label: 'Автоматическая история', note: 'Фоновые версии по включённым ниже условиям. Ручные версии доступны всегда.', type: 'toggle' },
   { tab: 'history', key: 'historyAutoGrowth', label: 'Версия при росте текста', note: 'Сохраняет версию после добавления заданного объёма. Размер шрифта и пагинация на порог не влияют.', type: 'toggle' },
@@ -32,7 +33,7 @@ export const workflowSettings = [
   { tab: 'manuscript-search', key: 'searchResultsMode', label: 'После открытия найденного текста', note: 'На телефоне сохраняем запрос и положение списка для возврата. Панель рядом с текстом доступна на ПК.', type: 'select', options: [['return', 'Закрывать, с возможностью вернуться'], ['side', 'Оставлять рядом с текстом на ПК']] },
   { tab: 'manuscript-search', key: 'searchFilterFirst', label: 'Первый фильтр результатов', note: 'Определяет порядок фильтров; выбранная область не сужается автоматически.', type: 'select', options: [['all', 'Всегда показывать всё'], ['work', 'Произведение'], ['chapter', 'Глава'], ['type', 'Тип материала'], ['status', 'Статус главы']] },
   { tab: 'manuscript-search', key: 'searchShowAll', label: 'Всегда показывать все совпадения', note: 'Выключено: первые фрагменты и кнопка «Показать ещё». Включено: полный список.', type: 'toggle' },
-];
+]);
 
 export function validateWorkflowSettings(settings) {
   for (const item of workflowSettings) {
@@ -52,7 +53,7 @@ export function workflowSettingsContent(app, tab) {
     let control = '';
     if (item.type === 'select') control = app.renderSettingsSelect(item.key, item.options).replace('data-setting-select-toggle ', `data-setting-select-toggle aria-label="${escapeHtml(item.label)}" `);
     if (item.type === 'toggle') control = `<button type="button" class="toggle ${settings[item.key] ? 'on' : ''}" data-setting="${item.key}" data-kind="toggle" role="switch" aria-label="${escapeHtml(item.label)}" aria-checked="${!!settings[item.key]}"></button>`;
-    if (item.type === 'range') control = `<div class="range-field" data-range-field><input class="range-control" type="range" min="${item.min}" max="${item.max}" step="${item.step || 1}" value="${settings[item.key]}" data-setting="${item.key}" data-suffix="${escapeHtml(item.suffix || '')}" aria-label="${escapeHtml(item.label)}"><input class="range-value-input" type="text" inputmode="numeric" value="${settings[item.key]}${escapeHtml(item.suffix || '')}" data-setting-input="${item.key}" data-suffix="${escapeHtml(item.suffix || '')}" data-min="${item.min}" data-max="${item.max}" data-step="${item.step || 1}" aria-label="${escapeHtml(item.label)}: значение"></div>`;
+    if (item.type === 'range') control = ui`<div class="range-field" data-range-field><input class="range-control" type="range" min="${item.min}" max="${item.max}" step="${item.step || 1}" value="${settings[item.key]}" data-setting="${item.key}" data-suffix="${escapeHtml(item.suffix || '')}" aria-label="${escapeHtml(item.label)}"><input class="range-value-input" type="text" inputmode="numeric" value="${settings[item.key]}${escapeHtml(item.suffix || '')}" data-setting-input="${item.key}" data-suffix="${escapeHtml(item.suffix || '')}" data-min="${item.min}" data-max="${item.max}" data-step="${item.step || 1}" aria-label="${escapeHtml(item.label)}: значение"></div>`;
     return `<div class="setting-row ${item.type === 'toggle' ? 'setting-row-switch' : ''}" data-surface-key="setting-${item.key}"><div class="setting-info"><span>${escapeHtml(item.label)}</span><small>${escapeHtml(item.note)}</small></div><div class="setting-control">${control}</div></div>`;
   }).join('');
 }

@@ -71,7 +71,7 @@ try{
     const started=Date.now();
     const instrument=check.executable===process.execPath&&(check.ports.length||check.id==='cross-platform-journey')&&check.id!=='pagination-performance';
     const execution={...check,timeout:check.id==='cross-platform-journey'?check.timeout+Math.max(0,values.steps-6)*profilesCount(values.platform,values.mode)*5000:check.timeout,args:instrument?['--import',pathToFileURL(join(root,'scripts/qa/observe-playwright.mjs')).href,...check.args]:check.args};
-    const result=await runCheck(execution,{root,directory:caseDirectory,onChild:child=>activeChild=child,env:{NOCTURNE_QA_DIR:caseDirectory,NOCTURNE_QA_PLATFORM:values.platform,NOCTURNE_QA_MODE:values.mode,NOCTURNE_QA_SEED:String(values.seed),NOCTURNE_QA_STEPS:String(values.steps),NOCTURNE_QA_TRACE:values.trace, ...(values['android-serial']?{NOCTURNE_ANDROID_SERIAL:values['android-serial']}:{})}});
+    const result=await runCheck(execution,{root,directory:caseDirectory,onChild:child=>activeChild=child,env:{NOCTURNE_QA_DIR:caseDirectory,NOCTURNE_QA_SUITE:check.id,NOCTURNE_QA_PLATFORM:values.platform,NOCTURNE_QA_MODE:values.mode,NOCTURNE_QA_SEED:String(values.seed),NOCTURNE_QA_STEPS:String(values.steps),NOCTURNE_QA_TRACE:values.trace, ...(values['android-serial']?{NOCTURNE_ANDROID_SERIAL:values['android-serial']}:{})}});
     Object.assign(check,result);if(interrupted)check.status='CANCELLED';
     if(check.id==='native-android'&&await exists(join(caseDirectory,'results.json'))){const native=JSON.parse(await readFile(join(caseDirectory,'results.json'),'utf8'));if(native.status==='SKIP'){check.status='SKIP';check.reason=native.reason;}}
     const archived=await archiveEvidence(qaRoot,caseDirectory,started);

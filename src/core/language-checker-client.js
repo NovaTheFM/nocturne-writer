@@ -1,4 +1,5 @@
 import { checkLanguageText } from './language-checker.js';
+import { t } from './i18n.js';
 
 let worker, nextId = 0;
 const requests = new Map();
@@ -15,7 +16,7 @@ export function checkLanguageTextAsync(text, options = {}) {
       if (data.error) request.reject(new Error(data.error)); else request.resolve(data.issues);
     };
     worker.onerror = event => {
-      for (const request of [...requests.values()]) { request.release(); request.reject(new Error(event.message || 'Не удалось загрузить локальный языковой словарь.')); }
+      for (const request of [...requests.values()]) { request.release(); request.reject(new Error(event.message || t('Не удалось загрузить локальный языковой словарь.'))); }
       worker.terminate(); worker = null;
     };
   }

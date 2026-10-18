@@ -2,6 +2,7 @@ import { chromium, _electron } from 'playwright';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { createWriteStream } from 'node:fs';
 import { join } from 'node:path';
+import { chooseDefaultInterfaceLanguage } from './first-run-language.mjs';
 
 const directory = process.env.NOCTURNE_QA_DIR;
 let contextNumber = 0;
@@ -48,6 +49,19 @@ async function observeContext(context) {
   await context.addInitScript(install);
   const observePage = page => {
     if(pages.includes(page))return;pages.push(page);
+    if (process.env.NOCTURNE_QA_SUITE !== 'interface-language-ui') {
+      let preparing;
+      const prepare = () => preparing ||= chooseDefaultInterfaceLanguage(page).finally(() => { preparing = null; });
+      const prepareLoaded = () => prepare().catch(error => { if (!page.isClosed()) log({ type: 'fixture-error', message: error.message }); });
+      page.on('domcontentloaded', prepareLoaded);
+      const navigate = page.goto.bind(page);
+      page.goto = async (...args) => {
+        const response = await navigate(...args);
+        if (await page.locator('#app').count()) await prepare();
+        return response;
+      };
+      if (page.url() !== 'about:blank') prepareLoaded();
+    }
     page.on('pageerror',error=>log({type:'pageerror',message:error.message,stack:error.stack}));
     page.on('console',message=>log({type:'console',level:message.type(),message:message.text().slice(0,6000),location:{...message.location(),url:cleanUrl(message.location().url)}}));
     page.on('requestfailed',request=>log({type:'requestfailed',method:request.method(),url:cleanUrl(request.url()),error:request.failure()?.errorText}));
@@ -74,6 +88,7 @@ async function observeContext(context) {
 if(directory){
   const launch=chromium.launch.bind(chromium);
   chromium.launch=async(...args)=>{
+    if (process.env.NOCTURNE_QA_BROWSER_CHANNEL && !args[0]?.executablePath && !args[0]?.channel) args[0] = { ...args[0], channel: process.env.NOCTURNE_QA_BROWSER_CHANNEL };
     const browser=await launch(...args),newContext=browser.newContext.bind(browser);
     browser.newContext=async(...options)=>observeContext(await newContext(...options));
     const close=browser.close.bind(browser);browser.close=async(...options)=>{await Promise.allSettled(browser.contexts().map(context=>context.__nocturneQaFinalize?.()));return close(...options);};

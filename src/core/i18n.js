@@ -18,10 +18,10 @@ export function setLocale(value) {
   locale = value;
 }
 
-export function t(source) {
-  if (locale === 'ru' || !source) return source;
+export function t(source, language = locale) {
+  if (language === 'ru' || !source) return source;
   const entry = messages[normalize(source)];
-  const translated = entry?.[locale === 'uk' ? 0 : 1];
+  const translated = entry?.[language === 'uk' ? 0 : 1];
   if (translated === undefined) { if (/[\u0400-\u04ff]/u.test(source)) missing.add(normalize(source)); return source; }
   const leading = source.match(/^\s*/u)[0], trailing = source.match(/\s*$/u)[0];
   return leading + translated + trailing;
@@ -65,6 +65,22 @@ export function ui(strings, ...values) { return template(strings, values, true);
 export function msg(strings, ...values) { return template(strings, values, false); }
 export function getMissingTranslations() { return [...missing]; }
 
+export function localizedLabels(source) {
+  return Object.defineProperties({}, Object.fromEntries(Object.entries(source).map(([key, value]) => [key, { enumerable: true, get: () => t(value) }])));
+}
+
+export function localizedOptions(source, labelIndex = 1) {
+  return source.map(option => Object.defineProperty([...option], labelIndex, { enumerable: true, get: () => t(option[labelIndex]) }));
+}
+
+export function localizedSettings(source) {
+  return source.map(item => {
+    const descriptors = Object.fromEntries(['label', 'note', 'suffix'].filter(key => key in item).map(key => [key, { enumerable: true, get: () => t(item[key]) }]));
+    if (item.options) descriptors.options = { enumerable: true, get: () => localizedOptions(item.options) };
+    return Object.defineProperties({ ...item }, descriptors);
+  });
+}
+
 const countForms = {
   words: { ru: ['слово', 'слова', 'слов'], uk: ['слово', 'слова', 'слів'], en: ['word', 'words', 'words'] },
   characters: { ru: ['знак', 'знака', 'знаков'], uk: ['знак', 'знаки', 'знаків'], en: ['character', 'characters', 'characters'] },
@@ -85,7 +101,7 @@ export async function loadLocalePreference(db) {
   const record = await db.get('settings', LOCALE_RECORD_ID);
   return record?.confirmed === true && supportedLocales.includes(record.locale)
     ? { locale: record.locale, confirmed: true }
-    : { locale: 'ru', confirmed: false };
+    : { locale: 'en', confirmed: false };
 }
 
 export async function saveLocalePreference(db, value) {

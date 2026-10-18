@@ -1,3 +1,6 @@
+import { t, ui, msg, getLocale, getLocaleName, formatCount, LOCALE_RECORD_ID } from './core/i18n.js';
+import { InterfaceLanguage, LANGUAGE_OPTIONS, languageFlag } from './ui/interface-language.js';
+import { inferLanguage } from './core/language-detection.js';
 import { Database } from './core/db.js';
 import { defaultSettings, seedDocs, seedFolders, seedLore } from './core/defaults.js';
 import {
@@ -68,7 +71,7 @@ function safeGetStorageItem(storage, key, fallback = '') {
     const value = storage?.getItem(key);
     return value === null || value === undefined ? fallback : value;
   } catch {
-    storageNotice(`Не удалось прочитать ${key}. Использовано безопасное значение.`);
+    storageNotice(msg`Не удалось прочитать ${key}. Использовано безопасное значение.`);
     return fallback;
   }
 }
@@ -78,7 +81,7 @@ function safeSetStorageItem(storage, key, value) {
     storage?.setItem(key, value);
     return true;
   } catch {
-    storageNotice(`Не удалось записать ${key}. Изменения останутся в памяти до успешного сохранения.`);
+    storageNotice(msg`Не удалось записать ${key}. Изменения останутся в памяти до успешного сохранения.`);
     return false;
   }
 }
@@ -88,7 +91,7 @@ function safeRemoveStorageItem(storage, key) {
     storage?.removeItem(key);
     return true;
   } catch {
-    storageNotice(`Не удалось удалить временную запись ${key}.`);
+    storageNotice(msg`Не удалось удалить временную запись ${key}.`);
     return false;
   }
 }
@@ -97,7 +100,7 @@ function safeStorageKeys(storage) {
   try {
     return Object.keys(storage || {});
   } catch {
-    storageNotice('Браузер заблокировал список localStorage/sessionStorage.');
+    storageNotice(t('Браузер заблокировал список localStorage/sessionStorage.'));
     return [];
   }
 }
@@ -107,7 +110,7 @@ function safeParseJson(value, fallback, label = 'JSON') {
   try {
     return JSON.parse(value);
   } catch {
-    storageNotice(`Повреждена запись ${label}. Использовано безопасное значение.`);
+    storageNotice(msg`Повреждена запись ${label}. Использовано безопасное значение.`);
     return fallback;
   }
 }
@@ -125,6 +128,7 @@ function defaultDeviceName(runtime) {
 class NocturneWriter {
   constructor() {
     this.db = new Database();
+    this.interfaceLanguage = new InterfaceLanguage(this);
     this.db.protection = () => ({ enabled: !!this.state?.settings.e2e, password: this.state?.sessionPassword || '' });
     this.draftWrites = new Map();
     this.runtime = detectRuntime();
@@ -352,6 +356,7 @@ class NocturneWriter {
     this.setStartupProgress(20);
     this.clearLegacyStorage();
     await this.db.open({ initialSettings: this.validateSettings({}) });
+    await this.interfaceLanguage.load();
     this.state.sessionPassword = safeGetStorageItem(sessionStorage, 'nocturne-master-password', '');
     const settings = await this.db.get('settings', 'app');
     this.state.settings = this.validateSettings(settings?.value || {});
@@ -414,9 +419,9 @@ class NocturneWriter {
     this.applySettings();
     this.setStartupProgress(90);
     this.renderAll();
-    this.startPreloader();
+    this.startupReveal = this.startPreloader();
     this.bindGlobalEvents();
-    this.disposeModalFocus = manageModalFocus({ onOverlayClose: overlay => this.closeSettingsSelects(null, { root: overlay, immediate: true, restoreFocus: false }) });
+    this.installModalFocus();
     this.databaseSync = new DatabaseSync({ db: this.db, deviceId: this.state.sync.deviceId,
       onChange: result => this.refreshAfterDatabaseSync(result),
       onPending: () => this.scheduleDatabaseSync(),
@@ -430,7 +435,9 @@ class NocturneWriter {
     this.startMobileSystemBar();
     this.applyAndroidSystemBars();
     this.startGitAutosave();
-    this.disposeNativeOpenFiles = platformFiles.onOpenFilesPending(() => this.openPendingNativeFiles());
+    this.disposeNativeOpenFiles = platformFiles.onOpenFilesPending(() => this.interfaceLanguage.confirmed && this.openPendingNativeFiles());
+    await this.startupReveal;
+    await this.interfaceLanguage.welcomeIfNeeded();
     const openedNativeFiles = await this.openPendingNativeFiles();
 
     // Check if new version first run (specifically for Electron desktop users)
@@ -647,7 +654,7 @@ class NocturneWriter {
     this.state.collapsedFolders = Array.isArray(this.state.collapsedFolders) ? this.state.collapsedFolders.filter((id) => this.state.folders.some((folder) => folder.id === id)) : [];
     this.state.docs = (Array.isArray(this.state.docs) ? this.state.docs : []).filter((doc) => doc?.id);
     this.state.lore = {
-      title: this.state.lore?.title || 'Основное произведение',
+      title: this.state.lore?.title || t('Основное произведение'),
       locked: !!this.state.lore?.locked,
       rules: Array.isArray(this.state.lore?.rules) ? this.state.lore.rules : [],
       characters: Array.isArray(this.state.lore?.characters) ? this.state.lore.characters : [],
@@ -1051,7 +1058,9 @@ class NocturneWriter {
     
     const updateMaxIcon = (isMaximized) => {
       if (maxBtn) {
-        maxBtn.title = isMaximized ? 'Восстановить' : 'Развернуть';
+        maxBtn.title = isMaximized ? t('Восстановить') : t('Развернуть');
+        maxBtn.dataset.i18nTitle = isMaximized ? 'Восстановить' : 'Развернуть';
+        maxBtn.setAttribute('aria-label', maxBtn.title);
         maxBtn.innerHTML = isMaximized 
           ? `<svg width="12" height="12" viewBox="0 0 12 12" id="titlebar-maximize-icon"><path d="M3.5,1.5 h7 v7 h-7 z M1.5,3.5 h7 v7 h-7 z" fill="none" stroke="currentColor" stroke-width="1.2" fill-rule="evenodd"/></svg>`
           : `<svg width="12" height="12" viewBox="0 0 12 12" id="titlebar-maximize-icon"><rect x="2" y="2" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>`;
@@ -1100,23 +1109,23 @@ class NocturneWriter {
 
     const activeId = this.state.activeLoreId || 'world';
     const project = this.state.kbProjects?.find(p => p.id === activeId);
-    const projectTitle = project ? project.title : (activeId === 'world' ? 'Основное' : 'Произведение ' + activeId);
+    const projectTitle = project ? this.workDisplayTitle(project) : (activeId === 'world' ? t('Основное') : `${t('Произведение')} ${activeId}`);
 
     const activeDoc = this.state.docs?.find(d => d.id === this.state.activeDocId);
     const docTitle = activeDoc ? activeDoc.title : '';
 
     const kbBadge = titlebar.querySelector('.titlebar-kb-project-badge');
     if (kbBadge) {
-      this.updateSurfaceHTML(kbBadge, `<span class="project-label">Произведение:</span><span class="project-name-badge">${escapeHtml(projectTitle)}</span>`, {});
+      this.updateSurfaceHTML(kbBadge, ui`<span class="project-label">Произведение:</span><span class="project-name-badge">${escapeHtml(projectTitle)}</span>`, {});
       kbBadge.style.display = 'flex';
     }
 
-    let displayProjectTitle = 'Документ';
+    let displayProjectTitle = t('Документ');
     if (activeDoc) {
       if (activeDoc.docType === 'book-chapter') {
-        displayProjectTitle = activeDoc.workTitle || 'Книга';
+        displayProjectTitle = activeDoc.workTitle || t('Книга');
       } else {
-        displayProjectTitle = 'Документ';
+        displayProjectTitle = t('Документ');
       }
     }
 
@@ -1213,8 +1222,8 @@ class NocturneWriter {
     const paneId = this.state.workspace?.focusedPaneId || 'primary';
     const pane = this.getPane(paneId);
     const doc = this.getDocForPane(paneId);
-    if (!pane || pane.type !== 'document' || !pane.docId || !doc) return 'Нет активного документа. Создайте или откройте рукопись.';
-    if (!this.getFocusedEditable()) return 'Документ ещё не готов к редактированию. Откройте рукопись в рабочей области.';
+    if (!pane || pane.type !== 'document' || !pane.docId || !doc) return t('Нет активного документа. Создайте или откройте рукопись.');
+    if (!this.getFocusedEditable()) return t('Документ ещё не готов к редактированию. Откройте рукопись в рабочей области.');
     return '';
   }
 
@@ -1248,11 +1257,11 @@ class NocturneWriter {
 
   assistantProviderProblem() {
     const s = this.state.settings;
-    if (s.aiProvider === 'local') return 'Ассистент не настроен. Выберите провайдера или подключите Ollama.';
+    if (s.aiProvider === 'local') return t('Ассистент не настроен. Выберите провайдера или подключите Ollama.');
     const p = this.resolveAiProviderSettings();
-    if (!String(p.endpoint || '').trim()) return 'У провайдера ИИ не указан endpoint.';
-    if (!String(p.model || '').trim()) return 'У провайдера ИИ не указана модель.';
-    if (!['ollama'].includes(p.id) && !String(p.key || '').trim()) return 'У провайдера ИИ не указан API key.';
+    if (!String(p.endpoint || '').trim()) return t('У провайдера ИИ не указан endpoint.');
+    if (!String(p.model || '').trim()) return t('У провайдера ИИ не указана модель.');
+    if (!['ollama'].includes(p.id) && !String(p.key || '').trim()) return t('У провайдера ИИ не указан API key.');
     return '';
   }
 
@@ -1260,7 +1269,7 @@ class NocturneWriter {
     const message = this.assistantDocumentProblem();
     if (!message) return { ok: true, doc: this.getFocusedDoc(), editable: this.getFocusedEditable() };
     this.clearSuggestion();
-    if (showToast) this.toast('Откройте или создайте документ, чтобы использовать ассистента.');
+    if (showToast) this.toast(t('Откройте или создайте документ, чтобы использовать ассистента.'));
     if (updateOutput) this.setAssistantOutput(message, 'no-document');
     this.updateAssistantPanelState();
     return { ok: false, message };
@@ -1287,12 +1296,12 @@ class NocturneWriter {
 
   assistantBusyMessage(kind = this.assistantBusyKind) {
     return {
-      proofread: 'Проверяю текст…',
-      'lore-check': 'Проверяю лор…',
-      continue: 'Готовлю продолжение…',
-      style: 'Переписываю фрагмент…',
-      repair: 'Исправляю формат ответа…',
-    }[kind] || 'Ассистент анализирует текст…';
+      proofread: t('Проверяю текст…'),
+      'lore-check': t('Проверяю лор…'),
+      continue: t('Готовлю продолжение…'),
+      style: t('Переписываю фрагмент…'),
+      repair: t('Исправляю формат ответа…'),
+    }[kind] || t('Ассистент анализирует текст…');
   }
 
   setAssistantBusy(kind) {
@@ -1341,7 +1350,7 @@ class NocturneWriter {
         this.renderNotes();
         this.renderFloatingNotes();
         this.renderSaveIndicator();
-        this.toast('Документ уже открыт в другой области.');
+        this.toast(t('Документ уже открыт в другой области.'));
         return;
       }
     }
@@ -1383,7 +1392,7 @@ class NocturneWriter {
     this.renderWorkspace();
     this.renderFloatingNotes();
     this.animatePaneContentRefresh(['primary', 'secondary']);
-    this.toast('Области успешно поменялись местами.');
+    this.toast(t('Области успешно поменялись местами.'));
   }
 
   toggleSplitMode() {
@@ -1404,7 +1413,7 @@ class NocturneWriter {
 
   toggleSplitMenu() {
     if (window.innerWidth < 1024 || document.body.classList.contains('mobile-shell-active')) {
-      this.toast('Split-screen поддерживается на экранах от 1024px');
+      this.toast(t('Split-screen поддерживается на экранах от 1024px'));
       return;
     }
     const willOpen = !this.isFloatingMenuOpen('split');
@@ -1630,7 +1639,7 @@ class NocturneWriter {
     this.state.activeDocId = activeDoc ? activeDoc.id : null;
     this.updateActiveDocHighlight();
     this.renderFloatingNotes();
-    this.toast(emptySide === 'left' ? 'Пустая область открыта слева.' : 'Пустая область открыта справа.');
+    this.toast(emptySide === 'left' ? t('Пустая область открыта слева.') : t('Пустая область открыта справа.'));
   }
 
   renderWorkspace() {
@@ -1739,9 +1748,9 @@ class NocturneWriter {
     
     const actionButtons = [];
     if (isSplit) {
-      actionButtons.push('<button class="btn-icon" data-action="swap-panes" title="Поменять области местами"><i class="bx bx-transfer-alt"></i></button>');
+      actionButtons.push(ui('<button class="btn-icon" data-action="swap-panes" title="Поменять области местами"><i class="bx bx-transfer-alt"></i></button>'));
       if (isSecondary) {
-        actionButtons.push('<button class="btn-icon" data-action="close-secondary-pane" title="Закрыть правую область"><i class="bx bx-x"></i></button>');
+        actionButtons.push(ui('<button class="btn-icon" data-action="close-secondary-pane" title="Закрыть правую область"><i class="bx bx-x"></i></button>'));
       }
     }
     return `
@@ -1753,7 +1762,7 @@ class NocturneWriter {
         ${this.renderPaneBody(paneId)}
       </div>
       <div class="pane-drop-overlay" data-pane-drop="${paneId}">
-        <div><i class="bx bx-file-import"></i><span>${pane?.type ? 'Открыть здесь' : 'Открыть документ здесь'}</span></div>
+        <div><i class="bx bx-file-import"></i><span>${pane?.type ? t('Открыть здесь') : t('Открыть документ здесь')}</span></div>
       </div>
     `;
   }
@@ -1761,15 +1770,15 @@ class NocturneWriter {
   renderPaneBody(paneId) {
     const pane = this.getPane(paneId);
     if (!pane?.type) {
-      return `<div class="workspace-empty">
+      return ui`<div class="workspace-empty">
         <i class="bx bx-sidebar"></i>
-        <h3>${paneId === 'primary' ? 'Левая область свободна' : 'Правая область свободна'}</h3>
+        <h3>${paneId === 'primary' ? t('Левая область свободна') : t('Правая область свободна')}</h3>
         <p>Откройте здесь документ, карточку персонажа или вкладку Базы знаний.</p>
       </div>`;
     }
     if (pane.type === 'document') {
       if (!this.getDocForPane(paneId)) {
-        return this.emptyStateMarkup('bx-file-plus', 'Начните новую рукопись', 'Создайте первый документ, чтобы начать писать.', 'new-doc', 'Создать документ');
+        return this.emptyStateMarkup('bx-file-plus', t('Начните новую рукопись'), t('Создайте первый документ, чтобы начать писать.'), 'new-doc', t('Создать документ'));
       }
       return `<div class="editor-scroll-area" data-editor-container data-pane-id="${paneId}"></div>`;
     }
@@ -1785,13 +1794,13 @@ class NocturneWriter {
   }
 
   singleWorkspaceEmptyMarkup() {
-    return this.emptyStateMarkup('bx-file-plus', 'Начните новую рукопись', 'Создайте первый документ, чтобы начать писать.', 'new-doc', 'Создать документ');
+    return this.emptyStateMarkup('bx-file-plus', t('Начните новую рукопись'), t('Создайте первый документ, чтобы начать писать.'), 'new-doc', t('Создать документ'));
   }
 
   paneTitle(pane) {
-    if (!pane?.type) return 'Пустая область';
-    if (pane.type === 'document') return this.state.docs.find((doc) => doc.id === pane.docId)?.title || 'Документ';
-    if (pane.type === 'kb-tab') return { characters: 'Персонажи', locations: 'Локации', timeline: 'Таймлайн', notes: 'Записи', search: 'Поиск в базе знаний' }[pane.kbTab] || 'База знаний';
+    if (!pane?.type) return t('Пустая область');
+    if (pane.type === 'document') return this.state.docs.find((doc) => doc.id === pane.docId)?.title || t('Документ');
+    if (pane.type === 'kb-tab') return { characters: t('Персонажи'), locations: t('Локации'), timeline: t('Таймлайн'), notes: t('Записи'), search: t('Поиск в базе знаний') }[pane.kbTab] || t('База знаний');
     
     let list;
     const rawType = pane.entityType;
@@ -1803,19 +1812,19 @@ class NocturneWriter {
     } else list = this.state.lore.characters;
     
     const entity = list.find((item) => item.id === pane.entityId);
-    return entity ? (entity.title || this.entityDisplayName(entity) || 'Досье') : 'Досье';
+    return entity ? (entity.title || this.entityDisplayName(entity) || t('Досье')) : t('Досье');
   }
 
   paneKindLabel(pane) {
     if (!pane?.type) return 'Split-screen';
-    if (pane.type === 'document') return 'Документ';
-    if (pane.type === 'kb-tab') return 'База знаний';
+    if (pane.type === 'document') return t('Документ');
+    if (pane.type === 'kb-tab') return t('База знаний');
     const rawType = pane.entityType;
-    if (rawType === 'location' || rawType === 'locations') return 'Локация';
-    if (rawType === 'note' || rawType === 'notes') return 'Запись';
-    if (rawType === 'timeline') return 'Событие';
-    if (rawType === 'subtimeline') return 'Подсобытие';
-    return 'Персонаж';
+    if (rawType === 'location' || rawType === 'locations') return t('Локация');
+    if (rawType === 'note' || rawType === 'notes') return t('Запись');
+    if (rawType === 'timeline') return t('Событие');
+    if (rawType === 'subtimeline') return t('Подсобытие');
+    return t('Персонаж');
   }
 
   renderLoreDetailPane(pane) {
@@ -1836,7 +1845,7 @@ class NocturneWriter {
     } else {
       item = this.state.lore[type]?.find((entry) => entry.id === pane.entityId);
     }
-    if (!item) return '<div class="workspace-empty"><p>Карточка не найдена.</p></div>';
+    if (!item) return ui('<div class="workspace-empty"><p>Карточка не найдена.</p></div>');
     return this.renderLoreDetail(type, item, pane.readMode);
   }
 
@@ -1846,12 +1855,12 @@ class NocturneWriter {
     if (tab === 'search') return this.renderKnowledgeSearch();
     if (tab === 'locations') {
       const locs = [...this.state.lore.locations].sort((a, b) => a.order - b.order);
-      return `<section class="kb-pane-section"><h2>Локации</h2><div class="locations-grid" data-dnd-zone="locations">${locs.length ? locs.map((item) => this.locationCard(item, false)).join('') : this.emptyStateMarkup('bx-map-alt', 'Локаций пока нет.', 'Добавьте первое место, чтобы связать сцену с миром.', 'new-lore', 'Добавить место', 'data-lore-type="locations"')}</div></section>`;
+      return ui`<section class="kb-pane-section"><h2>Локации</h2><div class="locations-grid" data-dnd-zone="locations">${locs.length ? locs.map((item) => this.locationCard(item, false)).join('') : this.emptyStateMarkup('bx-map-alt', t('Локаций пока нет.'), t('Добавьте первое место, чтобы связать сцену с миром.'), 'new-lore', t('Добавить место'), 'data-lore-type="locations"')}</div></section>`;
     }
     if (tab === 'timeline') {
       if (pane?.subtimelineParentId) return this.renderPaneSubtimeline(paneId, pane.subtimelineParentId);
       const time = [...this.state.lore.timeline].sort((a, b) => (a.order - b.order) || parseTimelineRank(a.date) - parseTimelineRank(b.date));
-      return `<section class="kb-pane-section"><h2>Таймлайн</h2><div class="timeline-container" data-dnd-zone="timeline">${time.length ? time.map((item, i, arr) => this.timelineCard(item, { isLast: i === arr.length - 1 })).join('') : this.emptyStateMarkup('bx-git-commit', 'Хронология пока пуста.', 'Добавьте первое событие, чтобы собрать порядок истории.', 'new-lore', 'Добавить событие', 'data-lore-type="timeline"')}</div></section>`;
+      return ui`<section class="kb-pane-section"><h2>Таймлайн</h2><div class="timeline-container" data-dnd-zone="timeline">${time.length ? time.map((item, i, arr) => this.timelineCard(item, { isLast: i === arr.length - 1 })).join('') : this.emptyStateMarkup('bx-git-commit', t('Хронология пока пуста.'), t('Добавьте первое событие, чтобы собрать порядок истории.'), 'new-lore', t('Добавить событие'), 'data-lore-type="timeline"')}</div></section>`;
     }
     if (tab === 'notes') {
       const notes = [...(this.state.lore.notes || [])].sort((a, b) => {
@@ -1859,33 +1868,33 @@ class NocturneWriter {
         if (!a.completed && b.completed) return -1;
         return a.order - b.order;
       });
-      return `<section class="kb-pane-section"><h2>Записи</h2><div class="character-grid" data-dnd-zone="notes">${notes.length ? notes.map((item) => this.noteCard(item, false)).join('') : this.emptyStateMarkup('bx-note', 'Записей пока нет.', 'Добавьте первую свободную запись или заметку к миру.', 'new-lore', 'Создать запись', 'data-lore-type="notes"')}</div></section>`;
+      return ui`<section class="kb-pane-section"><h2>Записи</h2><div class="character-grid" data-dnd-zone="notes">${notes.length ? notes.map((item) => this.noteCard(item, false)).join('') : this.emptyStateMarkup('bx-note', t('Записей пока нет.'), t('Добавьте первую свободную запись или заметку к миру.'), 'new-lore', t('Создать запись'), 'data-lore-type="notes"')}</div></section>`;
     }
     const chars = [...this.state.lore.characters].sort((a, b) => a.order - b.order);
-    return `<section class="kb-pane-section"><h2>Персонажи</h2><div class="character-grid" data-dnd-zone="characters">${chars.length ? chars.map((item) => this.characterCard(item, false)).join('') : this.emptyStateMarkup('bx-user-pin', 'Персонажей пока нет.', 'Создайте первый профиль для распознавания имён в тексте.', 'new-lore', 'Создать профиль', 'data-lore-type="characters"')}</div></section>`;
+    return ui`<section class="kb-pane-section"><h2>Персонажи</h2><div class="character-grid" data-dnd-zone="characters">${chars.length ? chars.map((item) => this.characterCard(item, false)).join('') : this.emptyStateMarkup('bx-user-pin', t('Персонажей пока нет.'), t('Создайте первый профиль для распознавания имён в тексте.'), 'new-lore', t('Создать профиль'), 'data-lore-type="characters"')}</div></section>`;
   }
 
   renderPaneSubtimeline(paneId, parentId) {
     const parent = this.timelineEvent(parentId);
     if (!parent) {
-      return `<section class="kb-pane-section kb-pane-subtimeline">
+      return ui`<section class="kb-pane-section kb-pane-subtimeline">
         <button class="pill-btn" data-action="close-pane-subtimeline" data-pane-id="${escapeHtml(paneId)}"><i class="bx bx-left-arrow-alt"></i> Назад к таймлайну</button>
         <div class="workspace-empty"><p>Сабтаймлайн не найден.</p></div>
       </section>`;
     }
     const events = this.subtimelineEvents(parent);
-    return `<section class="kb-pane-section kb-pane-subtimeline" data-parent-id="${escapeHtml(parent.id)}">
+    return ui`<section class="kb-pane-section kb-pane-subtimeline" data-parent-id="${escapeHtml(parent.id)}">
       <div class="kb-pane-breadcrumb">База знаний / Таймлайн / Сабтаймлайн</div>
       <button class="pane-back-btn" data-action="close-pane-subtimeline" data-pane-id="${escapeHtml(paneId)}"><i class="bx bx-left-arrow-alt"></i> Назад к таймлайну</button>
       <div class="kb-pane-subtimeline-head">
         <span>Сабтаймлайн</span>
-        <h2>${escapeHtml(parent.title || 'Событие')}</h2>
+        <h2>${escapeHtml(parent.title || t('Событие'))}</h2>
         <p>${escapeHtml(parent.body || '')}</p>
       </div>
       <div class="timeline-container subtimeline-container pane-subtimeline-list">
         ${events.length
           ? events.map((item, i, arr) => this.timelineCard(item, { isLast: i === arr.length - 1, isSub: true, parentId: parent.id })).join('')
-          : this.emptyStateMarkup('bx-git-branch', 'У этого события пока нет вложенных событий.', 'Добавьте саб-событие в полной Базе знаний, если нужно развернуть ветку.')}
+          : this.emptyStateMarkup('bx-git-branch', t('У этого события пока нет вложенных событий.'), t('Добавьте саб-событие в полной Базе знаний, если нужно развернуть ветку.'))}
       </div>
     </section>`;
   }
@@ -1905,7 +1914,7 @@ class NocturneWriter {
       <h3>${escapeHtml(title)}</h3>
       <p>${escapeHtml(text)}</p>
       ${action ? `<button class="pill-btn ai-btn ${action === 'new-doc' ? 'empty-project-create' : ''}" data-action="${action}" ${extraAttrs}>${action === 'new-doc' ? '<i class="bx bx-plus" aria-hidden="true"></i>' : ''}${escapeHtml(actionLabel)}</button>` : ''}
-      ${action === 'new-doc' ? '<div class="empty-project-actions"><button class="pill-btn empty-project-more" type="button" data-action="toggle-empty-project-menu" aria-haspopup="menu" aria-controls="empty-project-menu" aria-expanded="false"><span>Другое</span><i class="bx bx-chevron-down" aria-hidden="true"></i></button></div>' : ''}
+      ${action === 'new-doc' ? ui('<div class="empty-project-actions"><button class="pill-btn empty-project-more" type="button" data-action="toggle-empty-project-menu" aria-haspopup="menu" aria-controls="empty-project-menu" aria-expanded="false"><span>Другое</span><i class="bx bx-chevron-down" aria-hidden="true"></i></button></div>') : ''}
     </div>`;
   }
 
@@ -1933,9 +1942,9 @@ class NocturneWriter {
 
   applyReviewMode() {
     const modeLabels = {
-      write: ['Письмо', 'bx-pen'],
-      editor: ['Редактор', 'bx-comment-edit'],
-      finalization: ['Финализация', 'bx-check-double'],
+      write: [t('Письмо'), 'bx-pen'],
+      editor: [t('Редактор'), 'bx-comment-edit'],
+      finalization: [t('Финализация'), 'bx-check-double'],
     };
     const mode = modeLabels[this.state.reviewMode] ? this.state.reviewMode : 'write';
     document.body.dataset.activeReviewMode = mode;
@@ -1967,7 +1976,7 @@ class NocturneWriter {
         if (label.textContent === modeLabels[mode][0] && !trigger.querySelector('.review-mode-trigger-content').__reviewModeTransition) update();
         else this.transitionReviewModeSurface(trigger.querySelector('.review-mode-trigger-content'), update, { key: mode });
       }
-      trigger.setAttribute('aria-label', `Режим работы: ${modeLabels[mode][0]}`);
+      trigger.setAttribute('aria-label', msg`Режим работы: ${modeLabels[mode][0]}`);
     }
     document.querySelectorAll('.page-content').forEach((editable) => {
       const doc = this.state.docs.find((item) => item.id === editable.dataset.docId);
@@ -1992,7 +2001,7 @@ class NocturneWriter {
     this.updateReviewHighlights();
     this.renderReviewNavigator();
     this.renderMobileTopbarStatus();
-    this.toast(mode === 'editor' ? 'Режим редактора: текст защищён от ввода.' : mode === 'finalization' ? 'Режим финализации: правки видны и доступны.' : 'Режим письма.', 950);
+    this.toast(mode === 'editor' ? t('Режим редактора: текст защищён от ввода.') : mode === 'finalization' ? t('Режим финализации: правки видны и доступны.') : t('Режим письма.'), 950);
     
     if (this.state.workspace?.panes) Object.keys(this.state.workspace.panes).forEach((paneId) => this.renderBookmarksMenu(paneId));
   }
@@ -2009,23 +2018,23 @@ class NocturneWriter {
     const doc = this.getFocusedDoc();
     if (!doc || doc.locked) {
       const newClass = 'save-indicator disabled';
-      const newTitle = 'Недоступно для текущего окна';
-      const newHtml = `<i class="bx bx-check-circle"></i><span>Сохранено</span>`;
+      const newTitle = t('Недоступно для текущего окна');
+      const newHtml = ui`<i class="bx bx-check-circle"></i><span>Сохранено</span>`;
       if (el.className !== newClass) el.className = newClass;
       if (el.title !== newTitle) el.title = newTitle;
       this.updateSurfaceHTML(el, newHtml);
       return;
     }
     const status = this.state.saveStatusByDoc[doc.id] || { state: 'saved', updatedAt: doc.updatedAt || Date.now(), message: '' };
-    const time = status.updatedAt ? new Date(status.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    const time = status.updatedAt ? new Date(status.updatedAt).toLocaleTimeString(getLocaleName(), { hour: '2-digit', minute: '2-digit' }) : '';
     const meta = {
-      saving: ['bx-cloud-upload', 'Сохранение…'],
-      error: ['bx-error-circle', 'Ошибка сохранения'],
-      saved: ['bx-check-circle', 'Сохранено'],
-      idle: ['bx-check-circle', 'Сохранено'],
-    }[status.state] || ['bx-check-circle', 'Сохранено'];
+      saving: ['bx-cloud-upload', t('Сохранение…')],
+      error: ['bx-error-circle', t('Ошибка сохранения')],
+      saved: ['bx-check-circle', t('Сохранено')],
+      idle: ['bx-check-circle', t('Сохранено')],
+    }[status.state] || ['bx-check-circle', t('Сохранено')];
     const newClass = `save-indicator ${status.state}`;
-    const newTitle = status.message || (time ? `Последнее сохранение: ${time}` : meta[1]);
+    const newTitle = status.message || (time ? msg`Последнее сохранение: ${time}` : meta[1]);
     const newHtml = `<i class="bx ${meta[0]}"></i><span>${meta[1]}</span>`;
     if (el.className !== newClass) el.className = newClass;
     if (el.title !== newTitle) el.title = newTitle;
@@ -2164,7 +2173,7 @@ class NocturneWriter {
     const status = doc ? (this.state.saveStatusByDoc[doc.id]?.state || 'saved') : 'idle';
     const icon = status === 'saving' ? 'bx-cloud-upload' : status === 'error' ? 'bx-error-circle' : 'bx-check-circle';
     const newClass = `mobile-save-status ${status}`;
-    const label = !doc ? 'Локальный проект' : doc.locked ? 'Документ защищён' : this.state.reviewMode === 'editor' ? 'Чтение и пометки' : status === 'saving' ? 'Сохраняется…' : status === 'error' ? 'Не удалось сохранить' : 'Сохранено на устройстве';
+    const label = !doc ? t('Локальный проект') : doc.locked ? t('Документ защищён') : this.state.reviewMode === 'editor' ? t('Чтение и пометки') : status === 'saving' ? t('Сохраняется…') : status === 'error' ? t('Не удалось сохранить') : t('Сохранено на устройстве');
     const newHtml = `${doc ? `<i class="bx ${doc.locked ? 'bx-lock-alt' : icon}" aria-hidden="true"></i>` : ''}<span>${label}</span>`;
     if (el.className !== newClass) el.className = newClass;
     el.title = this.state.saveStatusByDoc[doc?.id]?.message || label;
@@ -2173,11 +2182,11 @@ class NocturneWriter {
 
   renderMobileTopbar() {
     const doc = this.getFocusedDoc() || this.state.docs.find((item) => item.id === this.state.activeDocId);
-    return `
+    return ui`
       <header class="mobile-topbar">
-        <button class="mobile-title-zone" data-action="mobile-open-docs" aria-label="${escapeHtml(doc ? `Открыть главы. ${doc.title}` : 'Открыть главы')}">
+        <button class="mobile-title-zone" data-action="mobile-open-docs" aria-label="${escapeHtml(doc ? msg`Открыть главы. ${doc.title}` : t('Открыть главы'))}">
           <span class="mobile-document-symbol"><i class="bx bx-file" aria-hidden="true"></i></span>
-          <span class="mobile-document-heading"><strong>${escapeHtml(doc?.title || 'Новая рукопись')}</strong><span id="mobile-save-status" class="mobile-save-status idle">Локальный проект</span></span>
+          <span class="mobile-document-heading"><strong>${escapeHtml(doc?.title || t('Новая рукопись'))}</strong><span id="mobile-save-status" class="mobile-save-status idle">Локальный проект</span></span>
           <i class="bx bx-chevron-down mobile-document-chevron" aria-hidden="true"></i>
         </button>
         <div class="mobile-topbar-actions">
@@ -2192,7 +2201,7 @@ class NocturneWriter {
     const battery = this.state.mobile.batteryLevel === null ? '—' : `${this.state.mobile.batteryLevel}%`;
     return `
       <div class="mobile-system-bar" aria-hidden="true">
-        <span data-mobile-system-time>${escapeHtml(this.state.mobile.systemTime || new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }))}</span>
+        <span data-mobile-system-time>${escapeHtml(this.state.mobile.systemTime || new Date().toLocaleTimeString(getLocaleName(), { hour: '2-digit', minute: '2-digit' }))}</span>
         <span class="mobile-system-dot"></span>
         <span class="mobile-system-battery"><i class="bx bx-battery"></i><span data-mobile-battery>${escapeHtml(battery)}</span></span>
       </div>`;
@@ -2200,13 +2209,13 @@ class NocturneWriter {
 
   renderMobileBottomNav() {
     const items = [
-      ['write', 'bx-edit-alt', 'Письмо', 'mobile-tab-write'],
-      ['docs', 'bx-file', 'Главы', 'mobile-open-docs'],
-      ['lore', 'bx-book-bookmark', 'База', 'mobile-open-lore'],
+      ['write', 'bx-edit-alt', t('Письмо'), 'mobile-tab-write'],
+      ['docs', 'bx-file', t('Главы'), 'mobile-open-docs'],
+      ['lore', 'bx-book-bookmark', t('База'), 'mobile-open-lore'],
       ['ai', 'nocturne-ai-icon', 'AI', 'mobile-open-ai'],
-      ['more', 'bx-grid-alt', 'Ещё', 'mobile-open-more'],
+      ['more', 'bx-grid-alt', t('Ещё'), 'mobile-open-more'],
     ];
-    return `<nav class="mobile-bottom-nav" data-active-tab="${escapeHtml(this.state.mobile.activeTab || 'write')}" aria-label="Мобильная навигация">
+    return ui`<nav class="mobile-bottom-nav" data-active-tab="${escapeHtml(this.state.mobile.activeTab || 'write')}" aria-label="Мобильная навигация">
       ${items.map(([id, icon, label, action]) => `<button class="${this.state.mobile.activeTab === id ? 'active' : ''}" data-action="${action}" ${this.state.mobile.activeTab === id ? 'aria-current="page"' : ''}>${id === 'ai' ? aiIcon('mobile-nav-svg') : `<i class="bx ${icon}" aria-hidden="true"></i>`}<span>${label}</span></button>`).join('')}
     </nav>`;
   }
@@ -2243,7 +2252,7 @@ class NocturneWriter {
 
   renderMobileOverlay() {
     const panelMode = this.mobilePanelMode();
-    return `
+    return ui`
       <div class="mobile-overlay ${this.state.mobile.panel ? 'active' : ''} mobile-overlay-${panelMode}" id="mobile-overlay" aria-hidden="${this.state.mobile.panel ? 'false' : 'true'}">
         <section class="mobile-panel mobile-panel-${panelMode}" id="mobile-panel">${this.renderMobilePanel()}</section>
       </div>
@@ -2271,16 +2280,16 @@ class NocturneWriter {
 
   mobilePanelTitle(panel = this.state.mobile.panel) {
     return {
-      docs: 'Главы',
-      actions: 'Действия',
-      more: 'Ещё',
-      settings: 'Настройки',
-      lore: 'База знаний',
+      docs: t('Главы'),
+      actions: t('Действия'),
+      more: t('Ещё'),
+      settings: t('Настройки'),
+      lore: t('База знаний'),
       ai: 'Nocturne AI',
-      notes: 'Заметки',
-      bookmarks: 'Закладки',
-      export: 'Экспорт / резервная копия',
-      sync: 'Связь с компьютером',
+      notes: t('Заметки'),
+      bookmarks: t('Закладки'),
+      export: t('Экспорт / резервная копия'),
+      sync: t('Связь с компьютером'),
     }[panel] || 'Nocturne';
   }
 
@@ -2292,9 +2301,9 @@ class NocturneWriter {
 
   mobilePanelHeader(title = this.mobilePanelTitle(), subtitle = '') {
     const hasBack = this.mobileCanGoBack();
-    return `
+    return ui`
       <header class="mobile-panel-header">
-        <button class="mobile-icon-btn" data-action="${hasBack ? 'mobile-back' : 'mobile-close-panel'}" aria-label="${hasBack ? 'Назад' : 'Закрыть'}"><i class="bx bx-left-arrow-alt"></i></button>
+        <button class="mobile-icon-btn" data-action="${hasBack ? 'mobile-back' : 'mobile-close-panel'}" aria-label="${hasBack ? t('Назад') : t('Закрыть')}"><i class="bx bx-left-arrow-alt"></i></button>
         <div><h2>${escapeHtml(title)}</h2>${subtitle ? `<p>${escapeHtml(subtitle)}</p>` : ''}</div>
         <button class="mobile-icon-btn" data-action="mobile-close-all" aria-label="Закрыть"><i class="bx bx-x"></i></button>
       </header>`;
@@ -2318,13 +2327,13 @@ class NocturneWriter {
 
   renderMobileDocsPanel(options = {}) {
     const q = (this.state.mobile.docsSearch || '').toLowerCase().trim();
-    const header = options.asTab ? this.mobileTabHeader('Главы', 'Документы проекта и папки') : this.mobilePanelHeader('Главы', 'Документы проекта и папки');
-    return `
+    const header = options.asTab ? this.mobileTabHeader(t('Главы'), t('Документы проекта и папки')) : this.mobilePanelHeader(t('Главы'), t('Документы проекта и папки'));
+    return ui`
       ${header}
       <div class="mobile-panel-body">
         <div class="mobile-search-field"><i class="bx bx-search" aria-hidden="true"></i><input data-mobile-doc-search aria-label="Поиск глав" type="search" placeholder="Поиск глав" value="${escapeHtml(this.state.mobile.docsSearch || '')}"></div>
         <div class="mobile-panel-actions"><button class="pill-btn ai-btn" data-action="new-doc"><i class="bx bx-plus"></i> Новая глава</button><button class="pill-btn" data-action="new-folder"><i class="bx bx-folder-plus"></i> Папка</button><button class="pill-btn" data-action="import-doc" aria-label="Импортировать текст"><i class="bx bx-import"></i> Импорт</button></div>
-        ${this.state.docs.length && !q ? '<p class="mobile-drag-hint">Удерживайте главу, чтобы изменить порядок или перенести в другую папку.</p>' : ''}
+        ${this.state.docs.length && !q ? ui('<p class="mobile-drag-hint">Удерживайте главу, чтобы изменить порядок или перенести в другую папку.</p>') : ''}
         <div class="mobile-doc-folders">
           ${this.state.folders.map((folder) => {
             const collapsed = this.state.collapsedFolders.includes(folder.id);
@@ -2332,14 +2341,14 @@ class NocturneWriter {
               .filter((doc) => doc.folderId === folder.id)
               .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || a.order - b.order);
             if (q) docs = docs.filter((doc) => `${doc.title} ${doc.description || ''} ${doc.summary || ''}`.toLowerCase().includes(q));
-            return `
+            return ui`
               <section class="mobile-folder" data-folder-id="${escapeHtml(folder.id)}">
                 <div class="mobile-folder-toolbar"><button class="mobile-folder-head" data-action="toggle-folder" data-folder="${escapeHtml(folder.id)}" aria-expanded="${!collapsed}">
-                  <span><i class="bx bx-chevron-${collapsed ? 'right' : 'down'}"></i>${escapeHtml(folder.title)}</span>
+                  <span><i class="bx bx-chevron-${collapsed ? 'right' : 'down'}"></i>${escapeHtml(this.folderDisplayTitle(folder))}</span>
                   <small>${docs.length}</small>
-                </button><button class="mini-icon-btn mobile-folder-menu" data-action="mobile-folder-menu" data-folder-id="${escapeHtml(folder.id)}" aria-label="Действия папки ${escapeHtml(folder.title)}" aria-haspopup="menu" aria-expanded="false"><i class="bx bx-dots-horizontal-rounded"></i></button></div>
+                </button><button class="mini-icon-btn mobile-folder-menu" data-action="mobile-folder-menu" data-folder-id="${escapeHtml(folder.id)}" aria-label="Действия папки ${escapeHtml(this.folderDisplayTitle(folder))}" aria-haspopup="menu" aria-expanded="false"><i class="bx bx-dots-horizontal-rounded"></i></button></div>
                 <div class="mobile-folder-docs ${collapsed ? 'collapsed' : ''}">
-                  ${docs.length ? docs.map((doc) => this.mobileDocCard(doc)).join('') : `<div class="mobile-empty-card"><i class="bx ${q ? 'bx-search' : 'bx-file-blank'}" aria-hidden="true"></i><span>${q ? 'Совпадений нет' : 'Документов пока нет'}</span>${q ? '' : `<button class="mini-text-btn" data-action="new-doc" data-folder-id="${escapeHtml(folder.id)}">Создать</button>`}</div>`}
+                  ${docs.length ? docs.map((doc) => this.mobileDocCard(doc)).join('') : `<div class="mobile-empty-card"><i class="bx ${q ? 'bx-search' : 'bx-file-blank'}" aria-hidden="true"></i><span>${q ? t('Совпадений нет') : t('Документов пока нет')}</span>${q ? '' : ui`<button class="mini-text-btn" data-action="new-doc" data-folder-id="${escapeHtml(folder.id)}">Создать</button>`}</div>`}
                 </div>
               </section>`;
           }).join('')}
@@ -2349,20 +2358,20 @@ class NocturneWriter {
 
   mobileDocCard(doc) {
     const words = countWords(docText(doc.ast));
-    const updated = doc.updatedAt ? new Date(doc.updatedAt).toLocaleDateString() : '';
+    const updated = doc.updatedAt ? new Date(doc.updatedAt).toLocaleDateString(getLocaleName()) : '';
     const isBook = doc.docType === 'book-chapter';
-    return `
+    return ui`
       <article class="doc-item mobile-doc-card ${isBook ? 'book-chapter-card' : ''} ${doc.id === this.state.activeDocId ? 'active' : ''}" data-doc-id="${escapeHtml(doc.id)}">
         <div>
           ${isBook ? `
           <div class="book-chapter-header">
-            <span class="book-work-info"><i class="bx bx-library"></i> <span>${escapeHtml(doc.workTitle || 'Книга')}${doc.volume ? ` · ${escapeHtml(doc.volume)}` : ''}</span></span>
+            <span class="book-work-info"><i class="bx bx-library"></i> <span>${escapeHtml(doc.workTitle || t('Книга'))}${doc.volume ? ` · ${escapeHtml(doc.volume)}` : ''}</span></span>
           </div>
           ` : ''}
-          <h3><i class="bx ${isBook ? 'bx-book-open' : (doc.pinned ? 'bx-pin' : doc.locked ? 'bx-lock' : 'bx-file')}"></i><span>${isBook && doc.chapterNumber ? `<span class="chapter-number">${escapeHtml(doc.chapterNumber)}</span>: ` : ''}${escapeHtml(doc.title || 'Без названия')}</span></h3>
-          <p>${escapeHtml(doc.description || doc.summary || 'Без описания')}</p>
+          <h3><i class="bx ${isBook ? 'bx-book-open' : (doc.pinned ? 'bx-pin' : doc.locked ? 'bx-lock' : 'bx-file')}"></i><span>${isBook && doc.chapterNumber ? `<span class="chapter-number">${escapeHtml(doc.chapterNumber)}</span>: ` : ''}${escapeHtml(doc.title || t('Без названия'))}</span></h3>
+          <p>${escapeHtml(doc.description || doc.summary || t('Без описания'))}</p>
           <div class="book-card-footer">
-            <small>${words} слов${updated ? ` · ${updated}` : ''}</small>
+            <small>${formatCount(words, 'words')}${updated ? ` · ${updated}` : ''}</small>
             ${isBook ? `
             <span class="book-status-inline status-${this.statusSlug(doc.bookStatus)}">
               <span class="status-dot"></span>
@@ -2382,64 +2391,64 @@ class NocturneWriter {
       <button class="mobile-action-row" data-action="${action}" ${extra}>
         <span class="mobile-action-icon">${icon === 'nocturne-ai' ? aiIcon('mobile-action-svg') : icon === 'nocturne-sync' ? iconSvg('sync', 'mobile-action-svg') : `<i class="bx ${icon}"></i>`}</span><span><strong>${title}</strong><small>${subtitle}</small></span>
       </button>`;
-    return `
-      ${this.mobilePanelHeader('Действия', doc?.title || 'Нет активной главы')}
+    return ui`
+      ${this.mobilePanelHeader(t('Действия'), doc?.title || t('Нет активной главы'))}
       <div class="mobile-panel-body mobile-action-list">
-        <div class="mobile-segmented mobile-work-modes" aria-label="Режим работы">${[['write', 'Письмо'], ['editor', 'Редактор'], ['finalization', 'Финализация']].map(([mode, title]) => `<button data-review-mode="${mode}" class="${this.state.reviewMode === mode ? 'active' : ''}" aria-pressed="${this.state.reviewMode === mode}">${title}</button>`).join('')}</div>
+        <div class="mobile-segmented mobile-work-modes" aria-label="Режим работы">${[['write', t('Письмо')], ['editor', t('Редактор')], ['finalization', t('Финализация')]].map(([mode, title]) => `<button data-review-mode="${mode}" class="${this.state.reviewMode === mode ? 'active' : ''}" aria-pressed="${this.state.reviewMode === mode}">${title}</button>`).join('')}</div>
         <h3>Документ</h3>
-        ${item('bx-edit', 'Переименовать', 'Название и описание главы', 'edit-doc', `data-ctx-doc="${escapeHtml(doc?.id || '')}" ${disabled}`)}
-        ${item('bx-plus', 'Новая глава', 'Создать новую главу', 'new-doc')}
-        ${item('bx-copy', 'Дублировать', 'Копия текущей главы', 'duplicate-doc', `data-ctx-doc="${escapeHtml(doc?.id || '')}" ${disabled}`)}
-        ${item('bx-camera', 'Снапшот', 'Снимок текущего состояния', 'manual-snapshot', disabled)}
-        ${item('bx-save', 'Сохранить сейчас', 'Сохранить изменения на устройстве', 'mobile-save-now', disabled)}
+        ${item('bx-edit', t('Переименовать'), t('Название и описание главы'), 'edit-doc', `data-ctx-doc="${escapeHtml(doc?.id || '')}" ${disabled}`)}
+        ${item('bx-plus', t('Новая глава'), t('Создать новую главу'), 'new-doc')}
+        ${item('bx-copy', t('Дублировать'), t('Копия текущей главы'), 'duplicate-doc', `data-ctx-doc="${escapeHtml(doc?.id || '')}" ${disabled}`)}
+        ${item('bx-camera', t('Снапшот'), t('Снимок текущего состояния'), 'manual-snapshot', disabled)}
+        ${item('bx-save', t('Сохранить сейчас'), t('Сохранить изменения на устройстве'), 'mobile-save-now', disabled)}
         <h3>Письмо</h3>
-        ${item('bx-undo', 'Отменить', 'Отменить ввод', 'mobile-command', 'data-mobile-command="undo"')}
-        ${item('bx-redo', 'Повторить', 'Повторить ввод', 'mobile-command', 'data-mobile-command="redo"')}
-        ${item('bx-search', 'Поиск / замена', 'Найти и заменить текст', 'open-search-chooser')}
-        ${item('bx-bookmark', 'Закладки', 'Места, к которым хочется вернуться', 'mobile-open-bookmarks', disabled)}
-        ${item('bx-target-lock', 'Фокус', 'Дзен-режим', 'toggle-zen')}
-        ${this.state.workspace?.mode === 'split' ? `
+        ${item('bx-undo', t('Отменить'), t('Отменить ввод'), 'mobile-command', 'data-mobile-command="undo"')}
+        ${item('bx-redo', t('Повторить'), t('Повторить ввод'), 'mobile-command', 'data-mobile-command="redo"')}
+        ${item('bx-search', t('Поиск / замена'), t('Найти и заменить текст'), 'open-search-chooser')}
+        ${item('bx-bookmark', t('Закладки'), t('Места, к которым хочется вернуться'), 'mobile-open-bookmarks', disabled)}
+        ${item('bx-target-lock', t('Фокус'), t('Дзен-режим'), 'toggle-zen')}
+        ${this.state.workspace?.mode === 'split' ? ui`
           <h3>Открытые области</h3>
-          ${item('bx-transfer-alt', 'Другая область', escapeHtml(this.paneTitle(this.getPane(this.state.workspace.focusedPaneId === 'primary' ? 'secondary' : 'primary'))), 'mobile-switch-pane')}
-          ${item('bx-x', 'Закрыть вторую область', 'Вернуться к одному документу', 'close-secondary-pane')}
+          ${item('bx-transfer-alt', t('Другая область'), escapeHtml(this.paneTitle(this.getPane(this.state.workspace.focusedPaneId === 'primary' ? 'secondary' : 'primary'))), 'mobile-switch-pane')}
+          ${item('bx-x', t('Закрыть вторую область'), t('Вернуться к одному документу'), 'close-secondary-pane')}
         ` : ''}
         <h3>Проект</h3>
-        ${item('bx-archive-out', 'Экспорт .nocturnedump', 'Резервная копия всего проекта', 'export-project-dump')}
-        ${item('bx-archive-in', 'Импорт .nocturnedump', 'Загрузить резервную копию', 'import-project-dump')}
-        ${item('bx-cog', 'Настройки', 'Настройки приложения', 'mobile-open-settings')}
+        ${item('bx-archive-out', t('Экспорт .nocturnedump'), t('Резервная копия всего проекта'), 'export-project-dump')}
+        ${item('bx-archive-in', t('Импорт .nocturnedump'), t('Загрузить резервную копию'), 'import-project-dump')}
+        ${item('bx-cog', t('Настройки'), t('Настройки приложения'), 'mobile-open-settings')}
         <h3>Вид</h3>
-        ${item('bx-notepad', 'Заметки', 'Документные и общие заметки', 'mobile-open-notes')}
-        ${item('nocturne-ai', 'AI', 'Проверка и творческие инструменты', 'mobile-open-ai')}
-        ${item('bx-book-bookmark', 'База знаний', 'Персонажи, локации, таймлайн', 'mobile-open-lore')}
+        ${item('bx-notepad', t('Заметки'), t('Документные и общие заметки'), 'mobile-open-notes')}
+        ${item('nocturne-ai', 'AI', t('Проверка и творческие инструменты'), 'mobile-open-ai')}
+        ${item('bx-book-bookmark', t('База знаний'), t('Персонажи, локации, таймлайн'), 'mobile-open-lore')}
       </div>`;
   }
 
   renderMobileMorePanel(options = {}) {
     const groups = [
-      ['Рабочее пространство', [
-        ['bx-cog', 'Настройки', 'Оформление, письмо и данные', 'mobile-open-settings'],
-        ['bx-note', 'Заметки', 'Идеи к главе и общие записи', 'mobile-open-notes'],
-        ['nocturne-sync', 'Связь с компьютером', 'Продолжить работу на другом устройстве', 'open-sync-panel'],
+      [t('Рабочее пространство'), [
+        ['bx-cog', t('Настройки'), t('Оформление, письмо и данные'), 'mobile-open-settings'],
+        ['bx-note', t('Заметки'), t('Идеи к главе и общие записи'), 'mobile-open-notes'],
+        ['nocturne-sync', t('Связь с компьютером'), t('Продолжить работу на другом устройстве'), 'open-sync-panel'],
       ]],
-      ['Проект и сохранение', [
-        ['bx-export', 'Экспорт / импорт', 'Текст, PDF, DOCX и проект целиком', 'mobile-open-export'],
-        ['bx-book-open', 'Собрать книгу', 'Объединить выбранные главы', 'export-book'],
-        ['bx-archive', 'Резервные копии', 'Сохранить или восстановить проект', 'open-backups'],
-        ['bx-camera', 'История главы', 'Вернуться к предыдущему тексту', 'show-history'],
-        ['bx-trash', 'Корзина', 'Восстановить удалённые главы', 'open-trash'],
+      [t('Проект и сохранение'), [
+        ['bx-export', t('Экспорт / импорт'), t('Текст, PDF, DOCX и проект целиком'), 'mobile-open-export'],
+        ['bx-book-open', t('Собрать книгу'), t('Объединить выбранные главы'), 'export-book'],
+        ['bx-archive', t('Резервные копии'), t('Сохранить или восстановить проект'), 'open-backups'],
+        ['bx-camera', t('История главы'), t('Вернуться к предыдущему тексту'), 'show-history'],
+        ['bx-trash', t('Корзина'), t('Восстановить удалённые главы'), 'open-trash'],
       ]],
-      ['Работа с текстом', [
-        ['bx-search-alt', 'Поиск / замена', 'В главе или во всём проекте', 'open-search-chooser'],
-        ['bx-message-square-edit', 'Все правки', 'Пометки во всех главах', 'open-review-queue'],
-        ['bx-search', 'Поиск команд', 'Все действия приложения', 'open-command-palette'],
+      [t('Работа с текстом'), [
+        ['bx-search-alt', t('Поиск / замена'), t('В главе или во всём проекте'), 'open-search-chooser'],
+        ['bx-message-square-edit', t('Все правки'), t('Пометки во всех главах'), 'open-review-queue'],
+        ['bx-search', t('Поиск команд'), t('Все действия приложения'), 'open-command-palette'],
       ]],
-      ['Приложение', [
-        ['bx-info-circle', 'О Nocturne', 'Версия и сведения', 'mobile-about'],
-        ['bx-reset', 'Сбросить настройки', 'Вернуть исходное оформление', 'reset-settings'],
+      [t('Приложение'), [
+        ['bx-info-circle', t('О Nocturne'), t('Версия и сведения'), 'mobile-about'],
+        ['bx-reset', t('Сбросить настройки'), t('Вернуть исходное оформление'), 'reset-settings'],
       ]],
     ];
     return `
-      ${options.asTab ? this.mobileTabHeader('Ещё', 'Ваш проект и инструменты') : this.mobilePanelHeader('Ещё', 'Ваш проект и инструменты')}
+      ${options.asTab ? this.mobileTabHeader(t('Ещё'), t('Ваш проект и инструменты')) : this.mobilePanelHeader(t('Ещё'), t('Ваш проект и инструменты'))}
       <div class="mobile-panel-body mobile-menu-groups">
         ${groups.map(([title, rows]) => `<section class="mobile-menu-group"><h3>${title}</h3>${rows.map(row => this.mobileMenuRow(...row)).join('')}</section>`).join('')}
       </div>`;
@@ -2455,41 +2464,41 @@ class NocturneWriter {
 
   renderMobileSettings() {
     const tabs = [
-      ['history', 'bx-history', 'История и восстановление', 'Версии, условия сохранения и лимиты'],
-      ['manuscript-search', 'bx-search-alt', 'Поиск рукописи', 'Слова, псевдонимы, фильтры и результаты'],
-      ['visual', 'bx-palette', 'Оформление', 'Темы, акцент и каретка'],
-      ['editor', 'bx-text', 'Рукопись', 'Шрифт, интервалы и типографика'],
-      ['bookmarks', 'bx-bookmark', 'Закладки', 'Привязка, отображение и история'],
-      ['focus', 'bx-target-lock', 'Концентрация', 'Дзен, страницы и фокус на тексте'],
-      ['review', 'bx-edit-alt', 'Редактура', 'Пометки и проверка рукописи'],
-      ['dictionary', 'bx-book-content', 'Словарь', 'Исключения и исправления'],
-      ['macros', 'bx-keyboard', 'Макросы', 'Свои текстовые сокращения'],
-      ['formatting', 'bx-list-check', 'Автозамена', 'Правила автоматического оформления'],
-      ['ai', 'nocturne-ai', 'Ассистент', 'Модели, персоны и контекст мира'],
-      ['data', 'bx-shield-quarter', 'Сохранение и защита', 'Копии, история и шифрование'],
-      ['export', 'bx-export', 'Экспорт', 'Параметры PDF и DOCX'],
-      ['misc', 'bx-slider-alt', 'Дополнительно', 'Цель дня, спринты и поведение'],
+      ['history', 'bx-history', t('История и восстановление'), t('Версии, условия сохранения и лимиты')],
+      ['manuscript-search', 'bx-search-alt', t('Поиск рукописи'), t('Слова, псевдонимы, фильтры и результаты')],
+      ['visual', 'bx-palette', t('Оформление'), t('Темы, акцент и каретка')],
+      ['editor', 'bx-text', t('Рукопись'), t('Шрифт, интервалы и типографика')],
+      ['bookmarks', 'bx-bookmark', t('Закладки'), t('Привязка, отображение и история')],
+      ['focus', 'bx-target-lock', t('Концентрация'), t('Дзен, страницы и фокус на тексте')],
+      ['review', 'bx-edit-alt', t('Редактура'), t('Пометки и проверка рукописи')],
+      ['dictionary', 'bx-book-content', t('Словарь'), t('Исключения и исправления')],
+      ['macros', 'bx-keyboard', t('Макросы'), t('Свои текстовые сокращения')],
+      ['formatting', 'bx-list-check', t('Автозамена'), t('Правила автоматического оформления')],
+      ['ai', 'nocturne-ai', t('Ассистент'), t('Модели, персоны и контекст мира')],
+      ['data', 'bx-shield-quarter', t('Сохранение и защита'), t('Копии, история и шифрование')],
+      ['export', 'bx-export', t('Экспорт'), t('Параметры PDF и DOCX')],
+      ['misc', 'bx-slider-alt', t('Дополнительно'), t('Цель дня, спринты и поведение')],
     ];
     const active = this.state.mobile.settingsTab;
     if (!active) {
       return `
-        ${this.mobilePanelHeader('Настройки', 'Выберите раздел')}
+        ${this.mobilePanelHeader(t('Настройки'), t('Выберите раздел'))}
         <div class="mobile-panel-body mobile-menu-groups">
           ${tabs.map(([id, icon, label, note]) => this.mobileMenuRow(icon, label, note, '', `data-mobile-settings-tab="${id}"`)).join('')}
         </div>`;
     }
-    const label = tabs.find(([id]) => id === active)?.[2] || 'Настройки';
+    const label = tabs.find(([id]) => id === active)?.[2] || t('Настройки');
     const content = document.createElement('template');
     content.innerHTML = this.settingsContent(active).replace('tab-content active', 'tab-content active mobile-settings-tab-content');
     content.content.querySelectorAll('[id]').forEach(element => { element.dataset.settingsId = element.id; element.id = `mobile-settings-${element.id}`; });
     const macroKeys = content.content.querySelector('[data-settings-id="new-macro-keys"]');
-    if (macroKeys) { macroKeys.removeAttribute('readonly'); macroKeys.placeholder = 'Например, Ctrl + Alt + G'; macroKeys.setAttribute('autocapitalize', 'off'); macroKeys.spellcheck = false; }
+    if (macroKeys) { macroKeys.removeAttribute('readonly'); macroKeys.placeholder = t('Например, Ctrl + Alt + G'); macroKeys.setAttribute('autocapitalize', 'off'); macroKeys.spellcheck = false; }
     content.content.querySelectorAll('[for], [aria-controls], [aria-labelledby], [aria-describedby]').forEach(element => {
       for (const attribute of ['for', 'aria-controls', 'aria-labelledby', 'aria-describedby']) {
         if (element.hasAttribute(attribute)) element.setAttribute(attribute, element.getAttribute(attribute).split(/\s+/).map(id => `mobile-settings-${id}`).join(' '));
       }
     });
-    return `
+    return ui`
       <header class="mobile-panel-header">
         <button class="mobile-icon-btn" data-action="mobile-settings-back" aria-label="Назад"><i class="bx bx-left-arrow-alt"></i></button>
         <div><h2>${escapeHtml(label)}</h2><p>Настройки применяются сразу</p></div>
@@ -2510,26 +2519,26 @@ class NocturneWriter {
     const time = [...this.state.lore.timeline].sort((a, b) => (a.order - b.order) || parseTimelineRank(a.date) - parseTimelineRank(b.date)).filter(filter);
     const notes = [...(this.state.lore.notes || [])].sort((a, b) => Number(!!a.completed) - Number(!!b.completed) || a.order - b.order).filter(filter);
     let list = active === 'characters'
-      ? (chars.length ? chars.map((item, index) => this.mobileLoreCard('characters', item, index, chars.length)).join('') : this.emptyStateMarkup('bx-user-pin', 'Персонажей пока нет.', 'Создайте первый профиль.', 'new-lore', 'Создать', 'data-lore-type="characters"'))
+      ? (chars.length ? chars.map((item, index) => this.mobileLoreCard('characters', item, index, chars.length)).join('') : this.emptyStateMarkup('bx-user-pin', t('Персонажей пока нет.'), t('Создайте первый профиль.'), 'new-lore', t('Создать'), 'data-lore-type="characters"'))
       : active === 'locations'
-        ? (locs.length ? locs.map((item, index) => this.mobileLoreCard('locations', item, index, locs.length)).join('') : this.emptyStateMarkup('bx-map-alt', 'Локаций пока нет.', 'Добавьте место.', 'new-lore', 'Добавить', 'data-lore-type="locations"'))
-        : active === 'notes' ? (notes.length ? notes.map(item => this.mobileLoreCard('notes', item)).join('') : this.emptyStateMarkup('bx-note', 'Записей пока нет.', 'Сохраните идеи для своего мира.', 'new-lore', 'Добавить', 'data-lore-type="notes"'))
-          : (time.length ? time.map((item, i, arr) => this.timelineCard(item, { isLast: i === arr.length - 1, draggable: true })).join('') : this.emptyStateMarkup('bx-git-commit', 'Таймлайн пуст.', 'Добавьте событие.', 'new-lore', 'Добавить', 'data-lore-type="timeline"'));
-    if (q && !({ characters: chars, locations: locs, notes, timeline: time }[active]?.length)) list = this.emptyStateMarkup('bx-search', 'Совпадений нет', 'Попробуйте другое имя или очистите поиск.');
+        ? (locs.length ? locs.map((item, index) => this.mobileLoreCard('locations', item, index, locs.length)).join('') : this.emptyStateMarkup('bx-map-alt', t('Локаций пока нет.'), t('Добавьте место.'), 'new-lore', t('Добавить'), 'data-lore-type="locations"'))
+        : active === 'notes' ? (notes.length ? notes.map(item => this.mobileLoreCard('notes', item)).join('') : this.emptyStateMarkup('bx-note', t('Записей пока нет.'), t('Сохраните идеи для своего мира.'), 'new-lore', t('Добавить'), 'data-lore-type="notes"'))
+          : (time.length ? time.map((item, i, arr) => this.timelineCard(item, { isLast: i === arr.length - 1, draggable: true })).join('') : this.emptyStateMarkup('bx-git-commit', t('Таймлайн пуст.'), t('Добавьте событие.'), 'new-lore', t('Добавить'), 'data-lore-type="timeline"'));
+    if (q && !({ characters: chars, locations: locs, notes, timeline: time }[active]?.length)) list = this.emptyStateMarkup('bx-search', t('Совпадений нет'), t('Попробуйте другое имя или очистите поиск.'));
     const zone = active === 'timeline' ? 'timeline' : active;
-    return `
-      ${options.asTab ? this.mobileTabHeader('База знаний', 'Персонажи, локации и таймлайн') : this.mobilePanelHeader('База знаний', 'Персонажи, локации и таймлайн')}
+    return ui`
+      ${options.asTab ? this.mobileTabHeader(t('База знаний'), t('Персонажи, локации и таймлайн')) : this.mobilePanelHeader(t('База знаний'), t('Персонажи, локации и таймлайн'))}
       <div class="mobile-panel-body">
         <div class="kb-project-switcher-mobile-wrap">
           <div class="kb-project-switcher" id="kb-project-switcher-btn-mobile">
             <i class="bx bx-cabinet"></i>
-            <span>${escapeHtml(this.state.lore.title || 'Основное произведение')}</span>
+            <span>${escapeHtml(this.workDisplayTitle({ id: this.state.activeLoreId, title: this.state.lore.title }) || t('Основное произведение'))}</span>
             <i class="bx bx-chevron-down"></i>
             <div class="kb-project-switcher-dropdown popover-surface">
               ${(this.state.kbProjects || []).map(p => `
                 <div class="kb-project-item ${p.id === (this.state.activeLoreId || 'world') ? 'active' : ''}" data-project-id="${p.id}">
                   <i class="bx bx-book-bookmark"></i>
-                  <span>${escapeHtml(p.title)}</span>
+                  <span>${escapeHtml(this.workDisplayTitle(p))}</span>
                   ${p.id === (this.state.activeLoreId || 'world') ? '<i class="bx bx-check check-icon"></i>' : ''}
                 </div>
               `).join('')}
@@ -2546,10 +2555,10 @@ class NocturneWriter {
           </div>
         </div>
         <div class="mobile-segmented mobile-lore-tabs">
-          ${[['characters', 'Персонажи'], ['locations', 'Локации'], ['timeline', 'Таймлайн'], ['notes', 'Записи'], ['bookmarks', 'Закладки'], ['search', 'Поиск']].map(([id, label]) => `<button class="${active === id ? 'active' : ''}" data-mobile-kb-tab="${id}">${label}</button>`).join('')}
+          ${[['characters', t('Персонажи')], ['locations', t('Локации')], ['timeline', t('Таймлайн')], ['notes', t('Записи')], ['bookmarks', t('Закладки')], ['search', t('Поиск')]].map(([id, label]) => `<button class="${active === id ? 'active' : ''}" data-mobile-kb-tab="${id}">${label}</button>`).join('')}
         </div>
         <div class="mobile-kb-content" data-surface-key="kb-content-${escapeHtml(active)}">
-        ${active === 'bookmarks' ? this.bookmarks.manager({ context: 'mobile' }) : active === 'search' ? this.renderKnowledgeSearch() : `
+        ${active === 'bookmarks' ? this.bookmarks.manager({ context: 'mobile' }) : active === 'search' ? this.renderKnowledgeSearch() : ui`
         ${this.kbViewTools()}
         <div class="mobile-search-field"><i class="bx bx-search" aria-hidden="true"></i><input data-mobile-lore-search aria-label="Поиск в базе знаний" type="search" placeholder="Поиск в базе" value="${escapeHtml(this.state.mobile.loreSearch || '')}"></div>
         <div class="mobile-panel-actions"><button class="pill-btn ai-btn" data-action="new-lore" data-lore-type="${active}"><i class="bx bx-plus"></i> Добавить</button><span class="mobile-drag-hint"><i class="bx bx-grid-vertical"></i> Удерживайте карточку, чтобы перенести</span></div>
@@ -2575,15 +2584,15 @@ class NocturneWriter {
 
   mobileLoreCard(type, item, index, total) {
     const isTimeline = type === 'timeline';
-    const title = isTimeline ? (item.title || 'Событие') : this.entityDisplayName(item);
-    const subtitle = isTimeline ? [item.date, item.body].filter(Boolean).join(' · ') : (item.role || item.body || 'Карточка базы знаний');
+    const title = isTimeline ? (item.title || t('Событие')) : this.entityDisplayName(item);
+    const subtitle = isTimeline ? [item.date, item.body].filter(Boolean).join(' · ') : (item.role || item.body || t('Карточка базы знаний'));
     const icon = isTimeline ? 'bx-git-commit' : type === 'notes' ? 'bx-note' : type === 'locations' ? (item.icon || 'bx-map-alt') : (item.icon || 'bx-user');
-    const sub = isTimeline && item.subEvents?.length ? `<button class="mini-text-btn" data-action="open-subtimeline" data-parent-id="${escapeHtml(item.id)}">Сабтаймлайн · ${item.subEvents.length}</button>` : '';
-    return `
+    const sub = isTimeline && item.subEvents?.length ? ui`<button class="mini-text-btn" data-action="open-subtimeline" data-parent-id="${escapeHtml(item.id)}">Сабтаймлайн · ${item.subEvents.length}</button>` : '';
+    return ui`
       <article class="mobile-lore-card ${isTimeline ? 'mobile-timeline-card' : ''} ${type === 'notes' && item.completed ? 'note-card-completed' : ''}" data-lore-type="${escapeHtml(type)}" data-lore-id="${escapeHtml(item.id)}">
         <div class="mobile-lore-main" role="button" tabindex="0" data-lore-type="${escapeHtml(type)}" data-lore-id="${escapeHtml(item.id)}">
           <span class="mobile-lore-icon"><i class="bx ${escapeHtml(icon)}"></i></span>
-          <span><strong>${escapeHtml(title || 'Без названия')}</strong><small>${escapeHtml(subtitle || '')}</small></span>
+          <span><strong>${escapeHtml(title || t('Без названия'))}</strong><small>${escapeHtml(subtitle || '')}</small></span>
         </div>
         <div class="mobile-lore-actions">
           ${sub}
@@ -2595,17 +2604,17 @@ class NocturneWriter {
 
   renderMobileLoreDetail(type, item) {
     const labelMap = {
-      locations: ['Локация', 'Карточка локации'],
-      notes: ['Запись', 'Запись базы знаний'],
-      timeline: ['Событие', 'Событие таймлайна'],
-      subtimeline: ['Подсобытие', 'Подсобытие таймлайна'],
-      characters: ['Персонаж', 'Карточка персонажа']
+      locations: [t('Локация'), t('Карточка локации')],
+      notes: [t('Запись'), t('Запись базы знаний')],
+      timeline: [t('Событие'), t('Событие таймлайна')],
+      subtimeline: [t('Подсобытие'), t('Подсобытие таймлайна')],
+      characters: [t('Персонаж'), t('Карточка персонажа')]
     };
-    const [defTitle, defSub] = labelMap[type] || ['Досье', 'База знаний'];
+    const [defTitle, defSub] = labelMap[type] || [t('Досье'), t('База знаний')];
     const title = item.title || this.entityDisplayName(item) || defTitle;
-    return `
+    return ui`
       <header class="mobile-panel-header">
-        <button class="mobile-icon-btn" data-action="${this.state.kbReadMode ? 'toggle-note-read-mode' : 'mobile-lore-back'}" aria-label="${this.state.kbReadMode ? 'Вернуться к досье' : 'Назад'}"><i class="bx bx-left-arrow-alt"></i></button>
+        <button class="mobile-icon-btn" data-action="${this.state.kbReadMode ? 'toggle-note-read-mode' : 'mobile-lore-back'}" aria-label="${this.state.kbReadMode ? t('Вернуться к досье') : t('Назад')}"><i class="bx bx-left-arrow-alt"></i></button>
         <div><h2>${escapeHtml(title)}</h2><p>${defSub}</p></div>
         <button class="mobile-icon-btn" data-action="mobile-close-all" aria-label="Закрыть"><i class="bx bx-x"></i></button>
       </header>
@@ -2620,10 +2629,10 @@ class NocturneWriter {
       this.state.activeSubtimelineId = null;
       return this.renderMobileKb();
     }
-    return `
+    return ui`
       <header class="mobile-panel-header">
         <button class="mobile-icon-btn" data-action="mobile-subtimeline-back" aria-label="Назад"><i class="bx bx-left-arrow-alt"></i></button>
-        <div><h2>${escapeHtml(parent.title || 'Сабтаймлайн')}</h2><p>${parent.subEvents?.length || 0} подсобытий</p></div>
+        <div><h2>${escapeHtml(parent.title || t('Сабтаймлайн'))}</h2><p>${parent.subEvents?.length || 0} подсобытий</p></div>
         <button class="mobile-icon-btn" data-action="mobile-close-all" aria-label="Закрыть"><i class="bx bx-x"></i></button>
       </header>
       <div class="mobile-panel-body mobile-subtimeline-screen">
@@ -2635,10 +2644,10 @@ class NocturneWriter {
     const doc = this.getFocusedDoc();
     const providerProblem = this.assistantProviderProblem();
     const cloudDisabled = !doc || doc.locked || !!providerProblem ? 'disabled' : '';
-    return `
-      ${options.asTab ? this.mobileTabHeader('Ассистент', doc?.title || 'Инструменты для вашей рукописи') : this.mobilePanelHeader('Ассистент', doc?.title || 'Инструменты для вашей рукописи')}
+    return ui`
+      ${options.asTab ? this.mobileTabHeader(t('Ассистент'), doc?.title || t('Инструменты для вашей рукописи')) : this.mobilePanelHeader(t('Ассистент'), doc?.title || t('Инструменты для вашей рукописи'))}
       <div class="mobile-panel-body">
-        ${!doc ? `<section class="mobile-ai-setup"><i class="bx bx-file"></i><div><strong>Откройте главу</strong><p>Ассистент работает с открытым текстом и вашим миром.</p><button class="pill-btn ai-btn" data-action="mobile-open-docs">Выбрать главу</button></div></section>` : providerProblem ? `<section class="mobile-ai-setup">${aiIcon('mobile-action-svg')}<div><strong>Подключите модель</strong><p>Выберите AI-провайдера в настройках, чтобы проверять и дополнять рукопись.</p><button class="pill-btn ai-btn" data-action="mobile-open-ai-settings"><i class="bx bx-cog"></i> Настроить ассистента</button></div></section>` : ''}
+        ${!doc ? ui`<section class="mobile-ai-setup"><i class="bx bx-file"></i><div><strong>Откройте главу</strong><p>Ассистент работает с открытым текстом и вашим миром.</p><button class="pill-btn ai-btn" data-action="mobile-open-docs">Выбрать главу</button></div></section>` : providerProblem ? ui`<section class="mobile-ai-setup">${aiIcon('mobile-action-svg')}<div><strong>Подключите модель</strong><p>Выберите AI-провайдера в настройках, чтобы проверять и дополнять рукопись.</p><button class="pill-btn ai-btn" data-action="mobile-open-ai-settings"><i class="bx bx-cog"></i> Настроить ассистента</button></div></section>` : ''}
         <h3 class="mobile-ai-section-title">Проверка текста</h3>
         <div class="mobile-ai-grid">
           <button class="ai-card ai-card-primary" data-ai="proofread" ${cloudDisabled}><h4><i class="bx bx-check-shield"></i> Корректура</h4><p>Ошибки и неточные формулировки</p></button>
@@ -2654,11 +2663,11 @@ class NocturneWriter {
         <canvas class="sentiment-graph mobile-sentiment" data-mobile-sentiment width="360" height="72" aria-label="График эмоционального ритма сцены" ${this.mobileSentimentVisible || this.state.settings.sentimentTimeline ? '' : 'hidden'}></canvas>
         <section class="ai-context-box">
           <div class="ai-context-head"><div><strong>Контекст базы знаний</strong><span>Без вставки в документ</span></div><button type="button" class="toggle ${this.state.settings.aiKnowledgeContext ? 'on' : ''}" data-setting="aiKnowledgeContext" data-kind="toggle" aria-label="Контекст базы знаний"></button></div>
-          <div class="ai-context-toggles">${[['aiContextCharacters', 'Персонажи'], ['aiContextLocations', 'Локации'], ['aiContextTimeline', 'Таймлайн'], ['aiContextSubtimelines', 'Подсобытия'], ['aiContextNotes', 'Записи']].map(([key, label]) => `<button class="context-chip ${this.state.settings[key] ? 'active' : ''}" data-setting="${key}" data-kind="toggle" aria-pressed="${!!this.state.settings[key]}">${label}</button>`).join('')}</div>
+          <div class="ai-context-toggles">${[['aiContextCharacters', t('Персонажи')], ['aiContextLocations', t('Локации')], ['aiContextTimeline', t('Таймлайн')], ['aiContextSubtimelines', t('Подсобытия')], ['aiContextNotes', t('Записи')]].map(([key, label]) => `<button class="context-chip ${this.state.settings[key] ? 'active' : ''}" data-setting="${key}" data-kind="toggle" aria-pressed="${!!this.state.settings[key]}">${label}</button>`).join('')}</div>
           <button class="pill-btn" data-action="preview-ai-context"><i class="bx bx-show"></i> Предпросмотр контекста</button>
           <button class="pill-btn" data-action="mobile-open-ai-settings"><i class="bx bx-cog"></i> Настройки AI</button>
         </section>
-        <div class="ai-output mobile-ai-output">${escapeHtml(this.assistantPanelMessage || 'Готов к работе.')}</div>
+        <div class="ai-output mobile-ai-output">${escapeHtml(this.assistantPanelMessage || t('Готов к работе.'))}</div>
         <button class="pill-btn ai-stop-button" data-action="cancel-ai" ${this.activeAiRequest ? '' : 'hidden'}><i class="bx bx-stop-circle"></i> Остановить запрос</button>
       </div>`;
   }
@@ -2669,8 +2678,8 @@ class NocturneWriter {
     this.state.mobile.notesMode = mode;
     const text = mode === 'global' ? this.state.globalNotes : (doc?.notes || '');
     const disabled = mode === 'document' && (!doc || doc.locked) ? 'disabled' : '';
-    return `
-      ${this.mobilePanelHeader('Заметки', doc?.title || 'Общие записи')}
+    return ui`
+      ${this.mobilePanelHeader(t('Заметки'), doc?.title || t('Общие записи'))}
       <div class="mobile-panel-body mobile-notes-body">
         <div class="mobile-notes-toolbar">
           <div class="mobile-segmented">
@@ -2683,7 +2692,7 @@ class NocturneWriter {
             <button class="pill-btn" data-action="new-floating-note"><i class="bx bx-note"></i> Новая</button>
           </div>
         </div>
-        <textarea class="mobile-notes-editor form-control" data-mobile-notes-input aria-label="${mode === 'global' ? 'Общие заметки' : 'Заметки к документу'}" placeholder="Заметки..." ${disabled}>${escapeHtml(text)}</textarea>
+        <textarea class="mobile-notes-editor form-control" data-mobile-notes-input aria-label="${mode === 'global' ? t('Общие заметки') : t('Заметки к документу')}" placeholder="Заметки..." ${disabled}>${escapeHtml(text)}</textarea>
         <div class="mobile-notes-format" role="toolbar" aria-label="Оформление заметок">
           <button class="tool-btn" data-action="mobile-note-tool" data-note-tool="heading" aria-label="Добавить заголовок" ${disabled}><i class="bx bx-heading"></i></button>
           <button class="tool-btn" data-action="mobile-note-tool" data-note-tool="checklist" aria-label="Добавить пункт списка" ${disabled}><i class="bx bx-list-check"></i></button>
@@ -2700,7 +2709,7 @@ class NocturneWriter {
     const toggle = (key) => `<button type="button" class="toggle ${this.state.settings[key] ? 'on' : ''}" data-setting="${key}" data-kind="toggle" role="switch" aria-checked="${!!this.state.settings[key]}"></button>`;
     const input = (key, type = 'text') => `<input class="form-control" type="${type}" value="${escapeHtml(this.state.settings[key] || '')}" data-setting="${key}">`;
     return `
-      ${this.mobilePanelHeader('Экспорт / резервная копия', 'PDF, DOCX и .nocturnedump')}
+      ${this.mobilePanelHeader(t('Экспорт / резервная копия'), t('PDF, DOCX и .nocturnedump'))}
       <div class="mobile-panel-body mobile-export-body">${this.exportSettingsContent(row, toggle, input)}</div>`;
   }
 
@@ -2710,7 +2719,7 @@ class NocturneWriter {
 
   startMobileSystemBar() {
     const updateTime = () => {
-      this.state.mobile.systemTime = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+      this.state.mobile.systemTime = new Date().toLocaleTimeString(getLocaleName(), { hour: '2-digit', minute: '2-digit' });
       document.querySelectorAll('[data-mobile-system-time]').forEach((el) => { el.textContent = this.state.mobile.systemTime; });
     };
     updateTime();
@@ -2771,14 +2780,14 @@ class NocturneWriter {
     const device = [...(this.state.sync.discoveredDevices || []), ...(this.state.sync.rememberedDevices || [])]
       .find((item) => String(item.id || item.deviceId || item.publicDeviceId) === String(id));
     if (!device) {
-      this.toast('Устройство не найдено.');
+      this.toast(t('Устройство не найдено.'));
       return;
     }
     this.state.sync.host = device.host || device.lastKnownIp || this.state.sync.host;
     this.state.sync.port = String(device.port || device.lastKnownPort || this.state.sync.port || '8787');
     if (!this.state.sync.token) {
       this.state.sync.discovery.manualOpen = true;
-      this.toast('Введите код подключения с компьютера.');
+      this.toast(t('Введите код подключения с компьютера.'));
       this.renderSyncSurfaces();
       return;
     }
@@ -2796,7 +2805,7 @@ class NocturneWriter {
       id,
       deviceId: peer.deviceId || previous?.deviceId || '',
       publicDeviceId: peer.publicDeviceId || previous?.publicDeviceId || '',
-      deviceName: peer.deviceName || previous?.deviceName || 'Устройство',
+      deviceName: peer.deviceName || previous?.deviceName || t('Устройство'),
       deviceType: peer.deviceType || peer.runtime || previous?.deviceType || '',
       runtime: peer.runtime || previous?.runtime || '',
       lastKnownIp: this.state.sync.host || previous?.lastKnownIp || '',
@@ -2814,7 +2823,7 @@ class NocturneWriter {
   async forgetSyncDevice(id) {
     if (!id) return;
     await this.db.delete('syncDevices', id);
-        this.toast('Устройство забыто.');
+        this.toast(t('Устройство забыто.'));
     this.renderSyncSurfaces();
   }
 
@@ -2836,15 +2845,15 @@ class NocturneWriter {
     try {
       await this.probeSyncDiscoveryHost(this.state.sync.host, this.state.sync.port, 'remembered');
       await this.syncClient.connect({ host: this.state.sync.host, port: this.state.sync.port, token, trusted: true });
-      this.state.sync.statusDetail = 'Автоподключение к доверенному устройству...';
+      this.state.sync.statusDetail = t('Автоподключение к доверенному устройству...');
     } catch {
-      this.state.sync.statusDetail = 'Доверенное устройство сейчас недоступно.';
+      this.state.sync.statusDetail = t('Доверенное устройство сейчас недоступно.');
     }
   }
 
   async requestSyncMerge() {
     if (!this.syncClient.isOpen()) {
-      this.toast('Сначала подключитесь к локальному серверу.');
+      this.toast(t('Сначала подключитесь к локальному серверу.'));
       return;
     }
     this.state.sync.status = 'connected';
@@ -2890,7 +2899,7 @@ class NocturneWriter {
     await this.bookmarks.init();
     await this.trash.init();
     this.state.sync.conflicts = conflicts.length;
-    this.state.sync.statusDetail = this.state.sync.conflicts ? `Есть ${this.state.sync.conflicts} конфликтов. Обе версии сохранены.` : 'Базы сверены. Все изменения сохранены на обоих устройствах.';
+    this.state.sync.statusDetail = this.state.sync.conflicts ? msg`Есть ${this.state.sync.conflicts} конфликтов. Обе версии сохранены.` : t('Базы сверены. Все изменения сохранены на обоих устройствах.');
     this.renderDocs(); this.renderKb(); this.renderNotes(); this.updateSyncStatusUi();
     if (focused && !this.state.docs.some(doc => doc.id === focused)) { this.initWorkspace(); this.renderWorkspace(); }
   }
@@ -2903,7 +2912,7 @@ class NocturneWriter {
     this.state.sync.remoteState = message;
     this.state.sync.mergePreview = preview;
     this.state.sync.status = 'connected';
-    this.state.sync.statusDetail = 'Получен проект. Проверьте preview перед merge.';
+    this.state.sync.statusDetail = t('Получен проект. Проверьте preview перед merge.');
     this.renderMobileShell();
   }
 
@@ -2914,17 +2923,17 @@ class NocturneWriter {
   async applySyncMergePreview() {
     const remote = this.state.sync.remoteState;
     if (!remote?.dump?.payload) {
-      this.toast('Нет подготовленного merge preview.');
+      this.toast(t('Нет подготовленного merge preview.'));
       return;
     }
     const report = await this.applyRemoteProjectMerge(remote);
     this.state.sync.mergePreview = null;
     this.state.sync.remoteState = null;
     this.state.sync.status = 'connected';
-    this.state.sync.statusDetail = `Объединено: ${report.docs} глав, ${report.characters} персонажей, ${report.locations} локаций.`;
+    this.state.sync.statusDetail = msg`Объединено: ${report.docs} глав, ${report.characters} персонажей, ${report.locations} локаций.`;
     this.syncClient.send({ type: 'merge-accepted', from: this.state.sync.deviceId, to: remote.from, report });
     this.renderAll();
-    this.toast('Локальный merge применён. Настройки не перезаписаны.');
+    this.toast(t('Локальный merge применён. Настройки не перезаписаны.'));
   }
 
   async applyRemoteProjectMerge(message) {
@@ -3002,7 +3011,7 @@ class NocturneWriter {
   async receiveSyncMergeAccepted(message = {}) {
     await this.persistSyncDevice({ deviceId: message.from, deviceName: message.deviceName });
     this.state.sync.status = 'connected';
-    this.state.sync.statusDetail = 'Второе устройство применило merge preview.';
+    this.state.sync.statusDetail = t('Второе устройство применило merge preview.');
     this.renderSyncStatus();
     if (this.isMobileLayout()) this.renderMobileShell();
   }
@@ -3013,7 +3022,7 @@ class NocturneWriter {
     const overlay = document.getElementById('form-overlay');
     if (!overlay) return;
     const runtime = this.runtime || detectRuntime();
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="form-modal about-modal">
         <div class="form-header">
           <div>
@@ -3107,7 +3116,7 @@ class NocturneWriter {
     await this.db.put('syncRevisions', { ...revState, revision, updatedAt: Date.now() });
     if (this.syncClient.isOpen()) {
       this.syncClient.send({ type: 'doc-patch', patch });
-      this.state.sync.statusDetail = 'Изменения отправлены на второе устройство.';
+      this.state.sync.statusDetail = t('Изменения отправлены на второе устройство.');
       this.renderSyncStatus();
       return;
     }
@@ -3152,7 +3161,7 @@ class NocturneWriter {
         createdAt: Date.now(),
       });
       this.state.sync.conflicts += 1;
-      this.toast('Получен patch для несвязанной главы. Он сохранён как конфликт.');
+      this.toast(t('Получен patch для несвязанной главы. Он сохранён как конфликт.'));
       return;
     }
     const doc = this.state.docs.find((item) => item.id === mapping.localDocId);
@@ -3164,7 +3173,7 @@ class NocturneWriter {
     const remoteBlockIds = new Set((patch.changedBlocks || []).map((block) => block.id));
     if (sameDocFocused && activeBlockId && remoteBlockIds.has(activeBlockId)) {
       await this.createSyncConflictCopy(doc, patch, mapping);
-      this.toast('Конфликт в активном абзаце. Создана безопасная копия.');
+      this.toast(t('Конфликт в активном абзаце. Создана безопасная копия.'));
       return;
     }
     doc.ast = {
@@ -3182,7 +3191,7 @@ class NocturneWriter {
     await this.db.put('docs', doc);
     await this.updateSyncMappingRevision(mapping, patch.revision);
     this.state.sync.status = 'connected';
-    this.state.sync.statusDetail = `Получены изменения от ${patch.deviceName || 'устройства'}.`;
+    this.state.sync.statusDetail = msg`Получены изменения от ${patch.deviceName || t('устройства')}.`;
     if (doc.id === this.getFocusedDoc()?.id && !sameDocFocused) this.renderWorkspace();
     this.renderDocs();
     this.renderMobileTopbarStatus();
@@ -3192,7 +3201,7 @@ class NocturneWriter {
     const copy = this.sanitizeDoc({
       ...structuredClone(doc),
       id: uid('doc'),
-      title: `${doc.title || 'Глава'} — конфликт ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+      title: msg`${doc.title || t('Глава')} — конфликт ${new Date().toLocaleTimeString(getLocaleName(), { hour: '2-digit', minute: '2-digit' })}`,
       folderId: doc.folderId,
       order: this.state.docs.filter((item) => item.folderId === doc.folderId).length,
       ast: {
@@ -3229,7 +3238,7 @@ class NocturneWriter {
   }
 
   renderShell() {
-    document.getElementById('app').innerHTML = `
+    document.getElementById('app').innerHTML = ui`
       <div class="app-shell ${this.mobileShellClasses()}" id="app-shell">
         ${this.renderMobileSystemBar()}
         ${this.renderMobileTopbar()}
@@ -3288,7 +3297,7 @@ class NocturneWriter {
               <div class="floating-note-menu-wrap" id="floating-note-menu-wrap">
                 <button class="tool-btn" data-action="toggle-floating-note-menu" data-floating-note-menu-anchor title="Плавающие заметки"><i class="bx bx-note"></i></button>
               </div>
-              ${this.state.settings.showZenButton ? '<button class="tool-btn zen-toggle-btn" data-action="toggle-zen" aria-pressed="false" title="Режим Дзен"><i class="bx bx-target-lock"></i></button>' : ''}
+              ${this.state.settings.showZenButton ? ui('<button class="tool-btn zen-toggle-btn" data-action="toggle-zen" aria-pressed="false" title="Режим Дзен"><i class="bx bx-target-lock"></i></button>') : ''}
               <button class="pill-btn" data-action="import-doc" aria-label="Импорт" title="Импорт"><i class="bx bx-import"></i> <span>Импорт</span></button>
               <button class="pill-btn" data-action="toggle-notes" aria-label="Заметки" title="Заметки"><i class="bx bx-notepad"></i> <span>Заметки</span></button>
               <button class="pill-btn ai-btn" data-action="toggle-ai" aria-label="Ассистент" title="Ассистент">${aiIcon('toolbar-ai-svg')} <span>Ассистент</span></button>
@@ -3319,11 +3328,11 @@ class NocturneWriter {
                 </div>
                 <div class="ai-context-toggles">
                   ${[
-                    ['aiContextCharacters', 'Персонажи'],
-                    ['aiContextLocations', 'Локации'],
-                    ['aiContextTimeline', 'Таймлайн'],
-                    ['aiContextSubtimelines', 'Сабтаймлайны'],
-                    ['aiContextNotes', 'Заметки'],
+                    ['aiContextCharacters', t('Персонажи')],
+                    ['aiContextLocations', t('Локации')],
+                    ['aiContextTimeline', t('Таймлайн')],
+                    ['aiContextSubtimelines', t('Сабтаймлайны')],
+                    ['aiContextNotes', t('Заметки')],
                   ].map(([key, label]) => `<button class="context-chip ${this.state.settings[key] ? 'active' : ''}" data-setting="${key}" data-kind="toggle">${label}</button>`).join('')}
                 </div>
                 <button class="pill-btn" data-action="preview-ai-context"><i class="bx bx-show"></i> Предпросмотр контекста</button>
@@ -3369,7 +3378,7 @@ class NocturneWriter {
           <button class="floating-menu-item" type="button" role="menuitem" data-action="import-project-dump"><i class="bx bx-archive-in" aria-hidden="true"></i><span>Восстановить проект</span></button>
         </div>
         <div class="dropdown-menu popover-surface portal-floating-menu library-menu" id="library-menu" data-floating-menu="library" role="menu" aria-label="Инструменты рукописи" aria-hidden="true">
-          ${[['export-book', 'bx-book-open', 'Экспорт книги'], ['open-review-queue', 'bx-message-square-edit', 'Все правки'], ['open-backups', 'bx-archive', 'Резервные копии'], ['open-trash', 'bx-trash', 'Корзина'], ['manual-snapshot', 'bx-camera', 'Сохранить версию'], ['open-command-palette', 'bx-command', 'Палитра команд']].map(([action, icon, label]) => `<button class="floating-menu-item" role="menuitem" data-action="${action}"><i class="bx ${icon}"></i><span>${label}</span></button>`).join('')}
+          ${[['export-book', 'bx-book-open', t('Экспорт книги')], ['open-review-queue', 'bx-message-square-edit', t('Все правки')], ['open-backups', 'bx-archive', t('Резервные копии')], ['open-trash', 'bx-trash', t('Корзина')], ['manual-snapshot', 'bx-camera', t('Сохранить версию')], ['open-command-palette', 'bx-command', t('Палитра команд')]].map(([action, icon, label]) => `<button class="floating-menu-item" role="menuitem" data-action="${action}"><i class="bx ${icon}"></i><span>${label}</span></button>`).join('')}
         </div>
         <div class="dropdown-menu popover-surface portal-floating-menu" id="kb-menu" data-floating-menu="kb" aria-hidden="true">
           <div class="drop-item kb-drop-row" data-kb-open="characters"><i class="bx bx-user-pin"></i><span>Персонажи</span><button type="button" data-action="open-kb-right" data-kb-tab="characters" title="Открыть справа"><i class="bx bx-columns"></i></button></div>
@@ -3479,7 +3488,7 @@ class NocturneWriter {
       progressFill.style.transition = 'width 1500ms cubic-bezier(0.22, 1, 0.36, 1)';
       progressFill.style.width = '100%';
     }
-    setTimeout(() => {
+    return new Promise(resolve => setTimeout(() => {
       const preloader = document.getElementById('preloader');
       if (preloader) preloader.classList.add('hidden');
       const appShell = document.getElementById('app-shell');
@@ -3488,8 +3497,55 @@ class NocturneWriter {
         const titlebar = document.getElementById('electron-titlebar');
         if (titlebar) titlebar.style.display = 'flex';
       }
-      if (!this.isMobileLayout()) document.querySelector('.page-content')?.focus();
-    }, 1800);
+      if (!this.isMobileLayout() && this.interfaceLanguage.confirmed) document.querySelector('.page-content')?.focus();
+      resolve();
+    }, 1800));
+  }
+
+  installModalFocus() {
+    this.disposeModalFocus = manageModalFocus({ onOverlayClose: overlay => this.closeSettingsSelects(null, { root: overlay, immediate: true, restoreFocus: false }) });
+  }
+
+  refreshLocalizedInterface() {
+    this.state.mobile.systemTime = new Date().toLocaleTimeString(getLocaleName(), { hour: '2-digit', minute: '2-digit' });
+    const root = document.getElementById('app');
+    const stage = root.querySelector('#workspace-stage');
+    const settingsOpen = document.getElementById('settings-overlay')?.classList.contains('active');
+    const panels = [...root.querySelectorAll('.side-panel')].map(element => [element.id, element.className]);
+    stage?.remove();
+    document.querySelectorAll('#floating-menu-portal, #doc-menu-portal').forEach(element => element.remove());
+    this.renderShell();
+    root.querySelector('.app-shell')?.classList.add('ready');
+    if (this.runtime.isElectron) {
+      const actions = root.querySelector('.sidebar-header-actions');
+      const previous = document.querySelector('#electron-titlebar .titlebar-header-actions');
+      if (actions && previous) { actions.classList.add('titlebar-header-actions'); previous.replaceWith(actions); }
+      this.updateTitlebarLayout();
+    }
+    if (stage) {
+      root.querySelector('#workspace-stage').replaceWith(stage);
+      for (const paneElement of stage.querySelectorAll('.workspace-pane')) {
+        const paneId = paneElement.dataset.paneId;
+        const pane = this.getPane(paneId);
+        if (pane?.type === 'document' && this.nocturneEditor.instances.has(paneId)) {
+          const content = document.createElement('template');
+          content.innerHTML = this.renderPane(paneId);
+          const header = content.content.querySelector('.workspace-pane-header');
+          if (header) paneElement.querySelector('.workspace-pane-header')?.replaceWith(header);
+          const drop = content.content.querySelector('.pane-drop-overlay');
+          if (drop) paneElement.querySelector('.pane-drop-overlay')?.replaceWith(drop);
+        } else paneElement.__paneConfig = null;
+      }
+    }
+    this.renderAll();
+    for (const [id, className] of panels) { const panel = document.getElementById(id); if (panel) panel.className = className; }
+    if (settingsOpen) document.getElementById('settings-overlay')?.classList.add('active');
+    for (const element of document.querySelectorAll('[data-i18n-title]')) {
+      element.title = t(element.dataset.i18nTitle);
+      element.setAttribute('aria-label', element.title);
+    }
+    for (const paneId of this.nocturneEditor.instances.keys()) this.nocturneEditor.scheduleVisualPages(paneId);
+    this.syncSidePanelGeometry();
   }
 
   renderAll() {
@@ -3925,6 +3981,7 @@ class NocturneWriter {
     this.capacitorBackBound = true;
     bindNativeLifecycle({
       onBack: ({ canGoBack } = {}) => {
+        if (this.interfaceLanguage.busy || document.getElementById('language-onboarding')) return;
         if (this.pendingConfirmation) { this.pendingConfirmation(false); return; }
         if (this.closeTopMobileOverlay()) return;
         if (canGoBack) window.history.back(); else this.openExitSheet();
@@ -4017,7 +4074,7 @@ class NocturneWriter {
   openExitSheet() {
     const overlay = document.getElementById('form-overlay');
     if (!overlay) return;
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="form-modal confirm-modal mobile-exit-sheet">
         <div class="confirm-icon"><i class="bx bx-log-out"></i></div>
         <h2>Выйти из Nocturne?</h2>
@@ -4142,7 +4199,7 @@ class NocturneWriter {
       this.closeFloatingMenu('noteActions'); this.noteActionsAnchor?.focus({ preventScroll: true });
     }
     if (action === 'toggle-note-actions') { this.openNoteActionsMenu(event.target.closest('[data-action]')); return; }
-    if (action === 'open-knowledge-result') { this.openKnowledgeSearchResult(event.target.closest('[data-action]')).catch(error => { console.error(error); this.toast('Не удалось открыть результат поиска.'); }); return; }
+    if (action === 'open-knowledge-result') { this.openKnowledgeSearchResult(event.target.closest('[data-action]')).catch(error => { console.error(error); this.toast(t('Не удалось открыть результат поиска.')); }); return; }
     if (['knowledge-search-scope', 'knowledge-search-category', 'knowledge-search-more'].includes(action)) {
       const search = this.knowledgeSearch(), button = event.target.closest('[data-action]');
       if (action === 'knowledge-search-scope') { search.scope = button.dataset.scope; search.category = 'all'; search.limit = 50; }
@@ -4358,7 +4415,7 @@ class NocturneWriter {
         this.persistSettings();
         this.injectCustomFonts();
         this.renderSettings();
-        this.toast('Шрифт удален.');
+        this.toast(t('Шрифт удален.'));
       }
       return;
     }
@@ -4383,7 +4440,7 @@ class NocturneWriter {
       return;
     }
     if (action === 'create-temporary-floating-note') {
-      this.createFloatingNote({ scope: 'global', linkedId: null, temporary: true, title: 'Временная заметка' });
+      this.createFloatingNote({ scope: 'global', linkedId: null, temporary: true, title: t('Временная заметка') });
       this.hideFloatingNoteMenu();
       return;
     }
@@ -4455,7 +4512,7 @@ class NocturneWriter {
     }
     if (action === 'new-lore-floating-note') {
       const button = event.target.closest('[data-entity-kind][data-entity-id]');
-      if (button) this.createFloatingNote({ scope: button.dataset.entityKind, linkedId: button.dataset.entityId, title: 'Заметка к досье', forceVisible: true });
+      if (button) this.createFloatingNote({ scope: button.dataset.entityKind, linkedId: button.dataset.entityId, title: t('Заметка к досье'), forceVisible: true });
       return;
     }
     if (action === 'open-subtimeline') {
@@ -4681,7 +4738,7 @@ class NocturneWriter {
         if (this.isFloatingMenuOpen('folder') && this.mobileFolderMenuAnchor === anchor) { this.closeFloatingMenu('folder'); return; }
         this.mobileFolderMenuAnchor = anchor;
         const id = escapeHtml(anchor.dataset.folderId);
-        this.updateSurfaceHTML(this.floatingMenuElement('folder'), [['new-doc', 'bx-plus', 'Новая глава'], ['rename-folder', 'bx-edit-alt', 'Переименовать'], ['delete-folder', 'bx-trash', 'Удалить папку']].map(([action, icon, title]) => `<button class="floating-menu-item" role="menuitem" data-action="mobile-folder-action" data-folder-action="${action}" data-folder-id="${id}"><i class="bx ${icon}"></i><span>${title}</span></button>`).join(''));
+        this.updateSurfaceHTML(this.floatingMenuElement('folder'), [['new-doc', 'bx-plus', t('Новая глава')], ['rename-folder', 'bx-edit-alt', t('Переименовать')], ['delete-folder', 'bx-trash', t('Удалить папку')]].map(([action, icon, title]) => `<button class="floating-menu-item" role="menuitem" data-action="mobile-folder-action" data-folder-action="${action}" data-folder-id="${id}"><i class="bx ${icon}"></i><span>${title}</span></button>`).join(''));
         this.openFloatingMenu('folder');
       },
       'mobile-folder-action': () => {
@@ -4749,7 +4806,7 @@ class NocturneWriter {
       },
       'mobile-toggle-reorder': () => { this.state.mobile.reorderMode = !this.state.mobile.reorderMode; this.renderMobileShell(); },
       'mobile-reorder-lore': () => this.mobileReorderLore(event.target.closest('[data-lore-type][data-lore-id]')),
-      'open-kb-desktop-modal': () => this.toast('Полный desktop-вид базы доступен на широком экране.'),
+      'open-kb-desktop-modal': () => this.toast(t('Полный desktop-вид базы доступен на широком экране.')),
       'mobile-about': () => this.openAboutModal(),
       'mobile-background-app': () => {
         document.getElementById('form-overlay')?.classList.remove('active');
@@ -4780,7 +4837,7 @@ class NocturneWriter {
     } else {
       const doc = this.getFocusedDoc();
       if (!doc) {
-        this.toast('Откройте документ для заметок.');
+        this.toast(t('Откройте документ для заметок.'));
         return;
       }
       doc.notes = result;
@@ -4789,7 +4846,7 @@ class NocturneWriter {
       this.saveDocByIdDebounced(doc.id);
     }
     this.renderNotes();
-    this.toast('Заметки сохранены.');
+    this.toast(t('Заметки сохранены.'));
   }
 
   toggleDocContextMenu(docId, anchor) {
@@ -4806,11 +4863,11 @@ class NocturneWriter {
     portal.dataset.docId = docId;
     portal.setAttribute('aria-hidden', 'false');
     portal.style.pointerEvents = '';
-    this.updateSurfaceHTML(portal, `
+    this.updateSurfaceHTML(portal, ui`
       <div class="doc-context-menu popover-surface" data-ctx-doc="${escapeHtml(doc.id)}">
         <button class="ctx-btn" data-action="open-doc-right" data-ctx-doc="${escapeHtml(doc.id)}"><i class="bx bx-sidebar"></i><span>Открыть справа</span></button>
         <button class="ctx-btn" data-action="duplicate-doc" data-ctx-doc="${escapeHtml(doc.id)}"><i class="bx bx-copy"></i><span>Дублировать</span></button>
-        <button class="ctx-btn" data-action="pin-doc" data-ctx-doc="${escapeHtml(doc.id)}"><i class="bx ${doc.pinned ? 'bx-pin' : 'bxs-pin'}"></i><span>${doc.pinned ? 'Открепить' : 'Закрепить'}</span></button>
+        <button class="ctx-btn" data-action="pin-doc" data-ctx-doc="${escapeHtml(doc.id)}"><i class="bx ${doc.pinned ? 'bx-pin' : 'bxs-pin'}"></i><span>${doc.pinned ? t('Открепить') : t('Закрепить')}</span></button>
         <button class="ctx-btn" data-action="edit-doc" data-ctx-doc="${escapeHtml(doc.id)}"><i class="bx bx-edit"></i><span>Редактировать</span></button>
         <button class="ctx-btn" data-action="export-doc-menu" data-ctx-doc="${escapeHtml(doc.id)}"><i class="bx bx-export"></i><span>Экспорт DOCX / .nocturned</span></button>
         <button class="ctx-btn danger" data-action="delete-doc" data-ctx-doc="${escapeHtml(doc.id)}"><i class="bx bx-trash"></i><span>Удалить</span></button>
@@ -5241,7 +5298,7 @@ class NocturneWriter {
       ? this.selectionController.editable
       : (snapshotEditable || this.editableFromSelection() || this.getFocusedEditable());
     if (!editable) {
-      this.toast('Не удалось определить место редактирования. Выделите текст снова.');
+      this.toast(t('Не удалось определить место редактирования. Выделите текст снова.'));
       return;
     }
     if (!this.selectionController?.active) {
@@ -5254,7 +5311,7 @@ class NocturneWriter {
       return;
     }
     if (command === 'undo' || command === 'redo') {
-      this.toast(command === 'undo' ? 'Используйте Ctrl+Z для отмены.' : 'Используйте Ctrl+Y или Ctrl+Shift+Z для повтора.');
+      this.toast(command === 'undo' ? t('Используйте Ctrl+Z для отмены.') : t('Используйте Ctrl+Y или Ctrl+Shift+Z для повтора.'));
       return;
     }
     if (!this.toggleInlineFormat(command)) return;
@@ -5281,7 +5338,7 @@ class NocturneWriter {
           .map((node) => node.parentElement?.closest?.('[data-block-id]'))
           .filter(Boolean));
         if (touchedBlocks.size > 1) {
-          this.toast('Форматирование выделения через несколько абзацев пока не поддерживается.');
+          this.toast(t('Форматирование выделения через несколько абзацев пока не поддерживается.'));
           return false;
         }
         try {
@@ -5315,7 +5372,7 @@ class NocturneWriter {
       range = this.selectionSnapshot.range.cloneRange();
     }
     if (!tagName || !range) {
-      this.toast('Выделите текст для форматирования.');
+      this.toast(t('Выделите текст для форматирования.'));
       return false;
     }
     let editable = customSelection ? this.selectionController.editable : this.editableFromSelection();
@@ -5340,7 +5397,7 @@ class NocturneWriter {
       range = this.rangeForTextInEditable(editable, selectionText) || range;
     }
     if (!editable || !editable.contains(range.commonAncestorContainer)) {
-      this.toast('Выделение не находится в редакторе.');
+      this.toast(t('Выделение не находится в редакторе.'));
       return false;
     }
 
@@ -5365,7 +5422,7 @@ class NocturneWriter {
       .map((node) => node.parentElement?.closest?.('[data-block-id]'))
       .filter(Boolean));
     if (touchedBlocks.size > 1) {
-      this.toast('Форматирование выделения через несколько абзацев пока не поддерживается.');
+      this.toast(t('Форматирование выделения через несколько абзацев пока не поддерживается.'));
       return false;
     }
     try {
@@ -5407,7 +5464,7 @@ class NocturneWriter {
       .map((node) => node.parentElement?.closest?.('[data-block-id]'))
       .filter(Boolean));
     if (touchedBlocks.size > 1) {
-      this.toast('Форматирование выделения через несколько абзацев пока не поддерживается.');
+      this.toast(t('Форматирование выделения через несколько абзацев пока не поддерживается.'));
       return false;
     }
     try {
@@ -5887,7 +5944,7 @@ class NocturneWriter {
         }
       }
       if (startBlock && endBlock && startBlock !== endBlock) {
-        this.toast('Смена стиля для выделения через несколько абзацев пока не поддерживается.');
+        this.toast(t('Смена стиля для выделения через несколько абзацев пока не поддерживается.'));
         return;
       }
     }
@@ -5922,7 +5979,7 @@ class NocturneWriter {
     this.restoreSelectionSnapshot(this.selectionSnapshot);
     const block = this.currentBlockElement();
     if (!block) {
-      this.toast('Не удалось определить место редактирования. Выделите текст снова.');
+      this.toast(t('Не удалось определить место редактирования. Выделите текст снова.'));
       return;
     }
     const editable = block.closest('.page-content');
@@ -5963,7 +6020,7 @@ class NocturneWriter {
   updateFormatLabel(type = null) {
     const block = this.currentBlockElement();
     const resolved = type || (block?.tagName?.toLowerCase() === 'h2' ? 'heading' : block?.tagName?.toLowerCase() === 'blockquote' ? 'quote' : 'paragraph');
-    const label = { paragraph: 'Обычный текст', heading: 'Заголовок', quote: 'Цитата' }[resolved] || 'Обычный текст';
+    const label = { paragraph: t('Обычный текст'), heading: t('Заголовок'), quote: t('Цитата') }[resolved] || t('Обычный текст');
     const labelEl = document.getElementById('format-label');
     if (labelEl) labelEl.textContent = label;
   }
@@ -6290,10 +6347,10 @@ class NocturneWriter {
       if (file) {
         const reader = new FileReader();
         reader.onload = () => {
-          const fontName = file.name.replace(/\.[^.]+$/u, '').replace(/[\u0000-\u001f\u007f]/g, '').trim() || 'Мой шрифт';
+          const fontName = file.name.replace(/\.[^.]+$/u, '').replace(/[\u0000-\u001f\u007f]/g, '').trim() || t('Мой шрифт');
           this.state.settings.customFonts = this.state.settings.customFonts || [];
           if (this.state.settings.customFonts.some(f => f.name === fontName)) {
-            this.toast('Шрифт с таким именем уже загружен.');
+            this.toast(t('Шрифт с таким именем уже загружен.'));
             return;
           }
           this.state.settings.customFonts.push({
@@ -6303,9 +6360,9 @@ class NocturneWriter {
           this.persistSettings();
           this.injectCustomFonts();
           this.renderSettings();
-          this.toast(`Шрифт "${fontName}" загружен.`);
+          this.toast(msg`Шрифт "${fontName}" загружен.`);
         };
-        reader.onerror = () => this.toast('Не удалось прочитать шрифт. Попробуйте выбрать файл ещё раз.');
+        reader.onerror = () => this.toast(t('Не удалось прочитать шрифт. Попробуйте выбрать файл ещё раз.'));
         reader.readAsDataURL(file);
       }
     }
@@ -6339,6 +6396,7 @@ class NocturneWriter {
   }
 
   handleKeydown(event) {
+    if (this.interfaceLanguage.busy || document.getElementById('language-onboarding')) return;
     const noteReader = event.target.closest?.('.note-read-mode') || document.querySelector('#kb-modal.active .note-read-mode, #mobile-tab-surface.active .note-read-mode, #mobile-overlay.active .note-read-mode, .workspace-pane.active-pane .note-read-mode');
     if ((event.ctrlKey || event.metaKey) && !event.altKey && event.code === 'KeyF' && noteReader) {
       event.preventDefault(); this.toggleNoteReadSearch(noteReader); return;
@@ -6585,7 +6643,7 @@ class NocturneWriter {
     this.closeContextMenu();
     const overlay = document.getElementById('shortcuts-overlay');
     if (!overlay) return;
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="form-modal shortcuts-modal">
         <div class="shortcuts-header">
           <div>
@@ -6595,23 +6653,23 @@ class NocturneWriter {
           <button class="btn-icon" data-action="close-shortcuts"><i class="bx bx-x"></i></button>
         </div>
         <div class="shortcuts-grid">
-          ${this.shortcutsGroup('Текст', [
-            ['Ctrl', 'B', 'Жирный'],
-            ['Ctrl', 'I', 'Курсив'],
-            ['Shift', 'Enter', 'Мягкий перенос строки'],
-            ['Enter', '', 'Новый абзац'],
-            ['Backspace / Delete', '', 'Удалить'],
+          ${this.shortcutsGroup(t('Текст'), [
+            ['Ctrl', 'B', t('Жирный')],
+            ['Ctrl', 'I', t('Курсив')],
+            ['Shift', 'Enter', t('Мягкий перенос строки')],
+            ['Enter', '', t('Новый абзац')],
+            ['Backspace / Delete', '', t('Удалить')],
           ])}
-          ${this.shortcutsGroup('Документ', [
-            ['Ctrl', 'S', 'Сохранить локально'],
-            ['Ctrl', 'F', 'Поиск в текущем документе'],
-            ['Ctrl + Shift', 'F', 'Поиск по всем документам'],
-            ['Ctrl', 'H', 'Замена в текущем документе'],
+          ${this.shortcutsGroup(t('Документ'), [
+            ['Ctrl', 'S', t('Сохранить локально')],
+            ['Ctrl', 'F', t('Поиск в текущем документе')],
+            ['Ctrl + Shift', 'F', t('Поиск по всем документам')],
+            ['Ctrl', 'H', t('Замена в текущем документе')],
           ])}
-          ${this.shortcutsGroup('Навигация / интерфейс', [
-            ['Ctrl + hover', '', 'Карточка имени или места'],
-            ['?', '', 'Открыть это окно'],
-            ['Escape', '', 'Закрыть всплывающие окна'],
+          ${this.shortcutsGroup(t('Навигация / интерфейс'), [
+            ['Ctrl + hover', '', t('Карточка имени или места')],
+            ['?', '', t('Открыть это окно')],
+            ['Escape', '', t('Закрыть всплывающие окна')],
           ])}
         </div>
       </div>`);
@@ -6994,47 +7052,47 @@ class NocturneWriter {
     const canEdit = ctx.reviewMode !== 'editor';
     const selectedPreview = hasSelection ? `<div class="context-selection">"${escapeHtml(ctx.selectedText.slice(0, 90))}${ctx.selectedText.length > 90 ? '...' : ''}"</div>` : '';
     const item = (action, icon, label, disabled = false, attrs = '') => `<button class="context-menu-item" data-action="${action}" ${attrs} ${disabled ? 'disabled' : ''}><i class="bx ${icon}"></i><span>${label}</span></button>`;
-    const issueItems = ctx.reviewMode === 'editor' && hasSelection ? `
+    const issueItems = ctx.reviewMode === 'editor' && hasSelection ? ui`
       <div class="context-subtitle">Пометить проблему</div>
-      ${item('context-review-issue', 'bx-check-circle', 'Орфография', false, 'data-review-category="orthography"')}
-      ${item('context-review-issue', 'bx-brain', 'Логика', false, 'data-review-category="logic"')}
-      ${item('context-review-issue', 'bx-git-branch', 'Сюжет / мотивация', false, 'data-review-category="plot"')}
-      ${item('context-review-issue', 'bx-bookmark', 'Лор / непрерывность', false, 'data-review-category="continuity"')}
-      ${item('context-review-issue', 'bx-water', 'Стиль / ритм', false, 'data-review-category="style"')}
+      ${item('context-review-issue', 'bx-check-circle', t('Орфография'), false, 'data-review-category="orthography"')}
+      ${item('context-review-issue', 'bx-brain', t('Логика'), false, 'data-review-category="logic"')}
+      ${item('context-review-issue', 'bx-git-branch', t('Сюжет / мотивация'), false, 'data-review-category="plot"')}
+      ${item('context-review-issue', 'bx-bookmark', t('Лор / непрерывность'), false, 'data-review-category="continuity"')}
+      ${item('context-review-issue', 'bx-water', t('Стиль / ритм'), false, 'data-review-category="style"')}
     ` : '';
     const editorBlock = ctx.reviewMode === 'editor' && hasSelection ? `
-      ${item('context-review-comment', 'bx-comment-detail', 'Добавить комментарий')}
-      ${item('context-review-suggestion', 'bx-transfer-alt', 'Предложить замену')}
+      ${item('context-review-comment', 'bx-comment-detail', t('Добавить комментарий'))}
+      ${item('context-review-suggestion', 'bx-transfer-alt', t('Предложить замену'))}
       ${issueItems}
       <div class="context-separator"></div>
     ` : '';
-    const entityBlock = ctx.entityPayload ? `
+    const entityBlock = ctx.entityPayload ? ui`
       <div class="context-section-title">Сущность</div>
-      ${item('context-entity-detail', 'bx-id-card', 'Просмотреть досье')}
-      ${item('context-entity-side', 'bx-sidebar', 'Открыть справа')}
-      ${item('context-entity-edit', 'bx-edit', 'Редактировать', ctx.entityPayload.kind === 'family')}
-      ${item('context-entity-note', 'bx-note', 'Создать заметку', ctx.entityPayload.kind === 'family')}
+      ${item('context-entity-detail', 'bx-id-card', t('Просмотреть досье'))}
+      ${item('context-entity-side', 'bx-sidebar', t('Открыть справа'))}
+      ${item('context-entity-edit', 'bx-edit', t('Редактировать'), ctx.entityPayload.kind === 'family')}
+      ${item('context-entity-note', 'bx-note', t('Создать заметку'), ctx.entityPayload.kind === 'family')}
       <div class="context-separator"></div>
     ` : '';
     const typoBlock = ctx.typoMatch ? `
-      <div class="context-section-title">${ctx.typoMatch.source === 'smart' ? 'Smart-словарь: возможная ошибка' : 'Словарь ошибок'}</div>
+      <div class="context-section-title">${ctx.typoMatch.source === 'smart' ? t('Smart-словарь: возможная ошибка') : t('Словарь ошибок')}</div>
       ${ctx.typoMatch.source === 'smart' && ctx.typoMatch.suggestions?.length
-        ? ctx.typoMatch.suggestions.map((suggestion, index) => item('context-apply-smart-typo-suggestion', 'bx-check-shield', suggestion ? `Заменить на «${escapeHtml(suggestion)}»` : 'Удалить лишний фрагмент', !canEdit, `data-typo-suggestion-index="${index}"`)).join('')
-        : ctx.typoMatch.correct ? item('context-apply-typo-replacement', 'bx-check-shield', `Заменить на «${escapeHtml(ctx.typoMatch.correct)}»`) : ''}
+        ? ctx.typoMatch.suggestions.map((suggestion, index) => item('context-apply-smart-typo-suggestion', 'bx-check-shield', suggestion ? msg`Заменить на «${escapeHtml(suggestion)}»` : t('Удалить лишний фрагмент'), !canEdit, `data-typo-suggestion-index="${index}"`)).join('')
+        : ctx.typoMatch.correct ? item('context-apply-typo-replacement', 'bx-check-shield', msg`Заменить на «${escapeHtml(ctx.typoMatch.correct)}»`) : ''}
       ${ctx.typoMatch.source === 'smart' && !ctx.typoMatch.suggestions?.length ? `<div class="context-subtitle">${escapeHtml(ctx.typoMatch.message || ctx.typoMatch.label)}</div>` : ''}
-      ${item('context-ignore-typo-word', 'bx-minus-circle', /^\p{L}+(?:[’'\-]\p{L}+)*$/u.test(ctx.typoMatch.rawText || '') ? `Игнорировать «${escapeHtml(ctx.typoMatch.rawText)}»` : 'Игнорировать замечание')}
-      ${/^\p{L}+(?:[’'\-]\p{L}+)*$/u.test(ctx.typoMatch.rawText || '') ? item('context-add-word-to-lexicon', 'bx-plus-circle', `Добавить «${escapeHtml(ctx.typoMatch.rawText)}» в словарь`) : ''}
+      ${item('context-ignore-typo-word', 'bx-minus-circle', /^\p{L}+(?:[’'\-]\p{L}+)*$/u.test(ctx.typoMatch.rawText || '') ? msg`Игнорировать «${escapeHtml(ctx.typoMatch.rawText)}»` : t('Игнорировать замечание'))}
+      ${/^\p{L}+(?:[’'\-]\p{L}+)*$/u.test(ctx.typoMatch.rawText || '') ? item('context-add-word-to-lexicon', 'bx-plus-circle', msg`Добавить «${escapeHtml(ctx.typoMatch.rawText)}» в словарь`) : ''}
       <div class="context-separator"></div>
     ` : '';
     this.updateSurfaceHTML(menu, `
       ${selectedPreview}
       ${entityBlock}
       ${typoBlock}
-      ${item('context-copy', 'bx-copy', 'Копировать', !hasSelection)}
-      ${item('context-cut', 'bx-cut', 'Вырезать', !hasSelection || !canEdit)}
-      ${item('context-paste', 'bx-clipboard', 'Вставить', !canEdit)}
-      ${(ctx.docId || ctx.noteId || ctx.sourceKey) ? item('context-add-bookmark', 'bx-bookmark', 'Поставить закладку') : ''}
-      ${hasSelection ? item('context-add-typo-rule', 'bx-book-add', 'Добавить в словарь ошибок') : ''}
+      ${item('context-copy', 'bx-copy', t('Копировать'), !hasSelection)}
+      ${item('context-cut', 'bx-cut', t('Вырезать'), !hasSelection || !canEdit)}
+      ${item('context-paste', 'bx-clipboard', t('Вставить'), !canEdit)}
+      ${(ctx.docId || ctx.noteId || ctx.sourceKey) ? item('context-add-bookmark', 'bx-bookmark', t('Поставить закладку')) : ''}
+      ${hasSelection ? item('context-add-typo-rule', 'bx-book-add', t('Добавить в словарь ошибок')) : ''}
       ${editorBlock}
     `, { resize: true });
 
@@ -7115,13 +7173,13 @@ class NocturneWriter {
       this.openTypoRuleForm(ctx.selectedText);
       return;
     } else if (action === 'context-apply-typo-replacement') {
-      if (this.applyTypoReplacement(ctx.typoMatch)) this.toast(`Заменено на «${ctx.typoMatch.correct}».`);
+      if (this.applyTypoReplacement(ctx.typoMatch)) this.toast(msg`Заменено на «${ctx.typoMatch.correct}».`);
       this.closeContextMenu();
       return;
     } else if (action === 'context-apply-smart-typo-suggestion') {
       const index = Number(button.dataset.typoSuggestionIndex);
       const suggestion = Number.isInteger(index) && ctx.typoMatch?.suggestions?.[index];
-      if (ctx.reviewMode !== 'editor' && typeof suggestion === 'string' && this.applyTypoReplacement({ ...ctx.typoMatch, correct: suggestion })) this.toast(suggestion ? `Заменено на «${suggestion}».` : 'Лишний фрагмент удалён.');
+      if (ctx.reviewMode !== 'editor' && typeof suggestion === 'string' && this.applyTypoReplacement({ ...ctx.typoMatch, correct: suggestion })) this.toast(suggestion ? msg`Заменено на «${suggestion}».` : t('Лишний фрагмент удалён.'));
       this.closeContextMenu();
       return;
     } else if (action === 'context-ignore-typo-word') {
@@ -7129,13 +7187,13 @@ class NocturneWriter {
         this.ignoredTypoIssues ||= new Set();
         this.ignoredTypoIssues.add(this.smartTypoIssueKey(ctx.typoMatch));
         this.updateTypoHighlights();
-        this.toast('Замечание проигнорировано на время сессии.');
+        this.toast(t('Замечание проигнорировано на время сессии.'));
       } else if (ctx.typoMatch?.rawText) {
         const norm = normalizeTypoToken(ctx.typoMatch.rawText);
         if (!this.ignoredTypoWords) this.ignoredTypoWords = new Set();
         this.ignoredTypoWords.add(norm);
         this.updateTypoHighlights();
-        this.toast(`Слово «${ctx.typoMatch.rawText}» проигнорировано на время сессии.`);
+        this.toast(msg`Слово «${ctx.typoMatch.rawText}» проигнорировано на время сессии.`);
       }
       this.closeContextMenu();
       return;
@@ -7148,7 +7206,7 @@ class NocturneWriter {
           this.saveSettings();
         }
         this.updateTypoHighlights();
-        this.toast(`Слово «${ctx.typoMatch.rawText}» добавлено в ваш словарь.`);
+        this.toast(msg`Слово «${ctx.typoMatch.rawText}» добавлено в ваш словарь.`);
       }
       this.closeContextMenu();
       return;
@@ -7176,7 +7234,7 @@ class NocturneWriter {
       await navigator.clipboard.writeText(text || '');
       return true;
     } catch {
-      this.toast('Буфер обмена недоступен — используйте Ctrl+C.');
+      this.toast(t('Буфер обмена недоступен — используйте Ctrl+C.'));
       return false;
     }
   }
@@ -7204,7 +7262,7 @@ class NocturneWriter {
       const editable = range.commonAncestorContainer?.parentElement?.closest?.('.page-content') || document.querySelector('.page-content:focus');
       if (editable) this.editorInput(editable, { inputType: 'insertFromPaste' });
     } catch {
-      this.toast('Буфер обмена недоступен — используйте Ctrl+V.');
+      this.toast(t('Буфер обмена недоступен — используйте Ctrl+V.'));
     }
   }
 
@@ -7214,7 +7272,7 @@ class NocturneWriter {
     if (action === 'context-entity-detail') this.openLoreDetail(payload.kind, payload.id, this.state.workspace.mode === 'split' ? 'secondary' : null);
     if (action === 'context-entity-side') this.openSecondaryPane({ type: `${payload.kind}-detail`, entityType: payload.kind, entityId: payload.id });
     if (action === 'context-entity-edit') this.editLore(loreType, payload.id);
-    if (action === 'context-entity-note') this.createFloatingNote({ scope: payload.kind, linkedId: payload.id, title: 'Заметка к досье', forceVisible: true });
+    if (action === 'context-entity-note') this.createFloatingNote({ scope: payload.kind, linkedId: payload.id, title: t('Заметка к досье'), forceVisible: true });
   }
 
   handlePointerDown(event) {
@@ -7394,9 +7452,9 @@ class NocturneWriter {
   }
 
   renderEntityHoverCard(entity, kind) {
-    const label = kind === 'location' ? 'Локация' : 'Персонаж';
+    const label = kind === 'location' ? t('Локация') : t('Персонаж');
     const icon = entity.image ? `<img src="${entity.image}" alt="">` : `<i class="bx ${entity.icon || (kind === 'location' ? 'bx-buildings' : 'bx-user')}"></i>`;
-    return `
+    return ui`
       <div class="entity-hover-head">
         <div class="entity-hover-avatar">${icon}</div>
         <div>
@@ -7405,10 +7463,10 @@ class NocturneWriter {
           <p>${escapeHtml(entity.role || '')}</p>
         </div>
       </div>
-      <p class="entity-hover-body">${escapeHtml(entity.body || 'Описание пока не заполнено.')}</p>
+      <p class="entity-hover-body">${escapeHtml(entity.body || t('Описание пока не заполнено.'))}</p>
       ${entity.aliases?.length ? `<div class="entity-mini-row">${entity.aliases.slice(0, 4).map((alias) => `<span>${escapeHtml(alias)}</span>`).join('')}</div>` : ''}
       <div class="entity-hover-actions">
-        <button type="button" data-action="open-lore-detail" data-entity-kind="${kind}" data-entity-id="${entity.id}">${kind === 'location' ? 'Открыть карточку' : 'Открыть досье'}</button>
+        <button type="button" data-action="open-lore-detail" data-entity-kind="${kind}" data-entity-id="${entity.id}">${kind === 'location' ? t('Открыть карточку') : t('Открыть досье')}</button>
         <button type="button" data-action="open-lore-side" data-entity-kind="${kind}" data-entity-id="${entity.id}">Открыть справа</button>
         <button type="button" data-action="edit-lore" data-lore-type="${kind === 'location' ? 'locations' : 'characters'}" data-lore-id="${entity.id}">Редактировать</button>
       </div>
@@ -7416,7 +7474,7 @@ class NocturneWriter {
   }
 
   renderFamilyHoverCard(familyName, members) {
-    return `
+    return ui`
       <div class="entity-family-head">
         <div class="entity-chip">Фамилия</div>
         <h3>Семья ${escapeHtml(familyName)}</h3>
@@ -7434,11 +7492,11 @@ class NocturneWriter {
   }
 
   renderEntityPreview(entity) {
-    return `
+    return ui`
       <div class="entity-chip">Превью</div>
       <h3>${escapeHtml(this.entityDisplayName(entity))}</h3>
       <p class="entity-preview-role">${escapeHtml(entity.role || '')}</p>
-      <p class="entity-hover-body">${escapeHtml(entity.body || 'Описание пока не заполнено.')}</p>
+      <p class="entity-hover-body">${escapeHtml(entity.body || t('Описание пока не заполнено.'))}</p>
       <div class="entity-hover-actions">
         <button type="button" data-action="open-lore-detail" data-entity-kind="character" data-entity-id="${entity.id}">Открыть досье</button>
       </div>
@@ -8026,12 +8084,12 @@ class NocturneWriter {
         const keys = (this.macroRecordedKeys || '').trim();
         const value = (this.settingsControl('new-macro-value')?.value || '').trim();
         if (!keys || !value) {
-          this.toast(!keys ? 'Сначала запишите сочетание клавиш.' : 'Укажите выводимый символ.');
+          this.toast(!keys ? t('Сначала запишите сочетание клавиш.') : t('Укажите выводимый символ.'));
           return;
         }
         const conflict = this.checkMacroConflict(keys);
-        if (conflict && conflict.includes('Конфликт с горячей клавишей')) {
-          this.toast('Нельзя перезаписать системную клавишу Ноктюрна.');
+        if (conflict && this.checkMacroConflict(keys, { systemOnly: true })) {
+          this.toast(t('Нельзя перезаписать системную клавишу Ноктюрна.'));
           return;
         }
         this.state.settings.macros = this.state.settings.macros || [];
@@ -8052,7 +8110,7 @@ class NocturneWriter {
         this.macroRecordingState = false;
         this.persistSettings();
         this.renderMacrosListOnly();
-        this.toast(existingIdx !== -1 ? 'Макрос обновлен.' : 'Макрос успешно добавлен.');
+        this.toast(existingIdx !== -1 ? t('Макрос обновлен.') : t('Макрос успешно добавлен.'));
       },
       'macro-delete': () => {
         const btn = event.target.closest('[data-macro-idx]');
@@ -8065,7 +8123,7 @@ class NocturneWriter {
         const collapsed = fields.classList.toggle('collapsed');
         const button = fields.querySelector('.assoc-collapse-btn');
         button?.setAttribute('aria-expanded', String(!collapsed));
-        button?.setAttribute('aria-label', collapsed ? 'Показать привязки и ассоциации' : 'Скрыть привязки и ассоциации');
+        button?.setAttribute('aria-label', collapsed ? t('Показать привязки и ассоциации') : t('Скрыть привязки и ассоциации'));
         const content = fields.querySelector('.assoc-collapsible-content');
         if (content) { content.inert = collapsed; content.setAttribute('aria-hidden', String(collapsed)); }
         if (!collapsed) this.updateWorkflowSelections(fields);
@@ -8075,11 +8133,11 @@ class NocturneWriter {
         const action = this.state.settings.newRuleAction || 'center';
         const customText = (this.settingsControl('new-rule-custom-text')?.value || '').trim();
         if (!trigger) {
-          this.toast('Укажите триггер при вводе.');
+          this.toast(t('Укажите триггер при вводе.'));
           return;
         }
         if (action === 'custom-text' && !customText) {
-          this.toast('Укажите символы разделителя.');
+          this.toast(t('Укажите символы разделителя.'));
           return;
         }
         this.state.settings.customInputRules = this.state.settings.customInputRules || [];
@@ -8099,7 +8157,7 @@ class NocturneWriter {
         if (customTextInput) customTextInput.value = '';
         this.persistSettings();
         this.renderFormattingListOnly();
-        this.toast(existingIdx !== -1 ? 'Правило автозамены обновлено.' : 'Правило автозамены успешно добавлено.');
+        this.toast(existingIdx !== -1 ? t('Правило автозамены обновлено.') : t('Правило автозамены успешно добавлено.'));
       },
       'formatting-delete': async () => {
         const btn = event.target.closest('[data-rule-idx]');
@@ -8121,7 +8179,7 @@ class NocturneWriter {
             const remaining = this.settingsSurfaceRoot().querySelectorAll('[data-action="formatting-delete"]');
             (remaining[Math.min(current, remaining.length - 1)] || this.settingsSurfaceRoot().querySelector('[data-action="formatting-save-new"]'))?.focus({ preventScroll: true });
           }
-          this.toast('Правило автозамены удалено.');
+          this.toast(t('Правило автозамены удалено.'));
         }
       },
       'formatting-toggle-rule': () => {
@@ -8184,7 +8242,7 @@ class NocturneWriter {
       'test-ai-connection': () => this.testAiConnection(),
       'new-custom-provider': () => {
         const overlay = document.getElementById('form-overlay');
-        this.presentOverlay(overlay, `
+        this.presentOverlay(overlay, ui`
           <form class="form-modal" id="new-custom-provider-form" novalidate>
             <h2>Новый провайдер ИИ</h2>
             <div class="form-grid">
@@ -8241,7 +8299,7 @@ class NocturneWriter {
           });
           await this.persistSettings();
           this.renderSettings();
-          this.toast(`Провайдер "${data.name}" добавлен.`);
+          this.toast(msg`Провайдер "${data.name}" добавлен.`);
         };
       },
       'edit-custom-provider': () => {
@@ -8250,7 +8308,7 @@ class NocturneWriter {
         const provider = this.state.settings.customAiProviders?.find(p => p.id === pid);
         if (!provider) return;
         const overlay = document.getElementById('form-overlay');
-        this.presentOverlay(overlay, `
+        this.presentOverlay(overlay, ui`
           <form class="form-modal" id="edit-custom-provider-form" novalidate>
             <h2>Редактировать провайдера ИИ</h2>
             <div class="form-grid">
@@ -8307,7 +8365,7 @@ class NocturneWriter {
           provider.apiFormat = data.apiFormat;
           await this.persistSettings();
           this.renderSettings();
-          this.toast('Изменения сохранены.');
+          this.toast(t('Изменения сохранены.'));
         };
       },
       'delete-custom-provider': () => {
@@ -8316,7 +8374,7 @@ class NocturneWriter {
         const provider = this.state.settings.customAiProviders?.find(p => p.id === pid);
         if (!provider) return;
         const overlay = document.getElementById('form-overlay');
-        this.presentOverlay(overlay, `
+        this.presentOverlay(overlay, ui`
           <div class="form-modal confirm-modal">
             <div class="confirm-icon"><i class="bx bx-trash"></i></div>
             <h2>Удалить провайдера?</h2>
@@ -8337,12 +8395,12 @@ class NocturneWriter {
           }
           await this.persistSettings();
           this.renderSettings();
-          this.toast(`Провайдер "${provider.name}" удален.`);
+          this.toast(msg`Провайдер "${provider.name}" удален.`);
         };
       },
       'new-custom-persona': () => {
         const overlay = document.getElementById('form-overlay');
-        this.presentOverlay(overlay, `
+        this.presentOverlay(overlay, ui`
           <form class="form-modal" id="new-custom-persona-form">
             <h2>Новый ИИ-соавтор</h2>
             <div class="form-group">
@@ -8372,7 +8430,7 @@ class NocturneWriter {
           this.state.settings.customAiPersonas.push({ id, name, prompt });
           await this.persistSettings();
           this.renderSettings();
-          this.toast(`Персона "${name}" создана.`);
+          this.toast(msg`Персона "${name}" создана.`);
         };
       },
       'edit-custom-persona': () => {
@@ -8381,7 +8439,7 @@ class NocturneWriter {
         const persona = this.state.settings.customAiPersonas?.find(p => p.id === pid);
         if (!persona) return;
         const overlay = document.getElementById('form-overlay');
-        this.presentOverlay(overlay, `
+        this.presentOverlay(overlay, ui`
           <form class="form-modal" id="edit-custom-persona-form">
             <h2>Редактировать ИИ-соавтора</h2>
             <div class="form-group">
@@ -8410,7 +8468,7 @@ class NocturneWriter {
           persona.prompt = prompt;
           await this.persistSettings();
           this.renderSettings();
-          this.toast('Изменения сохранены.');
+          this.toast(t('Изменения сохранены.'));
         };
       },
       'delete-custom-persona': () => {
@@ -8419,7 +8477,7 @@ class NocturneWriter {
         const persona = this.state.settings.customAiPersonas?.find(p => p.id === pid);
         if (!persona) return;
         const overlay = document.getElementById('form-overlay');
-        this.presentOverlay(overlay, `
+        this.presentOverlay(overlay, ui`
           <div class="form-modal confirm-modal">
             <div class="confirm-icon"><i class="bx bx-trash"></i></div>
             <h2>Удалить персону?</h2>
@@ -8440,7 +8498,7 @@ class NocturneWriter {
           }
           await this.persistSettings();
           this.renderSettings();
-          this.toast(`Персона "${persona.name}" удалена.`);
+          this.toast(msg`Персона "${persona.name}" удалена.`);
         };
       },
       'close-kb': () => {
@@ -8453,7 +8511,7 @@ class NocturneWriter {
       },
       'new-kb-project': () => {
         const overlay = document.getElementById('form-overlay');
-        this.presentOverlay(overlay, `
+        this.presentOverlay(overlay, ui`
           <form class="form-modal" id="new-kb-project-form" novalidate>
             <h2>Новое произведение</h2>
             <div class="form-grid">
@@ -8496,7 +8554,7 @@ class NocturneWriter {
             this.renderKb();
           }
           this.updateElectronTitlebarTitle();
-          this.toast(`Произведение "${title}" создано.`);
+          this.toast(msg`Произведение "${title}" создано.`);
         };
       },
       'rename-kb-project': () => {
@@ -8504,7 +8562,7 @@ class NocturneWriter {
         const project = this.state.kbProjects?.find(p => p.id === activeId);
         if (!project) return;
         const overlay = document.getElementById('form-overlay');
-        this.presentOverlay(overlay, `
+        this.presentOverlay(overlay, ui`
           <form class="form-modal" id="rename-kb-project-form" novalidate>
             <h2>Редактировать произведение</h2>
             <div class="form-grid">
@@ -8513,7 +8571,7 @@ class NocturneWriter {
               </label>
             </div>
             <div class="form-actions">
-              ${activeId !== 'world' ? `
+              ${activeId !== 'world' ? ui`
                 <button type="button" class="pill-btn danger-btn" data-action="delete-kb-project-inside" style="margin-right: auto;"><i class="bx bx-trash"></i> Удалить</button>
               ` : ''}
               <button type="button" class="pill-btn" data-close-form>Отмена</button>
@@ -8546,19 +8604,19 @@ class NocturneWriter {
             this.renderKb();
           }
           this.updateElectronTitlebarTitle();
-          this.toast('Произведение переименовано.');
+          this.toast(t('Произведение переименовано.'));
         };
       },
       'delete-kb-project': () => {
         const activeId = this.state.activeLoreId || 'world';
         if (activeId === 'world') {
-          this.toast('Основное произведение нельзя удалить.');
+          this.toast(t('Основное произведение нельзя удалить.'));
           return;
         }
         const project = this.state.kbProjects?.find(p => p.id === activeId);
         if (!project) return;
         const overlay = document.getElementById('form-overlay');
-        this.presentOverlay(overlay, `
+        this.presentOverlay(overlay, ui`
           <div class="form-modal confirm-modal">
             <div class="confirm-icon"><i class="bx bx-trash"></i></div>
             <h2>Удалить произведение?</h2>
@@ -8589,7 +8647,7 @@ class NocturneWriter {
             this.transitionKbContent(() => this.renderKb());
           }
           this.updateElectronTitlebarTitle();
-          this.toast(`Произведение "${project.title}" удалено.`);
+          this.toast(msg`Произведение "${project.title}" удалено.`);
         };
       },
       'toggle-zen': () => this.toggleZen(),
@@ -8622,11 +8680,11 @@ class NocturneWriter {
       'sync-connect-device': () => this.connectDiscoveredSyncDevice(event.target.closest('[data-sync-device-id]')?.dataset.syncDeviceId),
       'sync-forget-device': () => this.forgetSyncDevice(event.target.closest('[data-sync-device-id]')?.dataset.syncDeviceId),
       'sync-toggle-autoreconnect': () => this.toggleSyncAutoReconnect(event.target.closest('[data-sync-device-id]')?.dataset.syncDeviceId),
-      'sync-server-start': () => this.runSurfaceAction(event?.target?.closest('[data-action]'), 'Включаем связь…', () => this.controlLanServer('start')),
-      'sync-server-stop': () => this.runSurfaceAction(event?.target?.closest('[data-action]'), 'Останавливаем…', () => this.controlLanServer('stop')),
+      'sync-server-start': () => this.runSurfaceAction(event?.target?.closest('[data-action]'), t('Включаем связь…'), () => this.controlLanServer('start')),
+      'sync-server-stop': () => this.runSurfaceAction(event?.target?.closest('[data-action]'), t('Останавливаем…'), () => this.controlLanServer('stop')),
       'sync-server-check': () => this.controlLanServer('status'),
-      'sync-server-refresh-token': () => this.runSurfaceAction(event?.target?.closest('[data-action]'), 'Обновляем код…', () => this.controlLanServer('refresh-token')),
-      'sync-copy-info': () => this.runSurfaceAction(event?.target?.closest('[data-action]'), 'Копируем…', () => this.copyLanConnectionInfo()),
+      'sync-server-refresh-token': () => this.runSurfaceAction(event?.target?.closest('[data-action]'), t('Обновляем код…'), () => this.controlLanServer('refresh-token')),
+      'sync-copy-info': () => this.runSurfaceAction(event?.target?.closest('[data-action]'), t('Копируем…'), () => this.copyLanConnectionInfo()),
       'sync-clear-preview': () => { this.state.sync.mergePreview = null; this.renderSyncSurfaces(); },
       'sync-apply-merge': () => this.applySyncMergePreview(),
       'open-trash': () => this.openTrash(),
@@ -8636,8 +8694,8 @@ class NocturneWriter {
       'cancel-ai': () => { if (this.activeAiRequest) { this.activeAiRequest.userCancelled = true; this.activeAiRequest.controller.abort(); } },
       'open-sync-conflicts': () => this.openSyncConflicts(),
       'open-backups': () => this.openBackups(),
-      'backup-now': async () => { try { const copy = await this.backups.create(); this.toast(copy.external ? 'Копия сохранена в отдельную папку.' : 'Копия сохранена в этом браузере. Для защиты от очистки браузера подключите папку.'); } catch (error) { this.toast(`Не удалось создать копию: ${error.message}`); } },
-      'choose-backup-directory': async () => { try { const result = await platformFiles.chooseBackupDirectory(this.db); if (result) this.toast(`Папка копий: ${result.path}`); } catch (error) { if (error.name !== 'AbortError') this.toast(error.message); } },
+      'backup-now': async () => { try { const copy = await this.backups.create(); this.toast(copy.external ? t('Копия сохранена в отдельную папку.') : t('Копия сохранена в этом браузере. Для защиты от очистки браузера подключите папку.')); } catch (error) { this.toast(msg`Не удалось создать копию: ${error.message}`); } },
+      'choose-backup-directory': async () => { try { const result = await platformFiles.chooseBackupDirectory(this.db); if (result) this.toast(msg`Папка копий: ${result.path}`); } catch (error) { if (error.name !== 'AbortError') this.toast(error.message); } },
       'toggle-card-view': () => { this.state.settings.cardView = this.state.settings.cardView === 'list' ? 'grid' : 'list'; this.applySettings(); this.persistSettings(); const control = document.querySelector('[data-action="toggle-card-view"]'); if (control) { const compact = this.state.settings.cardView === 'list'; control.setAttribute('aria-checked', String(compact)); control.classList.toggle('on', compact); } },
       'open-compact-settings': () => this.openCompactSettings(),
       'edit-world-rules': () => this.editWorldRules(),
@@ -8651,9 +8709,9 @@ class NocturneWriter {
       'import-project-dump': () => this.startProjectDumpImport(),
       'confirm-export-project-dump-plaintext': async () => {
         const ok = await this.confirmDialog({
-          title: 'Экспортировать E2E-данные открытым текстом?',
-          message: 'Plaintext-экспорт может включать расшифрованные документы, заметки и снапшоты. Используйте его только для доверенного места хранения.',
-          confirmText: 'Экспорт plaintext',
+          title: t('Экспортировать E2E-данные открытым текстом?'),
+          message: t('Plaintext-экспорт может включать расшифрованные документы, заметки и снапшоты. Используйте его только для доверенного места хранения.'),
+          confirmText: t('Экспорт plaintext'),
           icon: 'bx-lock-open',
         });
         if (ok) await this.exportProjectDump({ plaintextE2e: true });
@@ -8664,9 +8722,9 @@ class NocturneWriter {
       'reset-data': () => this.resetData(),
       'clear-all-docs': async () => {
         const ok = await this.confirmDialog({
-          title: 'Удалить все документы?',
-          message: 'Все ваши папки, документы, снапшоты и история версий будут безвозвратно удалены. Рекомендуется сначала сделать экспорт проекта (.nocturnedump).',
-          confirmText: 'Удалить все',
+          title: t('Удалить все документы?'),
+          message: t('Все ваши папки, документы, снапшоты и история версий будут безвозвратно удалены. Рекомендуется сначала сделать экспорт проекта (.nocturnedump).'),
+          confirmText: t('Удалить все'),
           icon: 'bx-trash',
           danger: true,
         });
@@ -8684,14 +8742,14 @@ class NocturneWriter {
           this.initWorkspace();
           this.renderAll();
           this.renderSettings();
-          this.toast('Все документы и папки удалены.');
+          this.toast(t('Все документы и папки удалены.'));
         }
       },
       'clear-all-characters': async () => {
         const ok = await this.confirmDialog({
-          title: 'Удалить всех персонажей?',
-          message: 'Все персонажи будут перемещены в корзину.',
-          confirmText: 'Удалить',
+          title: t('Удалить всех персонажей?'),
+          message: t('Все персонажи будут перемещены в корзину.'),
+          confirmText: t('Удалить'),
           icon: 'bx-user-x',
           danger: true,
         });
@@ -8700,14 +8758,14 @@ class NocturneWriter {
           await this.saveLore();
           this.renderAll();
           this.renderSettings();
-          this.toast('Все персонажи удалены.');
+          this.toast(t('Все персонажи удалены.'));
         }
       },
       'clear-all-locations': async () => {
         const ok = await this.confirmDialog({
-          title: 'Удалить все локации?',
-          message: 'Все локации и места будут перенесены в корзину.',
-          confirmText: 'Удалить',
+          title: t('Удалить все локации?'),
+          message: t('Все локации и места будут перенесены в корзину.'),
+          confirmText: t('Удалить'),
           icon: 'bx-map-x',
           danger: true,
         });
@@ -8716,14 +8774,14 @@ class NocturneWriter {
           await this.saveLore();
           this.renderAll();
           this.renderSettings();
-          this.toast('Все локации удалены.');
+          this.toast(t('Все локации удалены.'));
         }
       },
       'clear-all-timeline': async () => {
         const ok = await this.confirmDialog({
-          title: 'Удалить все события?',
-          message: 'Все события хронологии и сабтаймлайны будут перенесены в корзину.',
-          confirmText: 'Удалить',
+          title: t('Удалить все события?'),
+          message: t('Все события хронологии и сабтаймлайны будут перенесены в корзину.'),
+          confirmText: t('Удалить'),
           icon: 'bx-git-commit',
           danger: true,
         });
@@ -8733,14 +8791,14 @@ class NocturneWriter {
           await this.saveLore();
           this.renderAll();
           this.renderSettings();
-          this.toast('Хронология очищена.');
+          this.toast(t('Хронология очищена.'));
         }
       },
       'clear-all-notes': async () => {
         const ok = await this.confirmDialog({
-          title: 'Удалить все записи?',
-          message: 'Все записи и заметки будут перенесены в корзину.',
-          confirmText: 'Удалить',
+          title: t('Удалить все записи?'),
+          message: t('Все записи и заметки будут перенесены в корзину.'),
+          confirmText: t('Удалить'),
           icon: 'bx-note',
           danger: true,
         });
@@ -8749,14 +8807,14 @@ class NocturneWriter {
           await this.saveLore();
           this.renderAll();
           this.renderSettings();
-          this.toast('Все записи удалены.');
+          this.toast(t('Все записи удалены.'));
         }
       },
       'clear-all-kb': async () => {
         const ok = await this.confirmDialog({
-          title: 'Очистить всю Базу Знаний?',
-          message: 'Все персонажи, локации, события таймлайна и записи будут перенесены в корзину.',
-          confirmText: 'Очистить базу',
+          title: t('Очистить всю Базу Знаний?'),
+          message: t('Все персонажи, локации, события таймлайна и записи будут перенесены в корзину.'),
+          confirmText: t('Очистить базу'),
           icon: 'bx-book-content',
           danger: true,
         });
@@ -8769,7 +8827,7 @@ class NocturneWriter {
           await this.saveLore();
           this.renderAll();
           this.renderSettings();
-          this.toast('База Знаний полностью очищена.');
+          this.toast(t('База Знаний полностью очищена.'));
         }
       },
       'reset-settings': () => this.resetSettings(),
@@ -8792,8 +8850,8 @@ class NocturneWriter {
       'note-toggle-check': () => this.toggleNoteChecklist(),
       'note-heading': () => this.insertNoteSnippet('\n\n## '),
     };
-    try { map[action]?.()?.catch?.(error => this.toast(error.message || 'Не удалось выполнить действие.')); }
-    catch (error) { this.toast(error.message || 'Не удалось выполнить действие.'); }
+    try { map[action]?.()?.catch?.(error => this.toast(error.message || t('Не удалось выполнить действие.'))); }
+    catch (error) { this.toast(error.message || t('Не удалось выполнить действие.')); }
     const notesMode = event.target.closest('[data-notes-mode]')?.dataset.notesMode;
     if (notesMode) {
       this.state.noteMode = notesMode;
@@ -8833,7 +8891,7 @@ class NocturneWriter {
     if (!shell) return;
     const enabled = force ?? !this.state.zenActive;
     if (!enabled && this.state.sprint?.locked && Date.now() < this.state.sprint.endsAt) {
-      this.toast('Дзен-режим заблокирован до завершения спринта.');
+      this.toast(t('Дзен-режим заблокирован до завершения спринта.'));
       return;
     }
     this.state.zenActive = !!enabled;
@@ -8842,7 +8900,7 @@ class NocturneWriter {
     document.querySelectorAll('[data-action="toggle-zen"]').forEach((button) => {
       button.classList.toggle('active', this.state.zenActive);
       button.setAttribute('aria-pressed', this.state.zenActive ? 'true' : 'false');
-      button.title = this.state.zenActive ? 'Выйти из режима Дзен' : 'Режим Дзен';
+      button.title = this.state.zenActive ? t('Выйти из режима Дзен') : t('Режим Дзен');
     });
     if (this.state.zenActive) {
       this.closeAllFloatingMenus();
@@ -8931,7 +8989,7 @@ class NocturneWriter {
         const emptyEl = document.createElement('div');
         emptyEl.className = 'global-doc-search-empty';
         emptyEl.style.cssText = 'padding: 36px 16px; text-align: center; color: var(--text-muted); font-size: 13px; display: flex; flex-direction: column; align-items: center; gap: 8px;';
-        emptyEl.innerHTML = `<i class="bx bx-search-alt" style="font-size: 28px; opacity: 0.5;"></i><span>Ничего не найдено</span>`;
+        emptyEl.innerHTML = ui`<i class="bx bx-search-alt" style="font-size: 28px; opacity: 0.5;"></i><span>Ничего не найдено</span>`;
         scrollEl.appendChild(emptyEl);
       }
     }
@@ -8947,7 +9005,7 @@ class NocturneWriter {
     let scrollEl = container.querySelector('.docs-list-scroll');
 
     if (!searchWrap || !scrollEl) {
-      container.innerHTML = `
+      container.innerHTML = ui`
         <div class="doc-search-wrap">
           <div class="doc-search-field">
             <i class="bx bx-search"></i>
@@ -8975,11 +9033,11 @@ class NocturneWriter {
       let docs = this.state.docs
         .filter((doc) => doc.folderId === folder.id)
         .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || a.order - b.order);
-      return `
+      return ui`
         <div class="section-title" data-folder-id="${folder.id}">
           <div class="section-title-left" data-action="toggle-folder" data-folder="${folder.id}">
             <i class="bx bx-chevron-${collapsed ? 'right' : 'down'} folder-chevron"></i>
-            <span>${escapeHtml(folder.title)}</span>
+            <span>${escapeHtml(this.folderDisplayTitle(folder))}</span>
           </div>
           <div class="folder-actions">
             <button class="btn-icon" data-action="new-doc" data-folder-id="${escapeHtml(folder.id)}" title="Новый документ"><i class="bx bx-plus"></i></button>
@@ -8992,16 +9050,16 @@ class NocturneWriter {
           const isBook = doc.docType === 'book-chapter';
           const isNew = this.state.newlyCreatedId === doc.id;
           const entranceClass = isNew ? ' new-doc-entrance' : '';
-          return `
+          return ui`
           <div class="doc-item ${isBook ? 'book-chapter-card' : ''} ${doc.id === this.state.activeDocId ? 'active' : ''} ${doc.pinned ? 'pinned' : ''}${entranceClass}" data-doc-id="${doc.id}">
             ${isBook ? `
             <div class="book-chapter-header">
-              <span class="book-work-info"><i class="bx bx-library"></i> <span>${escapeHtml(doc.workTitle || 'Книга')}${doc.volume ? ` · ${escapeHtml(doc.volume)}` : ''}</span></span>
+              <span class="book-work-info"><i class="bx bx-library"></i> <span>${escapeHtml(doc.workTitle || t('Книга'))}${doc.volume ? ` · ${escapeHtml(doc.volume)}` : ''}</span></span>
             </div>
             ` : ''}
             <div class="doc-title"><i class="bx ${isBook ? 'bx-book-open' : (doc.pinned ? 'bx-pin' : (doc.locked ? 'bx-lock' : 'bx-file'))}"></i> <span>${isBook && doc.chapterNumber ? `<span class="chapter-number">${escapeHtml(doc.chapterNumber)}</span>: ` : ''}${escapeHtml(doc.title)}</span></div>
             <button class="doc-menu-btn" data-doc-menu="${doc.id}" title="Меню"><i class="bx bx-dots-vertical-rounded"></i></button>
-            <div class="doc-desc">${escapeHtml(doc.description || doc.summary || 'Без описания')}</div>
+            <div class="doc-desc">${escapeHtml(doc.description || doc.summary || t('Без описания'))}</div>
             ${isBook ? `
             <div class="book-card-footer">
               <span class="book-status-inline status-${this.statusSlug(doc.bookStatus)}">
@@ -9042,13 +9100,22 @@ class NocturneWriter {
   folderEmptyState(folderId, isSearch = false) {
     return `<div class="doc-folder-empty">
       <i class="bx bx-file-blank"></i>
-      <span>${isSearch ? 'В этой папке нет совпадений.' : 'В этой папке пока нет документов.'}</span>
-      ${isSearch ? '' : `<button class="mini-text-btn" data-action="new-doc" data-folder-id="${escapeHtml(folderId)}">Создать документ</button>`}
+      <span>${isSearch ? t('В этой папке нет совпадений.') : t('В этой папке пока нет документов.')}</span>
+      ${isSearch ? '' : ui`<button class="mini-text-btn" data-action="new-doc" data-folder-id="${escapeHtml(folderId)}">Создать документ</button>`}
     </div>`;
   }
 
   defaultFolderId() {
     return this.state.folders.find((folder) => folder.id === 'manuscript')?.id || this.state.folders[0]?.id || 'manuscript';
+  }
+
+  folderDisplayTitle(folder) {
+    const preset = seedFolders.find(item => item.id === folder.id);
+    return preset && folder.title === preset.title ? t(folder.title) : folder.title;
+  }
+
+  workDisplayTitle(project) {
+    return project?.id === 'world' && ['Основное', 'Основное произведение'].includes(project.title) ? t(project.title) : project?.title;
   }
 
   statusSlug(status) {
@@ -9064,13 +9131,13 @@ class NocturneWriter {
 
   statusShortName(status) {
     const map = {
-      'Не редактировано': 'Не-ред.',
-      'На редакции': 'Редакт.',
-      'Вычитка': 'Вычитка',
-      'Чистовая версия': 'Чистовик',
-      'Закончено': 'Готово'
+      'Не редактировано': t('Не-ред.'),
+      'На редакции': t('Редакт.'),
+      'Вычитка': t('Вычитка'),
+      'Чистовая версия': t('Чистовик'),
+      'Закончено': t('Готово')
     };
-    return map[status] || status || 'Не-ред.';
+    return map[status] || t(status) || t('Не-ред.');
   }
 
   normalizeFolderOrders() {
@@ -9519,15 +9586,15 @@ class NocturneWriter {
     if (folderId && !folder) return;
     this.closeAllFloatingMenus();
     const overlay = document.getElementById('form-overlay');
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <form class="form-modal folder-form" id="folder-form" novalidate>
-        <h2>${folder ? 'Переименовать папку' : 'Новая папка'}</h2>
+        <h2>${folder ? t('Переименовать папку') : t('Новая папка')}</h2>
         <div class="form-grid">
           <label>Название <input class="form-control" name="title" maxlength="80" value="${escapeHtml(folder?.title || '')}" required></label>
         </div>
         <div class="form-actions">
           <button class="pill-btn" type="button" data-close-form>Отмена</button>
-          <button class="pill-btn ai-btn" type="submit">${folder ? 'Сохранить' : 'Создать'}</button>
+          <button class="pill-btn ai-btn" type="submit">${folder ? t('Сохранить') : t('Создать')}</button>
         </div>
       </form>
     `);
@@ -9551,7 +9618,7 @@ class NocturneWriter {
           folder.title = title.slice(0, 80);
           folder.updatedAt = Date.now();
           await this.db.put('folders', folder);
-          this.toast('Папка переименована.');
+          this.toast(t('Папка переименована.'));
         } else {
           const now = Date.now();
           const next = {
@@ -9565,7 +9632,7 @@ class NocturneWriter {
           this.state.collapsedFolders = this.state.collapsedFolders.filter((id) => id !== next.id);
           safeSetStorageItem(localStorage, 'nocturne-collapsed-folders', JSON.stringify(this.state.collapsedFolders));
           await this.db.put('folders', next);
-          this.toast('Папка создана.');
+          this.toast(t('Папка создана.'));
         }
         this.normalizeFolderOrders();
         this.renderDocs();
@@ -9577,21 +9644,21 @@ class NocturneWriter {
     const folder = this.state.folders.find((item) => item.id === folderId);
     if (!folder) return;
     if (this.state.folders.length <= 1) {
-      this.toast('Нужна хотя бы одна папка для документов.');
+      this.toast(t('Нужна хотя бы одна папка для документов.'));
       return;
     }
     const docsInside = this.state.docs.filter((doc) => doc.folderId === folderId);
     if (docsInside.length) {
-      this.toast('В папке есть документы. Сначала перенесите их в другую папку или удалите.');
+      this.toast(t('В папке есть документы. Сначала перенесите их в другую папку или удалите.'));
       return;
     }
     this.closeAllFloatingMenus();
     const overlay = document.getElementById('form-overlay');
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="form-modal confirm-modal">
         <div class="confirm-icon"><i class="bx bx-folder-minus"></i></div>
         <h2>Удалить папку?</h2>
-        <p>«${escapeHtml(folder.title)}» будет удалена. Документов в ней нет.</p>
+        <p>«${escapeHtml(this.folderDisplayTitle(folder))}» будет удалена. Документов в ней нет.</p>
         <div class="form-actions">
           <button class="pill-btn" data-close-form>Отмена</button>
           <button class="pill-btn danger-btn" data-confirm-folder-delete="${escapeHtml(folder.id)}">Удалить</button>
@@ -9621,11 +9688,11 @@ class NocturneWriter {
     const folder = this.state.folders.find((item) => item.id === folderId);
     if (!folder) return;
     if (this.state.folders.length <= 1) {
-      this.toast('Нужна хотя бы одна папка для документов.');
+      this.toast(t('Нужна хотя бы одна папка для документов.'));
       return;
     }
     if (this.state.docs.some((doc) => doc.folderId === folderId)) {
-      this.toast('В папке есть документы. Сначала перенесите их в другую папку или удалите.');
+      this.toast(t('В папке есть документы. Сначала перенесите их в другую папку или удалите.'));
       return;
     }
     this.state.folders = this.state.folders.filter((item) => item.id !== folderId);
@@ -9638,14 +9705,14 @@ class NocturneWriter {
     if (!localOnly) {
       this.renderDocs();
     }
-    this.toast('Папка удалена.');
+    this.toast(t('Папка удалена.'));
   }
 
   openDocForm(folderId) {
     const targetFolderId = this.state.folders.some((folder) => folder.id === folderId) ? folderId : this.defaultFolderId();
     this.closeAllFloatingMenus();
     const overlay = document.getElementById('form-overlay');
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <form class="form-modal doc-form" id="doc-form" novalidate>
         <h2>Новый документ</h2>
         
@@ -9657,7 +9724,7 @@ class NocturneWriter {
         <div class="form-grid">
           <label><span class="doc-title-label">Название</span> <input class="form-control" name="title" value="Новый документ" required></label>
           <label>Описание документа <textarea class="form-control" name="description" placeholder="Кратко: что происходит в этой главе, зачем она нужна, какой тон сцены."></textarea></label>
-          <div class="form-field"><span>База знаний произведения</span>${this.renderFormSelect('loreId', this.state.kbProjects.map(project => [project.id, project.title]), this.state.activeLoreId, { label: 'База знаний произведения' })}</div>
+          <div class="form-field"><span>База знаний произведения</span>${this.renderFormSelect('loreId', this.state.kbProjects.map(project => [project.id, this.workDisplayTitle(project)]), this.state.activeLoreId, { label: t('База знаний произведения') })}</div>
         </div>
 
         <div class="book-chapter-fields-wrapper">
@@ -9715,15 +9782,15 @@ class NocturneWriter {
         const titleInput = overlay.querySelector('input[name="title"]');
         if (radio.value === 'book-chapter') {
           bookFieldsWrapper.classList.add('open');
-          if (titleLabel) titleLabel.textContent = 'Название главы';
-          if (titleInput && titleInput.value === 'Новый документ') {
-            titleInput.value = 'Новая глава';
+          if (titleLabel) titleLabel.textContent = t('Название главы');
+          if (titleInput && titleInput.value === t('Новый документ')) {
+            titleInput.value = t('Новая глава');
           }
         } else {
           bookFieldsWrapper.classList.remove('open');
-          if (titleLabel) titleLabel.textContent = 'Название';
-          if (titleInput && titleInput.value === 'Новая глава') {
-            titleInput.value = 'Новый документ';
+          if (titleLabel) titleLabel.textContent = t('Название');
+          if (titleInput && titleInput.value === t('Новая глава')) {
+            titleInput.value = t('Новый документ');
           }
         }
       });
@@ -9751,7 +9818,7 @@ class NocturneWriter {
 
     overlay.querySelector('[name="imageFile"]')?.addEventListener('change', (event) => {
       const nameEl = overlay.querySelector('[data-file-name]');
-      if (nameEl) nameEl.textContent = event.target.files?.[0]?.name || 'Файл не выбран';
+      if (nameEl) nameEl.textContent = event.target.files?.[0]?.name || t('Файл не выбран');
     });
     overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('form').onsubmit = async (event) => {
@@ -9798,7 +9865,7 @@ class NocturneWriter {
       description,
       order,
       notes: '',
-      summary: description || 'Пустая глава.',
+      summary: description || t('Пустая глава.'),
       createdAt: Date.now(),
       updatedAt: Date.now(),
       ast: { type: 'doc', blocks: [{ id: uid('block'), type: 'heading', html: escapeHtml(title) }, { id: uid('block'), type: 'paragraph', html: '<br>' }] },
@@ -9834,19 +9901,19 @@ class NocturneWriter {
       if (emptyState) emptyState.remove();
 
       const isBook = doc.docType === 'book-chapter';
-      const docHtml = `
+      const docHtml = ui`
       <div class="doc-item ${isBook ? 'book-chapter-card' : ''} active new-doc-entrance" data-doc-id="${doc.id}">
         ${isBook ? `
         <div class="book-chapter-header">
-          <span class="book-work-info"><i class="bx bx-library"></i> <span>${escapeHtml(doc.workTitle || 'Книга')}${doc.volume ? ` · ${escapeHtml(doc.volume)}` : ''}</span></span>
+          <span class="book-work-info"><i class="bx bx-library"></i> <span>${escapeHtml(doc.workTitle || t('Книга'))}${doc.volume ? ` · ${escapeHtml(doc.volume)}` : ''}</span></span>
         </div>
         ` : ''}
         <div class="doc-title"><i class="bx ${isBook ? 'bx-book-open' : (doc.pinned ? 'bx-pin' : (doc.locked ? 'bx-lock' : 'bx-file'))}"></i> <span>${isBook && doc.chapterNumber ? `<span class="chapter-number">${escapeHtml(doc.chapterNumber)}</span>: ` : ''}${escapeHtml(doc.title)}</span></div>
         <button class="doc-menu-btn" data-doc-menu="${doc.id}" title="Меню"><i class="bx bx-dots-vertical-rounded"></i></button>
-        <div class="doc-desc">${escapeHtml(doc.description || doc.summary || 'Без описания')}</div>
+        <div class="doc-desc">${escapeHtml(doc.description || doc.summary || t('Без описания'))}</div>
         ${isBook ? `
         <div class="book-card-footer">
-          <span class="book-status-inline status-${this.statusSlug(doc.bookStatus)}">${escapeHtml(doc.bookStatus)}</span>
+          <span class="book-status-inline status-${this.statusSlug(doc.bookStatus)}">${escapeHtml(t(doc.bookStatus))}</span>
         </div>
         ` : ''}
       </div>
@@ -9882,7 +9949,7 @@ class NocturneWriter {
 
   uniqueCopyTitle(baseTitle) {
     const names = new Set(this.state.docs.map((doc) => doc.title));
-    const base = `${baseTitle} — копия`;
+    const base = msg`${baseTitle} — копия`;
     if (!names.has(base)) return base;
     let index = 2;
     while (names.has(`${base} ${index}`)) index += 1;
@@ -9903,7 +9970,7 @@ class NocturneWriter {
     const copy = {
       ...structuredClone(source),
       id: uid('doc'),
-      title: this.uniqueCopyTitle(source.title || 'Документ'),
+      title: this.uniqueCopyTitle(source.title || t('Документ')),
       folderId: source.folderId,
       order: sourceOrder + 1,
       pinned: false,
@@ -9934,7 +10001,7 @@ class NocturneWriter {
       this.db.put('docs', copy),
     ]);
     this.selectDoc(copy.id);
-    this.toast('Документ продублирован.');
+    this.toast(t('Документ продублирован.'));
   }
 
   async importDocuments(fileList) {
@@ -9949,7 +10016,7 @@ class NocturneWriter {
       overlay.className = 'kb-import-overlay';
       document.body.appendChild(overlay);
     }
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="kb-import-card">
         <div class="kb-import-spinner">
           <div class="spinner-ring"></div>
@@ -9995,11 +10062,11 @@ class NocturneWriter {
           id: uid('doc'),
           folderId: importFolderId,
           title,
-          description: `Импортировано из ${file.name}`,
+          description: msg`Импортировано из ${file.name}`,
           order: this.state.docs.filter((item) => item.folderId === importFolderId).length,
           notes: '',
           globalNotes: '',
-          summary: `Импортировано из ${file.name}`,
+          summary: msg`Импортировано из ${file.name}`,
           createdAt: Date.now(),
           updatedAt: Date.now(),
           ast: { type: 'doc', blocks },
@@ -10114,20 +10181,20 @@ class NocturneWriter {
       return fullText;
     } catch (err) {
       console.error('PDF import error:', err);
-      throw new Error('Убедитесь, что вы подключены к интернету.');
+      throw new Error(t('Убедитесь, что вы подключены к интернету.'));
     }
   }
 
   async blocksFromDocxFile(file) {
     try {
       const ZipClass = (typeof JSZip !== 'undefined' ? JSZip : null) || (typeof window !== 'undefined' ? window.JSZip : null);
-      if (!ZipClass) throw new Error('JSZip библиотека не найдена.');
+      if (!ZipClass) throw new Error(t('JSZip библиотека не найдена.'));
       const zip = await ZipClass.loadAsync(await file.arrayBuffer());
       const docXmlFile = zip.file('word/document.xml');
-      if (!docXmlFile) throw new Error('Не найден файл word/document.xml внутри DOCX архива.');
+      if (!docXmlFile) throw new Error(t('Не найден файл word/document.xml внутри DOCX архива.'));
       const xml = await docXmlFile.async('string');
       const doc = new DOMParser().parseFromString(xml, 'application/xml');
-      if (doc.querySelector('parsererror')) throw new Error('Повреждена XML-структура DOCX.');
+      if (doc.querySelector('parsererror')) throw new Error(t('Повреждена XML-структура DOCX.'));
       const paragraphs = [...doc.getElementsByTagName('w:p')];
       const blocks = paragraphs.map((p) => {
         const style = p.getElementsByTagName('w:pStyle')[0]?.getAttribute('w:val') || '';
@@ -10146,7 +10213,7 @@ class NocturneWriter {
       }).filter((block) => block && (block.html !== '<br>' || block.type !== 'heading'));
       return blocks.length ? blocks : [{ id: uid('block'), type: 'paragraph', align: 'left', html: '<br>' }];
     } catch (error) {
-      throw new Error(`DOCX импорт не удался: ${error.message}`);
+      throw new Error(msg`DOCX импорт не удался: ${error.message}`);
     }
   }
 
@@ -10155,10 +10222,10 @@ class NocturneWriter {
   async readNocturnedFile(file) {
     try {
       const payload = JSON.parse(await file.text());
-      if (payload?.format !== 'nocturne-review-delta' || payload.version !== 1) throw new Error('неподдерживаемый формат');
+      if (payload?.format !== 'nocturne-review-delta' || payload.version !== 1) throw new Error(t('неподдерживаемый формат'));
       return payload;
     } catch (error) {
-      this.toast(`Не удалось прочитать .nocturned: ${error.message}`);
+      this.toast(msg`Не удалось прочитать .nocturned: ${error.message}`);
       return null;
     }
   }
@@ -10191,12 +10258,12 @@ class NocturneWriter {
     const overlay = document.getElementById('form-overlay');
     const expectedHash = payload.document?.normalizedTextHash;
     const hasExactMatch = this.state.docs.some((doc) => this.documentPortableHash(doc) === expectedHash);
-    const matchStatus = hasExactMatch ? 'Совпадает' : 'Не найдено точного совпадения';
-    this.presentOverlay(overlay, `<div class="form-modal nocturned-import-modal">
+    const matchStatus = hasExactMatch ? t('Совпадает') : t('Не найдено точного совпадения');
+    this.presentOverlay(overlay, ui`<div class="form-modal nocturned-import-modal">
       <h2>Импорт редакторских правок</h2>
-      <p class="form-helper">${escapeHtml(filename)} относится к «${escapeHtml(payload.document?.title || 'документу')}».</p>
+      <p class="form-helper">${escapeHtml(filename)} относится к «${escapeHtml(payload.document?.title || t('документу'))}».</p>
       <p class="form-helper">Совпадение текста: ${escapeHtml(matchStatus)}</p>
-      <div class="form-field"><span>Целевой документ</span>${this.renderFormSelect('targetDoc', this.state.docs.map(doc => [doc.id, doc.title]), this.state.docs.find(doc => this.documentPortableHash(doc) === expectedHash)?.id, { id: 'nocturned-target-doc', label: 'Целевой документ' })}</div>
+      <div class="form-field"><span>Целевой документ</span>${this.renderFormSelect('targetDoc', this.state.docs.map(doc => [doc.id, doc.title]), this.state.docs.find(doc => this.documentPortableHash(doc) === expectedHash)?.id, { id: 'nocturned-target-doc', label: t('Целевой документ') })}</div>
       <div class="form-actions"><button class="pill-btn" data-close-form>Отмена</button><button class="pill-btn ai-btn" id="apply-nocturned">Импортировать правки</button></div>
     </div>`);
     overlay.classList.add('active');
@@ -10219,7 +10286,7 @@ class NocturneWriter {
     this.state.reviewMarks = [...this.state.reviewMarks, ...marks];
     this.updateReviewHighlights();
     this.renderReviewNavigator();
-    this.toast(`Импортировано правок: ${marks.length}`);
+    this.toast(msg`Импортировано правок: ${marks.length}`);
   }
 
   nocturnedMarkToLocal(mark, doc) {
@@ -10293,7 +10360,7 @@ class NocturneWriter {
     if (!doc) return;
     this.closeAllFloatingMenus();
     const overlay = document.getElementById('form-overlay');
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="form-modal confirm-modal">
         <div class="confirm-icon"><i class="bx bx-trash"></i></div>
         <h2>Удалить документ?</h2>
@@ -10384,7 +10451,7 @@ class NocturneWriter {
 
   async restoreTrashItem(id) {
     const item = await this.db.get('trash', id);
-    if (!item || item.locked) throw new Error('Введите мастер-пароль для восстановления.');
+    if (!item || item.locked) throw new Error(t('Введите мастер-пароль для восстановления.'));
     if (item.type === 'document') {
       const doc = structuredClone(item.doc);
       if (this.state.docs.some(existing => existing.id === doc.id)) doc.id = uid('doc');
@@ -10398,7 +10465,7 @@ class NocturneWriter {
     }
     await this.db.delete('trash', id);
     this.renderDocs();
-    this.toast('Документ восстановлен вместе с заметками и историей.');
+    this.toast(t('Документ восстановлен вместе с заметками и историей.'));
   }
 
   async openTrash() { return this.trash.open(); }
@@ -10417,7 +10484,7 @@ class NocturneWriter {
     this.closeAllFloatingMenus();
     const overlay = document.getElementById('form-overlay');
     const isBook = doc.docType === 'book-chapter';
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <form class="form-modal doc-form" id="edit-doc-form" novalidate>
         <h2>Редактировать документ</h2>
         
@@ -10427,9 +10494,9 @@ class NocturneWriter {
         </div>
 
         <div class="form-grid">
-          <label><span class="doc-title-label">${isBook ? 'Название главы' : 'Название'}</span> <input class="form-control" name="title" value="${escapeHtml(doc.title)}" required></label>
+          <label><span class="doc-title-label">${isBook ? t('Название главы') : t('Название')}</span> <input class="form-control" name="title" value="${escapeHtml(doc.title)}" required></label>
           <label>Описание <textarea class="form-control" name="description" data-bookmark-source="${escapeHtml(this.bookmarks.sources().find(source => source.owner.kind === 'doc' && source.owner.id === doc.id && source.owner.field === 'description')?.key || '')}">${escapeHtml(doc.description || '')}</textarea></label>
-          <div class="form-field"><span>База знаний произведения</span>${this.renderFormSelect('loreId', this.state.kbProjects.map(project => [project.id, project.title]), doc.loreId || 'world', { label: 'База знаний произведения' })}</div>
+          <div class="form-field"><span>База знаний произведения</span>${this.renderFormSelect('loreId', this.state.kbProjects.map(project => [project.id, this.workDisplayTitle(project)]), doc.loreId || 'world', { label: t('База знаний произведения') })}</div>
         </div>
 
         <div class="book-chapter-fields-wrapper ${isBook ? 'open' : ''}">
@@ -10441,13 +10508,13 @@ class NocturneWriter {
               <div class="nocturne-select" id="book-status-select" style="width: 100%;">
                 <input type="hidden" name="bookStatus" value="${escapeHtml(doc.bookStatus || 'Не редактировано')}">
                 <button type="button" class="nocturne-select-trigger" data-setting-select-toggle style="width: 100%;">
-                  <span>${escapeHtml(doc.bookStatus || 'Не редактировано')}</span>
+                  <span>${escapeHtml(t(doc.bookStatus || 'Не редактировано'))}</span>
                   <i class="bx bx-chevron-down"></i>
                 </button>
                 <div class="nocturne-select-menu popover-surface" role="listbox" aria-hidden="true" style="width: 100%; min-width: 100%;">
                   ${['Не редактировано', 'На редакции', 'Вычитка', 'Чистовая версия', 'Закончено'].map(status => `
                     <button type="button" class="nocturne-select-option ${doc.bookStatus === status ? 'selected' : (!doc.bookStatus && status === 'Не редактировано' ? 'selected' : '')}" role="option" data-book-status-option data-value="${escapeHtml(status)}">
-                      <span>${escapeHtml(status)}</span>
+                      <span>${escapeHtml(t(status))}</span>
                       <i class="bx bx-check"></i>
                     </button>
                   `).join('')}
@@ -10472,10 +10539,10 @@ class NocturneWriter {
         const titleLabel = overlay.querySelector('.doc-title-label');
         if (radio.value === 'book-chapter') {
           bookFieldsWrapper.classList.add('open');
-          if (titleLabel) titleLabel.textContent = 'Название главы';
+          if (titleLabel) titleLabel.textContent = t('Название главы');
         } else {
           bookFieldsWrapper.classList.remove('open');
-          if (titleLabel) titleLabel.textContent = 'Название';
+          if (titleLabel) titleLabel.textContent = t('Название');
         }
       });
     });
@@ -10693,7 +10760,7 @@ class NocturneWriter {
             });
           });
           try { await Promise.all(updates); this.renderDocs(); }
-          catch (error) { this.toast(`Не удалось сохранить порядок глав: ${error.message}`); }
+          catch (error) { this.toast(msg`Не удалось сохранить порядок глав: ${error.message}`); }
         },
       });
       zone.__sortable = sortable;
@@ -10819,7 +10886,7 @@ class NocturneWriter {
       .filter((doc) => byId.has(doc.id))
       .map((doc) => ({ ...doc, folderId: byId.get(doc.id).folderId, order: byId.get(doc.id).order }));
     this.renderDocs();
-    this.toast('Перетаскивание вне списка отменено.');
+    this.toast(t('Перетаскивание вне списка отменено.'));
   }
 
   beginDocPaneDrag(docId) {
@@ -10866,7 +10933,7 @@ class NocturneWriter {
     if (!doc) return false;
     const result = this.applyDocumentPaneDrop(doc.id, state.hoverPaneId);
     if (!result) return true;
-    this.toast(result === 'swap' ? 'Документы поменялись областями.' : result === 'move' ? 'Документ перемещён в другую область.' : (state.hoverPaneId === 'primary' ? 'Документ открыт слева.' : 'Документ открыт справа.'));
+    this.toast(result === 'swap' ? t('Документы поменялись областями.') : result === 'move' ? t('Документ перемещён в другую область.') : (state.hoverPaneId === 'primary' ? t('Документ открыт слева.') : t('Документ открыт справа.')));
     return true;
   }
 
@@ -10890,11 +10957,11 @@ class NocturneWriter {
     const sourcePaneId = this.paneIdForOpenDoc(docId);
     const target = this.getPane(targetPaneId);
     if (!targetPaneId || !target) return { kind: 'none', label: '' };
-    if (sourcePaneId === targetPaneId) return { kind: 'same', label: 'Уже открыт здесь' };
-    if (sourcePaneId && target?.type) return { kind: 'swap', label: 'Поменять документы местами' };
-    if (sourcePaneId && !target?.type) return { kind: 'move', label: 'Переместить сюда' };
-    if (!target?.type) return { kind: 'open', label: 'Открыть здесь' };
-    return { kind: 'replace', label: 'Открыть здесь' };
+    if (sourcePaneId === targetPaneId) return { kind: 'same', label: t('Уже открыт здесь') };
+    if (sourcePaneId && target?.type) return { kind: 'swap', label: t('Поменять документы местами') };
+    if (sourcePaneId && !target?.type) return { kind: 'move', label: t('Переместить сюда') };
+    if (!target?.type) return { kind: 'open', label: t('Открыть здесь') };
+    return { kind: 'replace', label: t('Открыть здесь') };
   }
 
   updatePaneDropLabel(paneId) {
@@ -10902,7 +10969,7 @@ class NocturneWriter {
     const pane = document.querySelector(`.workspace-pane[data-pane-id="${paneId}"]`);
     const label = pane?.querySelector('.pane-drop-overlay span');
     if (!label) return;
-    label.textContent = this.dropIntentForPane(this.docPaneDropState.docId, paneId).label || 'Открыть здесь';
+    label.textContent = this.dropIntentForPane(this.docPaneDropState.docId, paneId).label || t('Открыть здесь');
   }
 
   applyDocumentPaneDrop(docId, targetPaneId) {
@@ -10966,7 +11033,7 @@ class NocturneWriter {
         return;
       }
       this.setFocusedPane(existingPaneId);
-      this.toast('Перешли к открытому документу.');
+      this.toast(t('Перешли к открытому документу.'));
       return;
     }
     const paneId = this.state.workspace?.mode === 'split' ? this.state.workspace.focusedPaneId : 'primary';
@@ -11318,7 +11385,7 @@ class NocturneWriter {
     }
     if (doc.locked) {
       if (container) {
-        container.innerHTML = `
+        container.innerHTML = ui`
           <div class="locked-document-screen">
             <div class="locked-document-card">
               <div class="lock-icon-orb"><i class="bx bxs-lock"></i></div>
@@ -11336,7 +11403,7 @@ class NocturneWriter {
         const performUnlock = async () => {
           const password = input.value;
           if (!password) {
-            this.toast('Введите пароль.');
+            this.toast(t('Введите пароль.'));
             return;
           }
           this.state.sessionPassword = password;
@@ -11346,9 +11413,9 @@ class NocturneWriter {
           this.renderAll();
           const updatedDoc = this.state.docs.find(d => d.id === doc.id);
           if (updatedDoc && !updatedDoc.locked) {
-            this.toast('Документ успешно расшифрован!');
+            this.toast(t('Документ успешно расшифрован!'));
           } else {
-            this.toast('Неверный пароль сессии.', 1500);
+            this.toast(t('Неверный пароль сессии.'), 1500);
             this.state.sessionPassword = '';
             safeRemoveStorageItem(sessionStorage, 'nocturne-master-password');
             this.state.docs = await this.loadDocs();
@@ -11858,7 +11925,7 @@ class NocturneWriter {
                 correct: matchData.correct,
                 suggestions: matchData.suggestions || [matchData.correct],
                 preserveCase: matchData.preserveCase,
-                label: matchData.label || 'Smart-словарь: опечатка',
+                label: matchData.label || t('Smart-словарь: опечатка'),
                 occurrences: matchData.occurrences?.flatMap(occurrence => {
                   const block = context.blocks.find(block => occurrence.start >= block.start && occurrence.end <= block.end);
                   return block ? [{ ...occurrence, docId: block.docId, paneId: block.paneId, blockId: block.blockId, start: occurrence.start - block.start, end: occurrence.end - block.start }] : [];
@@ -11876,7 +11943,7 @@ class NocturneWriter {
           this.typoBlockCache = new WeakMap();
           this.spellerContextChecked = false;
           this.spellerResultRevision++;
-          this.toast(e.message || 'Онлайн-проверка сейчас недоступна.');
+          this.toast(e.message || t('Онлайн-проверка сейчас недоступна.'));
         }
         return;
       } finally {
@@ -11902,7 +11969,7 @@ class NocturneWriter {
       ruleId: rule.id,
       builtinKey: rule.builtinKey,
       correct: source === 'exact' && !['user', 'override'].includes(rule.source) ? this.smartSpellerReplacementCase(rawText, rule.correct) : rule.correct,
-      label: rule.label || 'Частая ошибка',
+      label: rule.label || t('Частая ошибка'),
       source,
       smartConfidence,
       ...(source === 'smart' ? { suggestions: rule.suggestions || (typeof rule.correct === 'string' ? [rule.correct] : []), message: rule.message, requiresChoice: rule.requiresChoice, spellerGeneration: this.spellerGeneration, displayStartOffset: rule.displayStartOffset, displayEndOffset: rule.displayEndOffset } : {}),
@@ -12003,7 +12070,7 @@ class NocturneWriter {
         wrong: value.wrong || key,
         normalizedWrong: key,
         correct: value.correct || '',
-        label: value.label || 'Частая ошибка',
+        label: value.label || t('Частая ошибка'),
         enabled: true,
         source: 'builtin',
         matchMode: /\s/u.test(value.wrong || key) ? 'phrase' : 'token',
@@ -12143,7 +12210,7 @@ class NocturneWriter {
     }
 
     if (!startBlock || !endBlock || startBlock.dataset.blockId !== endBlock.dataset.blockId) {
-      this.toast('Пока можно комментировать выделение внутри одного блока.');
+      this.toast(t('Пока можно комментировать выделение внутри одного блока.'));
       return null;
     }
 
@@ -12252,7 +12319,7 @@ class NocturneWriter {
       if (existing) {
         await this.deleteReviewMark(existing.id);
         this.closeContextMenu();
-        this.toast('Проблема снята.');
+        this.toast(t('Проблема снята.'));
         return null;
       }
     }
@@ -12269,7 +12336,7 @@ class NocturneWriter {
       createdAt: Date.now(),
     });
     this.closeContextMenu();
-    this.toast(kind === 'suggestion' ? 'Замена добавлена.' : kind === 'issue' ? 'Проблема помечена.' : 'Комментарий добавлен.');
+    this.toast(kind === 'suggestion' ? t('Замена добавлена.') : kind === 'issue' ? t('Проблема помечена.') : t('Комментарий добавлен.'));
     return mark;
   }
 
@@ -12277,7 +12344,7 @@ class NocturneWriter {
     const range = this.contextSelectionRange?.cloneRange() || (getSelection()?.rangeCount ? getSelection().getRangeAt(0).cloneRange() : null);
     this.closeContextMenu();
     const overlay = document.getElementById('form-overlay');
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="form-modal review-form-modal">
         <h2>Добавить комментарий</h2>
         <div class="review-form-stack">
@@ -12315,7 +12382,7 @@ class NocturneWriter {
     const selectedText = ctx?.selectedText || range?.toString()?.trim() || '';
     this.closeContextMenu();
     const overlay = document.getElementById('form-overlay');
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="form-modal review-form-modal">
         <h2>Предложить замену</h2>
         <div class="review-form-stack">
@@ -12385,17 +12452,17 @@ class NocturneWriter {
       if (slot.dataset.selectionReady === String(enabled)) continue;
       slot.dataset.selectionReady = String(enabled);
       const caption = slot.querySelector('.review-toolbar-caption');
-      if (caption?.lastChild) caption.lastChild.textContent = enabled ? 'Пометки к выделению' : 'Выделите текст для пометки';
+      if (caption?.lastChild) caption.lastChild.textContent = enabled ? t('Пометки к выделению') : t('Выделите текст для пометки');
       for (const [action, label] of [
-        ['quick-review-comment', 'Комментарий'],
-        ['quick-review-suggestion', 'Замена'],
-        ['toggle-review-issue-menu', 'Проблема'],
-        ['quick-typo-rule', 'В словарь'],
+        ['quick-review-comment', t('Комментарий')],
+        ['quick-review-suggestion', t('Замена')],
+        ['toggle-review-issue-menu', t('Проблема')],
+        ['quick-typo-rule', t('В словарь')],
       ]) {
         const button = slot.querySelector(`[data-action="${action}"]`);
         if (!button) continue;
         button.disabled = !enabled;
-        button.title = enabled ? label : `${label} — выделите текст`;
+        button.title = enabled ? label : msg`${label} — выделите текст`;
       }
     }
   }
@@ -12430,14 +12497,14 @@ class NocturneWriter {
       const enabled = this.hasFocusedTextSelection();
       const disabled = enabled ? '' : 'disabled';
       slot.dataset.selectionReady = String(enabled);
-      updateSlot(`
-        <span class="review-toolbar-caption"><i class="bx bx-comment-edit"></i>${enabled ? 'Пометки к выделению' : 'Выделите текст для пометки'}</span>
-        <button class="review-tool-btn icon-only" data-action="quick-review-comment" title="${enabled ? 'Комментарий' : 'Комментарий — выделите текст'}" aria-label="Комментарий" ${disabled}><i class="bx bx-comment-detail"></i></button>
-        <button class="review-tool-btn icon-only" data-action="quick-review-suggestion" title="${enabled ? 'Замена' : 'Замена — выделите текст'}" aria-label="Замена" ${disabled}><i class="bx bx-transfer-alt"></i></button>
+      updateSlot(ui`
+        <span class="review-toolbar-caption"><i class="bx bx-comment-edit"></i>${enabled ? t('Пометки к выделению') : t('Выделите текст для пометки')}</span>
+        <button class="review-tool-btn icon-only" data-action="quick-review-comment" title="${enabled ? t('Комментарий') : t('Комментарий — выделите текст')}" aria-label="Комментарий" ${disabled}><i class="bx bx-comment-detail"></i></button>
+        <button class="review-tool-btn icon-only" data-action="quick-review-suggestion" title="${enabled ? t('Замена') : t('Замена — выделите текст')}" aria-label="Замена" ${disabled}><i class="bx bx-transfer-alt"></i></button>
         <div class="review-issue-dropdown">
-          <button class="review-tool-btn icon-only has-chevron" data-action="toggle-review-issue-menu" title="${enabled ? 'Проблема' : 'Проблема — выделите текст'}" aria-label="Проблема" ${disabled}><i class="bx bx-error-circle"></i><i class="bx bx-chevron-down review-chevron"></i></button>
+          <button class="review-tool-btn icon-only has-chevron" data-action="toggle-review-issue-menu" title="${enabled ? t('Проблема') : t('Проблема — выделите текст')}" aria-label="Проблема" ${disabled}><i class="bx bx-error-circle"></i><i class="bx bx-chevron-down review-chevron"></i></button>
         </div>
-        <button class="review-tool-btn icon-only" data-action="quick-typo-rule" title="${enabled ? 'В словарь' : 'В словарь — выделите текст'}" aria-label="В словарь" ${disabled}><i class="bx bx-book-add"></i></button>
+        <button class="review-tool-btn icon-only" data-action="quick-typo-rule" title="${enabled ? t('В словарь') : t('В словарь — выделите текст')}" aria-label="В словарь" ${disabled}><i class="bx bx-book-add"></i></button>
       `, 'review-toolbar-slot editor-tools');
       return;
     }
@@ -12446,8 +12513,8 @@ class NocturneWriter {
     const index = Math.min(marks.length - 1, Math.max(0, this.state.currentReviewIndexByDoc[docId] || 0));
     delete slot.dataset.selectionReady;
     updateSlot(marks.length
-      ? `<div class="review-toolbar-nav"><button class="review-tool-btn icon-only" data-action="review-prev" title="Предыдущая правка" aria-label="Предыдущая правка"><i class="bx bx-chevron-left"></i></button><span class="review-count">${index + 1} / ${marks.length}</span><button class="review-tool-btn icon-only" data-action="review-next" title="Следующая правка" aria-label="Следующая правка"><i class="bx bx-chevron-right"></i></button></div>`
-      : '<span class="review-empty-chip"><i class="bx bx-check-circle"></i>Правок нет</span>', 'review-toolbar-slot finalization-tools');
+      ? ui`<div class="review-toolbar-nav"><button class="review-tool-btn icon-only" data-action="review-prev" title="Предыдущая правка" aria-label="Предыдущая правка"><i class="bx bx-chevron-left"></i></button><span class="review-count">${index + 1} / ${marks.length}</span><button class="review-tool-btn icon-only" data-action="review-next" title="Следующая правка" aria-label="Следующая правка"><i class="bx bx-chevron-right"></i></button></div>`
+      : ui('<span class="review-empty-chip"><i class="bx bx-check-circle"></i>Правок нет</span>'), 'review-toolbar-slot finalization-tools');
   }
 
   renderReviewNavigator() {
@@ -12468,7 +12535,7 @@ class NocturneWriter {
     const mark = marks[index];
     this.state.activeReviewMarkId = mark.id;
     
-    this.updateSurfaceHTML(nav, `
+    this.updateSurfaceHTML(nav, ui`
       <div class="review-nav-controls">
         <button type="button" data-action="review-prev" title="Предыдущая правка" aria-label="Предыдущая правка"><i class="bx bx-chevron-left"></i></button>
         <span>${index + 1} / ${marks.length}</span>
@@ -12476,12 +12543,12 @@ class NocturneWriter {
       </div>
       <div class="review-detail-card">
         <div><span class="review-chip ${mark.category}">${this.reviewCategoryLabel(mark.category)}</span><span class="review-chip">${this.reviewKindLabel(mark.kind)}</span>${mark.source === 'ai' ? '<span class="review-chip">AI</span>' : ''}</div>
-        ${mark.unresolvedRange ? '<p class="review-unresolved">Не удалось привязать к тексту.</p>' : ''}
+        ${mark.unresolvedRange ? ui('<p class="review-unresolved">Не удалось привязать к тексту.</p>') : ''}
         <blockquote>${escapeHtml(mark.quote)}</blockquote>
         ${mark.comment ? `<p>${escapeHtml(mark.comment)}</p>` : ''}
         ${mark.suggestion ? `<div class="review-suggestion-text">${escapeHtml(mark.suggestion)}</div>` : ''}
         <div class="review-detail-actions">
-          ${mark.kind === 'suggestion' ? '<button class="pill-btn ai-btn" data-action="review-accept">Принять</button><button class="pill-btn" data-action="review-reject">Отклонить</button>' : '<button class="pill-btn ai-btn" data-action="review-resolve">Решено</button>'}
+          ${mark.kind === 'suggestion' ? ui('<button class="pill-btn ai-btn" data-action="review-accept">Принять</button><button class="pill-btn" data-action="review-reject">Отклонить</button>') : ui('<button class="pill-btn ai-btn" data-action="review-resolve">Решено</button>')}
         </div>
       </div>`, { resize: true, key: mark.id });
 
@@ -12504,11 +12571,11 @@ class NocturneWriter {
   }
 
   reviewCategoryLabel(category) {
-    return { orthography: 'Орфография', punctuation: 'Пунктуация', grammar: 'Грамматика', repetition: 'Повтор', lore: 'Лор', logic: 'Логика', plot: 'Сюжет', continuity: 'Непрерывность', style: 'Стиль' }[category] || 'Стиль';
+    return { orthography: t('Орфография'), punctuation: t('Пунктуация'), grammar: t('Грамматика'), repetition: t('Повтор'), lore: t('Лор'), logic: t('Логика'), plot: t('Сюжет'), continuity: t('Непрерывность'), style: t('Стиль') }[category] || t('Стиль');
   }
 
   reviewKindLabel(kind) {
-    return { comment: 'Комментарий', issue: 'Пометка', suggestion: 'Замена' }[kind] || 'Пометка';
+    return { comment: t('Комментарий'), issue: t('Пометка'), suggestion: t('Замена') }[kind] || t('Пометка');
   }
 
   handleReviewAction(action) {
@@ -12580,7 +12647,7 @@ class NocturneWriter {
       if (!resolved) {
         mark.unresolvedRange = true;
         await this.saveReviewMark(mark);
-        this.toast('Не удалось применить замену: исходный фрагмент больше не найден.');
+        this.toast(t('Не удалось применить замену: исходный фрагмент больше не найден.'));
         return;
       }
       const range = resolved.range;
@@ -12666,8 +12733,8 @@ class NocturneWriter {
       if (match.type === 'family-group') {
         span.dataset.entityKind = 'family';
         span.dataset.familyName = match.familyName;
-        span.dataset.entityLabel = `Семья ${match.familyName}`;
-        span.setAttribute('aria-label', `Семья ${match.familyName}`);
+        span.dataset.entityLabel = msg`Семья ${match.familyName}`;
+        span.setAttribute('aria-label', msg`Семья ${match.familyName}`);
       } else {
         span.dataset.entityKind = match.kind;
         span.dataset.entityId = match.entity.id;
@@ -12803,7 +12870,7 @@ class NocturneWriter {
     if (this.state.workspace?.focusedPaneId !== paneId) this.setFocusedPane(paneId);
     if (this.state.suggestion?.docId === doc.id) {
       this.clearSuggestion();
-      this.toast('AI-предложение отменено: документ был изменён.');
+      this.toast(t('AI-предложение отменено: документ был изменён.'));
       this.renderWorkspacePane(paneId);
       return;
     }
@@ -12856,7 +12923,7 @@ class NocturneWriter {
     if (this.state.workspace?.focusedPaneId !== paneId) this.setFocusedPane(paneId);
     if (this.state.suggestion?.docId === doc.id) {
       this.clearSuggestion();
-      this.toast('AI-предложение отменено: документ был изменён.');
+      this.toast(t('AI-предложение отменено: документ был изменён.'));
       this.renderWorkspacePane(paneId);
       return;
     }
@@ -13285,7 +13352,7 @@ class NocturneWriter {
   openSearchChooser() {
     const hasDoc = !!this.getFocusedDoc();
     const overlay = document.getElementById('form-overlay');
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="form-modal search-choice-modal">
         <div class="modal-head-row">
           <div><h2>Выберите режим поиска</h2><p>Быстрый переход к нужным фрагментам рукописи.</p></div>
@@ -13296,7 +13363,7 @@ class NocturneWriter {
             <i class="bx bx-file-find"></i>
             <strong>Поиск в текущем документе</strong>
             <span>Найдите все совпадения в открытой главе и переключайтесь между ними прямо в тексте.</span>
-            <small>${hasDoc ? 'Быстрый поиск по активному документу.' : 'Нет открытого документа.'}</small>
+            <small>${hasDoc ? t('Быстрый поиск по активному документу.') : t('Нет открытого документа.')}</small>
           </button>
           <button class="search-mode-card" data-action="search-mode-global">
             <i class="bx bx-search-alt-2"></i>
@@ -13313,7 +13380,7 @@ class NocturneWriter {
   openDocumentSearch(seed = {}) {
     const doc = this.getFocusedDoc();
     if (!doc) {
-      this.toast('Откройте документ, чтобы использовать поиск.');
+      this.toast(t('Откройте документ, чтобы использовать поиск.'));
       return;
     }
     this.closeAllFloatingMenus();
@@ -13339,7 +13406,7 @@ class NocturneWriter {
     const current = total ? Math.min(total, this.searchSession.activeIndex + 1) : 0;
     
     const update = () => {
-      this.updateSurfaceHTML(panel, `
+      this.updateSurfaceHTML(panel, ui`
         <div class="doc-search-panel-row">
           <i class="bx bx-search"></i>
           <input id="doc-search-query" data-doc-search-query value="${escapeHtml(this.searchSession.query || '')}" placeholder="Найти в документе">
@@ -13349,7 +13416,7 @@ class NocturneWriter {
           <button class="tool-btn" data-action="close-doc-search" title="Закрыть"><i class="bx bx-x"></i></button>
         </div>
         <div class="search-options-row">
-          ${this.searchReturnAvailable ? '<button class="mini-text-btn" data-action="return-global-search"><i class="bx bx-arrow-back"></i> К общему списку</button>' : ''}<button class="mini-text-btn" data-action="search-settings">Настройки поиска</button>
+          ${this.searchReturnAvailable ? ui('<button class="mini-text-btn" data-action="return-global-search"><i class="bx bx-arrow-back"></i> К общему списку</button>') : ''}<button class="mini-text-btn" data-action="search-settings">Настройки поиска</button>
           <label class="nocturne-check"><input type="checkbox" data-doc-search-case ${this.searchSession.caseSensitive ? 'checked' : ''}><span class="check-mark"></span><span>Учитывать регистр</span></label>
           <label class="nocturne-check"><input type="checkbox" data-doc-search-whole ${this.searchSession.wholeWords ? 'checked' : ''}><span class="check-mark"></span><span>Только целые слова</span></label>
         </div>`);
@@ -13528,10 +13595,10 @@ class NocturneWriter {
     if (!nav || !this.searchSession) return;
     const total = this.searchSession.matches?.length || 0;
     const current = total ? this.searchSession.activeIndex + 1 : 0;
-    this.updateSurfaceHTML(nav, `
+    this.updateSurfaceHTML(nav, ui`
       <button class="btn-icon" data-action="search-prev"><i class="bx bx-chevron-left"></i></button>
       <strong>${total ? `${current} / ${total}` : '0 / 0'}</strong>
-      <button class="btn-icon" data-action="search-next" aria-label="Следующее совпадение"><i class="bx bx-chevron-right"></i></button>${this.searchReturnAvailable ? '<button class="mini-text-btn" data-action="return-global-search">К списку</button>' : ''}`, { resize: true });
+      <button class="btn-icon" data-action="search-next" aria-label="Следующее совпадение"><i class="bx bx-chevron-right"></i></button>${this.searchReturnAvailable ? ui('<button class="mini-text-btn" data-action="return-global-search">К списку</button>') : ''}`, { resize: true });
     nav.classList.toggle('active', !!this.searchSession.query);
     nav.setAttribute('aria-hidden', this.searchSession.query ? 'false' : 'true');
   }
@@ -13559,7 +13626,7 @@ class NocturneWriter {
       const text = [doc.workTitle, doc.volume, doc.chapterNumber, doc.bookStatus].filter(Boolean).join(' ');
       const from = Math.max(0, match.start - radius);
       const to = Math.min(text.length, match.end + radius);
-      return `<i class="bx bx-book-open"></i> Метаданные: ${from > 0 ? '...' : ''}${escapeHtml(text.slice(from, match.start))}<mark>${escapeHtml(text.slice(match.start, match.end))}</mark>${escapeHtml(text.slice(match.end, to))}${to < text.length ? '...' : ''}`;
+      return ui`<i class="bx bx-book-open"></i> Метаданные: ${from > 0 ? '...' : ''}${escapeHtml(text.slice(from, match.start))}<mark>${escapeHtml(text.slice(match.start, match.end))}</mark>${escapeHtml(text.slice(match.end, to))}${to < text.length ? '...' : ''}`;
     }
     const block = doc.ast.blocks.find((item) => item.id === match.blockId) || doc.ast.blocks[match.blockIndex];
     const text = blockText(block);
@@ -13582,7 +13649,7 @@ class NocturneWriter {
 
   renderGlobalSearchWindow() {
     const overlay = document.getElementById('form-overlay');
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="form-modal global-search-modal">
         <div class="modal-head-row">
           <div><h2>Поиск по проекту</h2><p>Результаты сгруппированы по документам.</p></div>
@@ -13594,7 +13661,7 @@ class NocturneWriter {
             <label class="nocturne-check"><input type="checkbox" data-global-search-case ${this.globalSearchState.caseSensitive ? 'checked' : ''}><span class="check-mark"></span><span>Учитывать регистр</span></label>
             <label class="nocturne-check"><input type="checkbox" data-global-search-whole ${this.globalSearchState.wholeWords ? 'checked' : ''}><span class="check-mark"></span><span>Только целые слова</span></label>
           </div>
-          <div class="workflow-toolbar"><button class="mini-text-btn" data-search-settings>Настройки поиска</button><button class="mini-text-btn" data-search-clear-filters>Показать всё</button><span class="workflow-note">${{ phrase: 'Точная фраза', all: 'Все слова', any: 'Любое слово' }[this.state.settings.manuscriptSearchMode]}</span></div>
+          <div class="workflow-toolbar"><button class="mini-text-btn" data-search-settings>Настройки поиска</button><button class="mini-text-btn" data-search-clear-filters>Показать всё</button><span class="workflow-note">${{ phrase: t('Точная фраза'), all: t('Все слова'), any: t('Любое слово') }[this.state.settings.manuscriptSearchMode]}</span></div>
           <div class="global-search-filters">${this.searchFiltersMarkup()}</div>
         </div>
         <div class="global-search-results" id="global-search-results"></div>
@@ -13609,13 +13676,16 @@ class NocturneWriter {
   searchFiltersMarkup() {
     const filters = this.globalSearchState.filters || {}, docs = this.state.docs;
     const choices = {
-      work: ['Произведение', [...new Set(docs.map(doc => doc.loreId || 'world'))].map(id => [id, this.state.kbProjects.find(project => project.id === id)?.title || docs.find(doc => (doc.loreId || 'world') === id)?.workTitle || 'Основное произведение'])],
-      chapter: ['Глава', docs.map(doc => [doc.id, doc.title])],
-      type: ['Тип материала', [['text', 'Текст глав'], ['meta', 'Метаданные книги']]],
-      status: ['Статус главы', [...new Set(docs.map(doc => doc.bookStatus || 'Черновик'))].map(status => [status, status])],
+      work: [t('Произведение'), [...new Set(docs.map(doc => doc.loreId || 'world'))].map(id => {
+        const project = this.state.kbProjects.find(project => project.id === id);
+        return [id, project ? this.workDisplayTitle(project) : docs.find(doc => (doc.loreId || 'world') === id)?.workTitle || t('Основное произведение')];
+      })],
+      chapter: [t('Глава'), docs.map(doc => [doc.id, doc.title])],
+      type: [t('Тип материала'), [['text', t('Текст глав')], ['meta', t('Метаданные книги')]]],
+      status: [t('Статус главы'), [...new Set(docs.map(doc => doc.bookStatus || 'Черновик'))].map(status => [status, t(status)])],
     };
     const first = this.state.settings.searchFilterFirst;
-    return Object.entries(choices).sort(([a], [b]) => a === first ? -1 : b === first ? 1 : 0).map(([key, [label, options]]) => `<div class="form-field"><span>${label}</span>${this.renderFormSelect(`search-${key}`, [['', 'Все'], ...options], filters[key] || '', { label }).replace('type="hidden"', `type="hidden" data-search-filter="${key}"`)}</div>`).join('');
+    return Object.entries(choices).sort(([a], [b]) => a === first ? -1 : b === first ? 1 : 0).map(([key, [label, options]]) => `<div class="form-field"><span>${label}</span>${this.renderFormSelect(`search-${key}`, [['', t('Все')], ...options], filters[key] || '', { label }).replace('type="hidden"', `type="hidden" data-search-filter="${key}"`)}</div>`).join('');
   }
 
   closeSearchDock() {
@@ -13628,7 +13698,7 @@ class NocturneWriter {
 
   dockGlobalSearch() {
     const overlay = document.getElementById('form-overlay'), modal = overlay.querySelector('.global-search-modal'); if (!modal) return;
-    const dock = document.createElement('aside'); dock.id = 'nocturne-search-dock'; dock.className = 'nocturne-search-dock'; dock.setAttribute('aria-label', 'Результаты поиска рядом с текстом');
+    const dock = document.createElement('aside'); dock.id = 'nocturne-search-dock'; dock.className = 'nocturne-search-dock'; dock.setAttribute('aria-label', t('Результаты поиска рядом с текстом'));
     modal.removeAttribute('aria-modal'); modal.removeAttribute('role'); dock.append(modal); document.body.append(dock); overlay.classList.remove('active');
     this.animateLayoutTransition(document.querySelector('.main-workspace'), () => document.body.classList.add('search-docked'));
     this.animateSurfaceContent(dock);
@@ -13654,24 +13724,24 @@ class NocturneWriter {
     const update = () => {
       const q = this.globalSearchState.query.trim();
       if (!q) {
-        this.updateSurfaceHTML(box, '<div class="search-empty">Введите запрос, чтобы начать поиск.</div>', { resize: true });
+        this.updateSurfaceHTML(box, ui('<div class="search-empty">Введите запрос, чтобы начать поиск.</div>'), { resize: true });
         return;
       }
-      const smart = this.globalSearchState.entitySuggestions.map((entry) => `
+      const smart = this.globalSearchState.entitySuggestions.map((entry) => ui`
         <div class="smart-entity-suggestion">
-          <span>${entry.kind === 'location' ? 'Найдено место' : 'Найден персонаж'}: <strong>${escapeHtml(this.entityDisplayName(entry.entity))}</strong></span>
+          <span>${entry.kind === 'location' ? t('Найдено место') : t('Найден персонаж')}: <strong>${escapeHtml(this.entityDisplayName(entry.entity))}</strong></span>
           <button class="pill-btn ai-btn" data-action="open-entity-mentions" data-entity-kind="${entry.kind}" data-entity-id="${escapeHtml(entry.entity.id)}">Показать все упоминания</button>
         </div>`).join('');
-      const results = this.globalSearchState.results.map(({ doc, matches }) => `
+      const results = this.globalSearchState.results.map(({ doc, matches }) => ui`
         <section class="search-result-doc">
           <header><strong>${escapeHtml(doc.title)}</strong><span>${matches.length} совп.</span></header>
           ${matches.slice(0, this.state.settings.searchShowAll ? matches.length : (this.globalSearchState.visibleByDoc?.[doc.id] || 12)).map((match, index) => `
             <button class="search-snippet" data-action="open-search-result" data-doc-id="${escapeHtml(doc.id)}" data-block-id="${escapeHtml(match.blockId)}" data-match-start="${match.start}" data-query="${escapeHtml(q)}">
               ${this.snippetForMatch(doc, match)}
             </button>`).join('')}
-          ${!this.state.settings.searchShowAll && matches.length > (this.globalSearchState.visibleByDoc?.[doc.id] || 12) ? `<button class="pill-btn search-show-more" data-search-more="${escapeHtml(doc.id)}">Показать ещё · осталось ${matches.length - (this.globalSearchState.visibleByDoc?.[doc.id] || 12)}</button>` : ''}
+          ${!this.state.settings.searchShowAll && matches.length > (this.globalSearchState.visibleByDoc?.[doc.id] || 12) ? ui`<button class="pill-btn search-show-more" data-search-more="${escapeHtml(doc.id)}">Показать ещё · осталось ${matches.length - (this.globalSearchState.visibleByDoc?.[doc.id] || 12)}</button>` : ''}
         </section>`).join('');
-      this.updateSurfaceHTML(box, `${smart}${results || '<div class="search-empty">Совпадений нет.</div>'}`, { resize: true });
+      this.updateSurfaceHTML(box, `${smart}${results || ui('<div class="search-empty">Совпадений нет.</div>')}`, { resize: true });
       box.querySelectorAll('[data-search-more]').forEach(button => { button.onclick = () => { this.globalSearchState.visibleByDoc ||= {}; this.globalSearchState.visibleByDoc[button.dataset.searchMore] = (this.globalSearchState.visibleByDoc[button.dataset.searchMore] || 12) + 24; this.renderGlobalSearchResults(); }; });
     };
 
@@ -13707,7 +13777,7 @@ class NocturneWriter {
   openReplaceWindow() {
     const doc = this.getFocusedDoc();
     if (!doc) {
-      this.toast('Откройте документ, чтобы использовать замену.');
+      this.toast(t('Откройте документ, чтобы использовать замену.'));
       return;
     }
     this.closeAllFloatingMenus();
@@ -13730,7 +13800,7 @@ class NocturneWriter {
   renderReplaceWindow() {
     const overlay = document.getElementById('form-overlay');
     const s = this.replaceSession;
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="form-modal replace-modal">
         <div class="modal-head-row">
           <div><h2>Замена в документе</h2><p>${escapeHtml(this.getFocusedDoc()?.title || '')}</p></div>
@@ -13742,10 +13812,10 @@ class NocturneWriter {
         </div>
         <section class="smart-replace-box">
           <h3>Умная замена</h3>
-          ${this.replaceOption('wholeWords', 'Только целые слова', 'Не заменяет фрагменты внутри больших слов: например, "дом" не сработает в "домовой".')}
-          ${this.replaceOption('caseSensitive', 'Учитывать регистр при поиске', 'Различает прописные и строчные буквы: "Дом" и "дом" будут разными совпадениями.')}
-          ${this.replaceOption('preserveCase', 'Сохранять регистр при замене', 'Подстраивает замену под найденный текст: герой -> персонаж, Герой -> Персонаж, ГЕРОЙ -> ПЕРСОНАЖ.')}
-          ${this.replaceOption('preview', 'Предпросмотр перед "Заменить всё"', 'Перед массовой заменой показывает количество замен и примеры фрагментов, чтобы избежать случайной правки всего документа.')}
+          ${this.replaceOption('wholeWords', t('Только целые слова'), t('Не заменяет фрагменты внутри больших слов: например, "дом" не сработает в "домовой".'))}
+          ${this.replaceOption('caseSensitive', t('Учитывать регистр при поиске'), t('Различает прописные и строчные буквы: "Дом" и "дом" будут разными совпадениями.'))}
+          ${this.replaceOption('preserveCase', t('Сохранять регистр при замене'), t('Подстраивает замену под найденный текст: герой -> персонаж, Герой -> Персонаж, ГЕРОЙ -> ПЕРСОНАЖ.'))}
+          ${this.replaceOption('preview', t('Предпросмотр перед "Заменить всё"'), t('Перед массовой заменой показывает количество замен и примеры фрагментов, чтобы избежать случайной правки всего документа.'))}
         </section>
         <div class="replace-summary" id="replace-summary"></div>
         <div class="form-actions">
@@ -13779,7 +13849,7 @@ class NocturneWriter {
     if (summary) {
       const modal = document.querySelector('.replace-modal');
       const update = () => {
-        this.updateSurfaceHTML(summary, this.replaceSession.find ? `Найдено: <strong>${this.replaceSession.matches.length}</strong>` : 'Введите текст для поиска.', { resize: true });
+        this.updateSurfaceHTML(summary, this.replaceSession.find ? ui`Найдено: <strong>${this.replaceSession.matches.length}</strong>` : t('Введите текст для поиска.'), { resize: true });
       };
       if (modal && !this._replaceOpening) {
         this.animateHeightTransition(modal, update);
@@ -13841,7 +13911,7 @@ class NocturneWriter {
     const block = doc?.ast?.blocks?.find((item) => item.id === match.blockId);
     if (!doc || !block) return false;
     if ((match.source === 'smart' && match.spellerGeneration !== this.spellerGeneration) || blockText(block).slice(match.startOffset, match.endOffset) !== match.rawText) {
-      this.toast('Фрагмент уже изменился. Повторите действие.');
+      this.toast(t('Фрагмент уже изменился. Повторите действие.'));
       this.updateTypoHighlights();
       return false;
     }
@@ -13889,7 +13959,7 @@ class NocturneWriter {
     const blockPlain = normalizeTypoToken(blockText(block));
 
     if (!blockPlain.includes(normRaw)) {
-      this.toast('Фрагмент уже изменился. Повторите действие.');
+      this.toast(t('Фрагмент уже изменился. Повторите действие.'));
       this.updateTypoHighlightsDebounced();
       return false;
     }
@@ -13933,7 +14003,7 @@ class NocturneWriter {
       ? current === expected
       : current.toLocaleLowerCase('ru-RU') === expected.toLocaleLowerCase('ru-RU');
     if (!same || (this.replaceSession?.wholeWords && !this.isWholeWordMatch(blockText(block), match.start, match.end))) {
-      this.toast('Фрагмент изменился, обновите поиск.');
+      this.toast(t('Фрагмент изменился, обновите поиск.'));
       this.updateReplaceMatches();
       return false;
     }
@@ -13951,7 +14021,7 @@ class NocturneWriter {
   replaceFindNext() {
     this.updateReplaceMatches();
     if (!this.replaceSession?.matches?.length) {
-      this.toast('Совпадений не найдено.');
+      this.toast(t('Совпадений не найдено.'));
       return;
     }
     this.replaceSession.activeIndex = (this.replaceSession.activeIndex + 1) % this.replaceSession.matches.length;
@@ -13966,13 +14036,13 @@ class NocturneWriter {
     this.updateReplaceMatches();
     const match = this.replaceSession?.matches?.[this.replaceSession.activeIndex || 0];
     if (!match) {
-      this.toast('Совпадений не найдено.');
+      this.toast(t('Совпадений не найдено.'));
       return;
     }
     if (this.applyReplaceMatch(match)) {
       this.renderWorkspacePane(this.state.workspace?.focusedPaneId || 'primary');
       this.updateReplaceMatches();
-      this.toast('Совпадение заменено.');
+      this.toast(t('Совпадение заменено.'));
       this.replaceFindNext();
     }
   }
@@ -13981,7 +14051,7 @@ class NocturneWriter {
     this.updateReplaceMatches();
     const matches = this.replaceSession?.matches || [];
     if (!matches.length) {
-      this.toast('Совпадений не найдено.');
+      this.toast(t('Совпадений не найдено.'));
       return;
     }
     if (!this.replaceSession.preview) return this.confirmReplaceAll();
@@ -13990,7 +14060,7 @@ class NocturneWriter {
     if (!summary) return;
     const modal = document.querySelector('.replace-modal');
     const update = () => {
-      this.updateSurfaceHTML(summary, `
+      this.updateSurfaceHTML(summary, ui`
         <div class="replace-preview">
           <strong>Будет заменено: ${matches.length}</strong>
           ${matches.slice(0, 8).map((match) => `<div>${this.snippetForMatch(doc, match, 36)}</div>`).join('')}
@@ -14008,14 +14078,14 @@ class NocturneWriter {
     this.updateReplaceMatches();
     const matches = [...(this.replaceSession?.matches || [])].sort((a, b) => b.blockIndex - a.blockIndex || b.start - a.start);
     if (!matches.length) {
-      this.toast('Совпадений не найдено.');
+      this.toast(t('Совпадений не найдено.'));
       return;
     }
     matches.forEach((match) => this.applyReplaceMatch(match));
     const paneId = this.state.workspace?.focusedPaneId || 'primary';
     this.renderWorkspacePane(paneId);
     this.updateReplaceMatches();
-    this.toast(`Заменено ${matches.length} совпадений.`);
+    this.toast(msg`Заменено ${matches.length} совпадений.`);
   }
 
   entitySuggestionsForQuery(query) {
@@ -14057,25 +14127,25 @@ class NocturneWriter {
     }).filter((group) => group.matches.length);
     const total = groups.reduce((sum, group) => sum + group.matches.length, 0);
     const overlay = document.getElementById('form-overlay');
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="form-modal global-search-modal mentions-modal">
         <div class="modal-head-row">
           <div>
             <h2>Все упоминания: ${escapeHtml(this.entityDisplayName(entity))}</h2>
-            <p>${kind === 'location' ? 'Локация' : 'Персонаж'} · ${total} упоминаний · ${groups.length} документов</p>
+            <p>${kind === 'location' ? t('Локация') : t('Персонаж')} · ${total} упоминаний · ${groups.length} документов</p>
           </div>
           <button class="btn-icon" data-close-form><i class="bx bx-x"></i></button>
         </div>
         <p class="mentions-variants">Учитывались варианты: ${escapeHtml(variants.slice(0, 8).join(', '))}</p>
         <div class="global-search-results">
-          ${groups.length ? groups.map(({ doc, matches }) => `
+          ${groups.length ? groups.map(({ doc, matches }) => ui`
             <section class="search-result-doc">
               <header><strong>${escapeHtml(doc.title)}</strong><span>${matches.length} упомин.</span></header>
               ${matches.slice(0, 18).map((match) => `
                 <button class="search-snippet" data-action="open-search-result" data-doc-id="${escapeHtml(doc.id)}" data-block-id="${escapeHtml(match.blockId)}" data-match-start="${match.start}" data-query="${escapeHtml(match.variant)}">
                   ${this.snippetForMatch(doc, match)}
                 </button>`).join('')}
-            </section>`).join('') : this.emptyStateMarkup('bx-search-alt', 'Упоминаний нет.', 'Эта сущность пока не встречается в документах.')}
+            </section>`).join('') : this.emptyStateMarkup('bx-search-alt', t('Упоминаний нет.'), t('Эта сущность пока не встречается в документах.'))}
         </div>
       </div>`);
     overlay.classList.add('active');
@@ -14227,8 +14297,8 @@ class NocturneWriter {
     this.writeLiveDraft(doc.id);
     this.setSaveStatus('saving', doc.id);
     if (this.state.settings.e2e && !this.state.sessionPassword) {
-      this.setSaveStatus('error', doc.id, 'Нужен мастер-пароль сессии для зашифрованного сохранения.');
-      if (!options.silent) this.toast('Введите мастер-пароль сессии перед сохранением.');
+      this.setSaveStatus('error', doc.id, t('Нужен мастер-пароль сессии для зашифрованного сохранения.'));
+      if (!options.silent) this.toast(t('Введите мастер-пароль сессии перед сохранением.'));
       return;
     }
     try {
@@ -14242,7 +14312,7 @@ class NocturneWriter {
       await this.updateTodayStats(doc.id);
       this.drawSentiment();
       this.setSaveStatus('saved', doc.id);
-      if (!options.silent) this.toast('Сохранено.');
+      if (!options.silent) this.toast(t('Сохранено.'));
       return true;
     } catch (error) {
       if (error.code === 'SYNC_RETRY') {
@@ -14250,14 +14320,14 @@ class NocturneWriter {
         const pending = structuredClone(doc); delete pending.encrypted;
         await this.databaseSync.captureDocumentConflict(pending);
         this.state.sync.conflicts = (await this.db.getAll('syncConflicts')).length;
-        this.setSaveStatus('error', doc.id, 'Глава изменена в другой вкладке. Обе версии сохранены в разделе «Разные версии».');
+        this.setSaveStatus('error', doc.id, t('Глава изменена в другой вкладке. Обе версии сохранены в разделе «Разные версии».'));
         this.updateSyncStatusUi();
-        if (!options.silent) this.toast('Глава изменена в другой вкладке. Выберите версию в разделе «Разные версии».');
+        if (!options.silent) this.toast(t('Глава изменена в другой вкладке. Выберите версию в разделе «Разные версии».'));
         return false;
       }
-      this.setSaveStatus('error', doc.id, error?.message || 'IndexedDB не принял сохранение.');
+      this.setSaveStatus('error', doc.id, error?.message || t('IndexedDB не принял сохранение.'));
       const quota = /quota|disk|storage/i.test(error?.name || error?.message || '');
-      if (!options.silent) this.toast(quota ? 'Недостаточно места для сохранения. Экспортируйте проект или удалите старые снапшоты.' : 'Ошибка сохранения.');
+      if (!options.silent) this.toast(quota ? t('Недостаточно места для сохранения. Экспортируйте проект или удалите старые снапшоты.') : t('Ошибка сохранения.'));
       return false;
     }
   }
@@ -14323,31 +14393,31 @@ class NocturneWriter {
   }
 
   floatingNoteScopeLabel(note) {
-    if (note.temporary) return 'Временная';
-    if (note.scope === 'global') return 'Общая';
-    if (note.scope === 'document') return this.state.docs.find((doc) => doc.id === note.linkedId)?.title || 'Документ';
+    if (note.temporary) return t('Временная');
+    if (note.scope === 'global') return t('Общая');
+    if (note.scope === 'document') return this.state.docs.find((doc) => doc.id === note.linkedId)?.title || t('Документ');
     const list = note.scope === 'note' ? this.state.lore.notes : note.scope === 'location' ? this.state.lore.locations : this.state.lore.characters;
     const item = list.find((item) => item.id === note.linkedId);
-    return (note.scope === 'note' ? item?.title : this.entityDisplayName(item)) || (note.scope === 'note' ? 'Запись' : note.scope === 'location' ? 'Локация' : 'Персонаж');
+    return (note.scope === 'note' ? item?.title : this.entityDisplayName(item)) || (note.scope === 'note' ? t('Запись') : note.scope === 'location' ? t('Локация') : t('Персонаж'));
   }
 
   floatingNoteTypeLabel(note) {
-    if (note.temporary) return 'Временная';
-    if (note.scope === 'document') return 'Документ';
-    if (note.scope === 'character') return 'Персонаж';
-    if (note.scope === 'location') return 'Локация';
-    if (note.scope === 'note') return 'Запись';
-    return 'Общая';
+    if (note.temporary) return t('Временная');
+    if (note.scope === 'document') return t('Документ');
+    if (note.scope === 'character') return t('Персонаж');
+    if (note.scope === 'location') return t('Локация');
+    if (note.scope === 'note') return t('Запись');
+    return t('Общая');
   }
 
   renderFloatingNoteMenu() {
     const popover = document.getElementById('floating-note-popover');
     if (!popover) return;
     const doc = this.getFocusedDoc();
-    this.updateSurfaceHTML(popover, `
+    this.updateSurfaceHTML(popover, ui`
       <button class="floating-menu-item ${doc ? '' : 'disabled'}" data-action="create-document-floating-note" ${doc ? '' : 'disabled'}>
         <i class="bx bx-file"></i>
-        <span>${doc ? 'Заметка для текущего документа' : 'Нет активного документа'}<small>${escapeHtml(doc?.title || 'Откройте документ в рабочей области')}</small></span>
+        <span>${doc ? t('Заметка для текущего документа') : t('Нет активного документа')}<small>${escapeHtml(doc?.title || t('Откройте документ в рабочей области'))}</small></span>
       </button>
       <button class="floating-menu-item" data-action="create-global-floating-note">
         <i class="bx bx-globe"></i>
@@ -14416,10 +14486,10 @@ class NocturneWriter {
     }
     const notes = [...this.state.floatingNotes].sort((a, b) => b.updatedAt - a.updatedAt);
     const groups = [
-      ['Общие заметки', notes.filter((note) => note.scope === 'global' && !note.temporary), 'Пока нет общих заметок.'],
-      ['Заметки документов', notes.filter((note) => note.scope === 'document' && !note.temporary), 'Пока нет заметок документов.'],
-      ['Временные заметки', notes.filter((note) => note.temporary), 'Пока нет временных заметок.'],
-      ['Заметки персонажей и локаций', notes.filter((note) => ['character', 'location'].includes(note.scope) && !note.temporary), 'Пока нет заметок к досье.'],
+      [t('Общие заметки'), notes.filter((note) => note.scope === 'global' && !note.temporary), t('Пока нет общих заметок.')],
+      [t('Заметки документов'), notes.filter((note) => note.scope === 'document' && !note.temporary), t('Пока нет заметок документов.')],
+      [t('Временные заметки'), notes.filter((note) => note.temporary), t('Пока нет временных заметок.')],
+      [t('Заметки персонажей и локаций'), notes.filter((note) => ['character', 'location'].includes(note.scope) && !note.temporary), t('Пока нет заметок к досье.')],
     ];
     const counts = {
       total: notes.length,
@@ -14427,7 +14497,7 @@ class NocturneWriter {
       document: notes.filter((note) => note.scope === 'document' && !note.temporary).length,
       temporary: notes.filter((note) => note.temporary).length,
     };
-    this.updateSurfaceHTML(modal, `
+    this.updateSurfaceHTML(modal, ui`
       <section class="floating-notes-modal-panel">
         <header class="floating-notes-modal-head">
           <div>
@@ -14454,13 +14524,13 @@ class NocturneWriter {
   }
 
   renderFloatingNoteManagerCard(note) {
-    const body = (note.body || '').trim() || 'Без текста';
-    return `<article class="floating-manager-card ${note.temporary ? 'temporary' : ''}" data-note-id="${note.id}">
+    const body = (note.body || '').trim() || t('Без текста');
+    return ui`<article class="floating-manager-card ${note.temporary ? 'temporary' : ''}" data-note-id="${note.id}">
       <div class="floating-manager-card-top">
         <span>${escapeHtml(this.floatingNoteTypeLabel(note))}</span>
         <small>${escapeHtml(this.floatingNoteScopeLabel(note))}</small>
       </div>
-      <h4>${escapeHtml(note.title || 'Заметка')}</h4>
+      <h4>${escapeHtml(note.title || t('Заметка'))}</h4>
       <p>${escapeHtml(body)}</p>
       <div class="floating-manager-card-actions">
         <button class="pill-btn" data-action="focus-floating-note" data-note-id="${note.id}"><i class="bx bx-show"></i> Показать</button>
@@ -14478,10 +14548,10 @@ class NocturneWriter {
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, 6)
       .map((note) => `<button class="floating-note-list-item" data-action="focus-floating-note" data-note-id="${note.id}">
-        <span>${escapeHtml(note.title || 'Заметка')}</span>
+        <span>${escapeHtml(note.title || t('Заметка'))}</span>
         <small>${escapeHtml(this.floatingNoteScopeLabel(note))}</small>
       </button>`).join('');
-    this.updateSurfaceHTML(manager, `
+    this.updateSurfaceHTML(manager, ui`
       <div class="floating-manager-head">
         <div><strong>Плавающие заметки</strong><span>${visibleCount} / ${total}</span></div>
         <div>
@@ -14490,7 +14560,7 @@ class NocturneWriter {
           <button class="mini-icon-btn" data-action="new-floating-note" title="Новая"><i class="bx bx-plus"></i></button>
         </div>
       </div>
-      ${items ? `<div class="floating-note-list">${items}</div>` : '<p class="floating-manager-empty">Окон заметок пока нет.</p>'}
+      ${items ? `<div class="floating-note-list">${items}</div>` : ui('<p class="floating-manager-empty">Окон заметок пока нет.</p>')}
     `, {});
   }
 
@@ -14504,10 +14574,10 @@ class NocturneWriter {
 
   renderFloatingNote(note) {
     const body = escapeHtml(note.body || '').replace(/\n/g, '<br>');
-    const title = escapeHtml(note.title || 'Новая заметка');
+    const title = escapeHtml(note.title || t('Новая заметка'));
     const max = this.clampFloatingNoteRect(note);
     const classes = ['floating-note', note.minimized ? 'minimized' : '', note.pinned ? 'pinned' : '', note.temporary ? 'temporary' : ''].filter(Boolean).join(' ');
-    return `<article class="${classes}" data-note-id="${note.id}" style="left:${max.x}px;top:${max.y}px;width:${max.width}px;height:${note.minimized ? '42' : max.height}px;z-index:${note.zIndex + (note.pinned ? 500 : 0)}">
+    return ui`<article class="${classes}" data-note-id="${note.id}" style="left:${max.x}px;top:${max.y}px;width:${max.width}px;height:${note.minimized ? '42' : max.height}px;z-index:${note.zIndex + (note.pinned ? 500 : 0)}">
       <header class="floating-note-header">
         <span class="floating-note-drag-handle" aria-hidden="true"><i class="bx bx-grid-vertical"></i></span>
         <div class="floating-note-title" tabindex="0" data-floating-title data-placeholder="Новая заметка">${title}</div>
@@ -14535,7 +14605,7 @@ class NocturneWriter {
     const now = Date.now();
     const note = this.sanitizeFloatingNote({
       id: uid('float-note'),
-      title: options.title || 'Новая заметка',
+      title: options.title || t('Новая заметка'),
       body: options.body || '',
       ...context,
       x,
@@ -14628,7 +14698,7 @@ class NocturneWriter {
           try {
             await this.db.put('floatingNotes', { ...note, forceVisible: false });
           } catch {
-            this.toast('Не удалось сохранить плавающую заметку.');
+            this.toast(t('Не удалось сохранить плавающую заметку.'));
           }
         }
       }, 220));
@@ -14642,7 +14712,7 @@ class NocturneWriter {
       try {
         await this.db.put('floatingNotes', { ...note, forceVisible: false });
       } catch {
-        this.toast('Не удалось сохранить плавающую заметку.');
+        this.toast(t('Не удалось сохранить плавающую заметку.'));
       }
     }
   }
@@ -14667,7 +14737,7 @@ class NocturneWriter {
     const noteEl = titleEl.closest('.floating-note');
     const note = this.state.floatingNotes.find((item) => item.id === noteEl?.dataset.noteId);
     if (!note) return;
-    titleEl.dataset.renameOriginal = note.title || 'Без названия';
+    titleEl.dataset.renameOriginal = note.title || t('Без названия');
     titleEl.setAttribute('contenteditable', 'true');
     titleEl.dataset.floatingField = 'title';
     titleEl.focus();
@@ -14683,7 +14753,7 @@ class NocturneWriter {
     const id = noteEl?.dataset.noteId;
     const note = this.state.floatingNotes.find((item) => item.id === id);
     if (!note) return;
-    const nextTitle = (titleEl.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 120) || 'Без названия';
+    const nextTitle = (titleEl.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 120) || t('Без названия');
     note.title = nextTitle;
     note.updatedAt = Date.now();
     titleEl.textContent = nextTitle;
@@ -14696,7 +14766,7 @@ class NocturneWriter {
   }
 
   cancelFloatingNoteRename(titleEl) {
-    const original = titleEl.dataset.renameOriginal || 'Без названия';
+    const original = titleEl.dataset.renameOriginal || t('Без названия');
     titleEl.textContent = original;
     titleEl.removeAttribute('contenteditable');
     delete titleEl.dataset.floatingField;
@@ -14946,7 +15016,7 @@ class NocturneWriter {
       builtinKey: key,
       wrong: rule.wrong || key,
       correct: overrides.get(key)?.correct || rule.correct || '',
-      label: overrides.get(key)?.label || rule.label || 'Частая ошибка',
+      label: overrides.get(key)?.label || t(rule.label) || t('Частая ошибка'),
       source: disabledBuiltins.has(key) ? 'disabled' : overrides.has(key) ? 'override' : 'builtin',
       userRuleId: overrides.get(key)?.id || null,
     }));
@@ -14958,20 +15028,20 @@ class NocturneWriter {
     if (filter === 'override') cards = cards.filter((rule) => rule.source === 'override');
     if (search) cards = cards.filter((rule) => `${rule.wrong} ${rule.correct} ${rule.label}`.toLowerCase().includes(search));
     const badge = (source) => ({
-      user: 'Моё',
-      builtin: 'Встроенное',
-      disabled: 'Отключено',
-      override: 'Переопределено',
+      user: t('Моё'),
+      builtin: t('Встроенное'),
+      disabled: t('Отключено'),
+      override: t('Переопределено'),
     }[source] || source);
     const actions = (rule) => {
       if (rule.source === 'user') {
-        return `<button data-action="dictionary-edit" data-rule-id="${rule.id}">Редактировать</button><button data-action="dictionary-delete" data-rule-id="${rule.id}">Удалить</button>`;
+        return ui`<button data-action="dictionary-edit" data-rule-id="${rule.id}">Редактировать</button><button data-action="dictionary-delete" data-rule-id="${rule.id}">Удалить</button>`;
       }
-      if (rule.source === 'disabled') return `<button data-action="dictionary-enable-builtin" data-builtin-key="${rule.builtinKey}">Включить</button>`;
-      if (rule.source === 'override') return `<button data-action="dictionary-edit" data-rule-id="${rule.userRuleId}">Редактировать</button><button data-action="dictionary-reset-override" data-builtin-key="${rule.builtinKey}">Сбросить override</button>`;
-      return `<button data-action="dictionary-override" data-builtin-key="${rule.builtinKey}">Переопределить</button><button data-action="dictionary-disable-builtin" data-builtin-key="${rule.builtinKey}">Отключить</button>`;
+      if (rule.source === 'disabled') return ui`<button data-action="dictionary-enable-builtin" data-builtin-key="${rule.builtinKey}">Включить</button>`;
+      if (rule.source === 'override') return ui`<button data-action="dictionary-edit" data-rule-id="${rule.userRuleId}">Редактировать</button><button data-action="dictionary-reset-override" data-builtin-key="${rule.builtinKey}">Сбросить override</button>`;
+      return ui`<button data-action="dictionary-override" data-builtin-key="${rule.builtinKey}">Переопределить</button><button data-action="dictionary-disable-builtin" data-builtin-key="${rule.builtinKey}">Отключить</button>`;
     };
-    return `
+    return ui`
       <div class="tab-content active dictionary-settings">
         <p class="settings-tab-desc" style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px; line-height: 1.5;">Локальные правила проверки текста. Встроенную базу можно дополнять, отключать и переопределять под ваш проект.</p>
         <section class="dictionary-controls">
@@ -14986,17 +15056,17 @@ class NocturneWriter {
                   <div class="smart-dictionary-field">
                     <span class="smart-dictionary-label">Режим:</span>
                     ${this.renderSettingsSelect('smartDictionaryMode', [
-                      ['local', 'Офлайн: словарь и правила'],
-                      ['hybrid', 'Словарь и LanguageTool'],
-                      ['api', 'Онлайн: LanguageTool']
+                      ['local', t('Офлайн: словарь и правила')],
+                      ['hybrid', t('Словарь и LanguageTool')],
+                      ['api', t('Онлайн: LanguageTool')]
                     ])}
                   </div>
                   <div class="smart-dictionary-field">
                     <span class="smart-dictionary-label">Язык проверки:</span>
                     ${this.renderSettingsSelect('smartDictionaryLang', [
-                      ['auto', 'Авто-определение'],
-                      ['uk', 'Українська'],
-                      ['ru', 'Русский'],
+                      ['auto', t('Авто-определение')],
+                      ['uk', t('Українська')],
+                      ['ru', t('Русский')],
                       ['en', 'English']
                     ])}
                   </div>
@@ -15030,7 +15100,7 @@ class NocturneWriter {
           </div>
           <div class="dictionary-filters-row" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-top:8px;">
             <div class="dictionary-filters" style="margin:0;">
-              ${[['all', 'Все'], ['mine', 'Мои'], ['builtin', 'Встроенные'], ['disabled', 'Отключённые'], ['override', 'Переопределённые']].map(([id, label]) => `<button class="${filter === id ? 'active' : ''}" data-dictionary-filter="${id}">${label}</button>`).join('')}
+              ${[['all', t('Все')], ['mine', t('Мои')], ['builtin', t('Встроенные')], ['disabled', t('Отключённые')], ['override', t('Переопределённые')]].map(([id, label]) => `<button class="${filter === id ? 'active' : ''}" data-dictionary-filter="${id}">${label}</button>`).join('')}
             </div>
             <button class="pill-btn ai-btn" data-action="dictionary-add" style="height:32px;"><i class="bx bx-plus"></i> Добавить правило</button>
           </div>
@@ -15042,7 +15112,7 @@ class NocturneWriter {
               <small>${escapeHtml(rule.label)} · ${badge(rule.source)}</small>
             </div>
             <div class="dictionary-card-actions">${actions(rule)}</div>
-          </article>`).join('') || '<div class="muted-empty">Правила не найдены.</div>'}
+          </article>`).join('') || ui('<div class="muted-empty">Правила не найдены.</div>')}
         </div>
       </div>
     `;
@@ -15076,13 +15146,13 @@ class NocturneWriter {
       <strong>${title}</strong>
       <span>${text}</span>
     </button>`;
-    return `
+    return ui`
       <div class="tab-content active review-settings">
         <p class="settings-tab-desc" style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px; line-height: 1.5;">Выберите, как документ ведёт себя сейчас: свободное письмо, редакторская разметка или финальная обработка правок.</p>
         <div class="review-mode-grid">
-          ${modeCard('write', 'Письмо', 'Обычное редактирование текста.', 'bx-pen')}
-          ${modeCard('editor', 'Редактор', 'Текст защищён, доступны комментарии, пометки и предложения.', 'bx-comment-edit')}
-          ${modeCard('finalization', 'Финализация', 'Текст редактируется, видны правки и навигация по ним.', 'bx-check-double')}
+          ${modeCard('write', t('Письмо'), t('Обычное редактирование текста.'), 'bx-pen')}
+          ${modeCard('editor', t('Редактор'), t('Текст защищён, доступны комментарии, пометки и предложения.'), 'bx-comment-edit')}
+          ${modeCard('finalization', t('Финализация'), t('Текст редактируется, видны правки и навигация по ним.'), 'bx-check-double')}
         </div>
         <div class="setting-row setting-row-switch">
           <div class="setting-info"><span>Экспортировать .nocturned рядом с DOCX</span><small>Если у документа есть редакторские правки, рядом с DOCX скачивается JSON-файл обмена правками.</small></div>
@@ -15157,7 +15227,7 @@ class NocturneWriter {
     const existing = new Set(this.state.docs.map((doc) => doc.id));
     const docs = seedDocs.map((doc) => this.cloneDemoDoc(doc)).filter((doc) => !existing.has(doc.id));
     if (!docs.length) {
-      if (!options.silent) this.toast('Тестовые главы уже добавлены.');
+      if (!options.silent) this.toast(t('Тестовые главы уже добавлены.'));
       return;
     }
     this.state.docs.push(...docs);
@@ -15167,7 +15237,7 @@ class NocturneWriter {
     this.persistWorkspaceState();
     if (!options.silent) {
       this.renderAll();
-      this.toast(`Добавлено тестовых глав: ${docs.length}`);
+      this.toast(msg`Добавлено тестовых глав: ${docs.length}`);
     }
   }
 
@@ -15175,7 +15245,7 @@ class NocturneWriter {
     const demoDocs = this.state.docs.filter((doc) => doc.isDemo && doc.demoGroup === 'docs');
     const ids = new Set(demoDocs.map((doc) => doc.id));
     if (!ids.size) {
-      if (!options.silent) this.toast('Тестовых глав нет.');
+      if (!options.silent) this.toast(t('Тестовых глав нет.'));
       return;
     }
     for (const doc of demoDocs) await this.deleteDoc(doc.id);
@@ -15192,7 +15262,7 @@ class NocturneWriter {
         this.persistWorkspaceState();
     if (!options.silent) {
       this.renderAll();
-      this.toast(`Удалено тестовых глав: ${ids.size}`);
+      this.toast(msg`Удалено тестовых глав: ${ids.size}`);
     }
   }
 
@@ -15205,13 +15275,13 @@ class NocturneWriter {
     };
     const count = addItems('characters', seedLore.characters || []) + addItems('locations', seedLore.locations || []);
     if (!count) {
-      if (!options.silent) this.toast('Тестовые персонажи и места уже добавлены.');
+      if (!options.silent) this.toast(t('Тестовые персонажи и места уже добавлены.'));
       return;
     }
     await this.saveLore();
     if (!options.silent) {
       this.renderAll();
-      this.toast(`Добавлено демо-элементов Базы знаний: ${count}`);
+      this.toast(msg`Добавлено демо-элементов Базы знаний: ${count}`);
     }
   }
 
@@ -15220,7 +15290,7 @@ class NocturneWriter {
     const doomedLocationIds = new Set(this.state.lore.locations.filter((item) => item.isDemo && item.demoGroup === 'lore').map((item) => item.id));
     const count = doomedCharacterIds.size + doomedLocationIds.size;
     if (!count) {
-      if (!options.silent) this.toast('Тестовых персонажей и мест нет.');
+      if (!options.silent) this.toast(t('Тестовых персонажей и мест нет.'));
       return;
     }
     const demoNotes = this.state.floatingNotes.filter((note) => (
@@ -15240,7 +15310,7 @@ class NocturneWriter {
     await this.saveLore();
     if (!options.silent) {
       this.renderAll();
-      this.toast(`Удалено демо-элементов Базы знаний: ${count}`);
+      this.toast(msg`Удалено демо-элементов Базы знаний: ${count}`);
     }
   }
 
@@ -15248,14 +15318,14 @@ class NocturneWriter {
     const existing = new Set(this.state.lore.timeline.map((item) => item.id));
     const events = (seedLore.timeline || []).map((event) => this.cloneDemoTimelineEvent(event)).filter((event) => !existing.has(event.id));
     if (!events.length) {
-      if (!options.silent) this.toast('Тестовые события таймлайна уже добавлены.');
+      if (!options.silent) this.toast(t('Тестовые события таймлайна уже добавлены.'));
       return;
     }
     this.state.lore.timeline.push(...events);
     await this.saveLore();
     if (!options.silent) {
       this.renderAll();
-      this.toast(`Добавлено тестовых событий: ${events.length}`);
+      this.toast(msg`Добавлено тестовых событий: ${events.length}`);
     }
   }
 
@@ -15268,7 +15338,7 @@ class NocturneWriter {
       removedSubevents += before - event.subEvents.length;
     });
     if (!doomedIds.size && !removedSubevents) {
-      if (!options.silent) this.toast('Тестовых событий таймлайна нет.');
+      if (!options.silent) this.toast(t('Тестовых событий таймлайна нет.'));
       return;
     }
     this.state.lore.timeline = this.state.lore.timeline.filter((item) => !doomedIds.has(item.id));
@@ -15276,7 +15346,7 @@ class NocturneWriter {
     await this.saveLore();
     if (!options.silent) {
       this.renderAll();
-      this.toast(`Удалено тестовых событий: ${doomedIds.size + removedSubevents}`);
+      this.toast(msg`Удалено тестовых событий: ${doomedIds.size + removedSubevents}`);
     }
   }
 
@@ -15285,16 +15355,16 @@ class NocturneWriter {
     await this.addDemoLore({ silent: true });
     await this.addDemoTimeline({ silent: true });
     this.renderAll();
-    this.toast('Весь демо-набор добавлен.');
+    this.toast(t('Весь демо-набор добавлен.'));
   }
 
-  confirmDialog({ title, message, confirmText = 'Подтвердить', icon = 'bx-help-circle', danger = true } = {}) {
+  confirmDialog({ title, message, confirmText = t('Подтвердить'), icon = 'bx-help-circle', danger = true } = {}) {
     return new Promise((resolve) => {
       const overlay = document.getElementById('form-overlay');
-      this.presentFormModal(`
+      this.presentFormModal(ui`
         <div class="form-modal confirm-modal">
           <div class="confirm-icon"><i class="bx ${escapeHtml(icon)}"></i></div>
-          <h2>${escapeHtml(title || 'Подтвердить действие')}</h2>
+          <h2>${escapeHtml(title || t('Подтвердить действие'))}</h2>
           <p>${escapeHtml(message || '')}</p>
           <div class="form-actions">
             <button class="pill-btn" data-close-form>Отмена</button>
@@ -15316,52 +15386,52 @@ class NocturneWriter {
   }
 
   async removeFullDemoSet() {
-    if (!await this.confirmDialog({ title: 'Удалить демо-контент?', message: 'Пользовательские данные не будут затронуты.', confirmText: 'Удалить', icon: 'bx-trash' })) return;
+    if (!await this.confirmDialog({ title: t('Удалить демо-контент?'), message: t('Пользовательские данные не будут затронуты.'), confirmText: t('Удалить'), icon: 'bx-trash' })) return;
     await this.removeDemoDocs({ silent: true });
     await this.removeDemoLore({ silent: true });
     await this.removeDemoTimeline({ silent: true });
     this.renderAll();
-    this.toast('Демо-набор удален.');
+    this.toast(t('Демо-набор удален.'));
   }
 
   async clearTemporaryNotes() {
     const count = this.state.floatingNotes.filter((note) => note.temporary).length;
     if (!count) {
-      this.toast('Временных заметок нет.');
+      this.toast(t('Временных заметок нет.'));
       return;
     }
     this.state.floatingNotes = this.state.floatingNotes.filter((note) => !note.temporary);
     this.renderFloatingNotes();
     this.renderFloatingNotesModal();
     this.renderSettings();
-    this.toast(`Удалено временных заметок: ${count}`);
+    this.toast(msg`Удалено временных заметок: ${count}`);
   }
 
   async clearCurrentDocumentReviewMarks() {
     const doc = this.getFocusedDoc();
     if (!doc) {
-      this.toast('Нет активного документа.');
+      this.toast(t('Нет активного документа.'));
       return;
     }
     const marks = this.state.reviewMarks.filter((mark) => mark.docId === doc.id);
     if (!marks.length) {
-      this.toast('У текущего документа нет правок.');
+      this.toast(t('У текущего документа нет правок.'));
       return;
     }
-    if (!await this.confirmDialog({ title: 'Удалить редакторские правки?', message: `Документ: ${doc.title}`, confirmText: 'Удалить', icon: 'bx-message-x' })) return;
+    if (!await this.confirmDialog({ title: t('Удалить редакторские правки?'), message: msg`Документ: ${doc.title}`, confirmText: t('Удалить'), icon: 'bx-message-x' })) return;
     for (const mark of marks) {
       await this.trash.store('reviewMarks', mark);
       await this.db.delete('reviewMarks', mark.id);
     }
     this.state.reviewMarks = this.state.reviewMarks.filter((mark) => mark.docId !== doc.id);
     this.renderAll();
-    this.toast(`Удалено правок: ${marks.length}`);
+    this.toast(msg`Удалено правок: ${marks.length}`);
   }
 
   async resetHiddenFloatingNotes() {
     const hidden = this.state.floatingNotes.filter((note) => note.hidden && !note.temporary);
     if (!hidden.length) {
-      this.toast('Скрытых постоянных заметок нет.');
+      this.toast(t('Скрытых постоянных заметок нет.'));
       return;
     }
     hidden.forEach((note) => {
@@ -15372,7 +15442,7 @@ class NocturneWriter {
     await Promise.all(hidden.map((note) => this.db.put('floatingNotes', { ...note, forceVisible: false })));
     this.renderFloatingNotes();
     this.renderSettings();
-    this.toast(`Показано окон заметок: ${hidden.length}`);
+    this.toast(msg`Показано окон заметок: ${hidden.length}`);
   }
 
   timelineEventCount(events = this.state.lore.timeline) {
@@ -15423,16 +15493,16 @@ class NocturneWriter {
       + this.state.lore.locations.filter((item) => item.isDemo && item.demoGroup === 'lore').length;
     const demoTimeline = this.state.lore.timeline.filter((item) => item.isDemo && item.demoGroup === 'timeline').length;
     const diagnostics = [
-      ['Документы', this.state.docs.length],
-      ['Персонажи', this.state.lore.characters.length],
-      ['Локации', this.state.lore.locations.length],
-      ['События', this.timelineEventCount()],
-      ['Заметки', this.notesCount()],
+      [t('Документы'), this.state.docs.length],
+      [t('Персонажи'), this.state.lore.characters.length],
+      [t('Локации'), this.state.lore.locations.length],
+      [t('События'), this.timelineEventCount()],
+      [t('Заметки'), this.notesCount()],
       ['Review marks', this.state.reviewMarks.length],
-      ['Локальное хранилище', this.formatBytes(this.storageApproxBytes())],
+      [t('Локальное хранилище'), this.formatBytes(this.storageApproxBytes())],
     ];
     const action = (icon, label, dataAction, danger = false) => `<button class="pill-btn ${danger ? 'danger-btn' : ''}" data-action="${dataAction}"><i class="bx ${icon}"></i> ${label}</button>`;
-    return `
+    return ui`
       <div class="tab-content active misc-settings">
         <p class="settings-section-note">Сервисные, тестовые и редкие функции.</p>
         <section class="misc-card">
@@ -15444,14 +15514,14 @@ class NocturneWriter {
             <span class="misc-chip">${demoDocs} глав · ${demoLore} БЗ · ${demoTimeline} событий</span>
           </div>
           <div class="misc-action-grid">
-            ${action('bx-file-plus', 'Добавить тестовые главы', 'demo-add-docs')}
-            ${action('bx-trash', 'Удалить тестовые главы', 'demo-remove-docs', true)}
-            ${action('bx-user-plus', 'Добавить тестовых персонажей и места', 'demo-add-lore')}
-            ${action('bx-trash', 'Удалить тестовых персонажей и места', 'demo-remove-lore', true)}
-            ${action('bx-git-commit', 'Добавить тестовые события таймлайна', 'demo-add-timeline')}
-            ${action('bx-trash', 'Удалить тестовые события таймлайна', 'demo-remove-timeline', true)}
-            ${action('bx-layer-plus', 'Добавить весь демо-набор', 'demo-add-all')}
-            ${action('bx-trash', 'Удалить весь демо-набор', 'demo-remove-all', true)}
+            ${action('bx-file-plus', t('Добавить тестовые главы'), 'demo-add-docs')}
+            ${action('bx-trash', t('Удалить тестовые главы'), 'demo-remove-docs', true)}
+            ${action('bx-user-plus', t('Добавить тестовых персонажей и места'), 'demo-add-lore')}
+            ${action('bx-trash', t('Удалить тестовых персонажей и места'), 'demo-remove-lore', true)}
+            ${action('bx-git-commit', t('Добавить тестовые события таймлайна'), 'demo-add-timeline')}
+            ${action('bx-trash', t('Удалить тестовые события таймлайна'), 'demo-remove-timeline', true)}
+            ${action('bx-layer-plus', t('Добавить весь демо-набор'), 'demo-add-all')}
+            ${action('bx-trash', t('Удалить весь демо-набор'), 'demo-remove-all', true)}
           </div>
         </section>
         <section class="misc-card misc-dev-card">
@@ -15462,9 +15532,9 @@ class NocturneWriter {
             </div>
           </div>
           <div class="misc-action-grid compact">
-            ${action('bx-eraser', 'Очистить временные заметки', 'clear-temp-notes', true)}
-            ${action('bx-comment-x', 'Очистить редакторские правки текущего документа', 'clear-current-review-marks', true)}
-            ${action('bx-show', 'Сбросить скрытые окна заметок', 'reset-hidden-floating-notes')}
+            ${action('bx-eraser', t('Очистить временные заметки'), 'clear-temp-notes', true)}
+            ${action('bx-comment-x', t('Очистить редакторские правки текущего документа'), 'clear-current-review-marks', true)}
+            ${action('bx-show', t('Сбросить скрытые окна заметок'), 'reset-hidden-floating-notes')}
           </div>
         </section>
         <section class="misc-card">
@@ -15489,22 +15559,22 @@ class NocturneWriter {
     this.closeAllFloatingMenus();
     const wrong = existing?.wrong || String(seedText || '').trim().replace(/\s+/g, ' ');
     if ((!wrong && !options.allowBlank) || wrong.length > 120) {
-      this.toast('Выделение слишком длинное для правила словаря.');
+      this.toast(t('Выделение слишком длинное для правила словаря.'));
       return;
     }
     const normalized = normalizeTypoToken(wrong);
     const builtin = wrong ? TYPO_LOOKUP[normalized] : null;
     const overlay = document.getElementById('form-overlay');
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="form-modal typo-rule-modal">
-        <h2>${existing ? 'Редактировать правило' : 'Добавить правило в словарь'}</h2>
+        <h2>${existing ? t('Редактировать правило') : t('Добавить правило в словарь')}</h2>
         <div class="form-grid">
           <label>Неверное написание<input class="form-control" id="typo-wrong" value="${escapeHtml(wrong)}"></label>
           <label>Правильный вариант<input class="form-control" id="typo-correct" value="${escapeHtml(existing?.correct || builtin?.correct || '')}"></label>
-          <div class="form-field"><span>Метка</span>${this.renderFormSelect('label', ['Мой словарь', 'Частая ошибка', 'Опечатка', 'Раздельно / слитно'].map(label => [label, label]), existing?.label || 'Мой словарь', { id: 'typo-label', label: 'Метка' })}</div>
-          <div class="form-field"><span>Режим</span>${this.renderFormSelect('mode', [['token', 'Слово'], ['phrase', 'Фраза']], /\s/u.test(wrong) ? 'phrase' : 'token', { id: 'typo-mode', label: 'Режим' })}</div>
+          <div class="form-field"><span>Метка</span>${this.renderFormSelect('label', [t('Мой словарь'), t('Частая ошибка'), t('Опечатка'), t('Раздельно / слитно')].map(label => [label, label]), existing?.label || t('Мой словарь'), { id: 'typo-label', label: t('Метка') })}</div>
+          <div class="form-field"><span>Режим</span>${this.renderFormSelect('mode', [['token', t('Слово')], ['phrase', t('Фраза')]], /\s/u.test(wrong) ? 'phrase' : 'token', { id: 'typo-mode', label: t('Режим') })}</div>
         </div>
-        ${builtin && !existing ? '<p class="form-helper">Для встроенного правила будет создано пользовательское переопределение.</p>' : ''}
+        ${builtin && !existing ? ui('<p class="form-helper">Для встроенного правила будет создано пользовательское переопределение.</p>') : ''}
         <div class="form-actions">
           <button class="pill-btn" data-close-form>Отмена</button>
           <button class="pill-btn ai-btn" id="save-typo-rule">Сохранить правило</button>
@@ -15517,7 +15587,7 @@ class NocturneWriter {
       const nextWrong = overlay.querySelector('#typo-wrong').value.trim().replace(/\s+/g, ' ');
       const correct = overlay.querySelector('#typo-correct').value.trim();
       if (!nextWrong || !correct) {
-        this.toast('Заполните неверное и правильное написание.');
+        this.toast(t('Заполните неверное и правильное написание.'));
         return;
       }
       const normalizedWrong = normalizeTypoToken(nextWrong);
@@ -15536,7 +15606,7 @@ class NocturneWriter {
       });
       overlay.classList.remove('active');
       this.closeContextMenu();
-      this.toast('Правило добавлено в словарь.');
+      this.toast(t('Правило добавлено в словарь.'));
     };
   }
 
@@ -15550,7 +15620,7 @@ class NocturneWriter {
       } else if (parsedData && Array.isArray(parsedData.rules)) {
         rules = parsedData.rules;
       } else {
-        this.toast('Неверный формат файла словаря.');
+        this.toast(t('Неверный формат файла словаря.'));
         return;
       }
 
@@ -15602,7 +15672,7 @@ class NocturneWriter {
       }
     } catch (err) {
       console.error('Error importing typos:', err);
-      this.toast('Ошибка при импорте файла.');
+      this.toast(t('Ошибка при импорте файла.'));
     }
   }
 
@@ -15615,7 +15685,7 @@ class NocturneWriter {
       document.body.appendChild(overlay);
     }
     
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="kb-import-card">
         <div class="kb-import-spinner">
           <div class="spinner-ring"></div>
@@ -15632,9 +15702,9 @@ class NocturneWriter {
     const listEl = overlay.querySelector('.kb-import-progress-list');
     
     const steps = [
-      { text: `Чтение файла: ${filename}`, class: 'success' },
-      { text: `Обработано правил: ${rulesCount}`, class: 'success' },
-      { text: mergedCount > 0 ? `Объединено дубликатов: ${mergedCount}` : 'Новые правила добавлены', class: 'success' }
+      { text: msg`Чтение файла: ${filename}`, class: 'success' },
+      { text: msg`Обработано правил: ${rulesCount}`, class: 'success' },
+      { text: mergedCount > 0 ? msg`Объединено дубликатов: ${mergedCount}` : t('Новые правила добавлены'), class: 'success' }
     ];
 
     for (let i = 0; i < steps.length; i++) {
@@ -15649,7 +15719,7 @@ class NocturneWriter {
     await new Promise(r => setTimeout(r, 1000));
     overlay.classList.remove('active');
     
-    this.toast(`Импорт завершен: добавлено/обновлено ${rulesCount} правил.`);
+    this.toast(msg`Импорт завершен: добавлено/обновлено ${rulesCount} правил.`);
   }
 
   handleDictionaryAction(action, event) {
@@ -15690,7 +15760,7 @@ class NocturneWriter {
     if (action === 'dictionary-disable-builtin') {
       const key = target?.dataset.builtinKey;
       const builtin = TYPO_LOOKUP[key];
-      if (key && builtin) this.saveTypoRule({ wrong: builtin.wrong || key, normalizedWrong: key, correct: builtin.correct || '', label: builtin.label || 'Отключено', source: 'disabled-builtin', builtinKey: key, enabled: true });
+      if (key && builtin) this.saveTypoRule({ wrong: builtin.wrong || key, normalizedWrong: key, correct: builtin.correct || '', label: builtin.label || t('Отключено'), source: 'disabled-builtin', builtinKey: key, enabled: true });
     }
     if (action === 'dictionary-enable-builtin') {
       const rule = this.state.typoRules.find((item) => item.source === 'disabled-builtin' && item.builtinKey === target?.dataset.builtinKey);
@@ -15699,7 +15769,7 @@ class NocturneWriter {
     if (action === 'dictionary-override') {
       const key = target?.dataset.builtinKey;
       const builtin = TYPO_LOOKUP[key];
-      if (builtin) this.openTypoRuleForm(builtin.wrong || key, { id: uid('typo-rule'), wrong: builtin.wrong || key, normalizedWrong: key, correct: builtin.correct || '', label: builtin.label || 'Частая ошибка', source: 'override', builtinKey: key, matchMode: /\s/u.test(builtin.wrong || key) ? 'phrase' : 'token' });
+      if (builtin) this.openTypoRuleForm(builtin.wrong || key, { id: uid('typo-rule'), wrong: builtin.wrong || key, normalizedWrong: key, correct: builtin.correct || '', label: builtin.label || t('Частая ошибка'), source: 'override', builtinKey: key, matchMode: /\s/u.test(builtin.wrong || key) ? 'phrase' : 'token' });
     }
     if (action === 'dictionary-reset-override') {
       this.state.typoRules
@@ -16523,11 +16593,11 @@ class NocturneWriter {
   renderKnowledgeSearch({ closeButton = false } = {}) {
     const search = this.knowledgeSearch();
     this.scheduleKnowledgeSelections();
-    return `<section class="knowledge-search" aria-label="Поиск по всей базе знаний">
-      <header class="knowledge-search-heading"><span class="knowledge-search-symbol"><i class="bx bx-search" aria-hidden="true"></i></span><div><h1>Поиск</h1><p>Найдите деталь, имя или идею в вашем мире.</p></div>${closeButton ? '<button type="button" class="btn-icon knowledge-search-close" data-action="close-kb" aria-label="Вернуться к рукописи"><i class="bx bx-x" aria-hidden="true"></i></button>' : ''}</header>
+    return ui`<section class="knowledge-search" aria-label="Поиск по всей базе знаний">
+      <header class="knowledge-search-heading"><span class="knowledge-search-symbol"><i class="bx bx-search" aria-hidden="true"></i></span><div><h1>Поиск</h1><p>Найдите деталь, имя или идею в вашем мире.</p></div>${closeButton ? ui('<button type="button" class="btn-icon knowledge-search-close" data-action="close-kb" aria-label="Вернуться к рукописи"><i class="bx bx-x" aria-hidden="true"></i></button>') : ''}</header>
       <div class="knowledge-search-controls">
         <label class="knowledge-query"><i class="bx bx-search" aria-hidden="true"></i><input type="search" data-knowledge-query aria-label="Слова для поиска по всей базе знаний" placeholder="Имя, псевдоним, фраза из записи…" value="${escapeHtml(search.query)}" autocomplete="off" spellcheck="false"></label>
-        <div class="knowledge-search-scope" role="group" aria-label="Область поиска"><span class="knowledge-selection" data-surface-key="selection" aria-hidden="true"></span>${[['current', 'Это произведение'], ['all', 'Все произведения']].map(([scope, label]) => `<button type="button" data-action="knowledge-search-scope" data-scope="${scope}" aria-pressed="${search.scope === scope}">${label}</button>`).join('')}</div>
+        <div class="knowledge-search-scope" role="group" aria-label="Область поиска"><span class="knowledge-selection" data-surface-key="selection" aria-hidden="true"></span>${[['current', t('Это произведение')], ['all', t('Все произведения')]].map(([scope, label]) => `<button type="button" data-action="knowledge-search-scope" data-scope="${scope}" aria-pressed="${search.scope === scope}">${label}</button>`).join('')}</div>
         <p class="knowledge-search-hint">Персонажи, псевдонимы, локации, события, подсобытия, записи, закладки и правила мира.</p>
       </div>
       <div class="knowledge-search-output">${this.renderKnowledgeSearchResults()}</div>
@@ -16537,13 +16607,13 @@ class NocturneWriter {
   renderKnowledgeSearchResults() {
     const search = this.knowledgeSearch(), terms = queryTerms(search.query), worlds = this.knowledgeSearchWorlds();
     const locked = worlds.filter(world => world.locked || world.protectedStore).length;
-    const notice = locked ? `<p class="knowledge-locked-notice"><i class="bx bx-lock-alt" aria-hidden="true"></i>Защищённые произведения (${locked}) доступны для поиска после разблокировки.</p>` : '';
-    if (!terms.length) return `${notice}<div class="knowledge-search-empty" data-surface-key="query-empty"><i class="bx bx-search-alt" aria-hidden="true"></i><h2>Всё, что вы записали</h2><p>Введите слово или несколько слов. Поиск проверит все текстовые поля, в том числе скрытые за карточками.</p><div class="knowledge-search-categories">${KNOWLEDGE_SEARCH_TYPES.filter(([type]) => type !== 'world').map(([, icon, label]) => `<span><i class="bx ${icon}" aria-hidden="true"></i>${label}</span>`).join('')}</div></div>`;
+    const notice = locked ? ui`<p class="knowledge-locked-notice"><i class="bx bx-lock-alt" aria-hidden="true"></i>Защищённые произведения (${locked}) доступны для поиска после разблокировки.</p>` : '';
+    if (!terms.length) return ui`${notice}<div class="knowledge-search-empty" data-surface-key="query-empty"><i class="bx bx-search-alt" aria-hidden="true"></i><h2>Всё, что вы записали</h2><p>Введите слово или несколько слов. Поиск проверит все текстовые поля, в том числе скрытые за карточками.</p><div class="knowledge-search-categories">${KNOWLEDGE_SEARCH_TYPES.filter(([type]) => type !== 'world').map(([, icon, label]) => `<span><i class="bx ${icon}" aria-hidden="true"></i>${label}</span>`).join('')}</div></div>`;
     const results = searchKnowledge(worlds, search.query, { docs: this.state.docs, floatingNotes: this.state.floatingNotes });
     const counts = new Map(KNOWLEDGE_SEARCH_TYPES.map(([type]) => [type, results.filter(result => result.type === type).length]));
     const filtered = search.category === 'all' ? results : results.filter(result => result.type === search.category);
     const visible = filtered.slice(0, search.limit);
-    const filters = `<div class="knowledge-search-filters" role="group" aria-label="Категории результатов"><span class="knowledge-selection" data-surface-key="selection" aria-hidden="true"></span>${[['all', 'Все', results.length], ...KNOWLEDGE_SEARCH_TYPES.map(([type, , label]) => [type, label, counts.get(type)])].map(([type, label, count]) => `<button type="button" data-surface-key="category:${type}" data-action="knowledge-search-category" data-category="${type}" aria-pressed="${search.category === type}">${label}<span>${count}</span></button>`).join('')}</div>`;
+    const filters = ui`<div class="knowledge-search-filters" role="group" aria-label="Категории результатов"><span class="knowledge-selection" data-surface-key="selection" aria-hidden="true"></span>${[['all', t('Все'), results.length], ...KNOWLEDGE_SEARCH_TYPES.map(([type, , label]) => [type, label, counts.get(type)])].map(([type, label, count]) => `<button type="button" data-surface-key="category:${type}" data-action="knowledge-search-category" data-category="${type}" aria-pressed="${search.category === type}">${label}<span>${count}</span></button>`).join('')}</div>`;
     const fieldMarkup = field => `<span class="knowledge-result-field" data-surface-key="${escapeHtml(field.label)}"><span class="knowledge-field-label">${escapeHtml(field.label)}</span><span>${highlightSearchText(searchSnippet(field.text, terms), terms)}</span></span>`;
     const groups = KNOWLEDGE_SEARCH_TYPES.map(([type, icon, label]) => {
       const group = visible.filter(result => result.type === type);
@@ -16553,10 +16623,10 @@ class NocturneWriter {
           <span class="knowledge-result-top"><span><strong>${highlightSearchText(result.title, terms)}</strong><small>${escapeHtml(result.worldTitle)}${result.parentTitle ? ` · ${escapeHtml(result.parentTitle)}` : ''}</small></span><i class="bx bx-right-arrow-alt" aria-hidden="true"></i></span>
           ${result.fields.slice(0, 3).map(fieldMarkup).join('')}
         </button>
-        ${result.fields.length > 3 ? `<details class="knowledge-result-more"><summary data-action="toggle-knowledge-fields">Ещё совпадения в полях: ${result.fields.length - 3}</summary><div class="knowledge-more-fields">${result.fields.slice(3).map(fieldMarkup).join('')}</div></details>` : ''}
+        ${result.fields.length > 3 ? ui`<details class="knowledge-result-more"><summary data-action="toggle-knowledge-fields">Ещё совпадения в полях: ${result.fields.length - 3}</summary><div class="knowledge-more-fields">${result.fields.slice(3).map(fieldMarkup).join('')}</div></details>` : ''}
       </article>`).join('')}</div></section>`;
     }).join('');
-    return `${notice}<p class="knowledge-result-status" role="status" aria-live="polite">Найдено карточек: <strong>${results.length}</strong>${search.category !== 'all' ? ` · В категории: ${filtered.length}` : ''}</p>${filters}${groups || `<div class="knowledge-search-empty" data-surface-key="no-results"><i class="bx bx-search" aria-hidden="true"></i><h2>Совпадений нет</h2><p>Попробуйте сократить запрос или выбрать другую область поиска.</p></div>`}${filtered.length > visible.length ? '<button type="button" class="pill-btn knowledge-search-more" data-action="knowledge-search-more">Показать ещё</button>' : ''}`;
+    return ui`${notice}<p class="knowledge-result-status" role="status" aria-live="polite">Найдено карточек: <strong>${results.length}</strong>${search.category !== 'all' ? msg` · В категории: ${filtered.length}` : ''}</p>${filters}${groups || ui`<div class="knowledge-search-empty" data-surface-key="no-results"><i class="bx bx-search" aria-hidden="true"></i><h2>Совпадений нет</h2><p>Попробуйте сократить запрос или выбрать другую область поиска.</p></div>`}${filtered.length > visible.length ? ui('<button type="button" class="pill-btn knowledge-search-more" data-action="knowledge-search-more">Показать ещё</button>') : ''}`;
   }
 
   refreshKnowledgeSearch() {
@@ -16685,7 +16755,7 @@ class NocturneWriter {
     const paneId = button.closest('.workspace-pane')?.dataset.paneId || null;
     if (worldId !== (this.state.activeLoreId || 'world')) {
       const world = await this.db.get('lore', worldId);
-      if (!world || world.locked || world.protectedStore) { this.toast('Произведение недоступно. Разблокируйте его и повторите поиск.'); return; }
+      if (!world || world.locked || world.protectedStore) { this.toast(t('Произведение недоступно. Разблокируйте его и повторите поиск.')); return; }
       this.state.activeLoreId = worldId; this.state.settings.activeLoreId = worldId;
       this.state.lore = await this.loadLore();
       await this.persistSettings(); this.updateElectronTitlebarTitle();
@@ -16693,10 +16763,10 @@ class NocturneWriter {
     if (type === 'rules' || type === 'world') {
       const world = this.state.lore;
       const item = type === 'rules' ? (world.rules || []).find((rule, index) => String(rule?.id || index) === id) : world;
-      if (!item) { this.toast('Результат уже удалён. Повторите поиск.'); this.refreshKnowledgeSearch(); return; }
+      if (!item) { this.toast(t('Результат уже удалён. Повторите поиск.')); this.refreshKnowledgeSearch(); return; }
       const fields = searchKnowledge([{ ...world, id: worldId }], this.knowledgeSearch().query).find(result => result.type === type && result.id === id)?.fields || [];
       const overlay = document.getElementById('form-overlay');
-      this.presentFormModal(`<div class="form-modal utility-modal knowledge-result-preview"><div class="modal-head-row"><div><h2>${type === 'rules' ? 'Правило мира' : escapeHtml(world.title)}</h2><p>${escapeHtml(world.title)}</p></div><button type="button" class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x" aria-hidden="true"></i></button></div>${fields.map(field => `<section><h3>${escapeHtml(field.label)}</h3><p>${highlightSearchText(field.text, queryTerms(this.knowledgeSearch().query))}</p></section>`).join('')}</div>`);
+      this.presentFormModal(ui`<div class="form-modal utility-modal knowledge-result-preview"><div class="modal-head-row"><div><h2>${type === 'rules' ? t('Правило мира') : escapeHtml(world.title)}</h2><p>${escapeHtml(world.title)}</p></div><button type="button" class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x" aria-hidden="true"></i></button></div>${fields.map(field => `<section><h3>${escapeHtml(field.label)}</h3><p>${highlightSearchText(field.text, queryTerms(this.knowledgeSearch().query))}</p></section>`).join('')}</div>`);
       overlay.querySelector('[data-close-form]').onclick = () => this.closeOverlay(overlay);
       return;
     }
@@ -16706,7 +16776,7 @@ class NocturneWriter {
   }
 
   renderNoteReadSearch() {
-    return `<div class="note-read-search-shell"><div class="note-read-search" hidden>
+    return ui`<div class="note-read-search-shell"><div class="note-read-search" hidden>
       <label><i class="bx bx-search" aria-hidden="true"></i><input type="search" data-note-read-query aria-label="Поиск в этой заметке" placeholder="Найти в тексте…" autocomplete="off" spellcheck="false"></label>
       <span class="note-read-search-count" role="status" aria-live="polite">Введите текст</span>
       <div class="note-read-search-actions"><button type="button" class="btn-icon" data-action="note-read-match" data-direction="-1" aria-label="Предыдущее совпадение" disabled><i class="bx bx-chevron-up" aria-hidden="true"></i></button><button type="button" class="btn-icon" data-action="note-read-match" data-direction="1" aria-label="Следующее совпадение" disabled><i class="bx bx-chevron-down" aria-hidden="true"></i></button><button type="button" class="btn-icon" data-action="close-note-read-search" aria-label="Закрыть поиск"><i class="bx bx-x" aria-hidden="true"></i></button></div>
@@ -16738,7 +16808,7 @@ class NocturneWriter {
   updateNoteReadSearch(article) {
     const text = article.querySelector('.note-read-text'), query = article.querySelector('[data-note-read-query]').value;
     const note = this.state.lore.notes.find(item => item.id === article.dataset.loreId);
-    const body = note ? note.body || 'Текст записи пуст.' : article.__noteReadText ?? text.textContent;
+    const body = note ? note.body || t('Текст записи пуст.') : article.__noteReadText ?? text.textContent;
     article.__noteReadText = body;
     let count = 0;
     const highlight = (element, value) => {
@@ -16746,12 +16816,12 @@ class NocturneWriter {
       for (const range of findTextMatches(value, query)) { html += escapeHtml(value.slice(cursor, range.start)) + `<mark data-note-match="${count++}">${escapeHtml(value.slice(range.start, range.end))}</mark>`; cursor = range.end; }
       element.innerHTML = html + escapeHtml(value.slice(cursor));
     };
-    highlight(article.querySelector('.note-read-title'), note?.title || 'Без названия');
+    highlight(article.querySelector('.note-read-title'), note?.title || t('Без названия'));
     highlight(text, body);
     this.runMotion(text, [{ opacity: .55 }, { opacity: 1 }], { channel: 'note-find-text', duration: 180 });
     article.__noteReadMatch = -1;
     article.querySelectorAll('[data-action="note-read-match"]').forEach(button => button.disabled = count === 0);
-    article.querySelector('.note-read-search-count').textContent = !query.trim() ? 'Введите текст' : count ? `1 / ${count}` : 'Совпадений нет';
+    article.querySelector('.note-read-search-count').textContent = !query.trim() ? t('Введите текст') : count ? `1 / ${count}` : t('Совпадений нет');
     this.runMotion(article.querySelector('.note-read-search-count'), [{ opacity: .4 }, { opacity: 1 }], { channel: 'note-find-count', duration: 160 });
     if (count) this.navigateNoteReadMatch(article, 1);
   }
@@ -16774,7 +16844,7 @@ class NocturneWriter {
     const note = this.state.lore.notes.find(item => item.id === anchor.dataset.loreId);
     if (!note) return;
     this.noteActionsAnchor = anchor;
-    const actions = [['toggle-note-completed', note.completed ? 'bx-undo' : 'bx-check-double', note.completed ? 'Вернуть в работу' : 'Отметить исполненной'], ['clean-note', 'reaper-icon', 'Чистильщик™'], ['dump-single-entity', 'bx-download', 'Экспорт записи'], ['delete-lore', 'bx-trash', 'Удалить запись']];
+    const actions = [['toggle-note-completed', note.completed ? 'bx-undo' : 'bx-check-double', note.completed ? t('Вернуть в работу') : t('Отметить исполненной')], ['clean-note', 'reaper-icon', t('Чистильщик™')], ['dump-single-entity', 'bx-download', t('Экспорт записи')], ['delete-lore', 'bx-trash', t('Удалить запись')]];
     this.updateSurfaceHTML(this.floatingMenuElement('noteActions'), actions.map(([action, icon, label]) => `<button type="button" role="menuitem" class="floating-menu-item ${action === 'delete-lore' ? 'danger' : ''}" data-action="${action}" data-lore-type="notes" data-lore-id="${escapeHtml(note.id)}"><i class="${icon === 'reaper-icon' ? icon : `bx ${icon}`}" aria-hidden="true"></i><span>${label}</span></button>`).join(''), { animate: false });
     this.openFloatingMenu('noteActions');
   }
@@ -16806,16 +16876,16 @@ class NocturneWriter {
       const switcher = document.querySelector('#kb-modal .kb-project-switcher');
       if (switcher) {
         const titleSpan = switcher.querySelector('span');
-        if (titleSpan) titleSpan.textContent = this.state.lore.title || 'Основное произведение';
+        if (titleSpan) titleSpan.textContent = this.workDisplayTitle({ id: this.state.activeLoreId, title: this.state.lore.title }) || t('Основное произведение');
         
         const dropdown = switcher.querySelector('.kb-project-switcher-dropdown');
         if (dropdown) {
           const activeId = this.state.activeLoreId || 'world';
-          this.updateSurfaceHTML(dropdown, `
+          this.updateSurfaceHTML(dropdown, ui`
             ${(this.state.kbProjects || []).map(p => `
               <div class="kb-project-item ${p.id === activeId ? 'active' : ''}" data-project-id="${p.id}">
                 <i class="bx bx-book-bookmark"></i>
-                <span>${escapeHtml(p.title)}</span>
+                <span>${escapeHtml(this.workDisplayTitle(p))}</span>
                 ${p.id === activeId ? '<i class="bx bx-check check-icon"></i>' : ''}
               </div>
             `).join('')}
@@ -16839,7 +16909,7 @@ class NocturneWriter {
       if (main) {
         this.kbRendering = true;
         try {
-          this.updateSurfaceHTML(main, detail ? this.renderLoreDetail(detail.type, detail.item, this.state.kbReadMode) : active === 'bookmarks' ? this.bookmarks.manager({ closeButton: true }) : active === 'search' ? this.renderKnowledgeSearch({ closeButton: true }) : `
+          this.updateSurfaceHTML(main, detail ? this.renderLoreDetail(detail.type, detail.item, this.state.kbReadMode) : active === 'bookmarks' ? this.bookmarks.manager({ closeButton: true }) : active === 'search' ? this.renderKnowledgeSearch({ closeButton: true }) : ui`
           ${this.kbViewTools()}
           <div class="kb-search-wrap">
             <i class="bx bx-search"></i>
@@ -16854,7 +16924,7 @@ class NocturneWriter {
                 <i class="bx bx-x kb-close-btn" data-action="close-kb"></i>
               </div>
             </div>
-            <div class="character-grid" data-dnd-zone="characters">${chars.length ? chars.map((item) => this.characterCard(item, true)).join('') : this.emptyStateMarkup('bx-user-pin', 'Персонажей пока нет.', 'Создайте первый профиль, чтобы Nocturne начал узнавать имена в тексте.', 'new-lore', 'Создать профиль', 'data-lore-type="characters"')}</div>
+            <div class="character-grid" data-dnd-zone="characters">${chars.length ? chars.map((item) => this.characterCard(item, true)).join('') : this.emptyStateMarkup('bx-user-pin', t('Персонажей пока нет.'), t('Создайте первый профиль, чтобы Nocturne начал узнавать имена в тексте.'), 'new-lore', t('Создать профиль'), 'data-lore-type="characters"')}</div>
           </section>
           <section class="kb-section ${active === 'locations' ? 'active' : ''}" id="kb-sec-locations">
             <div class="kb-header">
@@ -16865,7 +16935,7 @@ class NocturneWriter {
                 <i class="bx bx-x kb-close-btn" data-action="close-kb"></i>
               </div>
             </div>
-            <div class="locations-grid" data-dnd-zone="locations">${locs.length ? locs.map((item) => this.locationCard(item, true)).join('') : this.emptyStateMarkup('bx-map-alt', 'Локаций пока нет.', 'Добавьте первое место мира или сцены.', 'new-lore', 'Добавить место', 'data-lore-type="locations"')}</div>
+            <div class="locations-grid" data-dnd-zone="locations">${locs.length ? locs.map((item) => this.locationCard(item, true)).join('') : this.emptyStateMarkup('bx-map-alt', t('Локаций пока нет.'), t('Добавьте первое место мира или сцены.'), 'new-lore', t('Добавить место'), 'data-lore-type="locations"')}</div>
           </section>
           <section class="kb-section ${active === 'timeline' ? 'active' : ''}" id="kb-sec-timeline">
             <div class="kb-header">
@@ -16876,7 +16946,7 @@ class NocturneWriter {
                 <i class="bx bx-x kb-close-btn" data-action="close-kb"></i>
               </div>
             </div>
-            <div class="timeline-container" data-dnd-zone="timeline">${time.length ? time.map((item, i, arr) => this.timelineCard(item, { isLast: i === arr.length - 1, draggable: true })).join('') : this.emptyStateMarkup('bx-git-commit', 'Хронология пока пуста.', 'Добавьте первое событие, чтобы выстроить историю.', 'new-lore', 'Добавить событие', 'data-lore-type="timeline"')}</div>
+            <div class="timeline-container" data-dnd-zone="timeline">${time.length ? time.map((item, i, arr) => this.timelineCard(item, { isLast: i === arr.length - 1, draggable: true })).join('') : this.emptyStateMarkup('bx-git-commit', t('Хронология пока пуста.'), t('Добавьте первое событие, чтобы выстроить историю.'), 'new-lore', t('Добавить событие'), 'data-lore-type="timeline"')}</div>
           </section>
           <section class="kb-section ${active === 'notes' ? 'active' : ''}" id="kb-sec-notes">
             <div class="kb-header">
@@ -16888,7 +16958,7 @@ class NocturneWriter {
                 <i class="bx bx-x kb-close-btn" data-action="close-kb"></i>
               </div>
             </div>
-            <div class="character-grid" data-dnd-zone="notes">${notes.length ? notes.map((item) => this.noteCard(item, true)).join('') : this.emptyStateMarkup('bx-note', 'Записей пока нет.', 'Добавьте первую свободную запись или заметку к миру.', 'new-lore', 'Создать запись', 'data-lore-type="notes"')}</div>
+            <div class="character-grid" data-dnd-zone="notes">${notes.length ? notes.map((item) => this.noteCard(item, true)).join('') : this.emptyStateMarkup('bx-note', t('Записей пока нет.'), t('Добавьте первую свободную запись или заметку к миру.'), 'new-lore', t('Создать запись'), 'data-lore-type="notes"')}</div>
           </section>
           ${activeSubtimeline ? this.subtimelinePanel(activeSubtimeline) : ''}
         `);
@@ -16910,19 +16980,19 @@ class NocturneWriter {
       return;
     }
 
-    document.getElementById('kb-modal').innerHTML = `
+    document.getElementById('kb-modal').innerHTML = ui`
       <aside class="kb-sidebar">
         <h2 class="kb-title">База Знаний</h2>
         <div class="kb-sidebar-header">
           <div class="kb-project-switcher" id="kb-project-switcher-btn">
             <i class="bx bx-cabinet"></i>
-            <span>${escapeHtml(this.state.lore.title || 'Основное произведение')}</span>
+            <span>${escapeHtml(this.workDisplayTitle({ id: this.state.activeLoreId, title: this.state.lore.title }) || t('Основное произведение'))}</span>
             <i class="bx bx-chevron-down"></i>
             <div class="kb-project-switcher-dropdown popover-surface">
               ${(this.state.kbProjects || []).map(p => `
                 <div class="kb-project-item ${p.id === (this.state.activeLoreId || 'world') ? 'active' : ''}" data-project-id="${p.id}">
                   <i class="bx bx-book-bookmark"></i>
-                  <span>${escapeHtml(p.title)}</span>
+                  <span>${escapeHtml(this.workDisplayTitle(p))}</span>
                   ${p.id === (this.state.activeLoreId || 'world') ? '<i class="bx bx-check check-icon"></i>' : ''}
                 </div>
               `).join('')}
@@ -16939,19 +17009,19 @@ class NocturneWriter {
           </div>
         </div>
         ${[
-        ['characters', 'bx-user-pin', 'Персонажи'],
-        ['locations', 'bx-map-alt', 'Локации'],
-        ['timeline', 'bx-git-commit', 'Таймлайн'],
-        ['notes', 'bx-note', 'Записи'],
-         ['bookmarks', 'bx-bookmark', 'Закладки'],
-        ['search', 'bx-search', 'Поиск'],
+        ['characters', 'bx-user-pin', t('Персонажи')],
+        ['locations', 'bx-map-alt', t('Локации')],
+        ['timeline', 'bx-git-commit', t('Таймлайн')],
+        ['notes', 'bx-note', t('Записи')],
+         ['bookmarks', 'bx-bookmark', t('Закладки')],
+        ['search', 'bx-search', t('Поиск')],
       ].map(([id, icon, label]) => `<div class="settings-tab ${active === id ? 'active' : ''}" data-kb-tab="${id}"><i class="bx ${icon}"></i> ${label}</div>`).join('')}
         <div class="kb-dump-sidebar-section">
           <button class="pill-btn kb-sidebar-dump-btn" data-action="dump-full-kb" title="Скачать резервную копию всей базы знаний"><i class="bx bx-download"></i> Дамп всей БЗ</button>
         </div>
       </aside>
       <main class="kb-main">
-        ${detail ? this.renderLoreDetail(detail.type, detail.item, this.state.kbReadMode) : active === 'bookmarks' ? this.bookmarks.manager({ closeButton: true }) : active === 'search' ? this.renderKnowledgeSearch({ closeButton: true }) : `
+        ${detail ? this.renderLoreDetail(detail.type, detail.item, this.state.kbReadMode) : active === 'bookmarks' ? this.bookmarks.manager({ closeButton: true }) : active === 'search' ? this.renderKnowledgeSearch({ closeButton: true }) : ui`
         ${this.kbViewTools()}
         <div class="kb-search-wrap">
           <i class="bx bx-search"></i>
@@ -16966,7 +17036,7 @@ class NocturneWriter {
               <i class="bx bx-x kb-close-btn" data-action="close-kb"></i>
             </div>
           </div>
-          <div class="character-grid" data-dnd-zone="characters">${chars.length ? chars.map((item) => this.characterCard(item, true)).join('') : this.emptyStateMarkup('bx-user-pin', 'Персонажей пока нет.', 'Создайте первый профиль, чтобы Nocturne начал узнавать имена в тексте.', 'new-lore', 'Создать профиль', 'data-lore-type="characters"')}</div>
+          <div class="character-grid" data-dnd-zone="characters">${chars.length ? chars.map((item) => this.characterCard(item, true)).join('') : this.emptyStateMarkup('bx-user-pin', t('Персонажей пока нет.'), t('Создайте первый профиль, чтобы Nocturne начал узнавать имена в тексте.'), 'new-lore', t('Создать профиль'), 'data-lore-type="characters"')}</div>
         </section>
         <section class="kb-section ${active === 'locations' ? 'active' : ''}" id="kb-sec-locations">
           <div class="kb-header">
@@ -16977,7 +17047,7 @@ class NocturneWriter {
               <i class="bx bx-x kb-close-btn" data-action="close-kb"></i>
             </div>
           </div>
-          <div class="locations-grid" data-dnd-zone="locations">${locs.length ? locs.map((item) => this.locationCard(item, true)).join('') : this.emptyStateMarkup('bx-map-alt', 'Локаций пока нет.', 'Добавьте первое место мира или сцены.', 'new-lore', 'Добавить место', 'data-lore-type="locations"')}</div>
+          <div class="locations-grid" data-dnd-zone="locations">${locs.length ? locs.map((item) => this.locationCard(item, true)).join('') : this.emptyStateMarkup('bx-map-alt', t('Локаций пока нет.'), t('Добавьте первое место мира или сцены.'), 'new-lore', t('Добавить место'), 'data-lore-type="locations"')}</div>
         </section>
         <section class="kb-section ${active === 'timeline' ? 'active' : ''}" id="kb-sec-timeline">
           <div class="kb-header">
@@ -16988,7 +17058,7 @@ class NocturneWriter {
               <i class="bx bx-x kb-close-btn" data-action="close-kb"></i>
             </div>
           </div>
-          <div class="timeline-container" data-dnd-zone="timeline">${time.length ? time.map((item, i, arr) => this.timelineCard(item, { isLast: i === arr.length - 1, draggable: true })).join('') : this.emptyStateMarkup('bx-git-commit', 'Хронология пока пуста.', 'Добавьте первое событие, чтобы выстроить историю.', 'new-lore', 'Добавить событие', 'data-lore-type="timeline"')}</div>
+          <div class="timeline-container" data-dnd-zone="timeline">${time.length ? time.map((item, i, arr) => this.timelineCard(item, { isLast: i === arr.length - 1, draggable: true })).join('') : this.emptyStateMarkup('bx-git-commit', t('Хронология пока пуста.'), t('Добавьте первое событие, чтобы выстроить историю.'), 'new-lore', t('Добавить событие'), 'data-lore-type="timeline"')}</div>
         </section>
         <section class="kb-section ${active === 'notes' ? 'active' : ''}" id="kb-sec-notes">
           <div class="kb-header">
@@ -17000,7 +17070,7 @@ class NocturneWriter {
               <i class="bx bx-x kb-close-btn" data-action="close-kb"></i>
             </div>
           </div>
-          <div class="character-grid" data-dnd-zone="notes">${notes.length ? notes.map((item) => this.noteCard(item, true)).join('') : this.emptyStateMarkup('bx-note', 'Записей пока нет.', 'Добавьте первую свободную запись или заметку к миру.', 'new-lore', 'Создать запись', 'data-lore-type="notes"')}</div>
+          <div class="character-grid" data-dnd-zone="notes">${notes.length ? notes.map((item) => this.noteCard(item, true)).join('') : this.emptyStateMarkup('bx-note', t('Записей пока нет.'), t('Добавьте первую свободную запись или заметку к миру.'), 'new-lore', t('Создать запись'), 'data-lore-type="notes"')}</div>
         </section>
         ${activeSubtimeline ? this.subtimelinePanel(activeSubtimeline) : ''}
         `}
@@ -17178,7 +17248,7 @@ class NocturneWriter {
     const kind = this.singularLoreType(type);
     if (kind === 'timeline' || kind === 'subtimeline') {
       const isSub = kind === 'subtimeline';
-      const label = isSub ? 'Подсобытие' : 'Событие таймлайна';
+      const label = isSub ? t('Подсобытие') : t('Событие таймлайна');
       const visual = isSub ? `<i class="bx bx-git-branch"></i>` : `<i class="bx bx-git-commit"></i>`;
       
       const chars = (item.characterIds || []).map(cid => this.state.lore.characters.find(c => c.id === cid)).filter(Boolean);
@@ -17210,13 +17280,13 @@ class NocturneWriter {
 
       const docsSection = () => {
         if (!chapters.length) return '';
-        return `
+        return ui`
           <div class="lore-detail-panel">
             <h3>Связанные главы</h3>
             <div class="dossier-chip-row">
               ${chapters.map(doc => `
                 <span class="association-badge doc-badge" data-action="open-search-result" data-doc-id="${doc.id}">
-                  <i class="bx bx-book-content"></i>${escapeHtml(doc.title || 'Без названия')}
+                  <i class="bx bx-book-content"></i>${escapeHtml(doc.title || t('Без названия'))}
                 </span>
               `).join('')}
             </div>
@@ -17224,7 +17294,7 @@ class NocturneWriter {
         `;
       };
 
-      return `
+      return ui`
         <article class="lore-detail timeline-detail" data-lore-id="${item.id}" data-lore-type="${type}">
           <div class="lore-detail-topbar">
             <button class="pill-btn" data-action="back-lore-list"><i class="bx bx-arrow-back"></i> Назад к списку</button>
@@ -17234,7 +17304,7 @@ class NocturneWriter {
             <div class="lore-detail-visual">${visual}</div>
             <div>
               <div class="entity-chip">${label}</div>
-              <h1>${escapeHtml(item.title || 'Без названия')}</h1>
+              <h1>${escapeHtml(item.title || t('Без названия'))}</h1>
               <p>${escapeHtml(item.date || '')}</p>
               <div class="lore-detail-actions">
                 <button class="pill-btn ai-btn" data-action="edit-lore" data-lore-type="${type}" data-lore-id="${item.id}"${parentAttr}><i class="bx bx-edit"></i> Редактировать</button>
@@ -17246,25 +17316,25 @@ class NocturneWriter {
           <section class="lore-detail-grid">
             <div class="lore-detail-panel lore-detail-main">
               <h3>Описание</h3>
-              <p>${escapeHtml(item.body || 'Описание отсутствует.').replace(/\n/g, '<br>')}</p>
+              <p>${escapeHtml(item.body || t('Описание отсутствует.')).replace(/\n/g, '<br>')}</p>
             </div>
-            ${associationSection('Персонажи', chars, 'character', 'bx-user')}
-            ${associationSection('Локации', locs, 'location', 'bx-map-alt')}
-            ${associationSection('Записи', notes, 'note', 'bx-note')}
+            ${associationSection(t('Персонажи'), chars, 'character', 'bx-user')}
+            ${associationSection(t('Локации'), locs, 'location', 'bx-map-alt')}
+            ${associationSection(t('Записи'), notes, 'note', 'bx-note')}
             ${docsSection()}
           </section>
         </article>
       `;
     }
-    const label = kind === 'location' ? 'Локация' : kind === 'note' ? 'Запись' : 'Персонаж';
-    const title = this.entityDisplayName(item) || item.title || 'Без названия';
+    const label = kind === 'location' ? t('Локация') : kind === 'note' ? t('Запись') : t('Персонаж');
+    const title = this.entityDisplayName(item) || item.title || t('Без названия');
     const visual = kind === 'note' ? `<i class="bx bx-note"></i>` : (item.image ? `<img src="${item.image}" alt="">` : `<i class="bx ${item.icon || (kind === 'location' ? 'bx-buildings' : 'bx-user')}"></i>`);
     const docs = (item.documentIds || [])
       .map((id) => this.state.docs.find((doc) => doc.id === id))
       .filter(Boolean);
     const chips = (values) => values?.length
       ? `<div class="dossier-chip-row">${values.map((value) => `<span>${escapeHtml(value)}</span>`).join('')}</div>`
-      : '<p class="empty-state">Не заполнено.</p>';
+      : ui('<p class="empty-state">Не заполнено.</p>');
 
     const associatedEvents = [];
     (this.state.lore.timeline || []).forEach(event => {
@@ -17298,8 +17368,8 @@ class NocturneWriter {
         if (matchesMain) {
           const role = (event.characterRoles && event.characterRoles[item.id]) || 'regular';
           let roleLabel = '';
-          if (role === 'first_appearance') roleLabel = ' <span class="role-badge role-first-appearance"><i class="bx bx-star"></i> Появление</span>';
-          else if (role === 'death') roleLabel = ' <span class="role-badge role-death"><i class="bx bx-skull"></i> Смерть</span>';
+          if (role === 'first_appearance') roleLabel = ui(' <span class="role-badge role-first-appearance"><i class="bx bx-star"></i> Появление</span>');
+          else if (role === 'death') roleLabel = ui(' <span class="role-badge role-death"><i class="bx bx-skull"></i> Смерть</span>');
           
           const charBadges = (Array.isArray(event.characterIds) ? event.characterIds : []).map(charId => {
             if (kind === 'character' && charId === item.id) return '';
@@ -17318,14 +17388,14 @@ class NocturneWriter {
           const docBadges = (Array.isArray(event.chapterIds) ? event.chapterIds : []).map(docId => {
             const doc = this.state.docs.find(d => d.id === docId);
             if (!doc) return '';
-            return `<span class="association-badge doc-badge" data-action="open-search-result" data-doc-id="${doc.id}"><i class="bx bx-book-content"></i>${escapeHtml(doc.title || 'Без названия')}</span>`;
+            return `<span class="association-badge doc-badge" data-action="open-search-result" data-doc-id="${doc.id}"><i class="bx bx-book-content"></i>${escapeHtml(doc.title || t('Без названия'))}</span>`;
           }).filter(Boolean).join('');
 
           const noteBadges = (Array.isArray(event.noteIds) ? event.noteIds : []).map(noteId => {
             if (kind === 'note' && noteId === item.id) return '';
             const note = (this.state.lore.notes || []).find(n => n.id === noteId);
             if (!note) return '';
-            return `<span class="association-badge note-badge" data-action="open-lore-detail" data-entity-kind="note" data-entity-id="${note.id}"><i class="bx bx-note"></i>${escapeHtml(note.title || 'Без названия')}</span>`;
+            return `<span class="association-badge note-badge" data-action="open-lore-detail" data-entity-kind="note" data-entity-id="${note.id}"><i class="bx bx-note"></i>${escapeHtml(note.title || t('Без названия'))}</span>`;
           }).filter(Boolean).join('');
 
           const badgesHTML = (charBadges || locBadges || noteBadges || docBadges) ? `
@@ -17347,8 +17417,8 @@ class NocturneWriter {
         matchedSubEvents.forEach(sub => {
           const role = (sub.characterRoles && sub.characterRoles[item.id]) || 'regular';
           let roleLabel = '';
-          if (role === 'first_appearance') roleLabel = ' <span class="role-badge role-first-appearance"><i class="bx bx-star"></i> Появление</span>';
-          else if (role === 'death') roleLabel = ' <span class="role-badge role-death"><i class="bx bx-skull"></i> Смерть</span>';
+          if (role === 'first_appearance') roleLabel = ui(' <span class="role-badge role-first-appearance"><i class="bx bx-star"></i> Появление</span>');
+          else if (role === 'death') roleLabel = ui(' <span class="role-badge role-death"><i class="bx bx-skull"></i> Смерть</span>');
           
           const charBadges = (Array.isArray(sub.characterIds) ? sub.characterIds : []).map(charId => {
             if (kind === 'character' && charId === item.id) return '';
@@ -17367,14 +17437,14 @@ class NocturneWriter {
           const docBadges = (Array.isArray(sub.chapterIds) ? sub.chapterIds : []).map(docId => {
             const doc = this.state.docs.find(d => d.id === docId);
             if (!doc) return '';
-            return `<span class="association-badge doc-badge" data-action="open-search-result" data-doc-id="${doc.id}"><i class="bx bx-book-content"></i>${escapeHtml(doc.title || 'Без названия')}</span>`;
+            return `<span class="association-badge doc-badge" data-action="open-search-result" data-doc-id="${doc.id}"><i class="bx bx-book-content"></i>${escapeHtml(doc.title || t('Без названия'))}</span>`;
           }).filter(Boolean).join('');
 
           const noteBadges = (Array.isArray(sub.noteIds) ? sub.noteIds : []).map(noteId => {
             if (kind === 'note' && noteId === item.id) return '';
             const note = (this.state.lore.notes || []).find(n => n.id === noteId);
             if (!note) return '';
-            return `<span class="association-badge note-badge" data-action="open-lore-detail" data-entity-kind="note" data-entity-id="${note.id}"><i class="bx bx-note"></i>${escapeHtml(note.title || 'Без названия')}</span>`;
+            return `<span class="association-badge note-badge" data-action="open-lore-detail" data-entity-kind="note" data-entity-id="${note.id}"><i class="bx bx-note"></i>${escapeHtml(note.title || t('Без названия'))}</span>`;
           }).filter(Boolean).join('');
 
           const badgesHTML = (charBadges || locBadges || noteBadges || docBadges) ? `
@@ -17386,7 +17456,7 @@ class NocturneWriter {
             </div>
           ` : '';
 
-          itemsStr += `<li class="associated-timeline-item-row sub-row">
+          itemsStr += ui`<li class="associated-timeline-item-row sub-row">
             <span class="assoc-date">${escapeHtml(sub.date)}</span>
             <strong>${escapeHtml(sub.title)}</strong> <span class="subtimeline-type-badge"><i class="bx bx-git-branch"></i> Подсобытие</span>${roleLabel}
             <p>${escapeHtml(sub.body)}</p>
@@ -17396,7 +17466,7 @@ class NocturneWriter {
         return itemsStr;
       }).join('');
 
-      timelinePanelHTML = `
+      timelinePanelHTML = ui`
         <div class="lore-detail-panel lore-detail-main timeline-associations-panel">
           <h3>Хронология и события (${associatedEvents.length})</h3>
           <ul class="associated-timeline-list">
@@ -17405,7 +17475,7 @@ class NocturneWriter {
         </div>
       `;
     } else {
-      timelinePanelHTML = `
+      timelinePanelHTML = ui`
         <div class="lore-detail-panel lore-detail-main timeline-associations-panel">
           <h3>Хронология и события</h3>
           <p class="empty-state">Событий с участием этой записи пока не зафиксировано.</p>
@@ -17415,7 +17485,7 @@ class NocturneWriter {
 
     if (kind === 'note') {
       if (readMode) {
-        return `
+        return ui`
           <article class="lore-detail note-detail note-read-mode" data-lore-id="${item.id}" data-lore-type="${type}">
             <div class="lore-detail-topbar">
               <button class="pill-btn" data-action="toggle-note-read-mode"><i class="bx bx-arrow-back"></i> Назад к досье</button>
@@ -17423,13 +17493,13 @@ class NocturneWriter {
             </div>
             ${this.renderNoteReadSearch()}
             <div class="note-read-container">
-              <h1 class="note-read-title">${escapeHtml(item.title || 'Без названия')}</h1>
-              <div class="note-read-text">${escapeHtml(item.body || 'Текст записи пуст.')}</div>
+              <h1 class="note-read-title">${escapeHtml(item.title || t('Без названия'))}</h1>
+              <div class="note-read-text">${escapeHtml(item.body || t('Текст записи пуст.'))}</div>
             </div>
           </article>
         `;
       }
-      return `
+      return ui`
         <article class="lore-detail note-detail" data-lore-id="${item.id}" data-lore-type="${type}">
           <div class="lore-detail-topbar">
             <button class="pill-btn" data-action="back-lore-list"><i class="bx bx-arrow-back"></i> Назад к списку</button>
@@ -17451,7 +17521,7 @@ class NocturneWriter {
           <section class="lore-detail-grid">
             <div class="lore-detail-panel lore-detail-main">
               <h3>Описание</h3>
-              <p>${escapeHtml(item.body || 'Текст записи пуст.').replace(/\n/g, '<br>')}</p>
+              <p>${escapeHtml(item.body || t('Текст записи пуст.')).replace(/\n/g, '<br>')}</p>
             </div>
             ${timelinePanelHTML}
           </section>
@@ -17459,7 +17529,7 @@ class NocturneWriter {
       `;
     }
 
-    return `
+    return ui`
       <article class="lore-detail" data-lore-id="${item.id}" data-lore-type="${type}">
         <div class="lore-detail-topbar">
           <button class="pill-btn" data-action="back-lore-list"><i class="bx bx-arrow-back"></i> Назад к списку</button>
@@ -17470,7 +17540,7 @@ class NocturneWriter {
           <div>
             <div class="entity-chip">${label}</div>
             <h1>${escapeHtml(title)}</h1>
-            <p>${escapeHtml(item.role || (kind === 'location' ? 'Тип места не указан' : 'Роль не указана'))}</p>
+            <p>${escapeHtml(item.role || (kind === 'location' ? t('Тип места не указан') : t('Роль не указана')))}</p>
             <div class="lore-detail-actions">
               <button class="pill-btn ai-btn" data-action="edit-lore" data-lore-type="${type}" data-lore-id="${item.id}"><i class="bx bx-edit"></i> Редактировать</button>
               <button class="pill-btn" data-action="dump-single-entity" data-lore-type="${type}" data-lore-id="${item.id}"><i class="bx bx-download"></i> Дамп карточки</button>
@@ -17483,7 +17553,7 @@ class NocturneWriter {
         <section class="lore-detail-grid">
           <div class="lore-detail-panel lore-detail-main">
             <h3>Описание</h3>
-            <p>${escapeHtml(item.body || 'Описание пока не заполнено.')}</p>
+            <p>${escapeHtml(item.body || t('Описание пока не заполнено.'))}</p>
           </div>
           <div class="lore-detail-panel">
             <h3>Алиасы</h3>
@@ -17496,7 +17566,7 @@ class NocturneWriter {
           ${timelinePanelHTML}
           <div class="lore-detail-panel lore-detail-main">
             <h3>Связанные документы</h3>
-            ${docs.length ? `<div class="dossier-doc-list">${docs.map((doc) => `<button type="button" data-doc-id="${doc.id}"><i class="bx bx-file"></i><span>${escapeHtml(doc.title)}</span></button>`).join('')}</div>` : '<p class="empty-state">Связанных документов пока нет.</p>'}
+            ${docs.length ? `<div class="dossier-doc-list">${docs.map((doc) => `<button type="button" data-doc-id="${doc.id}"><i class="bx bx-file"></i><span>${escapeHtml(doc.title)}</span></button>`).join('')}</div>` : ui('<p class="empty-state">Связанных документов пока нет.</p>')}
           </div>
         </section>
       </article>
@@ -17610,10 +17680,10 @@ class NocturneWriter {
 
   showCharExportModal(char, cleanName) {
     const overlay = document.getElementById('form-overlay');
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="form-modal search-choice-modal" style="width: min(920px, calc(100vw - 44px));">
         <div class="modal-head-row">
-          <div><h2>Выберите формат экспорта</h2><p>Персонаж: <strong>${escapeHtml(char.displayName || char.name || 'Без имени')}</strong></p></div>
+          <div><h2>Выберите формат экспорта</h2><p>Персонаж: <strong>${escapeHtml(char.displayName || char.name || t('Без имени'))}</strong></p></div>
           <button class="btn-icon" data-close-form><i class="bx bx-x"></i></button>
         </div>
         <div class="search-mode-grid" style="grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;">
@@ -17659,27 +17729,27 @@ class NocturneWriter {
     const lines = [];
     const esc = (v) => String(v || '').trim();
     const fullName = [char.firstName, char.lastName].filter(Boolean).join(' ') || char.displayName || char.name || '';
-    lines.push(`=== ПЕРСОНАЖ: ${fullName} ===`);
+    lines.push(msg`=== ПЕРСОНАЖ: ${fullName} ===`);
     lines.push('');
-    if (char.displayName) lines.push(`Имя / Псевдоним: ${esc(char.displayName)}`);
-    if (char.age) lines.push(`Возраст: ${esc(char.age)}`);
-    if (char.gender) lines.push(`Пол: ${esc(char.gender)}`);
-    if (char.faction) lines.push(`Фракция: ${esc(char.faction)}`);
-    if (char.role) lines.push(`Роль: ${esc(char.role)}`);
-    if (char.aliases && char.aliases.length) lines.push(`Псевдонимы / Имена: ${char.aliases.join(', ')}`);
-    if (char.traits && char.traits.length) lines.push(`Черты характера: ${char.traits.join(', ')}`);
+    if (char.displayName) lines.push(msg`Имя / Псевдоним: ${esc(char.displayName)}`);
+    if (char.age) lines.push(msg`Возраст: ${esc(char.age)}`);
+    if (char.gender) lines.push(msg`Пол: ${esc(char.gender)}`);
+    if (char.faction) lines.push(msg`Фракция: ${esc(char.faction)}`);
+    if (char.role) lines.push(msg`Роль: ${esc(char.role)}`);
+    if (char.aliases && char.aliases.length) lines.push(msg`Псевдонимы / Имена: ${char.aliases.join(', ')}`);
+    if (char.traits && char.traits.length) lines.push(msg`Черты характера: ${char.traits.join(', ')}`);
     if (char.body) {
       lines.push('');
-      lines.push('--- СВЕДЕНИЯ ---');
+      lines.push(t('--- СВЕДЕНИЯ ---'));
       lines.push(esc(char.body));
     }
     const events = (this.state.lore.timeline || []).filter(e => Array.isArray(e.characterIds) && e.characterIds.includes(char.id));
     if (events.length) {
       lines.push('');
-      lines.push('--- СОБЫТИЯ ТАЙМЛАЙНА ---');
+      lines.push(t('--- СОБЫТИЯ ТАЙМЛАЙНА ---'));
       events.forEach(e => {
         const role = e.characterRoles?.[char.id] || 'regular';
-        const roleLabel = role === 'first_appearance' ? ' [ПОЯВЛЕНИЕ]' : role === 'death' ? ' [СМЕРТЬ]' : '';
+        const roleLabel = role === 'first_appearance' ? t(' [ПОЯВЛЕНИЕ]') : role === 'death' ? t(' [СМЕРТЬ]') : '';
         lines.push(`  ${esc(e.date)} — ${esc(e.title)}${roleLabel}`);
       });
     }
@@ -17708,24 +17778,24 @@ class NocturneWriter {
       if (!value) return;
       rows.push(`<w:tr><w:tc><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>${esc(label)}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve">${esc(value)}</w:t></w:r></w:p></w:tc></w:tr>`);
     };
-    addRow('Имя', fullName);
-    addRow('Псевдоним', char.displayName);
-    addRow('Возраст', char.age);
-    addRow('Пол', char.gender);
-    addRow('Фракция', char.faction);
-    addRow('Роль', char.role);
-    if (char.aliases?.length) addRow('Имена', char.aliases.join(', '));
-    if (char.traits?.length) addRow('Черты', char.traits.join(', '));
+    addRow(t('Имя'), fullName);
+    addRow(t('Псевдоним'), char.displayName);
+    addRow(t('Возраст'), char.age);
+    addRow(t('Пол'), char.gender);
+    addRow(t('Фракция'), char.faction);
+    addRow(t('Роль'), char.role);
+    if (char.aliases?.length) addRow(t('Имена'), char.aliases.join(', '));
+    if (char.traits?.length) addRow(t('Черты'), char.traits.join(', '));
     const events = (this.state.lore.timeline || []).filter(e => Array.isArray(e.characterIds) && e.characterIds.includes(char.id));
-    let paragraphs = `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>${esc('Персонаж: ' + fullName)}</w:t></w:r></w:p>`;
+    let paragraphs = `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>${esc(t('Персонаж: ') + fullName)}</w:t></w:r></w:p>`;
     if (rows.length) {
       paragraphs += `<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:left w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:right w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/></w:tblBorders></w:tblPr>${rows.join('')}</w:tbl>`;
     }
     if (char.body) {
-      paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Сведения</w:t></w:r></w:p>` + char.body.split('\n').map(line => `<w:p><w:r><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`).join('');
+      paragraphs += msg`<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Сведения</w:t></w:r></w:p>` + char.body.split('\n').map(line => `<w:p><w:r><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`).join('');
     }
     if (events.length) {
-      paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>События таймлайна</w:t></w:r></w:p>` + events.map(e => `<w:p><w:r><w:t xml:space="preserve">${esc(e.date + ' — ' + e.title)}</w:t></w:r></w:p>`).join('');
+      paragraphs += msg`<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>События таймлайна</w:t></w:r></w:p>` + events.map(e => `<w:p><w:r><w:t xml:space="preserve">${esc(e.date + ' — ' + e.title)}</w:t></w:r></w:p>`).join('');
     }
     const blob = this.generateDocxBlob(fullName, paragraphs);
     this.downloadBlob(blob, `${cleanName}.docx`);
@@ -17740,15 +17810,15 @@ class NocturneWriter {
       if (!value) return;
       rows.push(`<w:tr><w:tc><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>${esc(label)}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve">${esc(value)}</w:t></w:r></w:p></w:tc></w:tr>`);
     };
-    addRow('Название', name);
-    addRow('Альтернативные названия', loc.aliases?.join(', '));
-    addRow('Тип / Описание', loc.role);
-    let paragraphs = `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>${esc('Локация: ' + name)}</w:t></w:r></w:p>`;
+    addRow(t('Название'), name);
+    addRow(t('Альтернативные названия'), loc.aliases?.join(', '));
+    addRow(t('Тип / Описание'), loc.role);
+    let paragraphs = `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>${esc(t('Локация: ') + name)}</w:t></w:r></w:p>`;
     if (rows.length) {
       paragraphs += `<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:left w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:right w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/></w:tblBorders></w:tblPr>${rows.join('')}</w:tbl>`;
     }
     if (loc.body) {
-      paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Описание</w:t></w:r></w:p>` + loc.body.split('\n').map(line => `<w:p><w:r><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`).join('');
+      paragraphs += msg`<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Описание</w:t></w:r></w:p>` + loc.body.split('\n').map(line => `<w:p><w:r><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`).join('');
     }
     const blob = this.generateDocxBlob(name, paragraphs);
     this.downloadBlob(blob, `${cleanName}.docx`);
@@ -17757,7 +17827,7 @@ class NocturneWriter {
   exportAllNotesAsDocx() {
     const esc = (v) => String(v || '').trim()
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    let paragraphs = `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Сводка записей</w:t></w:r></w:p>`;
+    let paragraphs = msg`<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Сводка записей</w:t></w:r></w:p>`;
     (this.state.lore.notes || []).forEach((note) => {
       const title = note.title || '';
       paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>${esc(title)}</w:t></w:r></w:p>`;
@@ -17765,7 +17835,7 @@ class NocturneWriter {
         paragraphs += note.body.split('\n').map(line => `<w:p><w:r><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`).join('');
       }
     });
-    const blob = this.generateDocxBlob('Сводка записей', paragraphs);
+    const blob = this.generateDocxBlob(t('Сводка записей'), paragraphs);
     this.downloadBlob(blob, 'notes_dump.docx');
   }
 
@@ -17773,11 +17843,11 @@ class NocturneWriter {
     const esc = (v) => String(v || '').trim()
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const title = note.title || '';
-    let paragraphs = `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>${esc('Запись: ' + title)}</w:t></w:r></w:p>`;
+    let paragraphs = `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>${esc(t('Запись: ') + title)}</w:t></w:r></w:p>`;
     if (note.body) {
-      paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Текст</w:t></w:r></w:p>` + note.body.split('\n').map(line => `<w:p><w:r><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`).join('');
+      paragraphs += msg`<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Текст</w:t></w:r></w:p>` + note.body.split('\n').map(line => `<w:p><w:r><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`).join('');
     }
-    const blob = this.generateDocxBlob(title || 'Запись', paragraphs);
+    const blob = this.generateDocxBlob(title || t('Запись'), paragraphs);
     this.downloadBlob(blob, `${cleanName}.docx`);
   }
 
@@ -17790,21 +17860,21 @@ class NocturneWriter {
       if (!value) return;
       rows.push(`<w:tr><w:tc><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>${esc(label)}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve">${esc(value)}</w:t></w:r></w:p></w:tc></w:tr>`);
     };
-    addRow('Название события', title);
-    addRow('Дата / Время', eventItem.date);
+    addRow(t('Название события'), title);
+    addRow(t('Дата / Время'), eventItem.date);
     const charNames = (eventItem.characterIds || []).map(id => this.state.lore.characters.find(c => c.id === id)?.name).filter(Boolean).join(', ');
     const locNames = (eventItem.locationIds || []).map(id => this.state.lore.locations.find(l => l.id === id)?.name).filter(Boolean).join(', ');
-    addRow('Персонажи', charNames);
-    addRow('Локации', locNames);
-    let paragraphs = `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>${esc('Событие: ' + title)}</w:t></w:r></w:p>`;
+    addRow(t('Персонажи'), charNames);
+    addRow(t('Локации'), locNames);
+    let paragraphs = `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>${esc(t('Событие: ') + title)}</w:t></w:r></w:p>`;
     if (rows.length) {
       paragraphs += `<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:left w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:right w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/></w:tblBorders></w:tblPr>${rows.join('')}</w:tbl>`;
     }
     if (eventItem.body) {
-      paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Описание</w:t></w:r></w:p>` + eventItem.body.split('\n').map(line => `<w:p><w:r><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`).join('');
+      paragraphs += msg`<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Описание</w:t></w:r></w:p>` + eventItem.body.split('\n').map(line => `<w:p><w:r><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`).join('');
     }
     if (eventItem.subEvents?.length) {
-      paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Вложенные события (Сабтаймлайн)</w:t></w:r></w:p>`;
+      paragraphs += msg`<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Вложенные события (Сабтаймлайн)</w:t></w:r></w:p>`;
       eventItem.subEvents.forEach(sub => {
         paragraphs += `<w:p><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">${esc(sub.date || '')} — ${esc(sub.title || '')}</w:t></w:r></w:p>`;
         if (sub.body) {
@@ -17819,7 +17889,7 @@ class NocturneWriter {
   exportAllCharactersAsDocx() {
     const esc = (v) => String(v || '').trim()
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    let paragraphs = `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Все персонажи Базы Знаний</w:t></w:r></w:p>`;
+    let paragraphs = msg`<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Все персонажи Базы Знаний</w:t></w:r></w:p>`;
     this.state.lore.characters.forEach((char) => {
       const fullName = [char.firstName, char.lastName].filter(Boolean).join(' ') || char.displayName || char.name || '';
       paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>${esc(fullName)}</w:t></w:r></w:p>`;
@@ -17828,13 +17898,13 @@ class NocturneWriter {
         if (!value) return;
         rows.push(`<w:tr><w:tc><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>${esc(label)}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve">${esc(value)}</w:t></w:r></w:p></w:tc></w:tr>`);
       };
-      addRow('Псевдоним', char.displayName);
-      addRow('Возраст', char.age);
-      addRow('Пол', char.gender);
-      addRow('Фракция', char.faction);
-      addRow('Роль', char.role);
-      if (char.aliases?.length) addRow('Имена', char.aliases.join(', '));
-      if (char.traits?.length) addRow('Черты', char.traits.join(', '));
+      addRow(t('Псевдоним'), char.displayName);
+      addRow(t('Возраст'), char.age);
+      addRow(t('Пол'), char.gender);
+      addRow(t('Фракция'), char.faction);
+      addRow(t('Роль'), char.role);
+      if (char.aliases?.length) addRow(t('Имена'), char.aliases.join(', '));
+      if (char.traits?.length) addRow(t('Черты'), char.traits.join(', '));
       if (rows.length) {
         paragraphs += `<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:left w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:right w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/></w:tblBorders></w:tblPr>${rows.join('')}</w:tbl>`;
       }
@@ -17842,14 +17912,14 @@ class NocturneWriter {
         paragraphs += char.body.split('\n').map(line => `<w:p><w:r><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`).join('');
       }
     });
-    const blob = this.generateDocxBlob('Персонажи', paragraphs);
+    const blob = this.generateDocxBlob(t('Персонажи'), paragraphs);
     this.downloadBlob(blob, 'characters.docx');
   }
 
   exportAllLocationsAsDocx() {
     const esc = (v) => String(v || '').trim()
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    let paragraphs = `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Все локации Базы Знаний</w:t></w:r></w:p>`;
+    let paragraphs = msg`<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Все локации Базы Знаний</w:t></w:r></w:p>`;
     this.state.lore.locations.forEach((loc) => {
       const name = loc.displayName || loc.name || '';
       paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>${esc(name)}</w:t></w:r></w:p>`;
@@ -17858,8 +17928,8 @@ class NocturneWriter {
         if (!value) return;
         rows.push(`<w:tr><w:tc><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>${esc(label)}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve">${esc(value)}</w:t></w:r></w:p></w:tc></w:tr>`);
       };
-      addRow('Альтернативные названия', loc.aliases?.join(', '));
-      addRow('Тип / Описание', loc.role);
+      addRow(t('Альтернативные названия'), loc.aliases?.join(', '));
+      addRow(t('Тип / Описание'), loc.role);
       if (rows.length) {
         paragraphs += `<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:left w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:right w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/></w:tblBorders></w:tblPr>${rows.join('')}</w:tbl>`;
       }
@@ -17867,14 +17937,14 @@ class NocturneWriter {
         paragraphs += loc.body.split('\n').map(line => `<w:p><w:r><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`).join('');
       }
     });
-    const blob = this.generateDocxBlob('Локации', paragraphs);
+    const blob = this.generateDocxBlob(t('Локации'), paragraphs);
     this.downloadBlob(blob, 'locations.docx');
   }
 
   exportAllTimelineAsDocx() {
     const esc = (v) => String(v || '').trim()
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    let paragraphs = `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Хронология Событий</w:t></w:r></w:p>`;
+    let paragraphs = msg`<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Хронология Событий</w:t></w:r></w:p>`;
     this.state.lore.timeline.forEach((eventItem) => {
       const title = eventItem.title || '';
       paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>${esc(eventItem.date || '')} — ${esc(title)}</w:t></w:r></w:p>`;
@@ -17885,8 +17955,8 @@ class NocturneWriter {
       };
       const charNames = (eventItem.characterIds || []).map(id => this.state.lore.characters.find(c => c.id === id)?.name).filter(Boolean).join(', ');
       const locNames = (eventItem.locationIds || []).map(id => this.state.lore.locations.find(l => l.id === id)?.name).filter(Boolean).join(', ');
-      addRow('Персонажи', charNames);
-      addRow('Локации', locNames);
+      addRow(t('Персонажи'), charNames);
+      addRow(t('Локации'), locNames);
       if (rows.length) {
         paragraphs += `<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:left w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:right w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/></w:tblBorders></w:tblPr>${rows.join('')}</w:tbl>`;
       }
@@ -17894,7 +17964,7 @@ class NocturneWriter {
         paragraphs += eventItem.body.split('\n').map(line => `<w:p><w:r><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`).join('');
       }
       if (eventItem.subEvents?.length) {
-        paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Вложенные события (Сабтаймлайн)</w:t></w:r></w:p>`;
+        paragraphs += msg`<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Вложенные события (Сабтаймлайн)</w:t></w:r></w:p>`;
         eventItem.subEvents.forEach(sub => {
           paragraphs += `<w:p><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">  ${esc(sub.date || '')} — ${esc(sub.title || '')}</w:t></w:r></w:p>`;
           if (sub.body) {
@@ -17903,16 +17973,16 @@ class NocturneWriter {
         });
       }
     });
-    const blob = this.generateDocxBlob('Таймлайн', paragraphs);
+    const blob = this.generateDocxBlob(t('Таймлайн'), paragraphs);
     this.downloadBlob(blob, 'timeline.docx');
   }
 
   exportAllKbAsDocx() {
     const esc = (v) => String(v || '').trim()
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    let paragraphs = `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>База Знаний Проекта</w:t></w:r></w:p>`;
+    let paragraphs = msg`<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>База Знаний Проекта</w:t></w:r></w:p>`;
     
-    paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Раздел 1: Персонажи</w:t></w:r></w:p>`;
+    paragraphs += msg`<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Раздел 1: Персонажи</w:t></w:r></w:p>`;
     this.state.lore.characters.forEach((char) => {
       const fullName = [char.firstName, char.lastName].filter(Boolean).join(' ') || char.displayName || char.name || '';
       paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>${esc(fullName)}</w:t></w:r></w:p>`;
@@ -17921,13 +17991,13 @@ class NocturneWriter {
         if (!value) return;
         rows.push(`<w:tr><w:tc><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>${esc(label)}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve">${esc(value)}</w:t></w:r></w:p></w:tc></w:tr>`);
       };
-      addRow('Псевдоним', char.displayName);
-      addRow('Возраст', char.age);
-      addRow('Пол', char.gender);
-      addRow('Фракция', char.faction);
-      addRow('Роль', char.role);
-      if (char.aliases?.length) addRow('Имена', char.aliases.join(', '));
-      if (char.traits?.length) addRow('Черты', char.traits.join(', '));
+      addRow(t('Псевдоним'), char.displayName);
+      addRow(t('Возраст'), char.age);
+      addRow(t('Пол'), char.gender);
+      addRow(t('Фракция'), char.faction);
+      addRow(t('Роль'), char.role);
+      if (char.aliases?.length) addRow(t('Имена'), char.aliases.join(', '));
+      if (char.traits?.length) addRow(t('Черты'), char.traits.join(', '));
       if (rows.length) {
         paragraphs += `<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:left w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:right w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/></w:tblBorders></w:tblPr>${rows.join('')}</w:tbl>`;
       }
@@ -17936,7 +18006,7 @@ class NocturneWriter {
       }
     });
 
-    paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Раздел 2: Локации</w:t></w:r></w:p>`;
+    paragraphs += msg`<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Раздел 2: Локации</w:t></w:r></w:p>`;
     this.state.lore.locations.forEach((loc) => {
       const name = loc.displayName || loc.name || '';
       paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>${esc(name)}</w:t></w:r></w:p>`;
@@ -17945,8 +18015,8 @@ class NocturneWriter {
         if (!value) return;
         rows.push(`<w:tr><w:tc><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>${esc(label)}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve">${esc(value)}</w:t></w:r></w:p></w:tc></w:tr>`);
       };
-      addRow('Альтернативные названия', loc.aliases?.join(', '));
-      addRow('Тип / Описание', loc.role);
+      addRow(t('Альтернативные названия'), loc.aliases?.join(', '));
+      addRow(t('Тип / Описание'), loc.role);
       if (rows.length) {
         paragraphs += `<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:left w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:right w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/></w:tblBorders></w:tblPr>${rows.join('')}</w:tbl>`;
       }
@@ -17955,7 +18025,7 @@ class NocturneWriter {
       }
     });
 
-    paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Раздел 3: Хронология Событий</w:t></w:r></w:p>`;
+    paragraphs += msg`<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Раздел 3: Хронология Событий</w:t></w:r></w:p>`;
     this.state.lore.timeline.forEach((eventItem) => {
       const title = eventItem.title || '';
       paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>${esc(eventItem.date || '')} — ${esc(title)}</w:t></w:r></w:p>`;
@@ -17966,8 +18036,8 @@ class NocturneWriter {
       };
       const charNames = (eventItem.characterIds || []).map(id => this.state.lore.characters.find(c => c.id === id)?.name).filter(Boolean).join(', ');
       const locNames = (eventItem.locationIds || []).map(id => this.state.lore.locations.find(l => l.id === id)?.name).filter(Boolean).join(', ');
-      addRow('Персонажи', charNames);
-      addRow('Локации', locNames);
+      addRow(t('Персонажи'), charNames);
+      addRow(t('Локации'), locNames);
       if (rows.length) {
         paragraphs += `<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:left w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:right w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="EAEAEA"/></w:tblBorders></w:tblPr>${rows.join('')}</w:tbl>`;
       }
@@ -17975,7 +18045,7 @@ class NocturneWriter {
         paragraphs += eventItem.body.split('\n').map(line => `<w:p><w:r><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`).join('');
       }
       if (eventItem.subEvents?.length) {
-        paragraphs += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Вложенные события (Сабтаймлайн)</w:t></w:r></w:p>`;
+        paragraphs += msg`<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Вложенные события (Сабтаймлайн)</w:t></w:r></w:p>`;
         eventItem.subEvents.forEach(sub => {
           paragraphs += `<w:p><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">  ${esc(sub.date || '')} — ${esc(sub.title || '')}</w:t></w:r></w:p>`;
           if (sub.body) {
@@ -17984,7 +18054,7 @@ class NocturneWriter {
         });
       }
     });
-    const blob = this.generateDocxBlob('База Знаний', paragraphs);
+    const blob = this.generateDocxBlob(t('База Знаний'), paragraphs);
     this.downloadBlob(blob, 'world_kb.docx');
   }
 
@@ -17998,76 +18068,76 @@ class NocturneWriter {
     let docxLabel = '';
     let docxDesc = '';
     if (dumpType === 'full-kb') {
-      title = 'Дамп всей Базы Знаний';
-      subtitle = 'Экспортируйте всех персонажей, локации и хронологию.';
-      appLabel = 'Резервная копия БЗ (.nocturnmemory)';
-      appDesc = 'Для переноса базы знаний в другие проекты Ноктюрна.';
+      title = t('Дамп всей Базы Знаний');
+      subtitle = t('Экспортируйте всех персонажей, локации и хронологию.');
+      appLabel = t('Резервная копия БЗ (.nocturnmemory)');
+      appDesc = t('Для переноса базы знаний в другие проекты Ноктюрна.');
       appExt = 'world_kb.nocturnmemory';
-      docxLabel = 'Документ Word (.docx)';
-      docxDesc = 'Красиво оформленный текстовый файл со всеми статьями БЗ.';
+      docxLabel = t('Документ Word (.docx)');
+      docxDesc = t('Красиво оформленный текстовый файл со всеми статьями БЗ.');
     } else if (dumpType === 'kb-characters') {
-      title = 'Дамп персонажей';
-      subtitle = 'Экспортируйте весь список персонажей вашей истории.';
-      appLabel = 'Резервная копия персонажей (.nocturnecharacters)';
-      appDesc = 'Файл обмена для переноса персонажей.';
+      title = t('Дамп персонажей');
+      subtitle = t('Экспортируйте весь список персонажей вашей истории.');
+      appLabel = t('Резервная копия персонажей (.nocturnecharacters)');
+      appDesc = t('Файл обмена для переноса персонажей.');
       appExt = 'characters.nocturnecharacters';
-      docxLabel = 'Документ Word (.docx)';
-      docxDesc = 'Сводный текстовый файл со всеми досье персонажей.';
+      docxLabel = t('Документ Word (.docx)');
+      docxDesc = t('Сводный текстовый файл со всеми досье персонажей.');
     } else if (dumpType === 'kb-locations') {
-      title = 'Дамп локаций';
-      subtitle = 'Экспортируйте все места и локации мира.';
-      appLabel = 'Резервная копия локаций (.nocturneplaces)';
-      appDesc = 'Файл обмена для переноса локаций.';
+      title = t('Дамп локаций');
+      subtitle = t('Экспортируйте все места и локации мира.');
+      appLabel = t('Резервная копия локаций (.nocturneplaces)');
+      appDesc = t('Файл обмена для переноса локаций.');
       appExt = 'places.nocturneplaces';
-      docxLabel = 'Документ Word (.docx)';
-      docxDesc = 'Сводный текстовый файл со всеми описаниями локаций.';
+      docxLabel = t('Документ Word (.docx)');
+      docxDesc = t('Сводный текстовый файл со всеми описаниями локаций.');
     } else if (dumpType === 'kb-timeline') {
-      title = 'Дамп таймлайнов';
-      subtitle = 'Экспортируйте хронологию событий.';
-      appLabel = 'Резервная копия таймлайнов (.nocturnetimelines)';
-      appDesc = 'Файл обмена для переноса событий хронологии.';
+      title = t('Дамп таймлайнов');
+      subtitle = t('Экспортируйте хронологию событий.');
+      appLabel = t('Резервная копия таймлайнов (.nocturnetimelines)');
+      appDesc = t('Файл обмена для переноса событий хронологии.');
       appExt = 'timeline.nocturnetimelines';
-      docxLabel = 'Документ Word (.docx)';
-      docxDesc = 'Сводный текстовый файл со всей хронологией событий.';
+      docxLabel = t('Документ Word (.docx)');
+      docxDesc = t('Сводный текстовый файл со всей хронологией событий.');
     } else if (dumpType === 'kb-notes') {
-      title = 'Дамп записей';
-      subtitle = 'Экспортируйте ваши записи базы знаний.';
-      appLabel = 'Резервная копия записей (.nocturnenotes)';
-      appDesc = 'Файл обмена для переноса записей.';
+      title = t('Дамп записей');
+      subtitle = t('Экспортируйте ваши записи базы знаний.');
+      appLabel = t('Резервная копия записей (.nocturnenotes)');
+      appDesc = t('Файл обмена для переноса записей.');
       appExt = 'notes.nocturnenotes';
-      docxLabel = 'Документ Word (.docx)';
-      docxDesc = 'Сводный текстовый файл со всеми записями.';
+      docxLabel = t('Документ Word (.docx)');
+      docxDesc = t('Сводный текстовый файл со всеми записями.');
     } else if (dumpType === 'single-entity') {
       const type = options.type;
       const item = options.item;
       const cleanName = options.cleanName;
-      const name = item.displayName || item.name || item.title || 'Карточка';
-      title = `Дамп карточки: ${name}`;
-      subtitle = `Экспортируйте информацию о сущности.`;
+      const name = item.displayName || item.name || item.title || t('Карточка');
+      title = msg`Дамп карточки: ${name}`;
+      subtitle = msg`Экспортируйте информацию о сущности.`;
       if (type === 'characters') {
         this.showCharExportModal(item, cleanName);
         return;
       } else if (type === 'locations') {
-        appLabel = 'Файл локации (.nocturneplace)';
-        appDesc = 'Для переноса этой локации между проектами Ноктюрна.';
+        appLabel = t('Файл локации (.nocturneplace)');
+        appDesc = t('Для переноса этой локации между проектами Ноктюрна.');
         appExt = `${cleanName}.nocturneplace`;
-        docxLabel = 'Документ Word (.docx)';
-        docxDesc = 'Карточка локации для печати и вычитки.';
+        docxLabel = t('Документ Word (.docx)');
+        docxDesc = t('Карточка локации для печати и вычитки.');
       } else if (type === 'notes') {
-        appLabel = 'Файл записи (.nocturnenote)';
-        appDesc = 'Для переноса этой записи между проектами Ноктюрна.';
+        appLabel = t('Файл записи (.nocturnenote)');
+        appDesc = t('Для переноса этой записи между проектами Ноктюрна.');
         appExt = `${cleanName}.nocturnenote`;
-        docxLabel = 'Документ Word (.docx)';
-        docxDesc = 'Запись для печати и вычитки.';
+        docxLabel = t('Документ Word (.docx)');
+        docxDesc = t('Запись для печати и вычитки.');
       } else {
-        appLabel = 'Файл события (.nocturnetime)';
-        appDesc = 'Для переноса этого события между проектами Ноктюрна.';
+        appLabel = t('Файл события (.nocturnetime)');
+        appDesc = t('Для переноса этого события между проектами Ноктюрна.');
         appExt = `${cleanName}.nocturnetime`;
-        docxLabel = 'Документ Word (.docx)';
-        docxDesc = 'Карточка события и его сабтаймлайн.';
+        docxLabel = t('Документ Word (.docx)');
+        docxDesc = t('Карточка события и его сабтаймлайн.');
       }
     }
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="form-modal search-choice-modal dump-choice-modal">
         <div class="modal-head-row">
           <div><h2>${escapeHtml(title)}</h2><p>${escapeHtml(subtitle)}</p></div>
@@ -18247,14 +18317,14 @@ class NocturneWriter {
       this.refreshVisibleEntityLinks();
       
       let categories = [];
-      if (totalImported.characters > 0) categories.push({ name: 'characters', label: 'Персонажи', count: totalImported.characters });
-      if (totalImported.locations > 0) categories.push({ name: 'locations', label: 'Локации', count: totalImported.locations });
-      if (totalImported.timeline > 0) categories.push({ name: 'timeline', label: 'Таймлайн', count: totalImported.timeline });
-      if (totalImported.notes > 0) categories.push({ name: 'notes', label: 'Записи', count: totalImported.notes });
+      if (totalImported.characters > 0) categories.push({ name: 'characters', label: t('Персонажи'), count: totalImported.characters });
+      if (totalImported.locations > 0) categories.push({ name: 'locations', label: t('Локации'), count: totalImported.locations });
+      if (totalImported.timeline > 0) categories.push({ name: 'timeline', label: t('Таймлайн'), count: totalImported.timeline });
+      if (totalImported.notes > 0) categories.push({ name: 'notes', label: t('Записи'), count: totalImported.notes });
       
       await this.animateKbImport(categories, failCount);
     } else if (failCount > 0) {
-      this.toast(`Не удалось импортировать файлы (${failCount} ошибок). Проверьте формат файлов.`);
+      this.toast(msg`Не удалось импортировать файлы (${failCount} ошибок). Проверьте формат файлов.`);
     }
   }
 
@@ -18267,7 +18337,7 @@ class NocturneWriter {
       document.body.appendChild(overlay);
     }
     
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="kb-import-card">
         <div class="kb-import-spinner">
           <div class="spinner-ring"></div>
@@ -18289,7 +18359,7 @@ class NocturneWriter {
       const step = document.createElement('div');
       step.className = 'kb-import-step success';
       step.style.animationDelay = `${i * 150}ms`;
-      this.updateSurfaceHTML(step, `<span>Импорт: ${cat.label} (${cat.count})</span><i class="bx bx-check-circle"></i>`, { resize: true });
+      this.updateSurfaceHTML(step, ui`<span>Импорт: ${cat.label} (${cat.count})</span><i class="bx bx-check-circle"></i>`, { resize: true });
       listEl.appendChild(step);
       // Wait 350ms per step to let the user appreciate the checkmarks
       await new Promise(r => setTimeout(r, 350));
@@ -18299,7 +18369,7 @@ class NocturneWriter {
       const step = document.createElement('div');
       step.className = 'kb-import-step fail';
       step.style.animationDelay = `${categories.length * 150}ms`;
-      this.updateSurfaceHTML(step, `<span>Пропущено/ошибок: ${failCount}</span><i class="bx bx-x-circle"></i>`, { resize: true });
+      this.updateSurfaceHTML(step, ui`<span>Пропущено/ошибок: ${failCount}</span><i class="bx bx-x-circle"></i>`, { resize: true });
       listEl.appendChild(step);
       await new Promise(r => setTimeout(r, 350));
     }
@@ -18322,10 +18392,10 @@ class NocturneWriter {
     
     if (categories.length === 1) {
       const singleCat = categories[0];
-      this.toast(`Импортировано в раздел "${singleCat.label}": ${singleCat.count} записей.`);
+      this.toast(msg`Импортировано в раздел "${singleCat.label}": ${singleCat.count} записей.`);
     } else {
       const desc = categories.map(c => `${c.label}: ${c.count}`).join(', ');
-      this.toast(`Импорт завершен. Загружено: ${desc}`);
+      this.toast(msg`Импорт завершен. Загружено: ${desc}`);
     }
   }
 
@@ -18338,7 +18408,7 @@ class NocturneWriter {
       document.body.appendChild(overlay);
     }
     
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="kb-import-card">
         <div class="kb-import-spinner">
           <div class="spinner-ring"></div>
@@ -18359,7 +18429,7 @@ class NocturneWriter {
       const step = document.createElement('div');
       step.className = 'kb-import-step success';
       step.style.animationDelay = `${i * 150}ms`;
-      this.updateSurfaceHTML(step, `<span>Импорт: ${item.file.name}</span><i class="bx bx-check-circle"></i>`, { resize: true });
+      this.updateSurfaceHTML(step, ui`<span>Импорт: ${item.file.name}</span><i class="bx bx-check-circle"></i>`, { resize: true });
       listEl.appendChild(step);
       await new Promise(r => setTimeout(r, 350));
     }
@@ -18368,7 +18438,7 @@ class NocturneWriter {
       const step = document.createElement('div');
       step.className = 'kb-import-step success';
       step.style.animationDelay = `${importedDocs.length * 150}ms`;
-      this.updateSurfaceHTML(step, `<span>Редакторские правки (${reviewFilesCount})</span><i class="bx bx-check-circle"></i>`, { resize: true });
+      this.updateSurfaceHTML(step, ui`<span>Редакторские правки (${reviewFilesCount})</span><i class="bx bx-check-circle"></i>`, { resize: true });
       listEl.appendChild(step);
       await new Promise(r => setTimeout(r, 350));
     }
@@ -18377,7 +18447,7 @@ class NocturneWriter {
       const step = document.createElement('div');
       step.className = 'kb-import-step fail';
       step.style.animationDelay = `${(importedDocs.length + 1) * 150}ms`;
-      this.updateSurfaceHTML(step, `<span>Ошибок при импорте: ${failCount}</span><i class="bx bx-x-circle"></i>`, { resize: true });
+      this.updateSurfaceHTML(step, ui`<span>Ошибок при импорте: ${failCount}</span><i class="bx bx-x-circle"></i>`, { resize: true });
       listEl.appendChild(step);
       await new Promise(r => setTimeout(r, 350));
     }
@@ -18387,7 +18457,7 @@ class NocturneWriter {
     await new Promise(r => setTimeout(r, 1000));
     overlay.classList.remove('active');
     
-    this.toast(reviewFilesCount && importedDocs.length ? 'Документ и редакторские правки импортированы.' : `Импортировано документов: ${importedDocs.length}`);
+    this.toast(reviewFilesCount && importedDocs.length ? t('Документ и редакторские правки импортированы.') : msg`Импортировано документов: ${importedDocs.length}`);
   }
 
   async processImportedKbData(data) {
@@ -18678,7 +18748,7 @@ class NocturneWriter {
     list.forEach((item, order) => { item.order = order; });
     await this.saveLore();
     this.renderMobileShell();
-    this.toast('Порядок обновлён.');
+    this.toast(t('Порядок обновлён.'));
   }
 
   characterCard(item, draggable = false) {
@@ -18695,7 +18765,7 @@ class NocturneWriter {
 
   noteCard(item, draggable = false) {
     const completedClass = item.completed ? ' note-card-completed' : '';
-    return `<div class="char-card note-card${completedClass}" data-lore-type="notes" data-lore-id="${escapeHtml(item.id)}">${this.loreCardActions('notes', item.id)}<div class="char-img"><i class="bx bx-note"></i></div><div class="char-info"><h3>${escapeHtml(item.title || 'Без названия')}</h3><p>${escapeHtml(item.body || 'Пустая запись')}</p></div></div>`;
+    return `<div class="char-card note-card${completedClass}" data-lore-type="notes" data-lore-id="${escapeHtml(item.id)}">${this.loreCardActions('notes', item.id)}<div class="char-img"><i class="bx bx-note"></i></div><div class="char-info"><h3>${escapeHtml(item.title || t('Без названия'))}</h3><p>${escapeHtml(item.body || t('Пустая запись'))}</p></div></div>`;
   }
 
   timelineCard(item, options = {}) {
@@ -18710,15 +18780,15 @@ class NocturneWriter {
       const role = (item.characterRoles && item.characterRoles[charId]) || 'regular';
       let icon = 'bx-user';
       let roleClass = 'role-regular';
-      let roleLabel = 'Участие';
+      let roleLabel = t('Участие');
       if (role === 'first_appearance') {
         icon = 'bx-star';
         roleClass = 'role-first-appearance';
-        roleLabel = 'Появление';
+        roleLabel = t('Появление');
       } else if (role === 'death') {
         icon = 'bx-skull';
         roleClass = 'role-death';
-        roleLabel = 'Смерть';
+        roleLabel = t('Смерть');
       }
       return `<span class="association-badge char-badge ${roleClass}" data-action="open-lore-detail" data-entity-kind="character" data-entity-id="${char.id}" title="${roleLabel}"><i class="bx ${icon}"></i>${escapeHtml(this.entityDisplayName(char))}</span>`;
     }).filter(Boolean).join('');
@@ -18732,13 +18802,13 @@ class NocturneWriter {
     const docBadges = (Array.isArray(item.chapterIds) ? item.chapterIds : []).map(docId => {
       const doc = this.state.docs.find(d => d.id === docId);
       if (!doc) return '';
-      return `<span class="association-badge doc-badge" data-action="open-search-result" data-doc-id="${doc.id}"><i class="bx bx-book-content"></i>${escapeHtml(doc.title || 'Без названия')}</span>`;
+      return `<span class="association-badge doc-badge" data-action="open-search-result" data-doc-id="${doc.id}"><i class="bx bx-book-content"></i>${escapeHtml(doc.title || t('Без названия'))}</span>`;
     }).filter(Boolean).join('');
 
     const noteBadges = (Array.isArray(item.noteIds) ? item.noteIds : []).map(noteId => {
       const note = (this.state.lore.notes || []).find(n => n.id === noteId);
       if (!note) return '';
-      return `<span class="association-badge note-badge" data-action="open-lore-detail" data-entity-kind="note" data-entity-id="${note.id}"><i class="bx bx-note"></i>${escapeHtml(note.title || 'Без названия')}</span>`;
+      return `<span class="association-badge note-badge" data-action="open-lore-detail" data-entity-kind="note" data-entity-id="${note.id}"><i class="bx bx-note"></i>${escapeHtml(note.title || t('Без названия'))}</span>`;
     }).filter(Boolean).join('');
 
     const badgesHTML = (charBadges || locBadges || noteBadges || docBadges) ? `
@@ -18768,8 +18838,8 @@ class NocturneWriter {
   timelineCardActions(item, { isSub = false, parentId = '' } = {}) {
     const type = isSub ? 'subtimeline' : 'timeline';
     const parentAttr = parentId ? ` data-parent-id="${escapeHtml(parentId)}"` : '';
-    return `<div class="lore-card-actions timeline-actions">
-      ${!isSub ? `<button type="button" data-action="open-subtimeline" data-lore-type="timeline" data-lore-id="${item.id}" title="Сабтаймлайн"><i class="bx bx-git-branch"></i></button>` : ''}
+    return ui`<div class="lore-card-actions timeline-actions">
+      ${!isSub ? ui`<button type="button" data-action="open-subtimeline" data-lore-type="timeline" data-lore-id="${item.id}" title="Сабтаймлайн"><i class="bx bx-git-branch"></i></button>` : ''}
       <button type="button" data-action="dump-single-entity" data-lore-type="${type}" data-lore-id="${item.id}"${parentAttr} title="Дамп события"><i class="bx bx-download"></i></button>
       <button type="button" data-action="edit-lore" data-lore-type="${type}" data-lore-id="${item.id}"${parentAttr} title="Редактировать"><i class="bx bx-edit"></i></button>
       <button type="button" data-action="delete-lore" data-lore-type="${type}" data-lore-id="${item.id}"${parentAttr} title="Удалить"><i class="bx bx-trash"></i></button>
@@ -18777,13 +18847,13 @@ class NocturneWriter {
   }
 
   noteActionsTrigger(id, className = '') {
-    return `<button type="button" class="note-actions-trigger ${className}" data-action="toggle-note-actions" data-lore-id="${escapeHtml(id)}" aria-label="Другие действия записи" title="Другие действия" aria-haspopup="menu" aria-controls="note-actions-menu" aria-expanded="false"><i class="bx bx-dots-horizontal-rounded" aria-hidden="true"></i></button>`;
+    return ui`<button type="button" class="note-actions-trigger ${className}" data-action="toggle-note-actions" data-lore-id="${escapeHtml(id)}" aria-label="Другие действия записи" title="Другие действия" aria-haspopup="menu" aria-controls="note-actions-menu" aria-expanded="false"><i class="bx bx-dots-horizontal-rounded" aria-hidden="true"></i></button>`;
   }
 
   loreCardActions(type, id) {
     const safeId = escapeHtml(id), safeType = escapeHtml(type);
-    if (type === 'notes') return `<div class="lore-card-actions"><button type="button" data-action="edit-lore" data-lore-type="notes" data-lore-id="${safeId}" title="Редактировать" aria-label="Редактировать"><i class="bx bx-edit" aria-hidden="true"></i></button>${this.noteActionsTrigger(id)}</div>`;
-    return `<div class="lore-card-actions">
+    if (type === 'notes') return ui`<div class="lore-card-actions"><button type="button" data-action="edit-lore" data-lore-type="notes" data-lore-id="${safeId}" title="Редактировать" aria-label="Редактировать"><i class="bx bx-edit" aria-hidden="true"></i></button>${this.noteActionsTrigger(id)}</div>`;
+    return ui`<div class="lore-card-actions">
       <button type="button" data-action="dump-single-entity" data-lore-type="${safeType}" data-lore-id="${safeId}" title="Дамп карточки"><i class="bx bx-download"></i></button>
       <button type="button" data-action="edit-lore" data-lore-type="${safeType}" data-lore-id="${safeId}" title="Редактировать"><i class="bx bx-edit"></i></button>
       <button type="button" data-action="delete-lore" data-lore-type="${safeType}" data-lore-id="${safeId}" title="Удалить"><i class="bx bx-trash"></i></button>
@@ -18804,7 +18874,7 @@ class NocturneWriter {
 
   subtimelinePanel(parent) {
     const events = this.subtimelineEvents(parent);
-    return `<div class="subtimeline-overlay active">
+    return ui`<div class="subtimeline-overlay active">
       <section class="subtimeline-modal" data-parent-id="${escapeHtml(parent.id)}">
         <header class="subtimeline-header">
           <div>
@@ -18820,7 +18890,7 @@ class NocturneWriter {
           <div class="timeline-container subtimeline-container" data-dnd-zone="subtimeline" data-parent-id="${escapeHtml(parent.id)}">
             ${events.length
               ? events.map((item, i, arr) => this.timelineCard(item, { isLast: i === arr.length - 1, draggable: true, isSub: true, parentId: parent.id })).join('')
-              : this.emptyStateMarkup('bx-git-branch', 'Вложенных событий пока нет.', 'Добавьте саб-событие, если этот эпизод нужно развернуть подробнее.')}
+              : this.emptyStateMarkup('bx-git-branch', t('Вложенных событий пока нет.'), t('Добавьте саб-событие, если этот эпизод нужно развернуть подробнее.'))}
           </div>
         </div>
       </section>
@@ -18829,14 +18899,14 @@ class NocturneWriter {
 
   renderSubtimelineContent(parent) {
     const events = this.subtimelineEvents(parent);
-    return `
+    return ui`
       <div class="subtimeline-toolbar mobile-subtimeline-toolbar">
         <button class="pill-btn ai-btn" data-action="new-subtimeline-event" data-parent-id="${escapeHtml(parent.id)}"><i class="bx bx-plus"></i> Добавить подсобытие</button>
       </div>
       <div class="timeline-container subtimeline-container" data-dnd-zone="subtimeline" data-parent-id="${escapeHtml(parent.id)}">
         ${events.length
           ? events.map((item, i, arr) => this.timelineCard(item, { isLast: i === arr.length - 1, draggable: true, isSub: true, parentId: parent.id })).join('')
-          : this.emptyStateMarkup('bx-git-branch', 'Вложенных событий пока нет.', 'Добавьте подсобытие, если этот эпизод нужно развернуть подробнее.')}
+          : this.emptyStateMarkup('bx-git-branch', t('Вложенных событий пока нет.'), t('Добавьте подсобытие, если этот эпизод нужно развернуть подробнее.'))}
       </div>`;
   }
 
@@ -18900,10 +18970,10 @@ class NocturneWriter {
   }
 
   renderLoreEntityFields(type, item, iconOptions) {
-    const iconSelect = this.renderFormSelect('icon', iconOptions, item.icon, { label: 'Значок' });
-    const fileName = item.image ? 'Текущая картинка сохранена' : 'Файл не выбран';
+    const iconSelect = this.renderFormSelect('icon', iconOptions, item.icon, { label: t('Значок') });
+    const fileName = item.image ? t('Текущая картинка сохранена') : t('Файл не выбран');
     const imagePreview = item.image ? `<span class="lore-file-preview"><img src="${escapeHtml(item.image)}" alt=""></span>` : '';
-    const common = `
+    const common = ui`
       <label class="lore-field">Роль / тип <input class="form-control" name="role" value="${escapeHtml(item.role || '')}"></label>
       <label class="lore-field">Встроенная иконка ${iconSelect}</label>
       <label class="lore-field lore-field-wide">Алиасы через запятую <input class="form-control" name="aliases" value="${escapeHtml((item.aliases || []).join(', '))}"></label>
@@ -18920,7 +18990,7 @@ class NocturneWriter {
     `;
     if (type === 'characters') {
       const normalized = this.normalizeCharacter(item);
-      return `
+      return ui`
         <div class="lore-form-grid lore-form-grid-entity">
           <label class="lore-field">Имя <input class="form-control" name="firstName" value="${escapeHtml(normalized.firstName || '')}" required></label>
           <label class="lore-field">Фамилия <input class="form-control" name="lastName" value="${escapeHtml(normalized.lastName || '')}"></label>
@@ -18928,7 +18998,7 @@ class NocturneWriter {
         </div>
       `;
     }
-    return `
+    return ui`
       <div class="lore-form-grid lore-form-grid-entity">
         <label class="lore-field lore-field-wide">Название <input class="form-control" name="name" value="${escapeHtml(item.displayName || item.name || '')}" required></label>
         ${common}
@@ -18944,7 +19014,7 @@ class NocturneWriter {
     this.pendingConfirmation?.(false);
     return new Promise(resolve => {
       const overlay = document.getElementById('form-overlay');
-      this.presentFormModal(`
+      this.presentFormModal(ui`
         <div class="form-modal confirm-modal character-rename-modal" aria-describedby="character-rename-description">
           <div class="confirm-icon"><i class="bx bx-user-pin" aria-hidden="true"></i></div>
           <h2>Вы уверены, что хотите изменить имя персонажа?</h2>
@@ -18972,19 +19042,19 @@ class NocturneWriter {
         button.onclick = async () => {
           if (button.dataset.renameChoice === 'cancel') return close(false);
           if (busy) return;
-          await this.runSurfaceAction(button, 'Изменение имени…', async () => {
+          await this.runSurfaceAction(button, t('Изменение имени…'), async () => {
             busy = true;
             const buttons = [...overlay.querySelectorAll('[data-rename-choice]')];
             buttons.forEach(item => { item.disabled = true; });
             const status = overlay.querySelector('[data-rename-status]');
-            status.hidden = false; status.textContent = 'Обновляем имя во всех текстах…';
+            status.hidden = false; status.textContent = t('Обновляем имя во всех текстах…');
             try {
               await this.renameCharacterEverywhere(before, after, { keepAlias: button.dataset.renameChoice === 'alias' });
               busy = false; close(true);
             } catch (error) {
               status.textContent = error.code === 'SYNC_RETRY'
-                ? 'Данные изменились в другой вкладке или при синхронизации. Обновите их и повторите переименование. Имя не изменено.'
-                : `${error.message || 'Не удалось сохранить изменения.'} Имя не изменено.`;
+                ? t('Данные изменились в другой вкладке или при синхронизации. Обновите их и повторите переименование. Имя не изменено.')
+                : msg`${error.message || t('Не удалось сохранить изменения.')} Имя не изменено.`;
               status.setAttribute('role', 'alert');
             } finally { busy = false; buttons.forEach(item => { item.disabled = false; }); }
           });
@@ -18995,7 +19065,7 @@ class NocturneWriter {
 
   async renameCharacterEverywhere(before, after, { keepAlias = false } = {}) {
     const worldId = this.state.activeLoreId || 'world';
-    if (this.state.lore.locked || this.state.settings.e2e && !this.state.sessionPassword) throw new Error('Введите мастер-пароль для переименования.');
+    if (this.state.lore.locked || this.state.settings.e2e && !this.state.sessionPassword) throw new Error(t('Введите мастер-пароль для переименования.'));
     await Promise.all([...(this.docSaves?.values() || []), ...this.draftWrites.values(), this.trash.work, this.bookmarks.trashWork, this.databaseSync?.incomingWork]);
     for (const instance of this.nocturneEditor.instances.values()) this.nocturneEditor.syncDocFromEditor(instance.paneId);
     const stores = ['docs', 'folders', 'lore', 'floatingNotes', 'reviewMarks', 'drafts', 'trash'];
@@ -19003,12 +19073,12 @@ class NocturneWriter {
     const globalRaw = await this.db.getRaw('settings', 'global-notes');
     raw.settings = globalRaw ? [globalRaw] : [];
     const decoded = Object.fromEntries(await Promise.all(Object.entries(raw).map(async ([store, records]) => [store, await Promise.all(records.map(record => this.db.decodeRecord(store, record)))])));
-    if (Object.values(decoded).flat().some(record => record.locked || record.protectedStore)) throw new Error('Сначала разблокируйте все зашифрованные записи мастер-паролем.');
+    if (Object.values(decoded).flat().some(record => record.locked || record.protectedStore)) throw new Error(t('Сначала разблокируйте все зашифрованные записи мастер-паролем.'));
     const characters = [...this.state.lore.characters, ...decoded.lore.filter(world => world.id !== worldId).flatMap(world => world.characters || [])];
     const replacement = characterNameReplacement(before, after, { characters });
     const baseline = this.loreById?.get(worldId), persistedWorld = decoded.lore.find(world => world.id === worldId);
     if (baseline && Object.keys({ ...baseline, ...persistedWorld }).filter(key => !['id', 'locked'].includes(key)).some(key => JSON.stringify(baseline[key]) !== JSON.stringify(persistedWorld?.[key]))) {
-      const error = new Error('База знаний изменена в другой вкладке.'); error.code = 'SYNC_RETRY'; throw error;
+      const error = new Error(t('База знаний изменена в другой вкладке.')); error.code = 'SYNC_RETRY'; throw error;
     }
     const merge = (store, current) => {
       const records = new Map(decoded[store].map(record => [record.id, record]));
@@ -19020,7 +19090,7 @@ class NocturneWriter {
     merge('reviewMarks', this.state.reviewMarks);
     const world = { ...structuredClone(this.state.lore), id: worldId };
     const character = world.characters.find(item => item.id === before.id);
-    if (!character || this.entityDisplayName(character) !== this.entityDisplayName(before)) throw new Error('Карточка уже изменена. Откройте её заново.');
+    if (!character || this.entityDisplayName(character) !== this.entityDisplayName(before)) throw new Error(t('Карточка уже изменена. Откройте её заново.'));
     Object.assign(character, after);
     merge('lore', [world]);
     merge('settings', [{ ...decoded.settings[0], id: 'global-notes', text: this.state.globalNotes || '', bookmarks: this.state.globalBookmarks || [] }]);
@@ -19039,7 +19109,7 @@ class NocturneWriter {
         const modified = JSON.stringify(next) !== JSON.stringify(original) || store === 'lore' && record.id === worldId;
         if (modified) {
           if (store === 'docs' && this.db.documentVersions.has(record.id) && JSON.stringify(stored) !== JSON.stringify(this.db.documentVersions.get(record.id))) {
-            const error = new Error('Документ изменён в другой вкладке.'); error.code = 'SYNC_RETRY'; throw error;
+            const error = new Error(t('Документ изменён в другой вкладке.')); error.code = 'SYNC_RETRY'; throw error;
           }
           next.updatedAt = Date.now();
           (writes[store] ||= []).push(next);
@@ -19085,28 +19155,28 @@ class NocturneWriter {
     if (id && !item) return;
     const isTimeline = type === 'timeline' || isSubtimeline;
     const iconOptions = [
-      ['bx-user', 'Персона'],
-      ['bx-face', 'Лицо'],
-      ['bx-shield-quarter', 'Щит'],
-      ['bx-crown', 'Корона'],
-      ['bx-buildings', 'Город'],
-      ['bx-tree', 'Лес'],
-      ['bx-map-alt', 'Карта'],
-      ['bx-castle', 'Замок'],
+      ['bx-user', t('Персона')],
+      ['bx-face', t('Лицо')],
+      ['bx-shield-quarter', t('Щит')],
+      ['bx-crown', t('Корона')],
+      ['bx-buildings', t('Город')],
+      ['bx-tree', t('Лес')],
+      ['bx-map-alt', t('Карта')],
+      ['bx-castle', t('Замок')],
     ];
     const overlay = document.getElementById('form-overlay');
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <form class="form-modal lore-form-${type}" id="lore-form" novalidate>
-        <h2>${id ? 'Редактировать' : 'Создать'} ${isSubtimeline ? 'саб-событие' : isTimeline ? 'событие' : 'карточку'}</h2>
+        <h2>${id ? t('Редактировать') : t('Создать')} ${isSubtimeline ? t('саб-событие') : isTimeline ? t('событие') : t('карточку')}</h2>
         <div class="form-grid">
-          ${isTimeline ? `
-            <label>Дата <input class="form-control" name="date" value="${escapeHtml(item.date || 'Эпоха Пепла, год 1')}" required></label>
+          ${isTimeline ? ui`
+            <label>Дата <input class="form-control" name="date" value="${escapeHtml(item.date || t('Эпоха Пепла, год 1'))}" required></label>
             <label>Название <input class="form-control" name="title" value="${escapeHtml(item.title || '')}" required></label>
-          ` : type === 'notes' ? `
+          ` : type === 'notes' ? ui`
             <label class="lore-field lore-field-wide">Заголовок <input class="form-control" name="title" value="${escapeHtml(item.title || '')}" required></label>
           ` : this.renderLoreEntityFields(type, item, iconOptions)}
           <label class="lore-field lore-field-wide lore-description-field">Описание <textarea class="form-control" name="body" data-bookmark-source="${escapeHtml(this.bookmarks.sources().find(source => source.owner.kind === 'lore' && source.owner.worldId === this.state.activeLoreId && source.owner.id === item.id)?.key || '')}" required>${escapeHtml(item.body || '')}</textarea></label>
-          ${isTimeline ? `
+          ${isTimeline ? ui`
             <div class="lore-field lore-field-wide timeline-associations-fields collapsed">
               <div class="associations-title-row" data-action="toggle-associations">
                 <h4 class="associations-title"><i class="bx bx-link"></i> Привязки и Ассоциации</h4>
@@ -19128,8 +19198,8 @@ class NocturneWriter {
                   ${this.state.lore.characters.map(char => {
                     const checked = Array.isArray(item.characterIds) && item.characterIds.includes(char.id);
                     const role = (item.characterRoles && item.characterRoles[char.id]) || 'regular';
-                    const roleLabel = role === 'first_appearance' ? 'Появление' : role === 'death' ? 'Смерть' : 'Участие';
-                    return `
+                    const roleLabel = role === 'first_appearance' ? t('Появление') : role === 'death' ? t('Смерть') : t('Участие');
+                    return ui`
                       <div class="assoc-card char-assoc-card ${checked ? 'active' : ''}" data-id="${char.id}" data-role="${role}">
                         <div class="assoc-card-main">
                           <span class="assoc-card-icon"><i class="bx ${char.icon || 'bx-user'}"></i></span>
@@ -19147,7 +19217,7 @@ class NocturneWriter {
                         <input type="hidden" name="char_role_${char.id}" value="${role}" class="assoc-hidden-role">
                       </div>
                     `;
-                  }).join('') || '<div class="empty-state-text">Нет персонажей</div>'}
+                  }).join('') || ui('<div class="empty-state-text">Нет персонажей</div>')}
                 </div>
               </div>
               
@@ -19158,7 +19228,7 @@ class NocturneWriter {
                 <div class="assoc-cards-grid" data-assoc-grid="loc">
                   ${this.state.lore.locations.map(loc => {
                     const checked = Array.isArray(item.locationIds) && item.locationIds.includes(loc.id);
-                    return `
+                    return ui`
                       <div class="assoc-card loc-assoc-card ${checked ? 'active' : ''}" data-id="${loc.id}">
                         <div class="assoc-card-main">
                           <span class="assoc-card-icon"><i class="bx ${loc.icon || 'bx-map-alt'}"></i></span>
@@ -19167,7 +19237,7 @@ class NocturneWriter {
                         <input class="assoc-checkbox" type="checkbox" name="loc_assoc_${loc.id}" ${checked ? 'checked' : ''} aria-label="Связать с локацией: ${escapeHtml(this.entityDisplayName(loc))}">
                       </div>
                     `;
-                  }).join('') || '<div class="empty-state-text">Нет локаций</div>'}
+                  }).join('') || ui('<div class="empty-state-text">Нет локаций</div>')}
                 </div>
               </div>
 
@@ -19178,16 +19248,16 @@ class NocturneWriter {
                 <div class="assoc-cards-grid" data-assoc-grid="note">
                   ${(this.state.lore.notes || []).map(note => {
                     const checked = Array.isArray(item.noteIds) && item.noteIds.includes(note.id);
-                    return `
+                    return ui`
                       <div class="assoc-card note-assoc-card ${checked ? 'active' : ''}" data-id="${note.id}">
                         <div class="assoc-card-main">
                           <span class="assoc-card-icon"><i class="bx bx-note"></i></span>
-                          <span class="assoc-card-title">${escapeHtml(note.title || 'Без названия')}</span>
+                          <span class="assoc-card-title">${escapeHtml(note.title || t('Без названия'))}</span>
                         </div>
-                        <input class="assoc-checkbox" type="checkbox" name="note_assoc_${note.id}" ${checked ? 'checked' : ''} aria-label="Связать с записью: ${escapeHtml(note.title || 'Без названия')}">
+                        <input class="assoc-checkbox" type="checkbox" name="note_assoc_${note.id}" ${checked ? 'checked' : ''} aria-label="Связать с записью: ${escapeHtml(note.title || t('Без названия'))}">
                       </div>
                     `;
-                  }).join('') || '<div class="empty-state-text">Нет записей</div>'}
+                  }).join('') || ui('<div class="empty-state-text">Нет записей</div>')}
                 </div>
               </div>
               
@@ -19198,16 +19268,16 @@ class NocturneWriter {
                 <div class="assoc-cards-grid" data-assoc-grid="doc">
                   ${this.state.docs.map(doc => {
                     const checked = Array.isArray(item.chapterIds) && item.chapterIds.includes(doc.id);
-                    return `
+                    return ui`
                       <div class="assoc-card doc-assoc-card ${checked ? 'active' : ''}" data-id="${doc.id}">
                         <div class="assoc-card-main">
                           <span class="assoc-card-icon"><i class="bx bx-file"></i></span>
-                          <span class="assoc-card-title">${escapeHtml(doc.title || 'Без названия')}</span>
+                          <span class="assoc-card-title">${escapeHtml(doc.title || t('Без названия'))}</span>
                         </div>
-                        <input class="assoc-checkbox" type="checkbox" name="doc_assoc_${doc.id}" ${checked ? 'checked' : ''} aria-label="Связать с документом: ${escapeHtml(doc.title || 'Без названия')}">
+                        <input class="assoc-checkbox" type="checkbox" name="doc_assoc_${doc.id}" ${checked ? 'checked' : ''} aria-label="Связать с документом: ${escapeHtml(doc.title || t('Без названия'))}">
                       </div>
                     `;
-                  }).join('') || '<div class="empty-state-text">Нет документов</div>'}
+                  }).join('') || ui('<div class="empty-state-text">Нет документов</div>')}
                 </div>
                 </div>
                 </div>
@@ -19216,7 +19286,7 @@ class NocturneWriter {
           ` : ''}
         </div>
         <div class="form-actions lore-form-actions">
-          ${id ? '<button class="pill-btn" type="button" data-delete-lore>Удалить</button>' : ''}
+          ${id ? ui('<button class="pill-btn" type="button" data-delete-lore>Удалить</button>') : ''}
           <button class="pill-btn" type="button" data-close-form>Отмена</button>
           <button class="pill-btn ai-btn" type="submit">Сохранить</button>
         </div>
@@ -19253,7 +19323,7 @@ class NocturneWriter {
           card.dataset.role = role;
           const roleLabel = card.querySelector('.assoc-card-role-label');
           if (roleLabel) {
-            roleLabel.textContent = role === 'first_appearance' ? 'Появление' : role === 'death' ? 'Смерть' : 'Участие';
+            roleLabel.textContent = role === 'first_appearance' ? t('Появление') : role === 'death' ? t('Смерть') : t('Участие');
           }
           if (!checkbox.checked) {
             checkbox.checked = true;
@@ -19303,10 +19373,10 @@ class NocturneWriter {
             cardEls.filter(el => el.parentElement === parentGrid).forEach(el => el.remove());
             if (parentGrid && parentGrid.children.length === 0) {
               const typeClassMap = {
-                characters: { icon: 'bx-user-pin', title: 'Персонажей пока нет.', desc: 'Создайте первый профиль, чтобы Nocturne начал узнавать имена в тексте.', action: 'new-lore', btnText: 'Создать профиль', attr: 'data-lore-type="characters"' },
-                locations: { icon: 'bx-map-alt', title: 'Локации пока нет.', desc: 'Добавьте первое место мира или сцены.', action: 'new-lore', btnText: 'Добавить место', attr: 'data-lore-type="locations"' },
-                notes: { icon: 'bx-note', title: 'Записей пока нет.', desc: 'Создайте первую свободную запись или заметку к миру.', action: 'new-lore', btnText: 'Создать запись', attr: 'data-lore-type="notes"' },
-                timeline: { icon: 'bx-git-commit', title: 'Хронология пока пуста.', desc: 'Добавьте первое событие, чтобы выстроить историю.', action: 'new-lore', btnText: 'Добавить событие', attr: 'data-lore-type="timeline"' }
+                characters: { icon: 'bx-user-pin', title: t('Персонажей пока нет.'), desc: t('Создайте первый профиль, чтобы Nocturne начал узнавать имена в тексте.'), action: 'new-lore', btnText: t('Создать профиль'), attr: 'data-lore-type="characters"' },
+                locations: { icon: 'bx-map-alt', title: t('Локации пока нет.'), desc: t('Добавьте первое место мира или сцены.'), action: 'new-lore', btnText: t('Добавить место'), attr: 'data-lore-type="locations"' },
+                notes: { icon: 'bx-note', title: t('Записей пока нет.'), desc: t('Создайте первую свободную запись или заметку к миру.'), action: 'new-lore', btnText: t('Создать запись'), attr: 'data-lore-type="notes"' },
+                timeline: { icon: 'bx-git-commit', title: t('Хронология пока пуста.'), desc: t('Добавьте первое событие, чтобы выстроить историю.'), action: 'new-lore', btnText: t('Добавить событие'), attr: 'data-lore-type="timeline"' }
               };
               const config = typeClassMap[type];
               if (config) {
@@ -19327,7 +19397,7 @@ class NocturneWriter {
       if (file) image = await this.fileToDataUrl(file);
       collection = isSubtimeline ? this.timelineEvent(parentEvent?.id)?.subEvents : this.state.lore[type];
       item = id ? collection?.find((entry) => entry.id === id) : {};
-      if (!collection || !item) { this.toast('Карточка уже удалена. Закройте форму и обновите список.'); return; }
+      if (!collection || !item) { this.toast(t('Карточка уже удалена. Закройте форму и обновите список.')); return; }
       const existingDocs = Array.isArray(item.documentIds) && item.documentIds.length ? item.documentIds : [this.state.activeDocId].filter(Boolean);
       const order = Number.isFinite(Number(item.order)) ? Number(item.order) : collection.length;
       let next;
@@ -19424,7 +19494,7 @@ class NocturneWriter {
         try {
           if (!await this.confirmCharacterRename(item, next, form)) return;
           this.renderAll();
-          this.toast('Имя персонажа изменено во всех текстах.');
+          this.toast(t('Имя персонажа изменено во всех текстах.'));
         } finally { delete form.dataset.renamePending; }
         return;
       }
@@ -19470,7 +19540,7 @@ class NocturneWriter {
           const grids = document.querySelectorAll(`[data-dnd-zone="${type}"]`);
           grids.forEach(grid => {
             const isModalGrid = grid.closest('#kb-modal') !== null;
-            const hasEmptyState = grid.querySelector('.kb-empty-state') || grid.querySelector('.empty-card') || grid.innerHTML.includes('пока нет');
+          const hasEmptyState = grid.querySelector('.kb-empty-state, .empty-card, .utility-empty, .empty-state');
             if (hasEmptyState) {
               grid.innerHTML = '';
             }
@@ -19531,9 +19601,9 @@ class NocturneWriter {
     const collection = isSubtimeline ? parentEvent?.subEvents : this.state.lore[type];
     const item = collection?.find((entry) => entry.id === id);
     if (!item) return;
-    const label = this.entityDisplayName(item) || item.title || 'элемент';
+    const label = this.entityDisplayName(item) || item.title || t('элемент');
     const overlay = document.getElementById('form-overlay');
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="form-modal confirm-modal">
         <div class="confirm-icon"><i class="bx bx-trash"></i></div>
         <h2>Удалить карточку?</h2>
@@ -19564,10 +19634,10 @@ class NocturneWriter {
             cardEls.filter(el => el.parentElement === parentGrid).forEach(el => el.remove());
             if (parentGrid && parentGrid.children.length === 0) {
               const typeClassMap = {
-                characters: { icon: 'bx-user-pin', title: 'Персонажей пока нет.', desc: 'Создайте первый профиль, чтобы Nocturne начал узнавать имена в тексте.', action: 'new-lore', btnText: 'Создать профиль', attr: 'data-lore-type="characters"' },
-                locations: { icon: 'bx-map-alt', title: 'Локации пока нет.', desc: 'Добавьте первое место мира или сцены.', action: 'new-lore', btnText: 'Добавить место', attr: 'data-lore-type="locations"' },
-                notes: { icon: 'bx-note', title: 'Записей пока нет.', desc: 'Добавьте первую свободную запись или заметку к миру.', action: 'new-lore', btnText: 'Создать запись', attr: 'data-lore-type="notes"' },
-                timeline: { icon: 'bx-git-commit', title: 'Хронология пока пуста.', desc: 'Добавьте первое событие, чтобы выстроить историю.', action: 'new-lore', btnText: 'Добавить событие', attr: 'data-lore-type="timeline"' }
+                characters: { icon: 'bx-user-pin', title: t('Персонажей пока нет.'), desc: t('Создайте первый профиль, чтобы Nocturne начал узнавать имена в тексте.'), action: 'new-lore', btnText: t('Создать профиль'), attr: 'data-lore-type="characters"' },
+                locations: { icon: 'bx-map-alt', title: t('Локации пока нет.'), desc: t('Добавьте первое место мира или сцены.'), action: 'new-lore', btnText: t('Добавить место'), attr: 'data-lore-type="locations"' },
+                notes: { icon: 'bx-note', title: t('Записей пока нет.'), desc: t('Добавьте первую свободную запись или заметку к миру.'), action: 'new-lore', btnText: t('Создать запись'), attr: 'data-lore-type="notes"' },
+                timeline: { icon: 'bx-git-commit', title: t('Хронология пока пуста.'), desc: t('Добавьте первое событие, чтобы выстроить историю.'), action: 'new-lore', btnText: t('Добавить событие'), attr: 'data-lore-type="timeline"' }
               };
               const config = typeClassMap[type];
               if (config) {
@@ -19677,7 +19747,7 @@ class NocturneWriter {
     if (this.state.activeSubtimelineId && !this.timelineEvent(this.state.activeSubtimelineId)) this.state.activeSubtimelineId = null;
     const activeId = this.state.activeLoreId || 'world';
     this.loreById?.set(activeId, structuredClone(this.state.lore));
-    const storedWorld = { id: activeId, title: this.state.lore.title || 'Основное произведение', ...this.state.lore };
+    const storedWorld = { id: activeId, title: this.state.lore.title || t('Основное произведение'), ...this.state.lore };
     await this.db.put('lore', storedWorld);
     this.bookmarks.worldRecords = this.bookmarks.worldRecords.filter(world => world.id !== activeId).concat(structuredClone(storedWorld));
     this.updateTypoHighlightsDebounced();
@@ -19710,7 +19780,7 @@ class NocturneWriter {
       const doneBtn = cardEl.querySelector('[data-action="toggle-note-completed"], .done-btn');
       if (doneBtn) {
         doneBtn.classList.toggle('active', note.completed);
-        doneBtn.title = note.completed ? 'Вернуть в работу' : 'Исполнено';
+        doneBtn.title = note.completed ? t('Вернуть в работу') : t('Исполнено');
         const icon = doneBtn.querySelector('i');
         if (icon) {
           icon.className = `bx ${note.completed ? 'bx-check-double' : 'bx-check'}`;
@@ -19743,7 +19813,7 @@ class NocturneWriter {
       await this.saveLore();
     }, 300);
 
-    this.toast(note.completed ? 'Запись исполнена' : 'Запись возвращена в работу');
+    this.toast(note.completed ? t('Запись исполнена') : t('Запись возвращена в работу'));
   }
 
   settingsSurfaceRoot() {
@@ -19757,31 +19827,31 @@ class NocturneWriter {
   renderSettings() {
     if (this.isMobileLayout()) { this.renderMobileShell(); return; }
     const tabs = [
-      ['search', 'bx-search', 'Поиск настроек'],
-      ['history', 'bx-history', 'История и восстановление'],
-      ['manuscript-search', 'bx-search-alt', 'Поиск рукописи'],
-      ['visual', 'bx-palette', 'Визуал и UI'],
-      ['editor', 'bx-text', 'Микро-типографика'],
-      ['dictionary', 'bx-book-content', 'Словарь ошибок'],
-      ['review', 'bx-edit-alt', 'Редактура'],
-      ['bookmarks', 'bx-bookmark', 'Закладки'],
-      ['focus', 'bx-target-lock', 'Фокус и продуктивность'],
-      ['macros', 'bx-code-alt', 'Макросы'],
-      ['formatting', 'bx-paint-roll', 'Разделители / Автоформат'],
-      ['ai', 'bx-bot', 'Продвинутый ИИ'],
-      ['data', 'bx-shield-quarter', 'Данные'],
-      ['export', 'bx-export', 'Экспорт'],
-      ['misc', 'bx-slider-alt', 'Прочее'],
+      ['search', 'bx-search', t('Поиск настроек')],
+      ['history', 'bx-history', t('История и восстановление')],
+      ['manuscript-search', 'bx-search-alt', t('Поиск рукописи')],
+      ['visual', 'bx-palette', t('Визуал и UI')],
+      ['editor', 'bx-text', t('Микро-типографика')],
+      ['dictionary', 'bx-book-content', t('Словарь ошибок')],
+      ['review', 'bx-edit-alt', t('Редактура')],
+      ['bookmarks', 'bx-bookmark', t('Закладки')],
+      ['focus', 'bx-target-lock', t('Фокус и продуктивность')],
+      ['macros', 'bx-code-alt', t('Макросы')],
+      ['formatting', 'bx-paint-roll', t('Разделители / Автоформат')],
+      ['ai', 'bx-bot', t('Продвинутый ИИ')],
+      ['data', 'bx-shield-quarter', t('Данные')],
+      ['export', 'bx-export', t('Экспорт')],
+      ['misc', 'bx-slider-alt', t('Прочее')],
     ];
     const active = this.state.activeSettingsTab;
-    this.presentOverlay(document.getElementById('settings-overlay'), `
+    this.presentOverlay(document.getElementById('settings-overlay'), ui`
       <div class="settings-modal">
         <aside class="settings-sidebar">
           <div class="settings-sidebar-title">Настройки</div>
           ${tabs.map(([id, icon, label]) => `<div class="settings-tab ${active === id ? 'active' : ''}" data-settings-tab="${id}"><i class="bx ${icon}"></i> ${label}</div>`).join('')}
         </aside>
         <main class="settings-body">
-          <div class="settings-header"><h2>${tabs.find(([id]) => id === active)?.[2] || 'Настройки'}</h2><button class="btn-icon" data-action="close-settings"><i class="bx bx-x"></i></button></div>
+          <div class="settings-header"><h2>${tabs.find(([id]) => id === active)?.[2] || t('Настройки')}</h2><button class="btn-icon" data-action="close-settings"><i class="bx bx-x"></i></button></div>
           ${this.settingsContent(active)}
         </main>
       </div>
@@ -19806,16 +19876,16 @@ class NocturneWriter {
     const toggle = (key, title) => `<button type="button" class="toggle ${this.state.settings[key] ? 'on' : ''}" data-setting="${key}" data-kind="toggle" role="switch" aria-checked="${!!this.state.settings[key]}" aria-label="${title}"></button>`;
     const row = (title, note, control) => `<div class="setting-row compact-option"><div class="setting-info"><span>${title}</span><small>${note}</small></div><div class="setting-control">${control}</div></div>`;
     const cardsCompact = this.state.settings.cardView === 'list';
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="form-modal utility-modal compact-settings-modal">
         <div class="modal-head-row"><div><h2>Компактный вид</h2><p>Каждую часть интерфейса можно настроить отдельно.</p></div><button type="button" class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div>
         <div class="compact-settings-list">
-          ${row('Панель документов', 'Узкая боковая панель рукописи.', toggle('compactPanels', 'Компактная панель документов'))}
-          ${row('Панель базы знаний', 'Больше места для карточек и таймлайна.', toggle('compactKbSidebar', 'Компактная панель базы знаний'))}
-          ${row('Карточки базы знаний', 'Компактные карточки персонажей и локаций.', `<button type="button" class="toggle ${cardsCompact ? 'on' : ''}" data-action="toggle-card-view" role="switch" aria-checked="${cardsCompact}" aria-label="Компактные карточки базы знаний"></button>`)}
-          ${row('Панель инструментов', 'Плотнее расположить инструменты редактора.', toggle('compactToolbar', 'Компактная панель инструментов'))}
-          ${row('Настройки', 'Уменьшить отступы в меню настроек.', toggle('compactSettings', 'Компактные настройки'))}
-          ${row('Панель заметок', 'Показывать больше заметок без прокрутки.', toggle('compactNotes', 'Компактная панель заметок'))}
+          ${row(t('Панель документов'), t('Узкая боковая панель рукописи.'), toggle('compactPanels', t('Компактная панель документов')))}
+          ${row(t('Панель базы знаний'), t('Больше места для карточек и таймлайна.'), toggle('compactKbSidebar', t('Компактная панель базы знаний')))}
+          ${row(t('Карточки базы знаний'), t('Компактные карточки персонажей и локаций.'), ui`<button type="button" class="toggle ${cardsCompact ? 'on' : ''}" data-action="toggle-card-view" role="switch" aria-checked="${cardsCompact}" aria-label="Компактные карточки базы знаний"></button>`)}
+          ${row(t('Панель инструментов'), t('Плотнее расположить инструменты редактора.'), toggle('compactToolbar', t('Компактная панель инструментов')))}
+          ${row(t('Настройки'), t('Уменьшить отступы в меню настроек.'), toggle('compactSettings', t('Компактные настройки')))}
+          ${row(t('Панель заметок'), t('Показывать больше заметок без прокрутки.'), toggle('compactNotes', t('Компактная панель заметок')))}
         </div>
       </div>
     `);
@@ -19839,14 +19909,14 @@ class NocturneWriter {
     return ['#8B5CF6', '#A855F7', '#0EA5E9', '#22C55E', '#F59E0B', '#EF4444'];
   }
 
-  renderAccentColorControl({ name = '', value = this.state.settings.accent, label = 'акцентного цвета' } = {}) {
+  renderAccentColorControl({ name = '', value = this.state.settings.accent, label = t('акцентного цвета') } = {}) {
     const accent = this.normalizeAccentHex(value) || this.normalizeAccentHex(this.state.settings.accent) || defaultSettings.accent;
-    if (name) return `<div class="accent-picker bookmark-color-picker" data-bookmark-color-picker style="--accent-preview:${escapeHtml(accent)}">
+    if (name) return ui`<div class="accent-picker bookmark-color-picker" data-bookmark-color-picker style="--accent-preview:${escapeHtml(accent)}">
       <input type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(value || '')}">
       <button type="button" class="accent-swatch" data-bookmark-color-focus aria-label="Ввести HEX ${escapeHtml(label)}"><span class="accent-swatch-orb"></span></button>
       <div class="accent-picker-main"><label class="accent-hex-shell"><span>#</span><input value="${escapeHtml(accent.slice(1))}" maxlength="6" spellcheck="false" data-bookmark-color-hex aria-label="HEX ${escapeHtml(label)}"></label>
-      <div class="accent-presets" aria-label="Палитра ${escapeHtml(label)}">${this.accentPresets().map(color => `<button type="button" class="accent-preset ${value && color.toUpperCase() === accent ? 'active' : ''}" style="--preset:${escapeHtml(color)}" data-bookmark-color="${escapeHtml(color)}" aria-label="Цвет ${escapeHtml(color)}" aria-pressed="${!!value && color.toUpperCase() === accent}"></button>`).join('')}<button type="button" class="accent-reset" data-bookmark-color="" aria-pressed="${!value}">Акцент темы</button></div></div></div>`;
-    return `
+      <div class="accent-presets" aria-label="Палитра ${escapeHtml(label)}">${this.accentPresets().map(color => ui`<button type="button" class="accent-preset ${value && color.toUpperCase() === accent ? 'active' : ''}" style="--preset:${escapeHtml(color)}" data-bookmark-color="${escapeHtml(color)}" aria-label="Цвет ${escapeHtml(color)}" aria-pressed="${!!value && color.toUpperCase() === accent}"></button>`).join('')}<button type="button" class="accent-reset" data-bookmark-color="" aria-pressed="${!value}">Акцент темы</button></div></div></div>`;
+    return ui`
       <div class="accent-picker" data-accent-picker style="--accent-preview:${escapeHtml(accent)}">
         <label class="accent-swatch" title="Выбрать цвет">
           <input type="color" value="${escapeHtml(accent)}" data-accent-native aria-label="Выбрать акцентный цвет">
@@ -19858,7 +19928,7 @@ class NocturneWriter {
             <input value="${escapeHtml(accent.slice(1))}" maxlength="6" spellcheck="false" data-accent-hex aria-label="HEX акцентного цвета">
           </label>
           <div class="accent-presets" aria-label="Пресеты акцентного цвета">
-            ${this.accentPresets().map((color) => `<button type="button" class="accent-preset ${color.toUpperCase() === accent ? 'active' : ''}" style="--preset:${escapeHtml(color)}" data-action="set-accent-preset" data-accent-value="${escapeHtml(color)}" aria-label="Акцент ${escapeHtml(color)}"></button>`).join('')}
+            ${this.accentPresets().map((color) => ui`<button type="button" class="accent-preset ${color.toUpperCase() === accent ? 'active' : ''}" style="--preset:${escapeHtml(color)}" data-action="set-accent-preset" data-accent-value="${escapeHtml(color)}" aria-label="Акцент ${escapeHtml(color)}"></button>`).join('')}
             <button type="button" class="accent-reset" data-action="reset-accent">Сброс</button>
           </div>
         </div>
@@ -19916,20 +19986,21 @@ class NocturneWriter {
     const content = {
       visual: `
         <div class="tab-content active">
-          ${row('Тема оформления', 'Меняет базовую палитру интерфейса без изменения структуры документов.', select('theme', [['nocturne', 'Nocturne Dark'], ['adaptive', 'Nocturne Adaptive'], ['blazing', 'Blazing Black'], ['midnight', 'Deep Midnight'], ['paper', 'Paper Light'], ['matrix', 'Cyberpunk Matrix'], ['lavender', 'Lavender Bloom'], ['crimson', 'Crimson Flame']]))}
-          ${row('Кастомный акцентный цвет', 'Обновляет кнопки, свечения и подсветку сущностей.', this.renderAccentColorControl())}
-          ${row(this.isMobileLayout() ? 'Прозрачность панелей' : 'Прозрачность окна / Blur', this.isMobileLayout() ? 'Лёгкое размытие фона под меню и панелями.' : 'В веб-версии включает CSS-материал; desktop bridge сможет подключить Mica/Vibrancy.', toggle('windowMaterial'))}
-          ${row('Свечение курсора', 'Добавляет мягкую подсветку вокруг позиции ввода, чтобы легче держать фокус на строке.', toggle('cursorGlow'))}
-          ${row('Стиль каретки', 'Выберите форму курсора ввода: тонкая линия, блок или нижнее подчёркивание.', select('caretStyle', [['line', 'Тонкая линия'], ['block', 'Блок'], ['underline', 'Подчеркивание']]))}
-          ${row('Скорость мигания', 'Интервал мигания кастомной каретки в миллисекундах.', range('caretBlink', 250, 1400, 10, 'ms'))}
-          ${row('Плавное дыхание каретки', 'Добавляет еле заметную анимацию каретки вместо резкого мигания.', toggle('caretBreath'))}
-          ${row('Уровень контрастности текста', 'Поднимает или снижает яркость текста на странице, не меняя тему целиком.', range('textContrast', 45, 100, 1, '%'))}
-          ${row('Компактный вид', 'Настройте плотность отдельных частей интерфейса.', `<button class="pill-btn" data-action="open-compact-settings"><i class="bx bx-slider-alt"></i> Настроить</button>`)}
-          ${row('Режим пишущей машинки', 'Держит активную строку вертикально по центру экрана — как в профессиональных редакторах.', toggle('typewriterMode'))}
-          ${(this.isAndroidRuntime() || this.isCapacitorRuntime()) ? row('Уменьшить анимации на телефоне', 'По умолчанию мобильные анимации включены. Включите это только если устройство заметно тормозит.', toggle('reduceMobileAnimations')) : ''}
-          ${this.isMobileLayout() ? '' : row('Горячие клавиши', 'Открывает справку по реально доступным сочетаниям клавиш.', `<button class="pill-btn" data-action="open-shortcuts"><i class="bx bx-keyboard"></i> Показать</button>`)}
+          ${row(t('Язык интерфейса'), t('Язык меню и уведомлений. Язык рукописи и проверки текста не меняется.'), select('interfaceLanguage', LANGUAGE_OPTIONS))}
+          ${row(t('Тема оформления'), t('Меняет базовую палитру интерфейса без изменения структуры документов.'), select('theme', [['nocturne', 'Nocturne Dark'], ['adaptive', 'Nocturne Adaptive'], ['blazing', 'Blazing Black'], ['midnight', 'Deep Midnight'], ['paper', 'Paper Light'], ['matrix', 'Cyberpunk Matrix'], ['lavender', 'Lavender Bloom'], ['crimson', 'Crimson Flame']]))}
+          ${row(t('Кастомный акцентный цвет'), t('Обновляет кнопки, свечения и подсветку сущностей.'), this.renderAccentColorControl())}
+          ${row(this.isMobileLayout() ? t('Прозрачность панелей') : t('Прозрачность окна / Blur'), this.isMobileLayout() ? t('Лёгкое размытие фона под меню и панелями.') : t('В веб-версии включает CSS-материал; desktop bridge сможет подключить Mica/Vibrancy.'), toggle('windowMaterial'))}
+          ${row(t('Свечение курсора'), t('Добавляет мягкую подсветку вокруг позиции ввода, чтобы легче держать фокус на строке.'), toggle('cursorGlow'))}
+          ${row(t('Стиль каретки'), t('Выберите форму курсора ввода: тонкая линия, блок или нижнее подчёркивание.'), select('caretStyle', [['line', t('Тонкая линия')], ['block', t('Блок')], ['underline', t('Подчеркивание')]]))}
+          ${row(t('Скорость мигания'), t('Интервал мигания кастомной каретки в миллисекундах.'), range('caretBlink', 250, 1400, 10, 'ms'))}
+          ${row(t('Плавное дыхание каретки'), t('Добавляет еле заметную анимацию каретки вместо резкого мигания.'), toggle('caretBreath'))}
+          ${row(t('Уровень контрастности текста'), t('Поднимает или снижает яркость текста на странице, не меняя тему целиком.'), range('textContrast', 45, 100, 1, '%'))}
+          ${row(t('Компактный вид'), t('Настройте плотность отдельных частей интерфейса.'), ui`<button class="pill-btn" data-action="open-compact-settings"><i class="bx bx-slider-alt"></i> Настроить</button>`)}
+          ${row(t('Режим пишущей машинки'), t('Держит активную строку вертикально по центру экрана — как в профессиональных редакторах.'), toggle('typewriterMode'))}
+          ${(this.isAndroidRuntime() || this.isCapacitorRuntime()) ? row(t('Уменьшить анимации на телефоне'), t('По умолчанию мобильные анимации включены. Включите это только если устройство заметно тормозит.'), toggle('reduceMobileAnimations')) : ''}
+          ${this.isMobileLayout() ? '' : row(t('Горячие клавиши'), t('Открывает справку по реально доступным сочетаниям клавиш.'), ui`<button class="pill-btn" data-action="open-shortcuts"><i class="bx bx-keyboard"></i> Показать</button>`)}
         </div>`,
-      editor: `
+      editor: ui`
         <div class="tab-content active">
           ${(() => {
             const presetFonts = [
@@ -19942,7 +20013,7 @@ class NocturneWriter {
               ['Courier New', 'Courier New (Monospace)'],
             ];
             const customFonts = (s.customFonts || []).map((f) => [f.name, f.name]);
-            return row('Шрифт рукописи', 'Меняет семейство шрифта только в рабочей рукописи, не в интерфейсе.', select('fontFamily', [...presetFonts, ...customFonts]));
+            return row(t('Шрифт рукописи'), t('Меняет семейство шрифта только в рабочей рукописи, не в интерфейсе.'), select('fontFamily', [...presetFonts, ...customFonts]));
           })()}
           <div class="setting-row">
             <div class="setting-info">
@@ -19956,11 +20027,11 @@ class NocturneWriter {
               </label>
             </div>
           </div>
-          ${(s.customFonts || []).length ? `
+          ${(s.customFonts || []).length ? ui`
             <div class="setting-row" style="flex-direction: column; align-items: stretch; gap: 6px;">
               <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px;">Загруженные шрифты</div>
               <div style="display: flex; flex-direction: column; gap: 6px;">
-                ${(s.customFonts || []).map((f, idx) => `
+                ${(s.customFonts || []).map((f, idx) => ui`
                   <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(var(--accent-rgb), 0.05); border: 1px solid rgba(var(--accent-rgb), 0.15); padding: 6px 12px; border-radius: 6px;">
                     <span style="font-family: '${f.name}', sans-serif; font-size: 13px;">${escapeHtml(f.name)}</span>
                     <button class="btn-icon" data-action="delete-custom-font" data-font-idx="${idx}" title="Удалить" style="color: var(--accent);"><i class="bx bx-trash"></i></button>
@@ -19969,37 +20040,37 @@ class NocturneWriter {
               </div>
             </div>
           ` : ''}
-          ${row('Размер шрифта', 'Базовый размер текста на странице редактора.', range('fontSize', 14, 26, 1, 'px'))}
-          ${row('Межстрочный интервал', 'Высота строки. Большие значения дают больше воздуха для вычитки.', range('lineHeight', 1.35, 2.25, .05))}
-          ${row('Межбуквенный интервал', 'Дополнительный трекинг между буквами для комфортного чтения.', range('letterSpacing', 0, 1.8, .1, 'px'))}
-          ${row('Отступ между абзацами', 'Вертикальный интервал после абзаца в em относительно текущего шрифта.', range('paragraphSpacing', .25, 2.2, .05, 'em'))}
-          ${row('Абзацный отступ', 'Добавляет красную строку в прозе вместо разделения только вертикальным отступом.', toggle('paragraphIndent'))}
-          ${row('Умная пунктуация', 'Заменяет --, ..., прямые кавычки на типографские символы.', toggle('smartPunctuation'))}
-          ${row('Подсветка синтаксиса писателя', 'Диалоги и мысли получают отдельный визуальный слой.', toggle('writerSyntax'))}
-          ${row('Ритм чтения', 'Длинные предложения подсвечиваются красным, короткие зеленым.', toggle('readability'))}
-          ${row('Проверка частых ошибок', 'Локальная точечная проверка распространённых опечаток и неправильных написаний без браузерной волнистой мясорубки. Имена, фамилии и названия из Базы знаний не считаются ошибками.', toggle('strictSpellcheck'))}
-          ${row('Типографская сетка', 'Показывает ритмическую направляющую строк для оценки вертикального набора.', toggle('baselineGrid'))}
+          ${row(t('Размер шрифта'), t('Базовый размер текста на странице редактора.'), range('fontSize', 14, 26, 1, 'px'))}
+          ${row(t('Межстрочный интервал'), t('Высота строки. Большие значения дают больше воздуха для вычитки.'), range('lineHeight', 1.35, 2.25, .05))}
+          ${row(t('Межбуквенный интервал'), t('Дополнительный трекинг между буквами для комфортного чтения.'), range('letterSpacing', 0, 1.8, .1, 'px'))}
+          ${row(t('Отступ между абзацами'), t('Вертикальный интервал после абзаца в em относительно текущего шрифта.'), range('paragraphSpacing', .25, 2.2, .05, 'em'))}
+          ${row(t('Абзацный отступ'), t('Добавляет красную строку в прозе вместо разделения только вертикальным отступом.'), toggle('paragraphIndent'))}
+          ${row(t('Умная пунктуация'), t('Заменяет --, ..., прямые кавычки на типографские символы.'), toggle('smartPunctuation'))}
+          ${row(t('Подсветка синтаксиса писателя'), t('Диалоги и мысли получают отдельный визуальный слой.'), toggle('writerSyntax'))}
+          ${row(t('Ритм чтения'), t('Длинные предложения подсвечиваются красным, короткие зеленым.'), toggle('readability'))}
+          ${row(t('Проверка частых ошибок'), t('Локальная точечная проверка распространённых опечаток и неправильных написаний без браузерной волнистой мясорубки. Имена, фамилии и названия из Базы знаний не считаются ошибками.'), toggle('strictSpellcheck'))}
+          ${row(t('Типографская сетка'), t('Показывает ритмическую направляющую строк для оценки вертикального набора.'), toggle('baselineGrid'))}
         </div>`,
       dictionary: this.dictionarySettingsContent(),
       review: this.reviewSettingsContent(),
       misc: this.miscSettingsContent(),
       focus: `
         <div class="tab-content active">
-          ${row('Показывать кнопку «Дзен» в верхней панели', 'Добавляет кнопку быстрого входа в режим концентрации. При выключении кнопка скрывается из toolbar.', toggle('showZenButton'))}
-          ${row('Фокус на предложении / абзаце', 'Приглушает соседний текст и помогает вычитывать текущий фрагмент.', toggle('sentenceFocus'))}
-          ${row('Пагинация MS Word', 'Показывает текст на отдельных листах с полями. Содержимое и экспорт не меняются. По умолчанию выключена.', toggle('autoPaginate'))}
-          ${row('Линейки страниц', 'Показывает тонкие направляющие полей и рабочей области страницы.', toggle('showPageRulers'))}
-          ${row('Анимация письма', 'Искры, волна, туман или отключение анимации ввода.', select('writingAnimation', [['sparkles', 'Искры'], ['ripple', 'Волна'], ['mist', 'Туман'], ['off', 'Выключено']]))}
-          ${row('Дневная цель слов', 'Количество слов, к которому стремится дневной прогресс в нижней части sidebar.', range('dailyGoal', 100, 10000, 100))}
-                              ${row('Show, Don’t Tell анализатор', 'Локально подсвечивает слабые слова и места, где фразу можно показать действием.', toggle('showDontTell'))}
-          ${row('Фокус-линза', 'Позволяет временно выделить диалоги или описания и приглушить остальной текст.', select('dialogueLens', [['off', 'Выключено'], ['dialogues', 'Только диалоги'], ['descriptions', 'Только описания']]))}
+          ${row(t('Показывать кнопку «Дзен» в верхней панели'), t('Добавляет кнопку быстрого входа в режим концентрации. При выключении кнопка скрывается из toolbar.'), toggle('showZenButton'))}
+          ${row(t('Фокус на предложении / абзаце'), t('Приглушает соседний текст и помогает вычитывать текущий фрагмент.'), toggle('sentenceFocus'))}
+          ${row(t('Пагинация MS Word'), t('Показывает текст на отдельных листах с полями. Содержимое и экспорт не меняются. По умолчанию выключена.'), toggle('autoPaginate'))}
+          ${row(t('Линейки страниц'), t('Показывает тонкие направляющие полей и рабочей области страницы.'), toggle('showPageRulers'))}
+          ${row(t('Анимация письма'), t('Искры, волна, туман или отключение анимации ввода.'), select('writingAnimation', [['sparkles', t('Искры')], ['ripple', t('Волна')], ['mist', t('Туман')], ['off', t('Выключено')]]))}
+          ${row(t('Дневная цель слов'), t('Количество слов, к которому стремится дневной прогресс в нижней части sidebar.'), range('dailyGoal', 100, 10000, 100))}
+                              ${row(t('Show, Don’t Tell анализатор'), t('Локально подсвечивает слабые слова и места, где фразу можно показать действием.'), toggle('showDontTell'))}
+          ${row(t('Фокус-линза'), t('Позволяет временно выделить диалоги или описания и приглушить остальной текст.'), select('dialogueLens', [['off', t('Выключено')], ['dialogues', t('Только диалоги')], ['descriptions', t('Только описания')]]))}
         </div>`,
-      ai: `
+      ai: ui`
         <div class="tab-content active">
           ${this.aiPresetsContent()}
           <div class="setting-group-title">Провайдер</div>
-          ${row('LLM Provider', 'Режим «Не настроен» ничего не генерирует. Для локальной модели используйте Ollama, для облачных провайдеров укажите endpoint, model и ключ.', select('aiProvider', [
-            ['local', 'Не настроен / без генерации'],
+          ${row(t('Провайдер модели'), t('Режим «Не настроен» ничего не генерирует. Для локальной модели используйте Ollama, для облачных провайдеров укажите endpoint, model и ключ.'), select('aiProvider', [
+            ['local', t('Не настроен / без генерации')],
             ['ollama', 'Ollama'],
             ['groq', 'Groq free tier'],
             ['gemini', 'Gemini free tier'],
@@ -20008,11 +20079,11 @@ class NocturneWriter {
             ...(s.customAiProviders || []).map(p => [p.id, p.name])
           ]))}
           ${s.aiProvider?.startsWith?.('prov_') ? '' : `
-            ${row('Endpoint', 'Адрес API выбранного провайдера. У Ollama это локальный endpoint, у облачных сервисов — HTTPS API.', input('aiEndpoint'))}
-            ${row('API Key', 'Ключ хранится локально в настройках браузера. Для Ollama обычно не нужен.', input('aiKey', 'password'))}
-            ${row('Model', 'Идентификатор модели, который понимает выбранный провайдер.', input('aiModel'))}
+            ${row(t('Адрес API'), t('Адрес API выбранного провайдера. У Ollama это локальный endpoint, у облачных сервисов — HTTPS API.'), input('aiEndpoint'))}
+            ${row(t('Ключ API'), t('Ключ хранится локально в настройках браузера. Для Ollama обычно не нужен.'), input('aiKey', 'password'))}
+            ${row(t('Модель'), t('Идентификатор модели, который понимает выбранный провайдер.'), input('aiModel'))}
           `}
-          ${row('Проверка подключения', 'Отправляет минимальный тестовый запрос текущему провайдеру.', `<button class="pill-btn" data-action="test-ai-connection"><i class="bx bx-plug"></i> Проверить подключение</button>`)}
+          ${row(t('Проверка подключения'), t('Отправляет минимальный тестовый запрос текущему провайдеру.'), ui`<button class="pill-btn" data-action="test-ai-connection"><i class="bx bx-plug"></i> Проверить подключение</button>`)}
           
           <div class="custom-providers-section" style="margin: 12px 0 24px 0; padding: 16px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.02); border-radius: 8px;">
             <div class="custom-providers-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
@@ -20020,9 +20091,9 @@ class NocturneWriter {
               <button class="pill-btn ai-btn" data-action="new-custom-provider"><i class="bx bx-plus"></i> Добавить</button>
             </div>
             <div class="custom-providers-list" style="display: flex; flex-direction: column; gap: 8px;">
-              ${(s.customAiProviders || []).length === 0 ? `
+              ${(s.customAiProviders || []).length === 0 ? ui`
                 <p style="color: var(--text-muted); font-size: 0.9em; margin: 0;">Вы можете добавить собственные эндпоинты моделей (например, LM Studio, DeepSeek или локальные API).</p>
-              ` : (s.customAiProviders || []).map(p => `
+              ` : (s.customAiProviders || []).map(p => ui`
                 <div class="custom-provider-item" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: rgba(0,0,0,0.2); border-radius: 6px; border: 1px solid rgba(255,255,255,0.04);">
                   <div class="custom-provider-info" style="min-width: 0; flex: 1;">
                     <strong style="display: block; font-size: 0.95em; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">${escapeHtml(p.name)}</strong>
@@ -20038,10 +20109,10 @@ class NocturneWriter {
           </div>
 
           <div class="setting-group-title">Поведение</div>
-          ${row('Персона редактора', '', select('aiPersona', [
-            ['critic', 'Злой критик'],
-            ['muse', 'Муза'],
-            ['coauthor', 'Соавтор'],
+          ${row(t('Персона редактора'), '', select('aiPersona', [
+            ['critic', t('Злой критик')],
+            ['muse', t('Муза')],
+            ['coauthor', t('Соавтор')],
             ...(s.customAiPersonas || []).map(p => [p.id, p.name])
           ]))}
           <div class="custom-personas-section" style="margin: 12px 0 24px 0; padding: 16px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.02); border-radius: 8px;">
@@ -20050,9 +20121,9 @@ class NocturneWriter {
               <button class="pill-btn ai-btn" data-action="new-custom-persona"><i class="bx bx-plus"></i> Создать</button>
             </div>
             <div class="custom-personas-list" style="display: flex; flex-direction: column; gap: 8px;">
-              ${(s.customAiPersonas || []).length === 0 ? `
+              ${(s.customAiPersonas || []).length === 0 ? ui`
                 <p style="color: var(--text-muted); font-size: 0.9em; margin: 0;">Вы можете создать собственную персону с уникальной системной инструкцией.</p>
-              ` : (s.customAiPersonas || []).map(p => `
+              ` : (s.customAiPersonas || []).map(p => ui`
                 <div class="custom-persona-item" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: rgba(0,0,0,0.2); border-radius: 6px; border: 1px solid rgba(255,255,255,0.04);">
                   <div class="custom-persona-info" style="min-width: 0; flex: 1;">
                     <strong style="display: block; font-size: 0.95em; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">${escapeHtml(p.name)}</strong>
@@ -20066,10 +20137,10 @@ class NocturneWriter {
               `).join('')}
             </div>
           </div>
-          ${row('Креативность', 'Температура запроса: ниже — предсказуемее, выше — свободнее формулировки.', range('aiTemperature', 0, 1.4, .05))}
-          ${row('Контекст базы знаний', 'Передаёт ассистенту релевантных персонажей, локации, таймлайн, сабтаймлайны и заметки как справочный контекст, не вставляя его в документ.', toggle('aiKnowledgeContext'))}
-          ${row('Правила мира', 'Ограничения лора, которые учитывает ассистент.', `<button class="pill-btn" data-action="edit-world-rules"><i class="bx bx-book-content"></i> Открыть правила</button>`)}
-          ${row('Группы контекста', 'Можно отключить отдельные части контекста для более коротких запросов.', `
+          ${row(t('Креативность'), t('Температура запроса: ниже — предсказуемее, выше — свободнее формулировки.'), range('aiTemperature', 0, 1.4, .05))}
+          ${row(t('Контекст базы знаний'), t('Передаёт ассистенту релевантных персонажей, локации, таймлайн, сабтаймлайны и заметки как справочный контекст, не вставляя его в документ.'), toggle('aiKnowledgeContext'))}
+          ${row(t('Правила мира'), t('Ограничения лора, которые учитывает ассистент.'), ui`<button class="pill-btn" data-action="edit-world-rules"><i class="bx bx-book-content"></i> Открыть правила</button>`)}
+          ${row(t('Группы контекста'), t('Можно отключить отдельные части контекста для более коротких запросов.'), `
             <div class="context-settings-grid">
               <label class="nocturne-check"><input type="checkbox" data-setting="aiContextCharacters" ${s.aiContextCharacters ? 'checked' : ''}><span class="check-mark"></span><span>Characters</span></label>
               <label class="nocturne-check"><input type="checkbox" data-setting="aiContextLocations" ${s.aiContextLocations ? 'checked' : ''}><span class="check-mark"></span><span>Locations</span></label>
@@ -20077,23 +20148,23 @@ class NocturneWriter {
               <label class="nocturne-check"><input type="checkbox" data-setting="aiContextSubtimelines" ${s.aiContextSubtimelines ? 'checked' : ''}><span class="check-mark"></span><span>Subtimelines</span></label>
               <label class="nocturne-check"><input type="checkbox" data-setting="aiContextNotes" ${s.aiContextNotes ? 'checked' : ''}><span class="check-mark"></span><span>Notes</span></label>
             </div>`) }
-          ${row('Строгость хранителя лора', 'Насколько жёстко локальная проверка реагирует на противоречия с Базой знаний.', range('loreStrictness', 0, 100, 1, '%'))}
-          ${row('Реакция на конфликт лора', 'Soft только подсказывает, warn предупреждает, hard может блокировать сохранение проблемного абзаца.', select('loreReaction', [['soft', 'Подсказать'], ['warn', 'Предупредить'], ['hard', 'Блокировать сохранение абзаца']]))}
-          ${row('Sentiment Timeline', 'Показывает локальную кривую эмоциональной напряжённости по последним предложениям сцены.', toggle('sentimentTimeline'))}
+          ${row(t('Строгость хранителя лора'), t('Насколько жёстко локальная проверка реагирует на противоречия с Базой знаний.'), range('loreStrictness', 0, 100, 1, '%'))}
+          ${row(t('Реакция на конфликт лора'), t('Soft только подсказывает, warn предупреждает, hard может блокировать сохранение проблемного абзаца.'), select('loreReaction', [['soft', t('Подсказать')], ['warn', t('Предупредить')], ['hard', t('Блокировать сохранение абзаца')]]))}
+          ${row(t('Тональность сцены'), t('Показывает локальную кривую эмоциональной напряжённости по последним предложениям сцены.'), toggle('sentimentTimeline'))}
         </div>`,
-      data: `
+      data: ui`
         <div class="tab-content active">
-          ${row('Живое сохранение', 'Сохраняет черновик после каждого изменения в локальную базу. При перезапуске восстанавливает последнюю сохранённую фразу.', toggle('liveSave'))}
-          ${row('Интервал автосохранения', 'Как часто фоновый autosave подтверждает состояние документов в локальной базе.', range('autosaveMinutes', 1, 15, 1, ' мин'))}
-          ${row('История текста', 'Создайте снимок перед большой правкой. Восстановление возвращает текст и заметки.', `<button class="pill-btn ai-btn" data-action="manual-snapshot"><i class="bx bx-camera"></i> Создать снимок</button><button class="pill-btn" data-action="show-history">История</button>`)}
-          ${row('Резервные копии', 'Последние 20 копий. В приложении сохраняются в отдельную папку; в браузере папку нужно подключить.', `<button class="pill-btn" data-action="open-backups">Копии и восстановление</button>`)}
-          ${row('Автоматические копии', 'Создаёт копию проекта с интервалом автосохранения.', toggle('automaticBackups'))}
-          ${row('Корзина', 'Документы, объекты базы знаний, закладки и другие удалённые данные можно восстановить.', `<button class="pill-btn" data-action="open-trash">Открыть корзину</button>`)}
-          ${row('Конфликты синхронизации', 'Сравните версии после одновременной работы на ПК и телефоне.', `<button class="pill-btn" data-action="open-sync-conflicts">Сравнить версии</button>`)}
-          ${this.runtime.isElectron ? row('История в Git', 'Дополнительно сохраняет версии проекта на этом компьютере.', toggle('gitVersioning')) : ''}
-          ${row('Сквозное шифрование', 'AES-GCM для содержимого документов перед записью в IndexedDB.', toggle('e2e'))}
-          ${row('Мастер-пароль сессии', 'Используется для расшифровки в текущей сессии и не отправляется наружу.', `<input class="form-control" type="password" id="session-password" value="${escapeHtml(this.state.sessionPassword)}"><button class="pill-btn" data-action="save-password">Применить</button>`)}
-          ${row('Сбросить настройки', 'Возвращает все настройки интерфейса, текста, ИИ и экспорта к базовым значениям. Документы не удаляются.', `<button class="pill-btn" data-action="reset-settings">Сбросить настройки</button>`)}
+          ${row(t('Живое сохранение'), t('Сохраняет черновик после каждого изменения в локальную базу. При перезапуске восстанавливает последнюю сохранённую фразу.'), toggle('liveSave'))}
+          ${row(t('Интервал автосохранения'), t('Как часто фоновый autosave подтверждает состояние документов в локальной базе.'), range('autosaveMinutes', 1, 15, 1, t(' мин')))}
+          ${row(t('История текста'), t('Создайте снимок перед большой правкой. Восстановление возвращает текст и заметки.'), ui`<button class="pill-btn ai-btn" data-action="manual-snapshot"><i class="bx bx-camera"></i> Создать снимок</button><button class="pill-btn" data-action="show-history">История</button>`)}
+          ${row(t('Резервные копии'), t('Последние 20 копий. В приложении сохраняются в отдельную папку; в браузере папку нужно подключить.'), ui`<button class="pill-btn" data-action="open-backups">Копии и восстановление</button>`)}
+          ${row(t('Автоматические копии'), t('Создаёт копию проекта с интервалом автосохранения.'), toggle('automaticBackups'))}
+          ${row(t('Корзина'), t('Документы, объекты базы знаний, закладки и другие удалённые данные можно восстановить.'), ui`<button class="pill-btn" data-action="open-trash">Открыть корзину</button>`)}
+          ${row(t('Конфликты синхронизации'), t('Сравните версии после одновременной работы на ПК и телефоне.'), ui`<button class="pill-btn" data-action="open-sync-conflicts">Сравнить версии</button>`)}
+          ${this.runtime.isElectron ? row(t('История в Git'), t('Дополнительно сохраняет версии проекта на этом компьютере.'), toggle('gitVersioning')) : ''}
+          ${row(t('Сквозное шифрование'), t('AES-GCM для содержимого документов перед записью в IndexedDB.'), toggle('e2e'))}
+          ${row(t('Мастер-пароль сессии'), t('Используется для расшифровки в текущей сессии и не отправляется наружу.'), ui`<input class="form-control" type="password" id="session-password" value="${escapeHtml(this.state.sessionPassword)}"><button class="pill-btn" data-action="save-password">Применить</button>`)}
+          ${row(t('Сбросить настройки'), t('Возвращает все настройки интерфейса, текста, ИИ и экспорта к базовым значениям. Документы не удаляются.'), ui`<button class="pill-btn" data-action="reset-settings">Сбросить настройки</button>`)}
           <section class="misc-card" style="margin-top: 24px; border: 1px solid rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.02); padding: 18px 24px; border-radius: 8px;">
             <div class="misc-card-head" style="margin-bottom: 18px;">
               <div>
@@ -20135,57 +20206,58 @@ class NocturneWriter {
     const customFonts = (this.state.settings.customFonts || []).map((f) => [f.name, f.name]);
     return [
       ...workflowSettings,
-      { tab: 'visual', label: 'Тема оформления', note: 'Меняет базовую палитру интерфейса без изменения структуры документов.', key: 'theme', type: 'select', options: [['nocturne', 'Nocturne Dark'], ['adaptive', 'Nocturne Adaptive'], ['blazing', 'Blazing Black'], ['midnight', 'Deep Midnight'], ['paper', 'Paper Light'], ['matrix', 'Cyberpunk Matrix'], ['lavender', 'Lavender Bloom'], ['crimson', 'Crimson Flame']] },
-      { tab: 'visual', label: 'Кастомный акцентный цвет', note: 'Обновляет кнопки, свечения и подсветку сущностей.', key: 'accent', type: 'accent' },
-      { tab: 'visual', label: 'Прозрачность окна / Blur', note: 'В веб-версии включает CSS-материал; desktop bridge сможет подключить Mica/Vibrancy.', key: 'windowMaterial', type: 'toggle' },
-      { tab: 'visual', label: 'Свечение курсора', note: 'Добавляет мягкую подсветку вокруг позиции ввода, чтобы легче держать фокус на строке.', key: 'cursorGlow', type: 'toggle' },
-      { tab: 'visual', label: 'Стиль каретки', note: 'Выберите форму курсора ввода: тонкая линия, блок или нижнее подчёркивание.', key: 'caretStyle', type: 'select', options: [['line', 'Тонкая линия'], ['block', 'Блок'], ['underline', 'Подчеркивание']] },
-      { tab: 'visual', label: 'Скорость мигания', note: 'Интервал мигания кастомной каретки в миллисекундах.', key: 'caretBlink', type: 'range', min: 250, max: 1400, step: 10, suffix: 'ms' },
-      { tab: 'visual', label: 'Плавное дыхание каретки', note: 'Добавляет еле заметную анимацию каретки вместо резкого мигания.', key: 'caretBreath', type: 'toggle' },
-      { tab: 'visual', label: 'Уровень контрастности текста', note: 'Поднимает или снижает яркость текста на странице, не меняя тему целиком.', key: 'textContrast', type: 'range', min: 45, max: 100, step: 1, suffix: '%' },
-      { tab: 'visual', label: 'Компактный вид', note: 'Настройка плотности панелей, карточек, инструментов и заметок.', key: 'compactSettingsMenu', type: 'action', action: 'open-compact-settings' },
-      { tab: 'visual', label: 'Режим пишущей машинки', note: 'Держит активную строку вертикально по центру экрана — как в профессиональных редакторах.', key: 'typewriterMode', type: 'toggle' },
-      { tab: 'editor', label: 'Шрифт рукописи', note: 'Меняет семейство шрифта только в рабочей рукописи, не в интерфейсе.', key: 'fontFamily', type: 'select', options: [...presetFonts, ...customFonts] },
-      { tab: 'editor', label: 'Размер шрифта', note: 'Базовый размер текста на странице редактора.', key: 'fontSize', type: 'range', min: 14, max: 26, step: 1, suffix: 'px' },
-      { tab: 'editor', label: 'Межстрочный интервал', note: 'Высота строки. Большие значения дают больше воздуха для вычитки.', key: 'lineHeight', type: 'range', min: 1.35, max: 2.25, step: 0.05 },
-      { tab: 'editor', label: 'Межбуквенный интервал', note: 'Дополнительный трекинг между буквами для комфортного чтения.', key: 'letterSpacing', type: 'range', min: 0, max: 1.8, step: 0.1, suffix: 'px' },
-      { tab: 'editor', label: 'Отступ между абзацами', note: 'Вертикальный интервал после абзаца в em относительно текущего шрифта.', key: 'paragraphSpacing', type: 'range', min: 0.25, max: 2.2, step: 0.05, suffix: 'em' },
-      { tab: 'editor', label: 'Абзацный отступ', note: 'Добавляет красную строку в прозе вместо разделения только вертикальным отступом.', key: 'paragraphIndent', type: 'toggle' },
-      { tab: 'editor', label: 'Умная пунктуация', note: 'Заменяет --, ..., прямые кавычки на типографские символы.', key: 'smartPunctuation', type: 'toggle' },
-      { tab: 'editor', label: 'Подсветка синтаксиса писателя', note: 'Диалоги и мысли получают отдельный визуальный слой.', key: 'writerSyntax', type: 'toggle' },
-      { tab: 'editor', label: 'Ритм чтения', note: 'Длинные предложения подсвечиваются красным, короткие зеленым.', key: 'readability', type: 'toggle' },
-      { tab: 'editor', label: 'Проверка частых ошибок', note: 'Локальная точечная проверка распространённых опечаток и неправильных написаний.', key: 'strictSpellcheck', type: 'toggle' },
-      { tab: 'editor', label: 'Типографская сетка', note: 'Показывает ритмическую направляющую строк для оценки вертикального набора.', key: 'baselineGrid', type: 'toggle' },
-      { tab: 'focus', label: 'Показывать кнопку «Дзен» в верхней панели', note: 'Добавляет кнопку быстрого входа в режим концентрации.', key: 'showZenButton', type: 'toggle' },
-      { tab: 'focus', label: 'Фокус на предложении / абзаце', note: 'Приглушает соседний текст и помогает вычитывать текущий фрагмент.', key: 'sentenceFocus', type: 'toggle' },
-      { tab: 'focus', label: 'Пагинация MS Word', note: 'Показывает текст на отдельных листах с полями; по умолчанию выключена.', key: 'autoPaginate', type: 'toggle' },
-      { tab: 'focus', label: 'Линейки страниц', note: 'Показывает тонкие направляющие полей и рабочей области страницы.', key: 'showPageRulers', type: 'toggle' },
-      { tab: 'focus', label: 'Анимация письма', note: 'Искры, волна, туман или отключение анимации ввода.', key: 'writingAnimation', type: 'select', options: [['sparkles', 'Искры'], ['ripple', 'Волна'], ['mist', 'Туман'], ['off', 'Выключено']] },
-      { tab: 'focus', label: 'Дневная цель слов', note: 'Количество слов, к которому стремится дневной прогресс в нижней части sidebar.', key: 'dailyGoal', type: 'range', min: 100, max: 10000, step: 100 },
-      { tab: 'focus', label: 'Show, Don’t Tell анализатор', note: 'Локально подсвечивает слабые слова и места, где фразу можно показать действием.', key: 'showDontTell', type: 'toggle' },
-      { tab: 'focus', label: 'Фокус-линза', note: 'Позволяет временно выделить диалоги или описания и приглушить остальной текст.', key: 'dialogueLens', type: 'select', options: [['off', 'Выключено'], ['dialogues', 'Только диалоги'], ['descriptions', 'Только описания']] },
+      { tab: 'visual', label: t('Язык интерфейса'), note: t('Язык меню и уведомлений. Язык рукописи и проверки текста не меняется.'), key: 'interfaceLanguage', type: 'select', options: LANGUAGE_OPTIONS },
+      { tab: 'visual', label: t('Тема оформления'), note: t('Меняет базовую палитру интерфейса без изменения структуры документов.'), key: 'theme', type: 'select', options: [['nocturne', 'Nocturne Dark'], ['adaptive', 'Nocturne Adaptive'], ['blazing', 'Blazing Black'], ['midnight', 'Deep Midnight'], ['paper', 'Paper Light'], ['matrix', 'Cyberpunk Matrix'], ['lavender', 'Lavender Bloom'], ['crimson', 'Crimson Flame']] },
+      { tab: 'visual', label: t('Кастомный акцентный цвет'), note: t('Обновляет кнопки, свечения и подсветку сущностей.'), key: 'accent', type: 'accent' },
+      { tab: 'visual', label: t('Прозрачность окна / Blur'), note: t('В веб-версии включает CSS-материал; desktop bridge сможет подключить Mica/Vibrancy.'), key: 'windowMaterial', type: 'toggle' },
+      { tab: 'visual', label: t('Свечение курсора'), note: t('Добавляет мягкую подсветку вокруг позиции ввода, чтобы легче держать фокус на строке.'), key: 'cursorGlow', type: 'toggle' },
+      { tab: 'visual', label: t('Стиль каретки'), note: t('Выберите форму курсора ввода: тонкая линия, блок или нижнее подчёркивание.'), key: 'caretStyle', type: 'select', options: [['line', t('Тонкая линия')], ['block', t('Блок')], ['underline', t('Подчеркивание')]] },
+      { tab: 'visual', label: t('Скорость мигания'), note: t('Интервал мигания кастомной каретки в миллисекундах.'), key: 'caretBlink', type: 'range', min: 250, max: 1400, step: 10, suffix: 'ms' },
+      { tab: 'visual', label: t('Плавное дыхание каретки'), note: t('Добавляет еле заметную анимацию каретки вместо резкого мигания.'), key: 'caretBreath', type: 'toggle' },
+      { tab: 'visual', label: t('Уровень контрастности текста'), note: t('Поднимает или снижает яркость текста на странице, не меняя тему целиком.'), key: 'textContrast', type: 'range', min: 45, max: 100, step: 1, suffix: '%' },
+      { tab: 'visual', label: t('Компактный вид'), note: t('Настройка плотности панелей, карточек, инструментов и заметок.'), key: 'compactSettingsMenu', type: 'action', action: 'open-compact-settings' },
+      { tab: 'visual', label: t('Режим пишущей машинки'), note: t('Держит активную строку вертикально по центру экрана — как в профессиональных редакторах.'), key: 'typewriterMode', type: 'toggle' },
+      { tab: 'editor', label: t('Шрифт рукописи'), note: t('Меняет семейство шрифта только в рабочей рукописи, не в интерфейсе.'), key: 'fontFamily', type: 'select', options: [...presetFonts, ...customFonts] },
+      { tab: 'editor', label: t('Размер шрифта'), note: t('Базовый размер текста на странице редактора.'), key: 'fontSize', type: 'range', min: 14, max: 26, step: 1, suffix: 'px' },
+      { tab: 'editor', label: t('Межстрочный интервал'), note: t('Высота строки. Большие значения дают больше воздуха для вычитки.'), key: 'lineHeight', type: 'range', min: 1.35, max: 2.25, step: 0.05 },
+      { tab: 'editor', label: t('Межбуквенный интервал'), note: t('Дополнительный трекинг между буквами для комфортного чтения.'), key: 'letterSpacing', type: 'range', min: 0, max: 1.8, step: 0.1, suffix: 'px' },
+      { tab: 'editor', label: t('Отступ между абзацами'), note: t('Вертикальный интервал после абзаца в em относительно текущего шрифта.'), key: 'paragraphSpacing', type: 'range', min: 0.25, max: 2.2, step: 0.05, suffix: 'em' },
+      { tab: 'editor', label: t('Абзацный отступ'), note: t('Добавляет красную строку в прозе вместо разделения только вертикальным отступом.'), key: 'paragraphIndent', type: 'toggle' },
+      { tab: 'editor', label: t('Умная пунктуация'), note: t('Заменяет --, ..., прямые кавычки на типографские символы.'), key: 'smartPunctuation', type: 'toggle' },
+      { tab: 'editor', label: t('Подсветка синтаксиса писателя'), note: t('Диалоги и мысли получают отдельный визуальный слой.'), key: 'writerSyntax', type: 'toggle' },
+      { tab: 'editor', label: t('Ритм чтения'), note: t('Длинные предложения подсвечиваются красным, короткие зеленым.'), key: 'readability', type: 'toggle' },
+      { tab: 'editor', label: t('Проверка частых ошибок'), note: t('Локальная точечная проверка распространённых опечаток и неправильных написаний.'), key: 'strictSpellcheck', type: 'toggle' },
+      { tab: 'editor', label: t('Типографская сетка'), note: t('Показывает ритмическую направляющую строк для оценки вертикального набора.'), key: 'baselineGrid', type: 'toggle' },
+      { tab: 'focus', label: t('Показывать кнопку «Дзен» в верхней панели'), note: t('Добавляет кнопку быстрого входа в режим концентрации.'), key: 'showZenButton', type: 'toggle' },
+      { tab: 'focus', label: t('Фокус на предложении / абзаце'), note: t('Приглушает соседний текст и помогает вычитывать текущий фрагмент.'), key: 'sentenceFocus', type: 'toggle' },
+      { tab: 'focus', label: t('Пагинация MS Word'), note: t('Показывает текст на отдельных листах с полями; по умолчанию выключена.'), key: 'autoPaginate', type: 'toggle' },
+      { tab: 'focus', label: t('Линейки страниц'), note: t('Показывает тонкие направляющие полей и рабочей области страницы.'), key: 'showPageRulers', type: 'toggle' },
+      { tab: 'focus', label: t('Анимация письма'), note: t('Искры, волна, туман или отключение анимации ввода.'), key: 'writingAnimation', type: 'select', options: [['sparkles', t('Искры')], ['ripple', t('Волна')], ['mist', t('Туман')], ['off', t('Выключено')]] },
+      { tab: 'focus', label: t('Дневная цель слов'), note: t('Количество слов, к которому стремится дневной прогресс в нижней части sidebar.'), key: 'dailyGoal', type: 'range', min: 100, max: 10000, step: 100 },
+      { tab: 'focus', label: t('Show, Don’t Tell анализатор'), note: t('Локально подсвечивает слабые слова и места, где фразу можно показать действием.'), key: 'showDontTell', type: 'toggle' },
+      { tab: 'focus', label: t('Фокус-линза'), note: t('Позволяет временно выделить диалоги или описания и приглушить остальной текст.'), key: 'dialogueLens', type: 'select', options: [['off', t('Выключено')], ['dialogues', t('Только диалоги')], ['descriptions', t('Только описания')]] },
       ...this.bookmarks.searchSettings(),
-      { tab: 'ai', label: 'LLM Provider', note: 'Режим «Не настроен» ничего не генерирует.', key: 'aiProvider', type: 'select', options: [['local', 'Не настроен / без генерации'], ['ollama', 'Ollama'], ['groq', 'Groq free tier'], ['gemini', 'Gemini free tier'], ['openai', 'OpenAI-compatible'], ['anthropic', 'Anthropic-compatible']] },
-      { tab: 'ai', label: 'Endpoint', note: 'Адрес API выбранного провайдера.', key: 'aiEndpoint', type: 'input' },
-      { tab: 'ai', label: 'API Key', note: 'Ключ хранится локально в настройках браузера.', key: 'aiKey', type: 'input', inputType: 'password' },
-      { tab: 'ai', label: 'Model', note: 'Идентификатор модели, который понимает выбранный провайдер.', key: 'aiModel', type: 'input' },
-      { tab: 'ai', label: 'Персона редактора', note: 'Стиль поведения AI ассистента.', key: 'aiPersona', type: 'select', options: [['critic', 'Злой критик'], ['muse', 'Муза'], ['coauthor', 'Соавтор']] },
-      { tab: 'ai', label: 'Креативность', note: 'Температура запроса: ниже — предсказуемее, выше — свободнее.', key: 'aiTemperature', type: 'range', min: 0, max: 1.4, step: 0.05 },
-      { tab: 'ai', label: 'Контекст базы знаний', note: 'Передаёт ассистенту релевантных персонажей, локации, таймлайн и т.д.', key: 'aiKnowledgeContext', type: 'toggle' },
-      { tab: 'ai', label: 'Правила мира', note: 'Ограничения лора для ассистента.', key: 'worldRules', type: 'action', action: 'edit-world-rules' },
-      { tab: 'ai', label: 'Строгость хранителя лора', note: 'Насколько жёстко локальная проверка реагирует на противоречия с Базой знаний.', key: 'loreStrictness', type: 'range', min: 0, max: 100, step: 1, suffix: '%' },
-      { tab: 'ai', label: 'Реакция на конфликт лора', note: 'Действие при обнаружении нестыковок с Базой Знаний.', key: 'loreReaction', type: 'select', options: [['soft', 'Подсказать'], ['warn', 'Предупредить'], ['hard', 'Блокировать сохранение абзаца']] },
-      { tab: 'ai', label: 'Sentiment Timeline', note: 'Показывает локальную кривую эмоциональной напряжённости.', key: 'sentimentTimeline', type: 'toggle' },
-      { tab: 'data', label: 'Живое сохранение', note: 'Черновики сохраняются в локальной базе и восстанавливаются после перезапуска.', key: 'liveSave', type: 'toggle' },
-      { tab: 'data', label: 'Интервал автосохранения', note: 'Как часто фоновый autosave подтверждает состояние документов.', key: 'autosaveMinutes', type: 'range', min: 1, max: 15, step: 1, suffix: ' мин' },
-      { tab: 'data', label: 'Автоматические резервные копии', note: 'Сохраняет весь проект с ротацией последних 20 копий.', key: 'automaticBackups', type: 'toggle' },
-      { tab: 'data', label: 'Невидимое Git-версионирование', note: 'Автоматическое сохранение в локальный git-репозиторий.', key: 'gitVersioning', type: 'toggle' },
-      { tab: 'data', label: 'Сквозное шифрование', note: 'AES-GCM для содержимого документов перед записью.', key: 'e2e', type: 'toggle' },
-      { tab: 'export', label: 'Водяной знак PDF', note: 'Добавляет полупрозрачную подпись автора и дату в печатный PDF-макет.', key: 'watermark', type: 'toggle' },
-      { tab: 'export', label: 'Имя автора', note: 'Попадает в метаданные DOCX и используется в водяном знаке PDF.', key: 'authorName', type: 'input' },
-      { tab: 'review', label: 'Экспортировать .nocturned рядом с DOCX', note: 'Если у документа есть редакторские правок, рядом с DOCX скачивается JSON-файл обмена правками.', key: 'exportNocturned', type: 'toggle' },
-      { tab: 'formatting', label: 'Автозамена -- на длинное тире —', note: 'Автоматически заменяет два дефиса на длинное тире (em-dash) при вводе. При нажатии Backspace возвращает дефисы.', key: 'autoReplaceDoubleDash', type: 'toggle' },
-      { tab: 'formatting', label: 'Автозамена дефиса на среднее тире –', note: 'Автоматически заменяет одиночный дефис на среднее тире (en-dash), когда он находится между отдельными словами.', key: 'autoReplaceEnDash', type: 'toggle' },
+      { tab: 'ai', label: t('Провайдер модели'), note: t('Режим «Не настроен» ничего не генерирует.'), key: 'aiProvider', type: 'select', options: [['local', t('Не настроен / без генерации')], ['ollama', 'Ollama'], ['groq', 'Groq free tier'], ['gemini', 'Gemini free tier'], ['openai', 'OpenAI-compatible'], ['anthropic', 'Anthropic-compatible']] },
+      { tab: 'ai', label: t('Адрес API'), note: t('Адрес API выбранного провайдера.'), key: 'aiEndpoint', type: 'input' },
+      { tab: 'ai', label: t('Ключ API'), note: t('Ключ хранится локально в настройках браузера.'), key: 'aiKey', type: 'input', inputType: 'password' },
+      { tab: 'ai', label: t('Модель'), note: t('Идентификатор модели, который понимает выбранный провайдер.'), key: 'aiModel', type: 'input' },
+      { tab: 'ai', label: t('Персона редактора'), note: t('Стиль поведения AI ассистента.'), key: 'aiPersona', type: 'select', options: [['critic', t('Злой критик')], ['muse', t('Муза')], ['coauthor', t('Соавтор')]] },
+      { tab: 'ai', label: t('Креативность'), note: t('Температура запроса: ниже — предсказуемее, выше — свободнее.'), key: 'aiTemperature', type: 'range', min: 0, max: 1.4, step: 0.05 },
+      { tab: 'ai', label: t('Контекст базы знаний'), note: t('Передаёт ассистенту релевантных персонажей, локации, таймлайн и т.д.'), key: 'aiKnowledgeContext', type: 'toggle' },
+      { tab: 'ai', label: t('Правила мира'), note: t('Ограничения лора для ассистента.'), key: 'worldRules', type: 'action', action: 'edit-world-rules' },
+      { tab: 'ai', label: t('Строгость хранителя лора'), note: t('Насколько жёстко локальная проверка реагирует на противоречия с Базой знаний.'), key: 'loreStrictness', type: 'range', min: 0, max: 100, step: 1, suffix: '%' },
+      { tab: 'ai', label: t('Реакция на конфликт лора'), note: t('Действие при обнаружении нестыковок с Базой Знаний.'), key: 'loreReaction', type: 'select', options: [['soft', t('Подсказать')], ['warn', t('Предупредить')], ['hard', t('Блокировать сохранение абзаца')]] },
+      { tab: 'ai', label: t('Тональность сцены'), note: t('Показывает локальную кривую эмоциональной напряжённости.'), key: 'sentimentTimeline', type: 'toggle' },
+      { tab: 'data', label: t('Живое сохранение'), note: t('Черновики сохраняются в локальной базе и восстанавливаются после перезапуска.'), key: 'liveSave', type: 'toggle' },
+      { tab: 'data', label: t('Интервал автосохранения'), note: t('Как часто фоновый autosave подтверждает состояние документов.'), key: 'autosaveMinutes', type: 'range', min: 1, max: 15, step: 1, suffix: t(' мин') },
+      { tab: 'data', label: t('Автоматические резервные копии'), note: t('Сохраняет весь проект с ротацией последних 20 копий.'), key: 'automaticBackups', type: 'toggle' },
+      { tab: 'data', label: t('Невидимое Git-версионирование'), note: t('Автоматическое сохранение в локальный git-репозиторий.'), key: 'gitVersioning', type: 'toggle' },
+      { tab: 'data', label: t('Сквозное шифрование'), note: t('AES-GCM для содержимого документов перед записью.'), key: 'e2e', type: 'toggle' },
+      { tab: 'export', label: t('Водяной знак PDF'), note: t('Добавляет полупрозрачную подпись автора и дату в печатный PDF-макет.'), key: 'watermark', type: 'toggle' },
+      { tab: 'export', label: t('Имя автора'), note: t('Попадает в метаданные DOCX и используется в водяном знаке PDF.'), key: 'authorName', type: 'input' },
+      { tab: 'review', label: t('Экспортировать .nocturned рядом с DOCX'), note: t('Если у документа есть редакторские правок, рядом с DOCX скачивается JSON-файл обмена правками.'), key: 'exportNocturned', type: 'toggle' },
+      { tab: 'formatting', label: t('Автозамена -- на длинное тире —'), note: t('Автоматически заменяет два дефиса на длинное тире (em-dash) при вводе. При нажатии Backspace возвращает дефисы.'), key: 'autoReplaceDoubleDash', type: 'toggle' },
+      { tab: 'formatting', label: t('Автозамена дефиса на среднее тире –'), note: t('Автоматически заменяет одиночный дефис на среднее тире (en-dash), когда он находится между отдельными словами.'), key: 'autoReplaceEnDash', type: 'toggle' },
     ];
   }
 
@@ -20214,7 +20286,7 @@ class NocturneWriter {
     const query = String(this.state.settingsSearchQuery || '').trim().toLowerCase();
     let resultsHtml = '';
     if (!query) {
-      resultsHtml = `
+      resultsHtml = ui`
         <div class="settings-search-empty">
           <i class="bx bx-search-alt"></i>
           <p>Введите поисковый запрос, чтобы найти нужную настройку...</p>
@@ -20222,19 +20294,19 @@ class NocturneWriter {
       `;
     } else {
       const tabsList = [
-        { id: 'history', label: 'История и восстановление', note: 'Просмотр и сравнение версий, автоматические снимки, хранение, лимит, отмена восстановления.' },
-        { id: 'manuscript-search', label: 'Поиск по рукописи', note: 'Фраза и слова, е и ё, формы имён, результаты и фильтры.' },
-        { id: 'bookmarks', label: 'Закладки', note: 'Позиция, абзац, фрагмент, подтверждение удаления, копирование, снапшоты, навигация и вид метки.' },
-        { id: 'visual', label: 'Внешний вид и Оформление', note: 'Цветовая тема, акцентный цвет темы, стиль каретки, компактность, typewriter.' },
-        { id: 'editor', label: 'Настройки рукописи и Шрифты', note: 'Размер, отступы, шрифты рукописи, умная пунктуация, строгость проверки.' },
-        { id: 'focus', label: 'Концентрация и Фокус', note: 'Режим дзен, фокус на абзаце, пагинация MS Word, анимация.' },
-        { id: 'dictionary', label: 'Словарь автозамены', note: 'Настройка автоматического исправления опечаток и правил spellcheck.' },
-        { id: 'review', label: 'Режимы работы и Редактура', note: 'Режим письма, редактора или финализации, экспорт правок.' },
-        { id: 'macros', label: 'Клавиатурные макросы', note: 'Настройка клавиатурных макросов и автозамены.' },
-        { id: 'ai', label: 'AI Ассистент', note: 'Провайдеры искусственного интеллекта, ключи, температура, контекст базы знаний.' },
-        { id: 'data', label: 'Данные и Резервное копирование', note: 'Интервалы автосохранения, Git-версионирование, сквозное шифрование, удаление данных.' },
-        { id: 'export', label: 'Параметры экспорта', note: 'Водяной знак PDF, имя автора.' },
-        { id: 'misc', label: 'Прочее', note: 'Очистка и сброс настроек.' }
+        { id: 'history', label: t('История и восстановление'), note: t('Просмотр и сравнение версий, автоматические снимки, хранение, лимит, отмена восстановления.') },
+        { id: 'manuscript-search', label: t('Поиск по рукописи'), note: t('Фраза и слова, е и ё, формы имён, результаты и фильтры.') },
+        { id: 'bookmarks', label: t('Закладки'), note: t('Позиция, абзац, фрагмент, подтверждение удаления, копирование, снапшоты, навигация и вид метки.') },
+        { id: 'visual', label: t('Внешний вид и Оформление'), note: t('Цветовая тема, акцентный цвет темы, стиль каретки, компактность, typewriter.') },
+        { id: 'editor', label: t('Настройки рукописи и Шрифты'), note: t('Размер, отступы, шрифты рукописи, умная пунктуация, строгость проверки.') },
+        { id: 'focus', label: t('Концентрация и Фокус'), note: t('Режим дзен, фокус на абзаце, пагинация MS Word, анимация.') },
+        { id: 'dictionary', label: t('Словарь автозамены'), note: t('Настройка автоматического исправления опечаток и правил spellcheck.') },
+        { id: 'review', label: t('Режимы работы и Редактура'), note: t('Режим письма, редактора или финализации, экспорт правок.') },
+        { id: 'macros', label: t('Клавиатурные макросы'), note: t('Настройка клавиатурных макросов и автозамены.') },
+        { id: 'ai', label: t('AI Ассистент'), note: t('Провайдеры искусственного интеллекта, ключи, температура, контекст базы знаний.') },
+        { id: 'data', label: t('Данные и Резервное копирование'), note: t('Интервалы автосохранения, Git-версионирование, сквозное шифрование, удаление данных.') },
+        { id: 'export', label: t('Параметры экспорта'), note: t('Водяной знак PDF, имя автора.') },
+        { id: 'misc', label: t('Прочее'), note: t('Очистка и сброс настроек.') }
       ];
       const scoredSections = tabsList
         .map((tab) => ({ tab, score: this.scoreSettingSection(tab, query) }))
@@ -20251,7 +20323,7 @@ class NocturneWriter {
         .sort((a, b) => b.score - a.score);
 
       if (scored.length === 0 && scoredSections.length === 0) {
-        resultsHtml = `
+        resultsHtml = ui`
           <div class="settings-search-empty">
             <i class="bx bx-search-alt"></i>
             <p>Ничего не найдено по запросу «${escapeHtml(this.state.settingsSearchQuery)}»</p>
@@ -20265,7 +20337,7 @@ class NocturneWriter {
         const select = (key, options) => this.renderSettingsSelect(key, options);
         const input = (key, type = 'text') => `<input class="form-control" type="${type}" value="${escapeHtml(s[key] || '')}" data-setting="${key}">`;
         
-        let sectionsHtml = scoredSections.map(({ tab }) => `
+        let sectionsHtml = scoredSections.map(({ tab }) => ui`
           <div class="setting-row tab-link-row" style="background: rgba(var(--accent-rgb, 139, 92, 246), 0.04); border-left: 3px solid var(--accent); padding: 12px; border-radius: 6px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
             <div class="setting-info" style="display: flex; flex-direction: column; gap: 4px;">
               <span style="font-weight: 600; color: var(--text-color);">Раздел: ${escapeHtml(tab.label)}</span>
@@ -20288,7 +20360,7 @@ class NocturneWriter {
           } else if (item.type === 'input') {
             control = input(item.key, item.inputType || 'text');
           } else if (item.type === 'action') {
-            control = `<button class="pill-btn" data-action="${item.action}"><i class="bx bx-chevron-right"></i> Открыть</button>`;
+            control = ui`<button class="pill-btn" data-action="${item.action}"><i class="bx bx-chevron-right"></i> Открыть</button>`;
           } else if (item.type === 'accent') {
             control = this.renderAccentColorControl();
           }
@@ -20298,7 +20370,7 @@ class NocturneWriter {
         resultsHtml = itemsHtml + sectionsHtml;
       }
     }
-    return `
+    return ui`
       <div class="tab-content active settings-search-tab">
         <div class="settings-search-container">
           <div class="settings-search-input-wrap">
@@ -20319,7 +20391,7 @@ class NocturneWriter {
     const query = String(this.state.settingsSearchQuery || '').trim().toLowerCase();
     let resultsHtml = '';
     if (!query) {
-      resultsHtml = `
+      resultsHtml = ui`
         <div class="settings-search-empty">
           <i class="bx bx-search-alt"></i>
           <p>Введите поисковый запрос, чтобы найти нужную настройку...</p>
@@ -20327,18 +20399,18 @@ class NocturneWriter {
       `;
     } else {
       const tabsList = [
-        { id: 'history', label: 'История и восстановление', note: 'Просмотр и сравнение версий, автоматические снимки, хранение, лимит, отмена восстановления.' },
-        { id: 'manuscript-search', label: 'Поиск по рукописи', note: 'Фраза и слова, е и ё, формы имён, результаты и фильтры.' },
-        { id: 'visual', label: 'Внешний вид и Оформление', note: 'Цветовая тема, акцентный цвет темы, стиль каретки, компактность, typewriter.' },
-        { id: 'editor', label: 'Настройки рукописи и Шрифты', note: 'Размер, отступы, шрифты рукописи, умная пунктуация, строгость проверки.' },
-        { id: 'focus', label: 'Концентрация и Фокус', note: 'Режим дзен, фокус на абзаце, пагинация MS Word, анимация.' },
-        { id: 'dictionary', label: 'Словарь автозамены', note: 'Настройка автоматического исправления опечаток и правил spellcheck.' },
-        { id: 'review', label: 'Режимы работы и Редактура', note: 'Режим письма, редактора или финализации, экспорт правок.' },
-        { id: 'macros', label: 'Клавиатурные макросы', note: 'Настройка клавиатурных макросов и автозамены.' },
-        { id: 'ai', label: 'AI Ассистент', note: 'Провайдеры искусственного интеллекта, ключи, температура, контекст базы знаний.' },
-        { id: 'data', label: 'Данные и Резервное копирование', note: 'Интервалы автосохранения, Git-версионирование, сквозное шифрование, удаление данных.' },
-        { id: 'export', label: 'Параметры экспорта', note: 'Водяной знак PDF, имя автора.' },
-        { id: 'misc', label: 'Прочее', note: 'Очистка и сброс настроек.' }
+        { id: 'history', label: t('История и восстановление'), note: t('Просмотр и сравнение версий, автоматические снимки, хранение, лимит, отмена восстановления.') },
+        { id: 'manuscript-search', label: t('Поиск по рукописи'), note: t('Фраза и слова, е и ё, формы имён, результаты и фильтры.') },
+        { id: 'visual', label: t('Внешний вид и Оформление'), note: t('Цветовая тема, акцентный цвет темы, стиль каретки, компактность, typewriter.') },
+        { id: 'editor', label: t('Настройки рукописи и Шрифты'), note: t('Размер, отступы, шрифты рукописи, умная пунктуация, строгость проверки.') },
+        { id: 'focus', label: t('Концентрация и Фокус'), note: t('Режим дзен, фокус на абзаце, пагинация MS Word, анимация.') },
+        { id: 'dictionary', label: t('Словарь автозамены'), note: t('Настройка автоматического исправления опечаток и правил spellcheck.') },
+        { id: 'review', label: t('Режимы работы и Редактура'), note: t('Режим письма, редактора или финализации, экспорт правок.') },
+        { id: 'macros', label: t('Клавиатурные макросы'), note: t('Настройка клавиатурных макросов и автозамены.') },
+        { id: 'ai', label: t('AI Ассистент'), note: t('Провайдеры искусственного интеллекта, ключи, температура, контекст базы знаний.') },
+        { id: 'data', label: t('Данные и Резервное копирование'), note: t('Интервалы автосохранения, Git-версионирование, сквозное шифрование, удаление данных.') },
+        { id: 'export', label: t('Параметры экспорта'), note: t('Водяной знак PDF, имя автора.') },
+        { id: 'misc', label: t('Прочее'), note: t('Очистка и сброс настроек.') }
       ];
       const scoredSections = tabsList
         .map((tab) => ({ tab, score: this.scoreSettingSection(tab, query) }))
@@ -20355,7 +20427,7 @@ class NocturneWriter {
         .sort((a, b) => b.score - a.score);
 
       if (scored.length === 0 && scoredSections.length === 0) {
-        resultsHtml = `
+        resultsHtml = ui`
           <div class="settings-search-empty">
             <i class="bx bx-search-alt"></i>
             <p>Ничего не найдено по запросу «${escapeHtml(this.state.settingsSearchQuery)}»</p>
@@ -20369,7 +20441,7 @@ class NocturneWriter {
         const select = (key, options) => this.renderSettingsSelect(key, options);
         const input = (key, type = 'text') => `<input class="form-control" type="${type}" value="${escapeHtml(s[key] || '')}" data-setting="${key}">`;
         
-        let sectionsHtml = scoredSections.map(({ tab }) => `
+        let sectionsHtml = scoredSections.map(({ tab }) => ui`
           <div class="setting-row tab-link-row" style="background: rgba(var(--accent-rgb, 139, 92, 246), 0.04); border-left: 3px solid var(--accent); padding: 12px; border-radius: 6px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
             <div class="setting-info" style="display: flex; flex-direction: column; gap: 4px;">
               <span style="font-weight: 600; color: var(--text-color);">Раздел: ${escapeHtml(tab.label)}</span>
@@ -20392,7 +20464,7 @@ class NocturneWriter {
           } else if (item.type === 'input') {
             control = input(item.key, item.inputType || 'text');
           } else if (item.type === 'action') {
-            control = `<button class="pill-btn" data-action="${item.action}"><i class="bx bx-chevron-right"></i> Открыть</button>`;
+            control = ui`<button class="pill-btn" data-action="${item.action}"><i class="bx bx-chevron-right"></i> Открыть</button>`;
           } else if (item.type === 'accent') {
             control = this.renderAccentColorControl();
           }
@@ -20408,7 +20480,7 @@ class NocturneWriter {
   }
 
   exportSettingsContent(row, toggle, input) {
-    return `
+    return ui`
       <div class="tab-content active export-settings">
         <p class="settings-tab-desc" style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px; line-height: 1.5;">Соберите рукопись для чтения, печати или обмена с редактором (поддерживаются форматы PDF, DOCX, .NOCTURNED).</p>
         <section class="export-format-grid">
@@ -20443,9 +20515,9 @@ class NocturneWriter {
         </section>
         <section class="export-meta-card">
           <div class="setting-group-title">Метаданные</div>
-          ${row('Имя автора', 'Попадает в метаданные DOCX и используется в водяном знаке PDF.', input('authorName'))}
-          ${row('Водяной знак PDF', 'Добавляет полупрозрачную подпись автора и дату в печатный PDF-макет.', toggle('watermark'))}
-          ${row('Заметки в DOCX', 'По умолчанию личные заметки остаются в проекте. Включите, чтобы добавить их к экспорту текущей главы.', toggle('exportIncludeNotes'))}
+          ${row(t('Имя автора'), t('Попадает в метаданные DOCX и используется в водяном знаке PDF.'), input('authorName'))}
+          ${row(t('Водяной знак PDF'), t('Добавляет полупрозрачную подпись автора и дату в печатный PDF-макет.'), toggle('watermark'))}
+          ${row(t('Заметки в DOCX'), t('По умолчанию личные заметки остаются в проекте. Включите, чтобы добавить их к экспорту текущей главы.'), toggle('exportIncludeNotes'))}
         </section>
       </div>`;
   }
@@ -20453,10 +20525,10 @@ class NocturneWriter {
   macrosSettingsContent() {
     const s = this.state.settings;
     const macros = s.macros || [];
-    const recordBtnText = this.macroRecordingState ? 'Запись...' : 'Записать';
+    const recordBtnText = this.macroRecordingState ? t('Запись...') : t('Записать');
     const recordedVal = this.macroRecordedKeys || '';
     
-    return `
+    return ui`
       <div class="tab-content active macros-settings">
         <p class="settings-tab-desc" style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px; line-height: 1.5;">Настройте автозамену при печати. Например, одновременное нажатие <strong>Ctrl + [</strong> выдаст <strong>«</strong>, или любая другая комбинация клавиш вставит нужный символ.</p>
 
@@ -20485,12 +20557,12 @@ class NocturneWriter {
         <section class="macros-list-section">
           <h4>Список макросов (${macros.length})</h4>
           <div class="macros-list">
-            ${macros.length === 0 ? `
+            ${macros.length === 0 ? ui`
               <div class="macros-empty-state">
                 <i class="bx bx-keyboard"></i>
                 <p>У вас пока нет макросов. Запишите первый макрос выше!</p>
               </div>
-            ` : macros.map((macro, idx) => `
+            ` : macros.map((macro, idx) => ui`
               <div class="macro-item" data-surface-key="macro:${escapeHtml(macro.keys)}">
                 <div class="macro-keys-badge">${escapeHtml(macro.keys)}</div>
                 <div class="macro-arrow"><i class="bx bx-right-arrow-alt"></i></div>
@@ -20508,7 +20580,7 @@ class NocturneWriter {
     const macro = this.state.settings.macros?.[index];
     if (!macro) return;
     const overlay = document.getElementById('form-overlay');
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="form-modal confirm-modal">
         <div class="confirm-icon"><i class="bx bx-trash"></i></div>
         <h2>Удалить макрос?</h2>
@@ -20530,7 +20602,7 @@ class NocturneWriter {
         this.state.settings.macros.splice(current, 1);
         this.persistSettings();
         this.renderMacrosListOnly();
-        this.toast('Макрос удалён.');
+        this.toast(t('Макрос удалён.'));
       };
       if (row && !this.shouldReduceSurfaceMotion()) this.animateShatter(row, remove);
       else remove();
@@ -20546,7 +20618,7 @@ class NocturneWriter {
     // Update record button state
     const recordBtn = root.querySelector('[data-action="macro-record-toggle"]');
     if (recordBtn) {
-      const btnText = this.macroRecordingState ? 'Запись...' : 'Записать';
+      const btnText = this.macroRecordingState ? t('Запись...') : t('Записать');
       recordBtn.textContent = btnText;
       recordBtn.classList.toggle('recording', !!this.macroRecordingState);
       recordBtn.classList.toggle('active', !!this.macroRecordingState);
@@ -20567,10 +20639,10 @@ class NocturneWriter {
     const listEl = root.querySelector('.macros-list');
     if (!listEl) { this.renderSettings(); return; }
     const countEl = root.querySelector('.macros-list-section h4');
-    if (countEl) countEl.textContent = `Список макросов (${macros.length})`;
+    if (countEl) countEl.textContent = msg`Список макросов (${macros.length})`;
     this.updateSurfaceHTML(listEl, macros.length === 0
-      ? `<div class="macros-empty-state"><i class="bx bx-keyboard"></i><p>У вас пока нет макросов. Запишите первый макрос выше!</p></div>`
-      : macros.map((macro, idx) => `
+      ? ui`<div class="macros-empty-state"><i class="bx bx-keyboard"></i><p>У вас пока нет макросов. Запишите первый макрос выше!</p></div>`
+      : macros.map((macro, idx) => ui`
           <div class="macro-item" data-surface-key="macro:${escapeHtml(macro.keys)}">
             <div class="macro-keys-badge">${escapeHtml(macro.keys)}</div>
             <div class="macro-arrow"><i class="bx bx-right-arrow-alt"></i></div>
@@ -20580,12 +20652,12 @@ class NocturneWriter {
   }
 
   getFormattingActionLabel(action, customText = '') {
-    if (action === 'center') return 'Выравнивание по центру';
-    if (action === 'align-right') return 'Выравнивание по правому краю';
-    if (action === 'heading-2') return 'Заголовок H2';
-    if (action === 'heading-3') return 'Заголовок H3';
-    if (action === 'separator') return 'Разделительная линия';
-    if (action === 'custom-text') return `Текстовый разделитель (${escapeHtml(customText)})`;
+    if (action === 'center') return t('Выравнивание по центру');
+    if (action === 'align-right') return t('Выравнивание по правому краю');
+    if (action === 'heading-2') return t('Заголовок H2');
+    if (action === 'heading-3') return t('Заголовок H3');
+    if (action === 'separator') return t('Разделительная линия');
+    if (action === 'custom-text') return msg`Текстовый разделитель (${escapeHtml(customText)})`;
     return action;
   }
 
@@ -20594,14 +20666,14 @@ class NocturneWriter {
     const rules = s.customInputRules || [];
     const row = (label, note, control) => `<div class="setting-row"><div class="setting-info"><span>${label}${note ? `<i class="bx bx-info-circle info-icon" tabindex="0" data-tip="${escapeHtml(note)}"></i>` : ''}</span>${note ? `<small>${note}</small>` : ''}</div><div class="setting-control">${control}</div></div>`;
     const toggle = (key) => `<button type="button" class="toggle ${s[key] ? 'on' : ''}" data-setting="${key}" data-kind="toggle" role="switch" aria-checked="${!!s[key]}"></button>`;
-    return `
+    return ui`
       <div class="tab-content active formatting-settings">
         <p class="settings-tab-desc" style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px; line-height: 1.5;">Настройте динамические правила автозамены в редакторе. Например, ввод трех звездочек и нажатие клавиши Enter или Пробел может применить центрирование текста вместо вставки стандартного разделителя.</p>
 
         <section class="formatting-general-settings" style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); padding: 18px; border-radius: var(--radius-md); margin-bottom: 24px;">
           <h4 style="margin: 0 0 14px; font-size: 15px; font-weight: 600;">Автоформатирование</h4>
-          ${row('Автозамена -- на длинное тире —', 'Автоматически заменяет два дефиса на длинное тире (em-dash) при вводе. При нажатии Backspace возвращает дефисы.', toggle('autoReplaceDoubleDash'))}
-          ${row('Автозамена дефиса на среднее тире –', 'Автоматически заменяет одиночный дефис на среднее тире (en-dash), когда он находится между отдельными словами.', toggle('autoReplaceEnDash'))}
+          ${row(t('Автозамена -- на длинное тире —'), t('Автоматически заменяет два дефиса на длинное тире (em-dash) при вводе. При нажатии Backspace возвращает дефисы.'), toggle('autoReplaceDoubleDash'))}
+          ${row(t('Автозамена дефиса на среднее тире –'), t('Автоматически заменяет одиночный дефис на среднее тире (en-dash), когда он находится между отдельными словами.'), toggle('autoReplaceEnDash'))}
         </section>
 
         <section class="formatting-add-card" style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); padding: 18px; border-radius: var(--radius-md); margin-bottom: 24px;">
@@ -20614,12 +20686,12 @@ class NocturneWriter {
             <div class="formatting-field-group" style="flex: 1.2;">
               <label style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px;">Действие</label>
               ${this.renderSettingsSelect('newRuleAction', [
-                ['center', 'Выравнивание по центру'],
-                ['align-right', 'Выравнивание по правому краю'],
-                ['heading-2', 'Превратить в заголовок H2'],
-                ['heading-3', 'Превратить в заголовок H3'],
-                ['separator', 'Вставить разделитель (линия)'],
-                ['custom-text', 'Кастомный текст']
+                ['center', t('Выравнивание по центру')],
+                ['align-right', t('Выравнивание по правому краю')],
+                ['heading-2', t('Превратить в заголовок H2')],
+                ['heading-3', t('Превратить в заголовок H3')],
+                ['separator', t('Вставить разделитель (линия)')],
+                ['custom-text', t('Кастомный текст')]
               ])}
             </div>
             <div id="custom-text-wrapper" class="formatting-field-group custom-text-anim ${s.newRuleAction === 'custom-text' ? 'show' : ''}">
@@ -20633,12 +20705,12 @@ class NocturneWriter {
         <section class="formatting-list-section">
           <h4 style="margin: 0 0 14px; font-size: 15px; font-weight: 600;">Список правил (${rules.length})</h4>
           <div class="formatting-list" style="display: flex; flex-direction: column; gap: 10px;">
-            ${rules.length === 0 ? `
+            ${rules.length === 0 ? ui`
               <div class="formatting-empty-state" style="text-align: center; padding: 40px 20px; border: 1px dashed var(--border); border-radius: var(--radius-md); color: var(--text-muted);">
                 <i class="bx bx-list-check" style="font-size: 48px; margin-bottom: 8px; opacity: 0.4;"></i>
                 <p style="margin: 0;">У вас пока нет настроенных правил автозамены. Добавьте первое правило выше!</p>
               </div>
-            ` : rules.map((rule, idx) => `
+            ` : rules.map((rule, idx) => ui`
               <div class="formatting-item" data-surface-key="formatting:${escapeHtml(rule.trigger)}" style="display: flex; align-items: center; justify-content: space-between; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); padding: 12px 18px; border-radius: 8px; gap: 16px;">
                 <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
                   <span style="font-family: monospace; background: rgba(255, 255, 255, 0.05); padding: 4px 8px; border-radius: 4px; font-size: 14px; border: 1px solid rgba(255, 255, 255, 0.08); font-weight: bold; color: var(--accent);">${escapeHtml(rule.trigger)}</span>
@@ -20664,10 +20736,10 @@ class NocturneWriter {
     const listEl = root.querySelector('.formatting-list');
     if (!listEl) { this.renderSettings(); return; }
     const countEl = root.querySelector('.formatting-list-section h4');
-    if (countEl) countEl.textContent = `Список правил (${rules.length})`;
+    if (countEl) countEl.textContent = msg`Список правил (${rules.length})`;
     this.updateSurfaceHTML(listEl, rules.length === 0
-      ? `<div class="formatting-empty-state" style="text-align: center; padding: 40px 20px; border: 1px dashed var(--border); border-radius: var(--radius-md); color: var(--text-muted);"><i class="bx bx-list-check" style="font-size: 48px; margin-bottom: 8px; opacity: 0.4;"></i><p style="margin: 0;">У вас пока нет настроенных правил автозамены. Добавьте первое правило выше!</p></div>`
-      : rules.map((rule, idx) => `
+      ? ui`<div class="formatting-empty-state" style="text-align: center; padding: 40px 20px; border: 1px dashed var(--border); border-radius: var(--radius-md); color: var(--text-muted);"><i class="bx bx-list-check" style="font-size: 48px; margin-bottom: 8px; opacity: 0.4;"></i><p style="margin: 0;">У вас пока нет настроенных правил автозамены. Добавьте первое правило выше!</p></div>`
+      : rules.map((rule, idx) => ui`
           <div class="formatting-item" data-surface-key="formatting:${escapeHtml(rule.trigger)}" style="display: flex; align-items: center; justify-content: space-between; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); padding: 12px 18px; border-radius: 8px; gap: 16px;">
             <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
               <span style="font-family: monospace; background: rgba(255, 255, 255, 0.05); padding: 4px 8px; border-radius: 4px; font-size: 14px; border: 1px solid rgba(255, 255, 255, 0.08); font-weight: bold; color: var(--accent);">${escapeHtml(rule.trigger)}</span>
@@ -20685,8 +20757,8 @@ class NocturneWriter {
     return {
       gemini: {
         label: 'Gemini API',
-        subtitle: 'через OpenAI-compatible endpoint',
-        helper: 'Вставьте ключ Gemini API. Доступность бесплатных моделей и лимиты зависят от Google.',
+        subtitle: t('через OpenAI-compatible endpoint'),
+        helper: t('Вставьте ключ Gemini API. Доступность бесплатных моделей и лимиты зависят от Google.'),
         provider: 'openai',
         endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
         model: 'gemini-2.5-flash',
@@ -20694,23 +20766,23 @@ class NocturneWriter {
       groq: {
         label: 'Groq',
         subtitle: 'OpenAI-compatible API',
-        helper: 'Быстрый провайдер, лимиты и доступность моделей могут меняться.',
+        helper: t('Быстрый провайдер, лимиты и доступность моделей могут меняться.'),
         provider: 'groq',
         endpoint: 'https://api.groq.com/openai/v1/chat/completions',
         model: 'llama-3.3-70b-versatile',
       },
       openrouter: {
         label: 'OpenRouter Free',
-        subtitle: 'маршрутизация на free-модели',
-        helper: 'Маршрутизирует запросы на бесплатные модели. Качество и доступные модели могут меняться.',
+        subtitle: t('маршрутизация на free-модели'),
+        helper: t('Маршрутизирует запросы на бесплатные модели. Качество и доступные модели могут меняться.'),
         provider: 'openai',
         endpoint: 'https://openrouter.ai/api/v1/chat/completions',
         model: 'openrouter/free',
       },
       mistral: {
         label: 'Mistral',
-        subtitle: 'экспериментальный API-тариф',
-        helper: 'Бесплатный экспериментальный тариф предназначен для тестов и прототипов; лимиты ограничены.',
+        subtitle: t('экспериментальный API-тариф'),
+        helper: t('Бесплатный экспериментальный тариф предназначен для тестов и прототипов; лимиты ограничены.'),
         provider: 'openai',
         endpoint: 'https://api.mistral.ai/v1/chat/completions',
         model: 'mistral-small-latest',
@@ -20720,7 +20792,7 @@ class NocturneWriter {
 
   aiPresetsContent() {
     const presets = this.aiProviderPresets();
-    return `
+    return ui`
       <section class="ai-preset-section">
         <div class="ai-preset-head">
           <div>
@@ -20729,7 +20801,7 @@ class NocturneWriter {
           </div>
         </div>
         <div class="ai-preset-grid">
-          ${Object.entries(presets).map(([id, preset]) => `
+          ${Object.entries(presets).map(([id, preset]) => ui`
             <article class="ai-preset-card">
               <div>
                 <strong>${escapeHtml(preset.label)}</strong>
@@ -20761,7 +20833,7 @@ class NocturneWriter {
       keyInput?.classList.add('input-attention');
       setTimeout(() => keyInput?.classList.remove('input-attention'), 900);
     });
-    this.toast(`Пресет ${preset.label} применён. Вставьте API-ключ.`);
+    this.toast(msg`Пресет ${preset.label} применён. Вставьте API-ключ.`);
   }
 
   async testAiConnection() {
@@ -20773,11 +20845,11 @@ class NocturneWriter {
     const previous = this.assistantPanelMessage;
     try {
       let result = '';
-      await this.streamAi('Ответь одним словом: OK', (chunk) => { result += chunk; });
-      this.setAssistantOutput(previous || 'Готов к работе.');
-      this.toast(result.trim() ? 'Подключение работает.' : 'Провайдер ответил пустым сообщением.');
+      await this.streamAi(t('Ответь одним словом: OK'), (chunk) => { result += chunk; });
+      this.setAssistantOutput(previous || t('Готов к работе.'));
+      this.toast(result.trim() ? t('Подключение работает.') : t('Провайдер ответил пустым сообщением.'));
     } catch (error) {
-      this.toast(error.message || 'Не удалось проверить подключение.');
+      this.toast(error.message || t('Не удалось проверить подключение.'));
     }
   }
 
@@ -20838,18 +20910,19 @@ class NocturneWriter {
   }
 
   renderSettingsSelect(key, options) {
-    const current = String(this.state.settings[key] ?? '');
+    const current = key === 'interfaceLanguage' ? getLocale() : String(this.state.settings[key] ?? '');
     const selected = options.find(([value]) => String(value) === current) || options[0] || ['', ''];
+    const labelMarkup = (value, label) => key === 'interfaceLanguage' ? `<span class="language-option-label" lang="${escapeHtml(value)}">${languageFlag(value)}<span>${escapeHtml(label)}</span></span>` : `<span>${escapeHtml(label)}</span>`;
     return `
       <div class="nocturne-select" data-setting-select="${escapeHtml(key)}">
         <button type="button" class="nocturne-select-trigger" data-setting-select-toggle aria-haspopup="listbox" aria-expanded="false">
-          <span>${escapeHtml(selected[1])}</span>
+          ${labelMarkup(selected[0], selected[1])}
           <i class="bx bx-chevron-down"></i>
         </button>
         <div class="nocturne-select-menu popover-surface" role="listbox" aria-hidden="true">
           ${options.map(([value, label]) => `
             <button type="button" class="nocturne-select-option ${String(value) === current ? 'selected' : ''}" role="option" aria-selected="${String(value) === current ? 'true' : 'false'}" data-setting-option="${escapeHtml(key)}" data-value="${escapeHtml(value)}">
-              <span>${escapeHtml(label)}</span>
+              ${labelMarkup(value, label)}
               <i class="bx bx-check"></i>
             </button>
           `).join('')}
@@ -20938,6 +21011,11 @@ class NocturneWriter {
   updateSettingFromCustomOption(option) {
     const key = option.dataset.settingOption;
     if (!key) return;
+    if (key === 'interfaceLanguage') {
+      this.closeSettingsSelects(null, { restoreFocus: false });
+      this.interfaceLanguage.change(option.dataset.value).catch(error => this.toast(error.message));
+      return;
+    }
     this.state.settings[key] = option.dataset.value || '';
     this.state.settings = this.validateSettings(this.state.settings);
     this.closeSettingsSelects();
@@ -21185,7 +21263,7 @@ class NocturneWriter {
     this.updateAssistantPanelState();
   }
 
-    checkMacroConflict(keysStr) {
+    checkMacroConflict(keysStr, { systemOnly = false } = {}) {
     if (!keysStr) return null;
     const normalize = (str) => {
       return str.split('+')
@@ -21198,25 +21276,26 @@ class NocturneWriter {
     const targetNormalized = normalize(keysStr);
     
     const appShortcuts = {
-      'CTRL+B': 'Жирный текст (Ctrl + B)',
-      'CTRL+I': 'Курсивный текст (Ctrl + I)',
-      'CTRL+S': 'Сохранение (Ctrl + S)',
-      'CTRL+F': 'Поиск (Ctrl + F)',
-      'CTRL+SHIFT+F': 'Глобальный поиск (Ctrl + Shift + F)',
-      'CTRL+H': 'Замена (Ctrl + H)',
-      'CTRL+K': 'Командная палитра (Ctrl + K)',
-      '?': 'Горячие клавиши (?)',
-      'ESCAPE': 'Закрыть окна (Escape)',
+      'CTRL+B': t('Жирный текст (Ctrl + B)'),
+      'CTRL+I': t('Курсивный текст (Ctrl + I)'),
+      'CTRL+S': t('Сохранение (Ctrl + S)'),
+      'CTRL+F': t('Поиск (Ctrl + F)'),
+      'CTRL+SHIFT+F': t('Глобальный поиск (Ctrl + Shift + F)'),
+      'CTRL+H': t('Замена (Ctrl + H)'),
+      'CTRL+K': t('Командная палитра (Ctrl + K)'),
+      '?': t('Горячие клавиши (?)'),
+      'ESCAPE': t('Закрыть окна (Escape)'),
     };
     
     if (appShortcuts[targetNormalized]) {
-      return `Конфликт с горячей клавишей Ноктюрна: "${appShortcuts[targetNormalized]}"`;
+      return msg`Конфликт с горячей клавишей Ноктюрна: "${appShortcuts[targetNormalized]}"`;
     }
+    if (systemOnly) return null;
     
     const macros = this.state.settings.macros || [];
     const conflictIdx = macros.findIndex(m => normalize(m.keys) === targetNormalized);
     if (conflictIdx !== -1) {
-      return `Уже привязано к макросу: "${macros[conflictIdx].value}"`;
+      return msg`Уже привязано к макросу: "${macros[conflictIdx].value}"`;
     }
     
     return null;
@@ -21319,7 +21398,7 @@ class NocturneWriter {
     document.querySelectorAll('[data-action="toggle-zen"]').forEach((button) => {
       button.classList.toggle('active', !!this.state.zenActive);
       button.setAttribute('aria-pressed', this.state.zenActive ? 'true' : 'false');
-      button.title = this.state.zenActive ? 'Выйти из режима Дзен' : 'Режим Дзен';
+      button.title = this.state.zenActive ? t('Выйти из режима Дзен') : t('Режим Дзен');
     });
     this.updateTitlebarLayout();
   }
@@ -21349,7 +21428,7 @@ class NocturneWriter {
 
   async resetSettings() {
     const overlay = document.getElementById('form-overlay');
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="form-modal confirm-modal">
         <div class="confirm-icon"><i class="bx bx-reset"></i></div>
         <h2>Сбросить настройки?</h2>
@@ -21369,7 +21448,7 @@ class NocturneWriter {
       this.applySettings();
       this.renderSettings();
       this.renderWorkspace();
-      this.toast('Настройки сброшены.');
+      this.toast(t('Настройки сброшены.'));
     };
   }
 
@@ -21407,28 +21486,28 @@ class NocturneWriter {
       el.textContent = 'KB: off';
       return;
     }
-    el.textContent = `${context.stats.size}/${context.stats.budget} знаков · П${context.stats.characters} Л${context.stats.locations} Т${context.stats.timeline}`;
+    el.textContent = msg`${context.stats.size}/${context.stats.budget} знаков · П${context.stats.characters} Л${context.stats.locations} Т${context.stats.timeline}`;
   }
 
   openAiContextPreview() {
     const doc = this.getFocusedDoc();
     if (!doc) {
-      this.toast('Откройте документ для preview context.');
+      this.toast(t('Откройте документ для preview context.'));
       return;
     }
     const target = this.captureAssistantTargetSnapshot('proofread', doc, this.state.workspace?.focusedPaneId || 'primary')
       || { docId: doc.id, blockIndex: 0, targetBlockText: docText(doc.ast).slice(0, 1200) };
-    const context = this.buildCurrentAiContext(doc, target) || { disabled: true, message: 'Knowledge Context выключен.' };
+    const context = this.buildCurrentAiContext(doc, target) || { disabled: true, message: t('Knowledge Context выключен.') };
     const serialized = serializeAiContextSafe(context);
     const overlay = document.getElementById('form-overlay');
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="form-modal ai-context-preview-modal">
         <div class="modal-head-row">
-          <div><h2>Knowledge Context Preview</h2><p>Read-only JSON, не вставляется в документ.</p></div>
+          <div><h2>${t('Предпросмотр контекста')}</h2><p>Read-only JSON, не вставляется в документ.</p></div>
           <button class="btn-icon" data-close-form><i class="bx bx-x"></i></button>
         </div>
         <div class="ai-context-stats">
-          ${context.stats ? `
+          ${context.stats ? ui`
             <span>Characters: ${context.stats.characters}</span>
             <span>Locations: ${context.stats.locations}</span>
             <span>Таймлайн: ${context.stats.timeline}</span>
@@ -21447,7 +21526,7 @@ class NocturneWriter {
   async runAi(kind) {
     if (kind === 'lore') kind = 'lore-check';
     if (this.activeAiRequest) {
-      this.toast('Дождитесь завершения текущего AI-запроса.');
+      this.toast(t('Дождитесь завершения текущего AI-запроса.'));
       return;
     }
     const context = this.ensureAssistantDocumentContext();
@@ -21456,7 +21535,7 @@ class NocturneWriter {
       this.mobileSentimentVisible = true;
       document.querySelectorAll('[data-mobile-sentiment]').forEach(canvas => { canvas.hidden = false; });
       this.drawSentiment(true);
-      this.setAssistantOutput('График тональности обновлен.');
+      this.setAssistantOutput(t('График тональности обновлен.'));
       return;
     }
     if (!this.ensureAssistantProvider().ok) return;
@@ -21465,7 +21544,7 @@ class NocturneWriter {
       const paneId = this.state.workspace?.focusedPaneId || 'primary';
       const target = this.captureAssistantTargetSnapshot(kind, context.doc, paneId);
       if (!target && ['style', 'continue', 'proofread', 'lore-check'].includes(kind)) {
-        const message = kind === 'continue' ? 'Поставьте курсор в место продолжения сцены.' : 'Поставьте курсор в абзац или выделите фрагмент.';
+        const message = kind === 'continue' ? t('Поставьте курсор в место продолжения сцены.') : t('Поставьте курсор в абзац или выделите фрагмент.');
         this.toast(message);
         this.setAssistantOutput(message, 'error');
         return;
@@ -21493,14 +21572,14 @@ class NocturneWriter {
       if (this.activeAiRequest?.id !== request.id) return;
       const stillOpen = this.getPane(request.paneId)?.type === 'document' && this.getPane(request.paneId)?.docId === request.docId;
       if (!stillOpen) {
-        this.setAssistantOutput('AI-запрос завершён, но исходный документ уже не открыт.', 'idle');
-        this.toast('AI-результат не вставлен: исходная область изменилась.');
+        this.setAssistantOutput(t('AI-запрос завершён, но исходный документ уже не открыт.'), 'idle');
+        this.toast(t('AI-результат не вставлен: исходная область изменилась.'));
         return;
       }
       const rawResponse = chunks.join('');
-      if (!rawResponse.trim()) throw new Error('Провайдер ИИ вернул пустой ответ.');
+      if (!rawResponse.trim()) throw new Error(t('Провайдер ИИ вернул пустой ответ.'));
       const parsed = await this.parseAiProtocolWithRepair(rawResponse, prompt, budget, request);
-      if (!parsed.ok) throw new Error(parsed.message || 'Модель вернула ответ в неожиданном формате. Текст в документ не вставлен.');
+      if (!parsed.ok) throw new Error(parsed.message || t('Модель вернула ответ в неожиданном формате. Текст в документ не вставлен.'));
       if (parsed.thinking) this.setAssistantOutput(parsed.thinking, 'idle');
       if (parsed.writing?.text && parsed.writing.complete) {
         this.insertSuggestion(parsed.writing.text, { ok: true, doc: context.doc, paneId: request.paneId, target: request.target, kind, mode: parsed.writing.mode });
@@ -21508,11 +21587,11 @@ class NocturneWriter {
       if (Array.isArray(parsed.review)) {
         const result = await this.createAiReviewMarks(parsed.review, context.doc, request.target);
         const suffix = result.skipped.length ? `\n\n${result.skipped.join('\n')}` : '';
-        const emptyText = parsed.thinking || (kind === 'lore-check' ? 'Явных противоречий с лором не найдено.' : 'Явных ошибок не найдено.');
-        this.setAssistantOutput(result.count ? `${parsed.thinking || 'Проверка завершена.'}\n\nНайдено проблем: ${result.count}.${suffix}` : `${emptyText}${suffix}`, result.count ? 'idle' : 'empty');
+        const emptyText = parsed.thinking || (kind === 'lore-check' ? t('Явных противоречий с лором не найдено.') : t('Явных ошибок не найдено.'));
+        this.setAssistantOutput(result.count ? msg`${parsed.thinking || t('Проверка завершена.')}\n\nНайдено проблем: ${result.count}.${suffix}` : `${emptyText}${suffix}`, result.count ? 'idle' : 'empty');
         if (!result.count) {
           this.hideReviewNavigatorIfNoMarks();
-          this.toast('AI-проверка завершена: правок нет.', 1200);
+          this.toast(t('AI-проверка завершена: правок нет.'), 1200);
         }
         if (result.count) {
           this.state.reviewMode = 'finalization';
@@ -21522,11 +21601,11 @@ class NocturneWriter {
           this.updateReviewHighlights();
         }
       }
-      if (!parsed.writing?.text && !Array.isArray(parsed.review) && !parsed.thinking) throw new Error('Модель вернула ответ в неожиданном формате.');
+      if (!parsed.writing?.text && !Array.isArray(parsed.review) && !parsed.thinking) throw new Error(t('Модель вернула ответ в неожиданном формате.'));
     } catch (error) {
       this.clearSuggestion();
       const cancelled = this.activeAiRequest?.userCancelled;
-      const message = error.name === 'AbortError' ? cancelled ? 'Запрос остановлен. Текст сохранён без изменений.' : 'Запрос к ИИ слишком долго не отвечал.' : error.message || 'Ассистент не смог выполнить запрос.';
+      const message = error.name === 'AbortError' ? cancelled ? t('Запрос остановлен. Текст сохранён без изменений.') : t('Запрос к ИИ слишком долго не отвечал.') : error.message || t('Ассистент не смог выполнить запрос.');
       this.setAssistantOutput(message, cancelled ? 'idle' : 'error');
       this.toast(message);
     } finally {
@@ -21582,7 +21661,7 @@ class NocturneWriter {
     }
 
     if (!startBlock || !endBlock || startBlock.dataset.blockId !== endBlock.dataset.blockId) {
-      this.toast('AI пока работает с выделением внутри одного абзаца.');
+      this.toast(t('AI пока работает с выделением внутри одного абзаца.'));
       return null;
     }
     const block = doc?.ast?.blocks?.find((item) => item.id === startBlock.dataset.blockId);
@@ -21762,6 +21841,8 @@ ${preferredMode === 'inline-continuation' ? 'Нужно продолжить у�
 Не возвращай review/issues.`;
     return `${persona}
 
+Language instructions: write user-facing thinking and reason in ${ { ru: 'Russian', uk: 'Ukrainian', en: 'English' }[getLocale()] }. Keep quotes exact. Write replacement and text in the language of the author’s original passage. Changing the interface language must never translate the manuscript. Keep JSON keys and enum values exactly as specified.
+
 ${contract}
 
 ${modeInstruction}
@@ -21812,18 +21893,18 @@ ${text}`;
 
   parseAiJsonResponse(raw = '') {
     const source = this.sanitizeAssistantJsonText(raw);
-    if (!source) return { ok: false, message: 'AI вернул пустой JSON.' };
+    if (!source) return { ok: false, message: t('AI вернул пустой JSON.') };
     if (this.containsForeignProtocolMarkup(source)) {
-      return { ok: false, foreignProtocol: true, message: 'AI вернул служебный XML/protocol вместо JSON.' };
+      return { ok: false, foreignProtocol: true, message: t('AI вернул служебный XML/protocol вместо JSON.') };
     }
     let payload;
     try {
       payload = JSON.parse(source);
     } catch {
-      return { ok: false, message: 'AI вернул некорректный JSON.' };
+      return { ok: false, message: t('AI вернул некорректный JSON.') };
     }
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-      return { ok: false, message: 'AI JSON должен быть объектом.' };
+      return { ok: false, message: t('AI JSON должен быть объектом.') };
     }
     const type = String(payload.type || '').trim();
     const thinking = String(payload.thinking || '').trim();
@@ -21831,18 +21912,18 @@ ${text}`;
       const mode = String(payload.mode || '').trim();
       const text = this.sanitizeAssistantGeneratedText(payload.text || '');
       if (!['replace-selection', 'replace-block', 'inline-continuation', 'new-paragraph'].includes(mode)) {
-        return { ok: false, message: 'AI writing содержит неизвестный режим вставки.' };
+        return { ok: false, message: t('AI writing содержит неизвестный режим вставки.') };
       }
-      if (!text) return { ok: false, message: 'AI writing не содержит текста.' };
-      if (this.containsUnsafeAiOutput(text)) return { ok: false, message: 'AI writing содержит служебный протокол вместо текста.' };
+      if (!text) return { ok: false, message: t('AI writing не содержит текста.') };
+      if (this.containsUnsafeAiOutput(text)) return { ok: false, message: t('AI writing содержит служебный протокол вместо текста.') };
       return { ok: true, thinking, writing: { mode, text, complete: true }, review: null, reviewError: '', unexpected: false, foreignProtocol: false };
     }
     if (type === 'review') {
       const issues = Array.isArray(payload.issues) ? payload.issues : null;
-      if (!issues) return { ok: false, message: 'AI review должен содержать массив issues.' };
+      if (!issues) return { ok: false, message: t('AI review должен содержать массив issues.') };
       return { ok: true, thinking, writing: null, review: issues, reviewError: '', unexpected: false, foreignProtocol: false };
     }
-    return { ok: false, message: 'AI JSON содержит неизвестный type.' };
+    return { ok: false, message: t('AI JSON содержит неизвестный type.') };
   }
 
   parseAiProtocol(buffer = '', partial = false) {
@@ -21866,13 +21947,13 @@ ${text}`;
         const reviewText = review.text.replace(/^```(?:json)?\s*/i, '').replace(/```$/i, '').trim();
         const parsed = JSON.parse(reviewText);
         if (!Array.isArray(parsed)) {
-          reviewError = 'AI review должен быть JSON-массивом.';
+          reviewError = t('AI review должен быть JSON-массивом.');
           reviewItems = null;
         } else {
           reviewItems = parsed;
         }
       } catch {
-        reviewError = 'Не удалось разобрать список найденных проблем.';
+        reviewError = t('Не удалось разобрать список найденных проблем.');
         reviewItems = null;
       }
     }
@@ -21940,33 +22021,33 @@ ${text}`;
     const expected = this.expectedAiProtocolForKind(kind);
     const hasWriting = !!parsed.writing?.text;
     const hasReview = Array.isArray(parsed.review);
-    if (parsed.foreignProtocol) return 'Модель вернула служебный XML/protocol вместо ответа Nocturne. Текст в документ не вставлен.';
-    if (parsed.unexpected) return 'Модель добавила текст или теги вне протокола Nocturne. Текст в документ не вставлен.';
+    if (parsed.foreignProtocol) return t('Модель вернула служебный XML/protocol вместо ответа Nocturne. Текст в документ не вставлен.');
+    if (parsed.unexpected) return t('Модель добавила текст или теги вне протокола Nocturne. Текст в документ не вставлен.');
     if (parsed.reviewError) return parsed.reviewError;
-    if (parsed.writing?.text && (!parsed.writing.complete || this.containsUnsafeAiOutput(parsed.writing.text))) return 'Модель вернула небезопасный текст для вставки. Документ не изменён.';
-    if (expected === 'review' && hasWriting) return 'Модель вернула текст для вставки вместо списка замечаний. Документ не изменён.';
-    if (expected === 'writing' && hasReview) return 'Модель вернула review вместо текста правки. Документ не изменён.';
-    if (expected === 'review' && !hasReview) return 'Модель не вернула корректный AI review.';
+    if (parsed.writing?.text && (!parsed.writing.complete || this.containsUnsafeAiOutput(parsed.writing.text))) return t('Модель вернула небезопасный текст для вставки. Документ не изменён.');
+    if (expected === 'review' && hasWriting) return t('Модель вернула текст для вставки вместо списка замечаний. Документ не изменён.');
+    if (expected === 'writing' && hasReview) return t('Модель вернула review вместо текста правки. Документ не изменён.');
+    if (expected === 'review' && !hasReview) return t('Модель не вернула корректный AI review.');
     if (expected === 'review') {
       const reviewMessage = this.validateAiReviewActionability(parsed.review, kind, parsed.thinking);
       if (reviewMessage) return reviewMessage;
     }
-    if (expected === 'writing' && !hasWriting) return 'Модель не вернула корректный AI writing.';
+    if (expected === 'writing' && !hasWriting) return t('Модель не вернула корректный AI writing.');
     return '';
   }
 
   aiReviewThinkingClaimsIssues(thinking = '') {
     const text = String(thinking || '').toLowerCase();
     if (!text.trim()) return false;
-    const negative = /(не\s+найден|не\s+обнаружен|нет\s+(?:ошиб|опечат|проблем|правок)|ошибок\s+нет|опечаток\s+нет|проблем\s+нет|правок\s+нет|без\s+(?:ошиб|опечат|проблем)|явных\s+(?:ошиб|опечат|проблем)\s+не\s+найден)/iu;
+    const negative = /(не\s+найден|не\s+обнаружен|нет\s+(?:ошиб|опечат|проблем|правок)|ошибок\s+нет|опечаток\s+нет|проблем\s+нет|правок\s+нет|без\s+(?:ошиб|опечат|проблем)|явных\s+(?:ошиб|опечат|проблем)\s+не\s+найден|не\s+(?:знайден|виявлен)|(?:помилок|проблем|хиб)\s+немає|немає\s+(?:помилок|проблем|хиб)|без\s+помилок|\bno\s+(?:(?:clear|obvious|spelling|grammar|grammatical|punctuation)\s+)*(?:errors?|issues?|problems?|typos?)\b|\bnothing\s+(?:to\s+correct|found))/iu;
     if (negative.test(text)) return false;
-    return /(найден|обнаружен|есть|исправ|опечат|ошиб|проблем|замен|правк|пунктуац|граммат|орфограф|механическ)/iu.test(text);
+    return /(найден|обнаружен|есть|исправ|опечат|ошиб|проблем|замен|правк|пунктуац|граммат|орфограф|механическ|знайден|виявлен|помил|виправ|\b(?:found|errors?|issues?|problems?|typos?|corrections?|punctuation|grammar|spelling)\b)/iu.test(text);
   }
 
   validateAiReviewActionability(issues = [], kind = '', thinking = '') {
-    if (!Array.isArray(issues)) return 'Модель не вернула корректный AI review.';
+    if (!Array.isArray(issues)) return t('Модель не вернула корректный AI review.');
     if (!issues.length && this.aiReviewThinkingClaimsIssues(thinking)) {
-      return 'Модель написала, что нашла ошибки, но не вернула список issues с конкретными заменами.';
+      return t('Модель написала, что нашла ошибки, но не вернула список issues с конкретными заменами.');
     }
     if (kind !== 'proofread') return '';
     const actionableCategories = new Set(['orthography', 'punctuation', 'grammar', 'repetition']);
@@ -21977,14 +22058,14 @@ ${text}`;
       && !String(raw.replacement || '').trim()
     ));
     if (missingReplacement) {
-      return 'Модель нашла ошибки корректуры, но не дала replacement для готовой замены.';
+      return t('Модель нашла ошибки корректуры, но не дала replacement для готовой замены.');
     }
     return '';
   }
 
   async parseAiProtocolWithRepair(raw, originalPrompt, budget, request) {
     let parsed = this.parseAiJsonResponse(raw);
-    let invalidMessage = parsed.ok ? this.validateParsedAiProtocol(parsed, request?.kind) : (parsed.message || 'AI вернул некорректный формат.');
+    let invalidMessage = parsed.ok ? this.validateParsedAiProtocol(parsed, request?.kind) : (parsed.message || t('AI вернул некорректный формат.'));
     let invalid = !parsed.ok || !!invalidMessage;
     if (invalid) {
       const legacy = this.parseAiProtocol(raw, false);
@@ -21998,7 +22079,7 @@ ${text}`;
     try {
       await this.streamAi(repairPrompt, (chunk) => repairedChunks.push(chunk), request?.controller?.signal || null, { maxTokens: Math.max(500, budget?.maxTokens || 500) });
       parsed = this.parseAiJsonResponse(repairedChunks.join(''));
-      invalidMessage = parsed.ok ? this.validateParsedAiProtocol(parsed, request?.kind) : (parsed.message || 'AI вернул некорректный формат.');
+      invalidMessage = parsed.ok ? this.validateParsedAiProtocol(parsed, request?.kind) : (parsed.message || t('AI вернул некорректный формат.'));
       invalid = !parsed.ok || !!invalidMessage;
       if (invalid) {
         const legacy = this.parseAiProtocol(repairedChunks.join(''), false);
@@ -22006,9 +22087,9 @@ ${text}`;
         if (!legacyMessage && !legacy.foreignProtocol) return { ...legacy, ok: true, legacy: true };
       }
       if (!invalid) return { ...parsed, ok: true };
-      return { ...parsed, ok: false, message: invalidMessage || 'AI вернул некорректный формат. Текст не изменён.' };
+      return { ...parsed, ok: false, message: invalidMessage || t('AI вернул некорректный формат. Текст не изменён.') };
     } catch {
-      return { ...parsed, ok: false, message: invalidMessage || parsed.reviewError || 'AI вернул некорректный формат. Текст не изменён.' };
+      return { ...parsed, ok: false, message: invalidMessage || parsed.reviewError || t('AI вернул некорректный формат. Текст не изменён.') };
     }
   }
 
@@ -22047,7 +22128,7 @@ ${raw}`;
       const quote = issue.quote;
       const anchor = this.findAiIssueAnchor(doc, quote, target);
       if (!anchor) {
-        skipped.push('Одна из AI-пометок была пропущена: фрагмент не найден в тексте.');
+        skipped.push(t('Одна из AI-пометок была пропущена: фрагмент не найден в тексте.'));
         continue;
       }
       await this.saveReviewMark({
@@ -22071,7 +22152,7 @@ ${raw}`;
 
   validateAiReviewIssues(issues = [], doc, target = null, skipped = []) {
     if (!Array.isArray(issues)) {
-      skipped.push('Не удалось разобрать список найденных проблем.');
+      skipped.push(t('Не удалось разобрать список найденных проблем.'));
       return [];
     }
     const targetText = this.aiTargetReviewText(doc, target);
@@ -22086,7 +22167,7 @@ ${raw}`;
       if (!category || !quote || !reason) return null;
       if (this.aiIssueLooksLikeNonIssue({ reason, replacement })) return null;
       if (!targetText.includes(quote)) {
-        skipped.push('Одна из AI-пометок была пропущена: фрагмент не найден в тексте.');
+        skipped.push(t('Одна из AI-пометок была пропущена: фрагмент не найден в тексте.'));
         return null;
       }
       return { verdict: 'issue', category, quote, reason, replacement, severity };
@@ -22101,8 +22182,9 @@ ${raw}`;
 
   aiIssueLooksLikeNonIssue(issue = {}) {
     const combined = `${issue.reason || ''} ${issue.replacement || ''}`.toLowerCase();
-    const nonIssue = /(соответствует|ошибок\s+нет|корректно|нормально|не\s+требует\s+исправления|проблем\s+нет|допустим[ао]?)/iu.test(combined);
-    const concreteProblem = /(нужн[аоы]?|ошибк|противореч|конфликт|повтор|неверн|лишн|пропущ|согласован|запята|пунктуац|граммат|орфограф)/iu.test(combined);
+    const nonIssue = /(соответствует|ошибок\s+нет|корректно|нормально|не\s+требует\s+исправления|проблем\s+нет|допустим[ао]?|відповідає|коректно|помилок\s+немає|не\s+потребує\s+виправлення|\b(?:no\s+(?:errors?|issues?|problems?)|correct|consistent|acceptable|no\s+changes?\s+needed)\b)/iu.test(combined);
+    const remainder = combined.replace(/\bno\s+(?:errors?|issues?|problems?)\b|помилок\s+немає/giu, '');
+    const concreteProblem = /(нужн[аоы]?|ошибк|противореч|конфликт|повтор|неверн|лишн|пропущ|согласован|запята|пунктуац|граммат|орфограф|помил|супереч|зайв|пропущ|потрібн|\b(?:error|conflict|contradiction|repetition|incorrect|extra|missing|comma|punctuation|grammar|spelling|required)\b)/iu.test(remainder);
     return nonIssue && !concreteProblem;
   }
 
@@ -22141,9 +22223,9 @@ ${raw}`;
       body: JSON.stringify(this.aiRequestBody(prompt, budget, p)),
       signal,
     });
-    if (!response.ok) throw new Error(`Ошибка провайдера ИИ: HTTP ${response.status}`);
+    if (!response.ok) throw new Error(msg`Ошибка провайдера ИИ: HTTP ${response.status}`);
     const reader = response.body?.getReader();
-    if (!reader) throw new Error('Провайдер ИИ не вернул поток ответа.');
+    if (!reader) throw new Error(t('Провайдер ИИ не вернул поток ответа.'));
     const decoder = new TextDecoder();
     let buffer = '';
     while (true) {
@@ -22238,7 +22320,7 @@ ${raw}`;
   }
 
   localAiText() {
-    throw new Error('Ассистент не настроен. Выберите провайдера или подключите Ollama.');
+    throw new Error(t('Ассистент не настроен. Выберите провайдера или подключите Ollama.'));
   }
 
   findRelevantLore(text) {
@@ -22263,7 +22345,7 @@ ${raw}`;
       const disabled = !!docMessage || busy || (!!providerMessage && !!card.closest('.mobile-tab-surface, #mobile-panel'));
       card.toggleAttribute('disabled', disabled);
       card.classList.toggle('disabled', disabled);
-      card.title = docMessage ? 'Откройте или создайте документ, чтобы использовать ассистента.' : busy ? 'Дождитесь завершения текущего AI-запроса.' : '';
+      card.title = docMessage ? t('Откройте или создайте документ, чтобы использовать ассистента.') : busy ? t('Дождитесь завершения текущего AI-запроса.') : '';
     });
     const output = document.getElementById('ai-output');
     if (!output) return;
@@ -22276,17 +22358,17 @@ ${raw}`;
       this.assistantState = 'no-document';
       this.assistantPanelMessage = docMessage;
       output.dataset.tone = 'empty';
-      this.updateSurfaceHTML(output, '<strong>Нет активного документа</strong><span>Откройте или создайте рукопись, чтобы ассистент мог анализировать и предлагать изменения.</span>', { resize: true });
+      this.updateSurfaceHTML(output, ui('<strong>Нет активного документа</strong><span>Откройте или создайте рукопись, чтобы ассистент мог анализировать и предлагать изменения.</span>'), { resize: true });
     } else if (providerMessage && !['error', 'empty'].includes(this.assistantState)) {
       this.assistantState = 'provider-missing';
       this.assistantPanelMessage = providerMessage;
       output.dataset.tone = 'empty';
-      this.updateSurfaceHTML(output, '<strong>Ассистент не подключён</strong><span>Выберите провайдера в настройках ИИ.</span>', { resize: true });
+      this.updateSurfaceHTML(output, ui('<strong>Ассистент не подключён</strong><span>Выберите провайдера в настройках ИИ.</span>'), { resize: true });
     } else if (!this.assistantPanelMessage || ['busy', 'no-document', 'provider-missing'].includes(this.assistantState)) {
       this.assistantState = 'idle';
-      this.assistantPanelMessage = 'Готов к работе.';
+      this.assistantPanelMessage = t('Готов к работе.');
       output.dataset.tone = 'idle';
-      output.textContent = 'Готов к работе.';
+      output.textContent = t('Готов к работе.');
     } else {
       output.dataset.tone = this.assistantState || 'idle';
       output.textContent = this.assistantPanelMessage;
@@ -22321,8 +22403,8 @@ ${raw}`;
   insertSuggestion(text, context = this.ensureAssistantDocumentContext({ showToast: false, updateOutput: false })) {
     if (!text.trim() || !context?.ok) return false;
     if (this.containsAiProtocolMarkup(text)) {
-      this.setAssistantOutput('Модель вернула ответ в неожиданном формате. Текст в документ не вставлен.', 'error');
-      this.toast('AI-ответ не вставлен: нарушен формат.');
+      this.setAssistantOutput(t('Модель вернула ответ в неожиданном формате. Текст в документ не вставлен.'), 'error');
+      this.toast(t('AI-ответ не вставлен: нарушен формат.'));
       return false;
     }
     const doc = context.doc;
@@ -22346,7 +22428,7 @@ ${raw}`;
     this.renderWorkspacePane(paneId);
     if (!context.silent) {
       this.setAssistantOutput(text, 'idle');
-      this.toast(context.kind === 'continue' ? 'AI-продолжение готово. Проверьте и примите вставку.' : 'AI-замена готова. Проверьте и примите правку.');
+      this.toast(context.kind === 'continue' ? t('AI-продолжение готово. Проверьте и примите вставку.') : t('AI-замена готова. Проверьте и примите правку.'));
     }
     return true;
   }
@@ -22355,7 +22437,7 @@ ${raw}`;
     this.clearSuggestionIfStale();
     if (!this.state.suggestion) return;
     if (this.state.suggestion.streaming) {
-      this.toast('Дождитесь завершения предложения AI.');
+      this.toast(t('Дождитесь завершения предложения AI.'));
       return;
     }
     const suggestion = this.state.suggestion;
@@ -22379,18 +22461,18 @@ ${raw}`;
     this.nocturneEditor.syncDocFromEditorByDocId(doc.id);
     if (this.containsUnsafeAiOutput(suggestion.text)) {
       this.clearSuggestion();
-      this.setAssistantOutput('AI-предложение отклонено: модель вернула служебный протокол вместо текста.', 'error');
-      this.toast('AI-ответ не применён: нарушен формат.');
+      this.setAssistantOutput(t('AI-предложение отклонено: модель вернула служебный протокол вместо текста.'), 'error');
+      this.toast(t('AI-ответ не применён: нарушен формат.'));
       return false;
     }
     const blockIndex = doc.ast.blocks.findIndex((block) => block.id === target.blockId);
     const block = doc.ast.blocks[blockIndex];
     if (!block) {
-      this.toast('AI-результат готов, но место вставки изменилось. Повторите запрос.');
+      this.toast(t('AI-результат готов, но место вставки изменилось. Повторите запрос.'));
       return false;
     }
     if (target.mode !== 'replace-selection' && typeof target.targetBlockText === 'string' && blockText(block) !== target.targetBlockText) {
-      this.toast('AI-результат готов, но исходный абзац изменился. Повторите запрос.');
+      this.toast(t('AI-результат готов, но исходный абзац изменился. Повторите запрос.'));
       return false;
     }
     if (suggestion.mode === 'inline-continuation') {
@@ -22414,7 +22496,7 @@ ${raw}`;
     } else if (target.mode === 'replace-selection') {
       const current = blockText(block).slice(target.startOffset, target.endOffset);
       if (current !== target.selectedText) {
-        this.toast('AI-результат готов, но исходный фрагмент изменился. Повторите запрос.');
+        this.toast(t('AI-результат готов, но исходный фрагмент изменился. Повторите запрос.'));
         return false;
       }
       block.html = this.replaceInHtmlRange(block.html, target.startOffset, target.endOffset, suggestion.text);
@@ -22428,7 +22510,7 @@ ${raw}`;
     this.writeLiveDraft(doc.id);
     this.saveDocByIdDebounced(doc.id);
     this.renderWorkspacePane(suggestion.paneId || this.state.workspace?.focusedPaneId || 'primary');
-    this.toast('AI-предложение применено.');
+    this.toast(t('AI-предложение применено.'));
     return true;
   }
 
@@ -22506,7 +22588,7 @@ ${raw}`;
 
   startSprint() {
     if (this.state.sprint || this.sprintTimer) {
-      this.toast('Спринт уже идёт.');
+      this.toast(t('Спринт уже идёт.'));
       return;
     }
     const minutes = Math.max(1, Math.min(180, Number(this.state.settings.sprintMinutes) || 25));
@@ -22520,12 +22602,12 @@ ${raw}`;
         clearInterval(this.sprintTimer);
         this.sprintTimer = null;
         this.state.sprint = null;
-        this.toast('Спринт завершен. Дзен-режим остаётся включённым.');
+        this.toast(t('Спринт завершен. Дзен-режим остаётся включённым.'));
         this.confetti();
         return;
       }
       const remaining = Math.ceil(left / 60000);
-      if (remaining !== lastMinute) this.toast(`Спринт: осталось ${remaining} мин.`, 900);
+      if (remaining !== lastMinute) this.toast(msg`Спринт: осталось ${remaining} мин.`, 900);
       lastMinute = remaining;
     };
     this.sprintTimer = setInterval(tick, 1000);
@@ -22599,9 +22681,9 @@ ${raw}`;
   async openProjectExportModal() {
     const overlay = document.getElementById('form-overlay');
     const e2eWarning = this.state.settings.e2e
-      ? '<p class="form-helper warning-text">E2E включено. Безопасный экспорт сохраняет зашифрованные данные и не добавляет открытые заметки/снапшоты. Plaintext-экспорт доступен только после явного подтверждения.</p>'
-      : '<p class="form-helper">Dump сохранит документы, базу знаний, настройки, заметки, правки, словарь и снапшоты.</p>';
-    this.presentFormModal(`
+      ? ui('<p class="form-helper warning-text">E2E включено. Безопасный экспорт сохраняет зашифрованные данные и не добавляет открытые заметки/снапшоты. Plaintext-экспорт доступен только после явного подтверждения.</p>')
+      : ui('<p class="form-helper">Dump сохранит документы, базу знаний, настройки, заметки, правки, словарь и снапшоты.</p>');
+    this.presentFormModal(ui`
       <div class="form-modal project-dump-modal">
         <div class="modal-head-row">
           <div><h2>Экспорт проекта</h2><p>.nocturnedump резервная копия всего проекта.</p></div>
@@ -22617,7 +22699,7 @@ ${raw}`;
         <div class="form-actions">
           <button class="pill-btn" data-close-form>Отмена</button>
           <button class="pill-btn ai-btn" data-action="confirm-export-project-dump"><i class="bx bx-archive-out"></i> Экспорт безопасного dump</button>
-          ${this.state.settings.e2e ? '<button class="pill-btn danger-btn" data-action="confirm-export-project-dump-plaintext">Экспорт plaintext</button>' : ''}
+          ${this.state.settings.e2e ? ui('<button class="pill-btn danger-btn" data-action="confirm-export-project-dump-plaintext">Экспорт plaintext</button>') : ''}
         </div>
       </div>`);
     overlay.classList.add('active');
@@ -22633,7 +22715,7 @@ ${raw}`;
       document.body.appendChild(overlay);
     }
     
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="kb-import-card">
         <div class="kb-import-spinner">
           <div class="spinner-ring"></div>
@@ -22652,14 +22734,14 @@ ${raw}`;
     const lore = payload.lore || {};
     
     const categories = [];
-    if (payload.folders?.length > 0) categories.push({ label: 'Папки', count: payload.folders.length });
-    if (payload.docs?.length > 0) categories.push({ label: 'Документы', count: payload.docs.length });
-    if (lore.characters?.length > 0) categories.push({ label: 'Персонажи', count: lore.characters.length });
-    if (lore.locations?.length > 0) categories.push({ label: 'Локации', count: lore.locations.length });
-    if (lore.timeline?.length > 0) categories.push({ label: 'Таймлайн', count: lore.timeline.length });
+    if (payload.folders?.length > 0) categories.push({ label: t('Папки'), count: payload.folders.length });
+    if (payload.docs?.length > 0) categories.push({ label: t('Документы'), count: payload.docs.length });
+    if (lore.characters?.length > 0) categories.push({ label: t('Персонажи'), count: lore.characters.length });
+    if (lore.locations?.length > 0) categories.push({ label: t('Локации'), count: lore.locations.length });
+    if (lore.timeline?.length > 0) categories.push({ label: t('Таймлайн'), count: lore.timeline.length });
     if (payload.floatingNotes?.length > 0 || payload.globalNotes) {
       const count = (payload.floatingNotes?.length || 0) + (payload.globalNotes ? 1 : 0);
-      categories.push({ label: 'Записи', count });
+      categories.push({ label: t('Записи'), count });
     }
     
     for (let i = 0; i < categories.length; i++) {
@@ -22667,7 +22749,7 @@ ${raw}`;
       const step = document.createElement('div');
       step.className = 'kb-import-step success';
       step.style.animationDelay = `${i * 150}ms`;
-      this.updateSurfaceHTML(step, `<span>Упаковано: ${cat.label} (${cat.count})</span><i class="bx bx-check-circle"></i>`, { resize: true });
+      this.updateSurfaceHTML(step, ui`<span>Упаковано: ${cat.label} (${cat.count})</span><i class="bx bx-check-circle"></i>`, { resize: true });
       listEl.appendChild(step);
       await new Promise(r => setTimeout(r, 350));
     }
@@ -23039,7 +23121,7 @@ ${raw}`;
       document.body.appendChild(overlay);
     }
     
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="cleaner-modal-container">
         <div class="whats-new-reaper-wrapper floating" style="position: absolute; top: -270px; left: 50%; transform: translateX(-50%); width: 320px; height: 320px; pointer-events: none; z-index: 100;">
           <!-- Base layers -->
@@ -23292,7 +23374,7 @@ ${raw}`;
       document.body.appendChild(overlay);
     }
     
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="cleaner-modal-container">
         <div class="cleaner-reaper-wrapper">
           <!-- Base layers -->
@@ -23345,7 +23427,7 @@ ${raw}`;
 
     overlay.querySelector('#start-scan-btn').onclick = async () => {
       const contentEl = overlay.querySelector('#cleaner-content');
-      this.updateModalContent(contentEl, `
+      this.updateModalContent(contentEl, ui`
         <h2>Сканирование...</h2>
         <p>Ищем остатки переписок из Telegram (ПК и мобильной версии)...</p>
         <div class="kb-import-spinner" style="margin-bottom: 20px;">
@@ -23358,13 +23440,13 @@ ${raw}`;
       const progressText = contentEl.querySelector('.cleaner-progress-text');
       
       await new Promise(r => setTimeout(r, 600));
-      progressText.textContent = noteId ? 'Анализ текста выбранной заметки...' : 'Загрузка списка всех заметок...';
+      progressText.textContent = noteId ? t('Анализ текста выбранной заметки...') : t('Загрузка списка всех заметок...');
       
       await new Promise(r => setTimeout(r, 650));
-      progressText.textContent = 'Поиск ПК-версий логов Telegram...';
+      progressText.textContent = t('Поиск ПК-версий логов Telegram...');
       
       await new Promise(r => setTimeout(r, 650));
-      progressText.textContent = 'Поиск мобильных версий логов Telegram...';
+      progressText.textContent = t('Поиск мобильных версий логов Telegram...');
       
       let matches = [];
       let totalNotesScanned = 0;
@@ -23400,10 +23482,10 @@ ${raw}`;
     
     if (matches.length === 0) {
       this.transitionReaperImage(reaperImg, 'success', { duration: 250 }).then(() => {
-        this.updateModalContent(contentEl, `
+        this.updateModalContent(contentEl, ui`
           <h2>Текст чист, мастер</h2>
           <p style="color: var(--text-muted); font-size: 13px; line-height: 1.6; margin-bottom: 24px;">
-            ${noteId ? 'В выбранной заметке' : `В проверенных заметках (${totalNotesScanned})`} не обнаружено артефактов копирования Telegram.
+            ${noteId ? t('В выбранной заметке') : msg`В проверенных заметках (${totalNotesScanned})`} не обнаружено артефактов копирования Telegram.
           </p>
           <div class="form-actions" style="justify-content: center; margin-top: 24px;">
             <button class="pill-btn ai-btn" data-action="close-cleaner" style="min-width: 120px;">Закрыть</button>
@@ -23417,11 +23499,11 @@ ${raw}`;
     }
     
     const matchesHtml = matches.map(m => {
-      let badge = '<span class="cleaner-match-badge mobile">Моб</span>';
+      let badge = ui('<span class="cleaner-match-badge mobile">Моб</span>');
       if (m.type === 'pc' || m.type === 'pc_reply') {
-        badge = '<span class="cleaner-match-badge pc">ПК</span>';
+        badge = ui('<span class="cleaner-match-badge pc">ПК</span>');
       } else if (m.type === 'reply_quote') {
-        badge = '<span class="cleaner-match-badge pc" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.3);">Ответ</span>';
+        badge = ui('<span class="cleaner-match-badge pc" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.3);">Ответ</span>');
       }
       const noteTitle = m.noteTitle ? `<span style="color: var(--accent); font-weight: bold;">[${escapeHtml(m.noteTitle)}]</span> ` : '';
       return `<div class="cleaner-match-item">
@@ -23429,7 +23511,7 @@ ${raw}`;
       </div>`;
     }).join('');
     
-    this.updateModalContent(contentEl, `
+    this.updateModalContent(contentEl, ui`
       <h2>Найденные совпадения</h2>
       <p>«Чистильщик™» обнаружил <strong>${matches.length}</strong> совпадений в тексте. Посмотрите список ниже перед удалением.</p>
       
@@ -23450,7 +23532,7 @@ ${raw}`;
     overlay.querySelector('#cut-btn').onclick = async () => {
       await this.transitionReaperToDelete(reaperImg);
       
-      this.updateModalContent(contentEl, `
+      this.updateModalContent(contentEl, ui`
         <h2>Очистка текста...</h2>
         <p>«Чистильщик™» вырезает метаданные и форматирует строки...</p>
         <div class="kb-import-spinner" style="margin-bottom: 20px;">
@@ -23463,7 +23545,7 @@ ${raw}`;
       const progressText = contentEl.querySelector('.cleaner-progress-text');
       
       await new Promise(r => setTimeout(r, 700));
-      progressText.textContent = 'Удаление временных меток и юзернеймов...';
+      progressText.textContent = t('Удаление временных меток и юзернеймов...');
       
       let errorOccurred = false;
       try {
@@ -23490,16 +23572,16 @@ ${raw}`;
       }
       
       await new Promise(r => setTimeout(r, 700));
-      progressText.textContent = 'Восстановление абзацев и отступов...';
+      progressText.textContent = t('Восстановление абзацев и отступов...');
       
       await new Promise(r => setTimeout(r, 700));
-      progressText.textContent = 'Запись изменений в базу данных...';
+      progressText.textContent = t('Запись изменений в базу данных...');
       
       await new Promise(r => setTimeout(r, 500));
       
       if (errorOccurred) {
         await this.transitionReaperImage(reaperImg, 'error', { duration: 250 });
-        this.updateModalContent(contentEl, `
+        this.updateModalContent(contentEl, ui`
           <h2>Произошла ошибка</h2>
           <p>«Чистильщик™» столкнулся с непредвиденной ошибкой при изменении базы данных.</p>
           <div class="form-actions" style="justify-content: center; margin-top: 24px;">
@@ -23512,7 +23594,7 @@ ${raw}`;
       } else {
         await this.transitionReaperImage(reaperImg, 'success', { duration: 250 });
         
-        this.updateModalContent(contentEl, `
+        this.updateModalContent(contentEl, ui`
           <h2>Очистка завершена, мастер</h2>
           <p style="color: var(--text-muted); font-size: 13px; line-height: 1.6; margin-bottom: 24px;">
             Все артефакты копирования сообщений Telegram были успешно удалены из заметок.
@@ -23537,7 +23619,7 @@ ${raw}`;
     const name = `nocturne-${localDateKey()}.nocturnedump`;
     await this.animateProjectExport(dump);
     await platformFiles.exportProjectDump(data, { suggestedName: name });
-    this.toast('Dump проекта экспортирован.');
+    this.toast(t('Dump проекта экспортирован.'));
     return dump;
   }
 
@@ -23547,32 +23629,32 @@ ${raw}`;
       if (!file?.data) return;
       await this.handleProjectDumpText(file.data, file.name || 'project.nocturnedump');
     } catch (error) {
-      this.toast(error?.message || 'Не удалось открыть dump.');
+      this.toast(error?.message || t('Не удалось открыть dump.'));
     }
   }
 
   validateProjectDump(raw) {
-    if (!raw || typeof raw !== 'object') throw new Error('Dump не является JSON-объектом.');
-    if (raw.format !== 'nocturnedump') throw new Error('Это не .nocturnedump файл.');
-    if (!raw.payload || typeof raw.payload !== 'object') throw new Error('Dump не содержит payload.');
+    if (!raw || typeof raw !== 'object') throw new Error(t('Dump не является JSON-объектом.'));
+    if (raw.format !== 'nocturnedump') throw new Error(t('Это не .nocturnedump файл.'));
+    if (!raw.payload || typeof raw.payload !== 'object') throw new Error(t('Dump не содержит payload.'));
     const payload = raw.payload;
-    if (raw.schemaVersion !== undefined && ![1, 2, 3, 4].includes(Number(raw.schemaVersion))) throw new Error('Версия резервной копии не поддерживается.');
+    if (raw.schemaVersion !== undefined && ![1, 2, 3, 4].includes(Number(raw.schemaVersion))) throw new Error(t('Версия резервной копии не поддерживается.'));
     ['folders', 'docs', 'typoRules', 'reviewMarks', 'snapshots', 'lores', 'settingsRecords', 'floatingNotes', 'stats', 'trash', 'syncMappings', 'syncRevisions', 'syncConflicts'].forEach((key) => {
-      if (payload[key] !== undefined && !Array.isArray(payload[key])) throw new Error(`Некорректный раздел ${key}.`);
+      if (payload[key] !== undefined && !Array.isArray(payload[key])) throw new Error(msg`Некорректный раздел ${key}.`);
       const ids = new Set();
       for (const item of payload[key] || []) {
-        if (!isPlainObject(item) || typeof item.id !== 'string' || !item.id) throw new Error(`Повреждена запись раздела ${key}.`);
-        if (ids.has(item.id)) throw new Error(`Повторяющийся ID в разделе ${key}: ${item.id}.`);
+        if (!isPlainObject(item) || typeof item.id !== 'string' || !item.id) throw new Error(msg`Повреждена запись раздела ${key}.`);
+        if (ids.has(item.id)) throw new Error(msg`Повторяющийся ID в разделе ${key}: ${item.id}.`);
         ids.add(item.id);
       }
     });
-    if (payload.lore !== undefined && !isPlainObject(payload.lore)) throw new Error('Некорректный раздел lore.');
+    if (payload.lore !== undefined && !isPlainObject(payload.lore)) throw new Error(t('Некорректный раздел lore.'));
     const walk = (value, depth = 0) => {
-      if (depth > 100) throw new Error('Слишком глубокая структура резервной копии.');
+      if (depth > 100) throw new Error(t('Слишком глубокая структура резервной копии.'));
       if (!value || typeof value !== 'object') return;
       for (const [key, child] of Object.entries(value)) {
-        if (['__proto__', 'constructor', 'prototype'].includes(key)) throw new Error('Опасное поле в резервной копии.');
-        if (['id', 'blockId', 'folderId', 'docId', 'linkedId'].includes(key) && child !== null && child !== undefined && child !== '' && (typeof child !== 'string' || !/^[\w.:-]{1,240}$/u.test(child))) throw new Error('Недопустимый идентификатор в резервной копии.');
+        if (['__proto__', 'constructor', 'prototype'].includes(key)) throw new Error(t('Опасное поле в резервной копии.'));
+        if (['id', 'blockId', 'folderId', 'docId', 'linkedId'].includes(key) && child !== null && child !== undefined && child !== '' && (typeof child !== 'string' || !/^[\w.:-]{1,240}$/u.test(child))) throw new Error(t('Недопустимый идентификатор в резервной копии.'));
         walk(child, depth + 1);
       }
     };
@@ -23582,7 +23664,7 @@ ${raw}`;
   }
 
   validateImportedModels(payload) {
-    const fail = label => { throw new Error(`Повреждена структура ${label}.`); };
+    const fail = label => { throw new Error(msg`Повреждена структура ${label}.`); };
     const strings = (item, keys, label) => {
       for (const key of keys) if (item[key] !== undefined && item[key] !== null && typeof item[key] !== 'string') fail(`${label}.${key}`);
     };
@@ -23593,7 +23675,7 @@ ${raw}`;
       for (const item of items) {
         if (rules && typeof item === 'string') continue;
         if (!isPlainObject(item)) fail(label);
-        if (item.id) { if (ids.has(item.id)) fail(`${label}: повторяющийся ID ${item.id}`); ids.add(item.id); }
+        if (item.id) { if (ids.has(item.id)) fail(msg`${label}: повторяющийся ID ${item.id}`); ids.add(item.id); }
         validate(item, label);
       }
     };
@@ -23656,7 +23738,7 @@ ${raw}`;
         if (!record.encrypted || !this.state.sessionPassword) return record;
         const value = record.protectedStore ? await this.db.decodeRecord(store, record) : { ...record, ...await decryptJson(record.encrypted, this.state.sessionPassword) };
         if (value.locked) return record;
-        if (value.id !== record.id) throw new Error('ID защищённой записи не совпадает с её содержимым.');
+        if (value.id !== record.id) throw new Error(t('ID защищённой записи не совпадает с её содержимым.'));
         return value;
       }));
     }
@@ -23665,15 +23747,15 @@ ${raw}`;
 
   async handleProjectDumpText(text, filename = 'project.nocturnedump') {
     if (String(text || '').length > 80 * 1024 * 1024) {
-      this.toast('Dump слишком большой для безопасного импорта.');
+      this.toast(t('Dump слишком большой для безопасного импорта.'));
       return;
     }
     let dump;
     try {
       dump = this.validateProjectDump(JSON.parse(text));
-      if (dump.checksum && dump.checksum !== await this.checksumText(JSON.stringify(dump.payload))) throw new Error('Контрольная сумма не совпала. Файл повреждён или изменён.');
+      if (dump.checksum && dump.checksum !== await this.checksumText(JSON.stringify(dump.payload))) throw new Error(t('Контрольная сумма не совпала. Файл повреждён или изменён.'));
     } catch (error) {
-      this.openImportErrorModal(error.message || 'Не удалось прочитать dump.', filename);
+      this.openImportErrorModal(error.message || t('Не удалось прочитать dump.'), filename);
       return;
     }
     this.openProjectImportPreview(dump, filename);
@@ -23695,7 +23777,7 @@ ${raw}`;
 
   openImportErrorModal(message, filename) {
     const overlay = document.getElementById('form-overlay');
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="form-modal confirm-modal">
         <div class="confirm-icon"><i class="bx bx-error-circle"></i></div>
         <h2>Dump не импортирован</h2>
@@ -23709,10 +23791,10 @@ ${raw}`;
   openProjectImportPreview(dump, filename) {
     const stats = this.dumpPreviewStats(dump);
     const overlay = document.getElementById('form-overlay');
-    this.presentFormModal(`
+    this.presentFormModal(ui`
       <div class="form-modal project-dump-modal">
         <div class="modal-head-row">
-          <div><h2>Предпросмотр импорта</h2><p>${escapeHtml(filename)} · схема ${escapeHtml(dump.schemaVersion || 'неизвестно')}</p></div>
+          <div><h2>Предпросмотр импорта</h2><p>${escapeHtml(filename)} · схема ${escapeHtml(dump.schemaVersion || t('неизвестно'))}</p></div>
           <button class="btn-icon" data-close-form><i class="bx bx-x"></i></button>
         </div>
         <div class="dump-summary-grid">
@@ -23723,7 +23805,7 @@ ${raw}`;
           <span><strong>${stats.subtimelines}</strong> подсобытий</span>
           <span><strong>${stats.snapshots}</strong> снапшотов</span>
         </div>
-        <p class="form-helper">Экспортирован: ${escapeHtml(dump.exportedAt || 'неизвестно')} · checksum: ${escapeHtml(String(dump.checksum || '').slice(0, 16) || 'нет')}</p>
+        <p class="form-helper">Экспортирован: ${escapeHtml(dump.exportedAt || t('неизвестно'))} · checksum: ${escapeHtml(String(dump.checksum || '').slice(0, 16) || t('нет'))}</p>
         <div class="form-actions">
           <button class="pill-btn" data-close-form>Отмена</button>
           <button class="pill-btn" data-action="merge-project-dump">Объединить с текущим</button>
@@ -23739,9 +23821,9 @@ ${raw}`;
     };
     overlay.querySelector('[data-action="replace-project-dump"]').onclick = async () => {
       const confirmed = await this.confirmDialog({
-        title: 'Заменить текущий проект?',
-        message: 'Перед заменой можно скачать резервную копию текущего проекта. Замена удалит текущие локальные данные и загрузит dump.',
-        confirmText: 'Заменить',
+        title: t('Заменить текущий проект?'),
+        message: t('Перед заменой можно скачать резервную копию текущего проекта. Замена удалит текущие локальные данные и загрузит dump.'),
+        confirmText: t('Заменить'),
         icon: 'bx-error',
       });
       if (!confirmed) return;
@@ -23761,7 +23843,7 @@ ${raw}`;
       document.body.appendChild(overlay);
     }
     
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="kb-import-card">
         <div class="kb-import-spinner">
           <div class="spinner-ring"></div>
@@ -23777,13 +23859,13 @@ ${raw}`;
     const listEl = overlay.querySelector('.kb-import-progress-list');
     const steps = [];
     if (mode === 'replace') {
-      steps.push('Очистка текущей базы...');
+      steps.push(t('Очистка текущей базы...'));
     }
-    steps.push('Импорт настроек и папок...');
-    steps.push('Импорт документов...');
-    steps.push('Импорт базы знаний...');
-    steps.push('Импорт снапшотов и заметок...');
-    steps.push('Импорт завершен!');
+    steps.push(t('Импорт настроек и папок...'));
+    steps.push(t('Импорт документов...'));
+    steps.push(t('Импорт базы знаний...'));
+    steps.push(t('Импорт снапшотов и заметок...'));
+    steps.push(t('Импорт завершен!'));
     
     for (let i = 0; i < steps.length; i++) {
       const step = document.createElement('div');
@@ -23800,9 +23882,9 @@ ${raw}`;
 
   async importProjectDump(dump, { mode = 'merge' } = {}) {
     this.validateProjectDump(dump);
-    if (dump.checksum && dump.checksum !== await this.checksumText(JSON.stringify(dump.payload))) throw new Error('Контрольная сумма резервной копии не совпала.');
-    if (!['replace', 'merge'].includes(mode)) throw new Error('Неизвестный режим импорта.');
-    if (this.importingProject) throw new Error('Дождитесь завершения текущего импорта.');
+    if (dump.checksum && dump.checksum !== await this.checksumText(JSON.stringify(dump.payload))) throw new Error(t('Контрольная сумма резервной копии не совпала.'));
+    if (!['replace', 'merge'].includes(mode)) throw new Error(t('Неизвестный режим импорта.'));
+    if (this.importingProject) throw new Error(t('Дождитесь завершения текущего импорта.'));
     await this.history.work;
     const payload = dump.payload || {};
     await this.validateDecodedImportedModels(payload);
@@ -23818,7 +23900,7 @@ ${raw}`;
     if (mode === 'replace') {
       this.state.settings = this.validateSettings(payload.settings || {});
       this.state.settings.activeLoreId = 'world';
-      this.state.settings.kbProjects = [{ id: 'world', title: payload.lore?.title || 'Основное' }];
+      this.state.settings.kbProjects = [{ id: 'world', title: payload.lore?.title || t('Основное') }];
       this.state.kbProjects = structuredClone(this.state.settings.kbProjects);
       this.state.activeLoreId = 'world';
       this.state.folders = this.validateFolders(payload.folders || []);
@@ -23856,7 +23938,7 @@ ${raw}`;
     this.initWorkspace();
     this.applySettings();
     this.renderAll();
-    this.toast(mode === 'replace' ? 'Проект заменён из dump.' : 'Dump проекта объединён.');
+    this.toast(mode === 'replace' ? t('Проект заменён из dump.') : t('Dump проекта объединён.'));
     this.scheduleDatabaseSync();
     return report;
   }
@@ -23864,9 +23946,9 @@ ${raw}`;
   async persistImportedProject(payload = {}, onCommit = () => {}) {
     const settingsRecords = payload.settingsRecords || [];
     const protectedPreferences = settingsRecords.find(record => record.id === 'app' && record.protectedStore);
-    const localSettings = (await this.db.getAllRaw('settings')).filter(record => ['sync-identity', 'sync-connection', 'backup-directory'].includes(record.id));
+    const localSettings = (await this.db.getAllRaw('settings')).filter(record => ['sync-identity', 'sync-connection', 'backup-directory', LOCALE_RECORD_ID].includes(record.id));
     await this.db.atomicWrite({
-      settings: [protectedPreferences || { id: 'app', value: this.state.settings }, ...settingsRecords.filter(record => !['app', 'global-notes', 'sync-identity', 'sync-connection', 'backup-directory'].includes(record.id)), ...localSettings, settingsRecords.find(record => record.id === 'global-notes') || { id: 'global-notes', text: this.state.globalNotes, bookmarks: this.state.globalBookmarks || [], updatedAt: Date.now() }],
+      settings: [protectedPreferences || { id: 'app', value: this.state.settings }, ...settingsRecords.filter(record => !['app', 'global-notes', 'sync-identity', 'sync-connection', 'backup-directory', LOCALE_RECORD_ID].includes(record.id)), ...localSettings, settingsRecords.find(record => record.id === 'global-notes') || { id: 'global-notes', text: this.state.globalNotes, bookmarks: this.state.globalBookmarks || [], updatedAt: Date.now() }],
       folders: this.state.folders, docs: this.state.docs,
       lore: payload.lores?.length ? payload.lores : [{ id: 'world', ...this.state.lore }],
       floatingNotes: this.state.floatingNotes, typoRules: this.state.typoRules, reviewMarks: this.state.reviewMarks,
@@ -23901,7 +23983,7 @@ ${raw}`;
     const idMap = new Map();
     const decode = async (store, records = []) => Promise.all(records.map(async record => {
       const value = await this.db.decodeRecord(store, record);
-      if (value?.locked) throw new Error('Введите мастер-пароль резервной копии перед объединением.');
+      if (value?.locked) throw new Error(t('Введите мастер-пароль резервной копии перед объединением.'));
       return structuredClone(value);
     }));
     const currentWorlds = await this.db.getAll('lore');
@@ -23956,7 +24038,7 @@ ${raw}`;
 
   openImportReport(report) {
     const overlay = document.getElementById('form-overlay');
-    this.presentFormModal(`
+    this.presentFormModal(ui`
       <div class="form-modal project-dump-modal">
         <div class="confirm-icon"><i class="bx bx-check-circle"></i></div>
         <h2>Отчёт импорта</h2>
@@ -23978,13 +24060,13 @@ ${raw}`;
   async exportPrintable() {
     const doc = this.activeDoc;
     if (!doc) {
-      this.toast('Откройте документ для экспорта.');
+      this.toast(t('Откройте документ для экспорта.'));
       return;
     }
-    if (doc.locked) { this.toast('Введите мастер-пароль перед экспортом.'); return; }
+    if (doc.locked) { this.toast(t('Введите мастер-пароль перед экспортом.')); return; }
     this.nocturneEditor.syncDocFromEditorByDocId(doc.id);
-    const watermark = this.state.settings.watermark ? `${escapeHtml(this.state.settings.authorName)} · ${new Date().toLocaleDateString()}` : '';
-    const html = `<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>${escapeHtml(doc.title)}</title><style>
+    const watermark = this.state.settings.watermark ? `${escapeHtml(this.state.settings.authorName)} · ${new Date().toLocaleDateString(getLocaleName())}` : '';
+    const html = `<!doctype html><html lang="${this.state.settings.smartDictionaryLang === 'auto' ? inferLanguage(docText(doc.ast)) : this.state.settings.smartDictionaryLang || 'und'}"><head><meta charset="utf-8"><title>${escapeHtml(doc.title)}</title><style>
       @page{size:A4;margin:20mm}body{margin:0;background:white;font:12pt/1.75 Georgia,serif;color:#111}p{orphans:3;widows:3}h1,h2,h3{break-after:avoid;line-height:1.3}blockquote{border-left:2px solid #aaa;padding-left:18px;margin-left:0}pre{white-space:pre-wrap;overflow-wrap:anywhere}.watermark{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}.watermark span{transform:rotate(-45deg);font:700 40pt sans-serif;color:rgba(0,0,0,.055);white-space:nowrap;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     </style></head><body>${watermark ? `<div class="watermark"><span>${watermark}</span></div>` : ''}${legacyAstToHtml(doc.ast)}</body></html>`;
     try { await platformFiles.printHtmlDocument(html, doc.title); } catch (error) { this.toast(error.message); }
@@ -23992,7 +24074,7 @@ ${raw}`;
 
   exportDocx() {
     if (!this.activeDoc) {
-      this.toast('Откройте документ для экспорта.');
+      this.toast(t('Откройте документ для экспорта.'));
       return;
     }
     return this.exportDocById(this.activeDoc.id);
@@ -24001,10 +24083,10 @@ ${raw}`;
   exportDocById(docId, { includeNotes = !!this.state.settings.exportIncludeNotes, returnBlob = false, docOverride = null } = {}) {
     const doc = docOverride || this.state.docs.find(d => d.id === docId);
     if (!doc) {
-      this.toast('Документ не найден.');
+      this.toast(t('Документ не найден.'));
       return;
     }
-    if (doc.locked) throw new Error('Введите мастер-пароль перед экспортом.');
+    if (doc.locked) throw new Error(t('Введите мастер-пароль перед экспортом.'));
     if (!docOverride) this.nocturneEditor.syncDocFromEditorByDocId(doc.id);
     const paragraphs = (doc.ast.blocks || []).flatMap((block) => {
       const align = block.align && block.align !== 'left' ? `<w:jc w:val="${block.align === 'center' ? 'center' : block.align === 'right' ? 'right' : 'both'}"/>` : '';
@@ -24040,36 +24122,36 @@ ${raw}`;
     if (marks.length && this.state.exportNocturned) {
       const reviewBlob = new Blob([JSON.stringify(this.buildNocturnedPayload(doc, marks), null, 2)], { type: 'application/json' });
       if (!await this.downloadBlob(reviewBlob, `${this.safeFileName(doc.title)}.nocturned`)) return false;
-      this.toast('DOCX и файл редакторских правок экспортированы.');
+      this.toast(t('DOCX и файл редакторских правок экспортированы.'));
     } else if (this.state.exportNocturned) {
-      this.toast('DOCX экспортирован. Файл правок .nocturned не скачан, так как в документе нет правок.');
+      this.toast(t('DOCX экспортирован. Файл правок .nocturned не скачан, так как в документе нет правок.'));
     } else {
-      this.toast('DOCX экспортирован.');
+      this.toast(t('DOCX экспортирован.'));
     }
     return true;
   }
 
   buildBookDocx(docIds, { includeNotes = false, title = '' } = {}) {
     const chapters = this.state.docs.filter(doc => docIds.includes(doc.id));
-    if (!chapters.length) throw new Error('Выберите хотя бы одну главу.');
-    if (chapters.some(doc => doc.locked)) throw new Error('Расшифруйте выбранные главы перед экспортом.');
-    const collator = new Intl.Collator('ru', { numeric: true });
+    if (!chapters.length) throw new Error(t('Выберите хотя бы одну главу.'));
+    if (chapters.some(doc => doc.locked)) throw new Error(t('Расшифруйте выбранные главы перед экспортом.'));
+    const collator = new Intl.Collator(getLocale(), { numeric: true });
     chapters.sort((a, b) => collator.compare(String(a.volume || ''), String(b.volume || '')) || collator.compare(String(a.chapterNumber || ''), String(b.chapterNumber || '')) || (a.order || 0) - (b.order || 0));
     chapters.forEach(doc => this.nocturneEditor.syncDocFromEditorByDocId(doc.id));
     const blocks = chapters.flatMap(doc => [
       { id: uid('block'), type: 'heading', level: 1, html: escapeHtml(doc.title) },
       ...structuredClone(doc.ast.blocks),
-      ...(includeNotes && doc.notes ? [{ id: uid('block'), type: 'quote', html: `Заметки к главе: ${escapeHtml(doc.notes).replace(/\n/g, '<br>')}` }] : []),
+      ...(includeNotes && doc.notes ? [{ id: uid('block'), type: 'quote', html: msg`Заметки к главе: ${escapeHtml(doc.notes).replace(/\n/g, '<br>')}` }] : []),
     ]);
-    return this.exportDocById(null, { returnBlob: true, includeNotes: false, docOverride: { title: title || chapters[0].workTitle || 'Рукопись', ast: { type: 'doc', blocks } } });
+    return this.exportDocById(null, { returnBlob: true, includeNotes: false, docOverride: { title: title || chapters[0].workTitle || t('Рукопись'), ast: { type: 'doc', blocks } } });
   }
 
   openBookExport() {
     const chapters = [...this.state.docs].sort((a, b) => String(a.workTitle || '').localeCompare(String(b.workTitle || '')) || Number(a.chapterNumber || a.order) - Number(b.chapterNumber || b.order));
     const overlay = document.getElementById('form-overlay');
-    this.presentFormModal(`<div class="form-modal utility-modal book-export-modal"><div class="modal-head-row"><div><h2>Экспорт книги</h2><p>Главы будут расположены по томам и номерам.</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div>
+    this.presentFormModal(ui`<div class="form-modal utility-modal book-export-modal"><div class="modal-head-row"><div><h2>Экспорт книги</h2><p>Главы будут расположены по томам и номерам.</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div>
       <div class="selection-heading"><span>Главы <small id="book-export-count"></small></span><button class="mini-text-btn" data-export-select-all>Снять выбор</button></div>
-      <div class="utility-list chapter-selection">${chapters.map(doc => `<label class="utility-row nocturne-check"><input type="checkbox" data-export-chapter="${escapeHtml(doc.id)}" ${doc.locked ? 'disabled' : 'checked'}><span class="check-mark" aria-hidden="true"></span><div><strong>${escapeHtml(doc.title)}</strong><small>${escapeHtml([doc.workTitle, doc.volume && `Том ${doc.volume}`, doc.chapterNumber && `Глава ${doc.chapterNumber}`, doc.locked && 'Введите пароль'].filter(Boolean).join(' · '))}</small></div></label>`).join('') || '<p class="utility-empty">Сначала создайте или импортируйте главы.</p>'}</div>
+      <div class="utility-list chapter-selection">${chapters.map(doc => `<label class="utility-row nocturne-check"><input type="checkbox" data-export-chapter="${escapeHtml(doc.id)}" ${doc.locked ? 'disabled' : 'checked'}><span class="check-mark" aria-hidden="true"></span><div><strong>${escapeHtml(doc.title)}</strong><small>${escapeHtml([doc.workTitle, doc.volume && msg`Том ${doc.volume}`, doc.chapterNumber && msg`Глава ${doc.chapterNumber}`, doc.locked && t('Введите пароль')].filter(Boolean).join(' · '))}</small></div></label>`).join('') || ui('<p class="utility-empty">Сначала создайте или импортируйте главы.</p>')}</div>
       <label class="nocturne-check export-notes-option"><input type="checkbox" id="book-export-notes"><span class="check-mark" aria-hidden="true"></span><span>Добавить личные заметки к главам</span></label>
       <div class="form-actions"><button class="pill-btn" data-close-form>Отмена</button><button class="pill-btn ai-btn" data-export-selected-book><i class="bx bx-export"></i> Скачать DOCX</button></div></div>`);
     overlay.classList.add('active');
@@ -24079,7 +24161,7 @@ ${raw}`;
       const count = enabled.filter(input => input.checked).length;
       overlay.querySelector('#book-export-count').textContent = `${count} / ${chapters.length}`;
       overlay.querySelector('[data-export-selected-book]').disabled = !count || !!overlay.querySelector('[data-export-selected-book]').__surfaceAction;
-      overlay.querySelector('[data-export-select-all]').textContent = enabled.length && count === enabled.length ? 'Снять выбор' : 'Выбрать все';
+      overlay.querySelector('[data-export-select-all]').textContent = enabled.length && count === enabled.length ? t('Снять выбор') : t('Выбрать все');
     };
     overlay.querySelectorAll('[data-export-chapter]').forEach(input => { input.onchange = updateSelection; });
     overlay.querySelector('[data-export-select-all]').onclick = () => {
@@ -24091,11 +24173,11 @@ ${raw}`;
     const exportButton = overlay.querySelector('[data-export-selected-book]');
     exportButton.onclick = async () => {
       try {
-        await this.runSurfaceAction(exportButton, 'Собираем DOCX…', async () => {
+        await this.runSurfaceAction(exportButton, t('Собираем DOCX…'), async () => {
           const ids = [...overlay.querySelectorAll('[data-export-chapter]:checked')].map(input => input.dataset.exportChapter);
           const blob = await this.buildBookDocx(ids, { includeNotes: overlay.querySelector('#book-export-notes').checked });
-          const result = await this.downloadBlob(blob, `${this.safeFileName(this.state.docs.find(doc => ids.includes(doc.id))?.workTitle || 'Рукопись')}.docx`);
-          if (result) { if (exportButton.isConnected) overlay.classList.remove('active'); this.toast('Рукопись экспортирована.'); }
+          const result = await this.downloadBlob(blob, `${this.safeFileName(this.state.docs.find(doc => ids.includes(doc.id))?.workTitle || t('Рукопись'))}.docx`);
+          if (result) { if (exportButton.isConnected) overlay.classList.remove('active'); this.toast(t('Рукопись экспортирована.')); }
         });
       } catch (error) { this.toast(error.message); }
       finally { if (exportButton.isConnected) updateSelection(); }
@@ -24127,7 +24209,7 @@ ${raw}`;
   openReviewQueue() {
     const marks = this.state.reviewMarks.filter(mark => mark.status === 'open' && this.state.docs.some(doc => doc.id === mark.docId));
     const overlay = document.getElementById('form-overlay');
-    this.presentFormModal(`<div class="form-modal utility-modal"><div class="modal-head-row"><div><h2>Правки всей рукописи</h2><p>${marks.length ? `${marks.length} нерешённых правок. Выберите запись, чтобы перейти к тексту.` : 'Все правки разобраны.'}</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div><div class="utility-list">${marks.map(mark => `<button class="utility-row review-queue-row" data-review-jump="${escapeHtml(mark.id)}"><i class="bx bx-message-square-edit"></i><div><strong>${escapeHtml(this.state.docs.find(doc => doc.id === mark.docId)?.title)}</strong><small>${escapeHtml(this.reviewCategoryLabel(mark.category))} · ${escapeHtml(mark.quote || mark.comment || 'Пометка без цитаты')}</small></div><i class="bx bx-chevron-right"></i></button>`).join('')}</div></div>`);
+    this.presentFormModal(ui`<div class="form-modal utility-modal"><div class="modal-head-row"><div><h2>Правки всей рукописи</h2><p>${marks.length ? msg`${marks.length} нерешённых правок. Выберите запись, чтобы перейти к тексту.` : t('Все правки разобраны.')}</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div><div class="utility-list">${marks.map(mark => `<button class="utility-row review-queue-row" data-review-jump="${escapeHtml(mark.id)}"><i class="bx bx-message-square-edit"></i><div><strong>${escapeHtml(this.state.docs.find(doc => doc.id === mark.docId)?.title)}</strong><small>${escapeHtml(this.reviewCategoryLabel(mark.category))} · ${escapeHtml(mark.quote || mark.comment || t('Пометка без цитаты'))}</small></div><i class="bx bx-chevron-right"></i></button>`).join('')}</div></div>`);
     overlay.classList.add('active'); overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelectorAll('[data-review-jump]').forEach(button => button.onclick = () => {
       const mark = marks.find(item => item.id === button.dataset.reviewJump);
@@ -24147,14 +24229,14 @@ ${raw}`;
     const conflicts = (await this.db.getAll('syncConflicts')).filter(item => item.type === 'database-record');
     const conflict = conflicts.find(item => item.id === selectedId) || conflicts[0], overlay = document.getElementById('form-overlay');
     const describe = async variant => {
-      if (variant.deleted) return 'Удалено на этом устройстве.';
+      if (variant.deleted) return t('Удалено на этом устройстве.');
       const value = await this.db.decodeRecord(conflict.store, variant.value);
-      if (value?.locked) return 'Зашифрованная версия. Примените мастер-пароль для сравнения.';
-      return value?.ast ? `${value.title || ''}\n\n${docText(value.ast)}${value.notes ? `\n\nЗаметки:\n${value.notes}` : ''}` : JSON.stringify(value, null, 2);
+      if (value?.locked) return t('Зашифрованная версия. Примените мастер-пароль для сравнения.');
+      return value?.ast ? `${value.title || ''}\n\n${docText(value.ast)}${value.notes ? msg`\n\nЗаметки:\n${value.notes}` : ''}` : JSON.stringify(value, null, 2);
     };
     const localDescription = conflict ? await describe(conflict.local) : '', remoteDescription = conflict ? await describe(conflict.remote) : '';
     if (revision !== this.conflictSurfaceRevision || startingKind !== overlay.querySelector('.form-modal')?.__surfaceKind || (wasActive && !overlay.classList.contains('active'))) return;
-    this.presentFormModal(`<div class="form-modal utility-modal conflict-modal"><div class="modal-head-row"><div><h2>Разные версии</h2><p>${conflict ? 'Оба варианта сохранены. Выберите версию или оставьте оба документа.' : 'Конфликтов нет. Изменения согласованы.'}</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div>${conflict ? `<div class="form-field conflict-record-picker"><span>Запись</span>${this.renderFormSelect('conflict', conflicts.map(item => [item.id, item.local.value?.title || item.remote.value?.title || item.recordId]), conflict.id, { id: 'conflict-selection', label: 'Запись' })}</div><div class="conflict-versions"><section><h3>На этом устройстве</h3><pre>${escapeHtml(localDescription)}</pre></section><section><h3>На другом устройстве</h3><pre>${escapeHtml(remoteDescription)}</pre></section></div><div class="form-actions"><button class="pill-btn" data-resolve-conflict="local">Оставить эту</button><button class="pill-btn" data-resolve-conflict="remote">Принять другую</button>${conflict.store === 'docs' && !conflict.local.deleted && !conflict.remote.deleted ? '<button class="pill-btn ai-btn" data-resolve-conflict="both">Сохранить обе главы</button>' : ''}</div>` : ''}</div>`);
+    this.presentFormModal(ui`<div class="form-modal utility-modal conflict-modal"><div class="modal-head-row"><div><h2>Разные версии</h2><p>${conflict ? t('Оба варианта сохранены. Выберите версию или оставьте оба документа.') : t('Конфликтов нет. Изменения согласованы.')}</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div>${conflict ? ui`<div class="form-field conflict-record-picker"><span>Запись</span>${this.renderFormSelect('conflict', conflicts.map(item => [item.id, item.local.value?.title || item.remote.value?.title || item.recordId]), conflict.id, { id: 'conflict-selection', label: t('Запись') })}</div><div class="conflict-versions"><section><h3>На этом устройстве</h3><pre>${escapeHtml(localDescription)}</pre></section><section><h3>На другом устройстве</h3><pre>${escapeHtml(remoteDescription)}</pre></section></div><div class="form-actions"><button class="pill-btn" data-resolve-conflict="local">Оставить эту</button><button class="pill-btn" data-resolve-conflict="remote">Принять другую</button>${conflict.store === 'docs' && !conflict.local.deleted && !conflict.remote.deleted ? ui('<button class="pill-btn ai-btn" data-resolve-conflict="both">Сохранить обе главы</button>') : ''}</div>` : ''}</div>`);
     overlay.classList.add('active'); overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('#conflict-selection')?.addEventListener('change', event => this.openSyncConflicts(event.target.value));
     overlay.querySelectorAll('[data-resolve-conflict]').forEach(button => button.onclick = async () => {
@@ -24162,8 +24244,8 @@ ${raw}`;
         button.disabled = true;
         if (button.dataset.resolveConflict === 'both') {
           const copy = await this.db.decodeRecord('docs', conflict.remote.value);
-          if (copy.locked) throw new Error('Сначала примените мастер-пароль.');
-          await this.db.put('docs', { ...copy, id: uid('doc'), title: `${copy.title} — другая версия`, updatedAt: Date.now() });
+          if (copy.locked) throw new Error(t('Сначала примените мастер-пароль.'));
+          await this.db.put('docs', { ...copy, id: uid('doc'), title: msg`${copy.title} — другая версия`, updatedAt: Date.now() });
         }
         await this.databaseSync.resolveConflict(conflict.id, button.dataset.resolveConflict === 'both' ? 'local' : button.dataset.resolveConflict);
         await this.openSyncConflicts();
@@ -24173,15 +24255,15 @@ ${raw}`;
 
   async openBackups() {
     const copies = (await this.db.getAll('backups')).sort((a, b) => b.createdAt - a.createdAt), overlay = document.getElementById('form-overlay');
-    this.presentFormModal(`<div class="form-modal utility-modal backups-modal"><div class="modal-head-row"><div><h2>Резервные копии</h2><p>Храним последние 20 копий. Автоматическая копия создаётся с интервалом автосохранения.</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div><div class="form-actions"><button class="pill-btn" data-action="choose-backup-directory"><i class="bx bx-folder-open"></i> Папка копий</button><button class="pill-btn ai-btn" data-backup-create>Создать копию</button></div><div class="utility-list">${copies.map(copy => `<div class="utility-row" data-surface-key="openBackups-${escapeHtml(copy.id)}"><i class="bx bx-archive"></i><div><strong>${new Date(copy.createdAt).toLocaleString()}</strong><small>${copy.external ? escapeHtml(copy.path) : 'В этом браузере · скачайте или подключите папку'} · ${Math.ceil((copy.bytes || 0) / 1024)} КБ</small></div><button class="pill-btn" data-backup-restore="${escapeHtml(copy.id)}" ${copy.locked ? 'disabled' : ''}>Открыть</button></div>`).join('') || '<p class="utility-empty">Копий пока нет. Создайте первую перед большой правкой.</p>'}</div></div>`);
+    this.presentFormModal(ui`<div class="form-modal utility-modal backups-modal"><div class="modal-head-row"><div><h2>Резервные копии</h2><p>Храним последние 20 копий. Автоматическая копия создаётся с интервалом автосохранения.</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div><div class="form-actions"><button class="pill-btn" data-action="choose-backup-directory"><i class="bx bx-folder-open"></i> Папка копий</button><button class="pill-btn ai-btn" data-backup-create>Создать копию</button></div><div class="utility-list">${copies.map(copy => ui`<div class="utility-row" data-surface-key="openBackups-${escapeHtml(copy.id)}"><i class="bx bx-archive"></i><div><strong>${new Date(copy.createdAt).toLocaleString(getLocaleName())}</strong><small>${copy.external ? escapeHtml(copy.path) : t('В этом браузере · скачайте или подключите папку')} · ${Math.ceil((copy.bytes || 0) / 1024)} КБ</small></div><button class="pill-btn" data-backup-restore="${escapeHtml(copy.id)}" ${copy.locked ? 'disabled' : ''}>Открыть</button></div>`).join('') || ui('<p class="utility-empty">Копий пока нет. Создайте первую перед большой правкой.</p>')}</div></div>`);
     overlay.classList.add('active'); overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     const createButton = overlay.querySelector('[data-backup-create]');
     createButton.onclick = async () => {
-      try { await this.runSurfaceAction(createButton, 'Создаём копию…', async () => { await this.backups.create(); if (overlay.classList.contains('active') && createButton.isConnected) await this.openBackups(); }); }
+      try { await this.runSurfaceAction(createButton, t('Создаём копию…'), async () => { await this.backups.create(); if (overlay.classList.contains('active') && createButton.isConnected) await this.openBackups(); }); }
       catch (error) { this.toast(error.message); }
     };
     overlay.querySelectorAll('[data-backup-restore]').forEach(button => button.onclick = async () => {
-      try { await this.runSurfaceAction(button, 'Читаем копию…', async () => { const copy = copies.find(item => item.id === button.dataset.backupRestore); const dump = await this.backups.read(copy); this.validateProjectDump(dump); if (overlay.classList.contains('active') && button.isConnected) this.openProjectImportPreview(dump, copy.name); }); }
+      try { await this.runSurfaceAction(button, t('Читаем копию…'), async () => { const copy = copies.find(item => item.id === button.dataset.backupRestore); const dump = await this.backups.read(copy); this.validateProjectDump(dump); if (overlay.classList.contains('active') && button.isConnected) this.openProjectImportPreview(dump, copy.name); }); }
       catch (error) { this.toast(error.message); }
     });
   }
@@ -24192,7 +24274,7 @@ ${raw}`;
 
   editWorldRules() {
     const overlay = document.getElementById('form-overlay');
-    this.presentFormModal(`<div class="form-modal utility-modal"><form class="utility-form"><div class="modal-head-row"><div><h2>Правила мира</h2><p>По одному правилу на строку. AI использует их при включённом контексте базы знаний.</p></div><button type="button" class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div><textarea class="form-control" name="rules" rows="12" aria-label="Правила мира">${escapeHtml((this.state.lore.rules || []).map(rule => rule.text || rule.body || rule).join('\n'))}</textarea><div class="form-actions"><button class="pill-btn ai-btn" type="submit">Сохранить правила</button></div></form></div>`);
+    this.presentFormModal(ui`<div class="form-modal utility-modal"><form class="utility-form"><div class="modal-head-row"><div><h2>Правила мира</h2><p>По одному правилу на строку. AI использует их при включённом контексте базы знаний.</p></div><button type="button" class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div><textarea class="form-control" name="rules" rows="12" aria-label="Правила мира">${escapeHtml((this.state.lore.rules || []).map(rule => rule.text || rule.body || rule).join('\n'))}</textarea><div class="form-actions"><button class="pill-btn ai-btn" type="submit">Сохранить правила</button></div></form></div>`);
     overlay.classList.add('active'); overlay.querySelector('[data-close-form]').onclick = () => overlay.classList.remove('active');
     overlay.querySelector('form').onsubmit = async event => {
       event.preventDefault();
@@ -24206,7 +24288,7 @@ ${raw}`;
         const id = previous?.id || uid('rule'); used.add(id);
         return { ...previous, id, text };
       });
-      await this.saveLore(); overlay.classList.remove('active'); this.toast('Правила мира сохранены.');
+      await this.saveLore(); overlay.classList.remove('active'); this.toast(t('Правила мира сохранены.'));
     };
   }
 
@@ -24381,37 +24463,37 @@ ${raw}`;
     let steps = [];
     if (ext === 'docx') {
       steps = [
-        'Анализ структуры данных...',
-        'Генерация разметки DOCX...',
-        'Упаковка контента...',
-        'Экспорт готов!'
+        t('Анализ структуры данных...'),
+        t('Генерация разметки DOCX...'),
+        t('Упаковка контента...'),
+        t('Экспорт готов!')
       ];
     } else if (ext === 'txt' || ext === 'md') {
       steps = [
-        'Сбор текстовых блоков...',
-        'Кодирование в UTF-8...',
-        'Экспорт готов!'
+        t('Сбор текстовых блоков...'),
+        t('Кодирование в UTF-8...'),
+        t('Экспорт готов!')
       ];
     } else if (ext === 'html') {
       steps = [
-        'Сборка разметки HTML...',
-        'Интеграция стилей...',
-        'Экспорт готов!'
+        t('Сборка разметки HTML...'),
+        t('Интеграция стилей...'),
+        t('Экспорт готов!')
       ];
     } else if (ext.startsWith('nocturne') || ext.startsWith('nocturn')) {
       steps = [
-        'Подготовка структуры JSON...',
-        'Валидация чексуммы...',
-        'Экспорт готов!'
+        t('Подготовка структуры JSON...'),
+        t('Валидация чексуммы...'),
+        t('Экспорт готов!')
       ];
     } else {
       steps = [
-        'Подготовка данных...',
-        'Экспорт готов!'
+        t('Подготовка данных...'),
+        t('Экспорт готов!')
       ];
     }
     
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="kb-import-card">
         <div class="kb-import-spinner">
           <div class="spinner-ring"></div>
@@ -24446,7 +24528,7 @@ ${raw}`;
     }
 
     try { return await platformFiles.saveBlobFile(blob, filename); }
-    catch (error) { this.toast(`Не удалось сохранить файл: ${error.message}`); return false; }
+    catch (error) { this.toast(msg`Не удалось сохранить файл: ${error.message}`); return false; }
   }
 
   async setSessionPassword() {
@@ -24469,15 +24551,15 @@ ${raw}`;
     await this.trash.init();
     this.initWorkspace();
     this.renderAll();
-    this.toast('Пароль сессии применен, документы перечитаны.');
+    this.toast(t('Пароль сессии применен, документы перечитаны.'));
   }
 
   async migrateEncryption() {
-    if (!this.state.sessionPassword) throw new Error('Введите мастер-пароль перед сменой режима шифрования.');
+    if (!this.state.sessionPassword) throw new Error(t('Введите мастер-пароль перед сменой режима шифрования.'));
     const records = {};
     for (const store of ['docs', 'drafts', 'lore', 'snapshots', 'floatingNotes', 'reviewMarks', 'typoRules', 'trash', 'backups', 'syncQueue', 'syncConflicts', 'settings']) {
       records[store] = await this.db.getAll(store);
-      if (records[store].some(record => record.locked)) throw new Error('Пароль не открывает все записи. Шифрование не изменено.');
+      if (records[store].some(record => record.locked)) throw new Error(t('Пароль не открывает все записи. Шифрование не изменено.'));
     }
     records.docs = await this.loadDocs();
     records.docs = records.docs.map(doc => {
@@ -24501,7 +24583,7 @@ ${raw}`;
   promptForMasterPassword() {
     const overlay = document.getElementById('form-overlay');
     if (!overlay) return;
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="form-modal confirm-modal">
         <div class="confirm-icon"><i class="bx bx-shield-quarter"></i></div>
         <h2>Включить сквозное шифрование?</h2>
@@ -24532,7 +24614,7 @@ ${raw}`;
     const savePass = async () => {
       const pass = (input.value || '').trim();
       if (!pass) {
-        this.toast('Пароль не может быть пустым.');
+        this.toast(t('Пароль не может быть пустым.'));
         return;
       }
       this.state.sessionPassword = pass;
@@ -24542,7 +24624,7 @@ ${raw}`;
       await this.migrateEncryption();
       this.initWorkspace();
       this.renderAll();
-      this.toast('Шифрование включено. Все документы зашифрованы.');
+      this.toast(t('Шифрование включено. Все документы зашифрованы.'));
     };
     
     saveBtn.onclick = savePass;
@@ -24558,7 +24640,7 @@ ${raw}`;
     if (!this.state.sessionPassword) {
       const hasLocked = this.state.docs.some((doc) => doc.locked);
       if (hasLocked) {
-        this.toast('Часть документов заблокирована. Сначала введите пароль для их расшифровки.');
+        this.toast(t('Часть документов заблокирована. Сначала введите пароль для их расшифровки.'));
         this.state.settings.e2e = true;
         this.persistSettings();
         this.renderSettings();
@@ -24570,12 +24652,12 @@ ${raw}`;
     this.state.docs = await this.loadDocs();
     this.initWorkspace();
     this.renderAll();
-    this.toast('Шифрование отключено. Все документы расшифрованы.');
+    this.toast(t('Шифрование отключено. Все документы расшифрованы.'));
   }
 
   async resetData() {
     const overlay = document.getElementById('form-overlay');
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="form-modal confirm-modal">
         <div class="confirm-icon"><i class="bx bx-trash"></i></div>
         <h2>Сбросить локальную базу?</h2>
@@ -24599,7 +24681,9 @@ ${raw}`;
     this.activeAiRequest?.controller.abort();
     for (const save of this.saveDocDebouncers.values()) save.cancel?.();
     await Promise.allSettled([...this.docSaves?.values() || [], ...this.draftWrites.values(), this.databaseSync?.work, this.databaseSync?.incomingWork, this.backups?.running, this.history.work]);
+    const languagePreference = await this.db.getRaw('settings', LOCALE_RECORD_ID);
     await this.db.clearAll();
+    if (languagePreference) await this.db.put('settings', languagePreference);
     const localPrefixes = [LIVE_PREFIX, 'goal-done-'];
     const localKeys = [
       'nocturne-global-notes',
@@ -24647,24 +24731,24 @@ ${raw}`;
 
   renderSyncConnectionForm() {
     const s = this.state.sync;
-    return `<div class="form-grid sync-connection-form">
+    return ui`<div class="form-grid sync-connection-form">
       <label>Адрес компьютера<input class="form-control" data-sync-field="host" value="${escapeHtml(s.host || '')}" placeholder="192.168.1.10" inputmode="url" autocapitalize="off" autocomplete="off" spellcheck="false"></label>
       <label>Код подключения<input class="form-control sync-code-input" data-sync-field="token" value="${escapeHtml(s.token || '')}" placeholder="Код из приложения на ПК" autocapitalize="characters" autocomplete="off" spellcheck="false"></label>
-      <button class="pill-btn ai-btn sync-primary" data-action="sync-connect" aria-busy="${s.status === 'waiting'}" ${s.status === 'waiting' ? 'disabled' : ''}><i class="bx ${s.status === 'waiting' ? 'bx-loader-alt bx-spin' : 'bx-link'}"></i><span>${s.status === 'waiting' ? 'Подключение…' : 'Подключиться'}</span></button>
+      <button class="pill-btn ai-btn sync-primary" data-action="sync-connect" aria-busy="${s.status === 'waiting'}" ${s.status === 'waiting' ? 'disabled' : ''}><i class="bx ${s.status === 'waiting' ? 'bx-loader-alt bx-spin' : 'bx-link'}"></i><span>${s.status === 'waiting' ? t('Подключение…') : t('Подключиться')}</span></button>
     </div>`;
   }
 
   renderSyncOptions() {
     const s = this.state.sync, server = s.server || {};
-    return `<button class="sync-disclosure" data-action="sync-toggle-options" aria-expanded="${!!s.optionsOpen}" aria-controls="sync-options-content"><span>Дополнительные параметры</span><i class="bx bx-chevron-down"></i></button>
+    return ui`<button class="sync-disclosure" data-action="sync-toggle-options" aria-expanded="${!!s.optionsOpen}" aria-controls="sync-options-content"><span>Дополнительные параметры</span><i class="bx bx-chevron-down"></i></button>
       ${s.optionsOpen ? `<div class="sync-options-content" id="sync-options-content">
-        ${s.discovery.manualOpen || this.isMobileLayout() ? `<div class="form-grid sync-extra-fields"><label>Имя устройства<input class="form-control" data-sync-field="deviceName" value="${escapeHtml(s.deviceName || '')}"></label><label>Порт<input class="form-control" data-sync-field="port" value="${escapeHtml(s.port || '8787')}" inputmode="numeric"></label></div>` : ''}
+        ${s.discovery.manualOpen || this.isMobileLayout() ? ui`<div class="form-grid sync-extra-fields"><label>Имя устройства<input class="form-control" data-sync-field="deviceName" value="${escapeHtml(s.deviceName || '')}"></label><label>Порт<input class="form-control" data-sync-field="port" value="${escapeHtml(s.port || '8787')}" inputmode="numeric"></label></div>` : ''}
         <div class="sync-secondary-actions">
-          ${server.running ? '<button class="pill-btn" data-action="sync-server-refresh-token"><i class="bx bx-key"></i> Новый код</button><button class="pill-btn" data-action="sync-server-stop"><i class="bx bx-stop"></i> Остановить сервер</button>' : ''}
-          ${this.syncClient.isOpen() ? '<button class="pill-btn" data-action="sync-request-merge"><i class="bx bx-refresh"></i> Сверить сейчас</button><button class="pill-btn" data-action="sync-disconnect"><i class="bx bx-link-break"></i> Отключиться</button>' : ''}
-          ${!this.isMobileLayout() ? `<button class="pill-btn" data-action="sync-toggle-manual"><i class="bx bx-link"></i>${s.discovery.manualOpen ? 'Вернуться к серверу' : 'Подключиться к другому ПК'}</button>` : ''}
+          ${server.running ? ui('<button class="pill-btn" data-action="sync-server-refresh-token"><i class="bx bx-key"></i> Новый код</button><button class="pill-btn" data-action="sync-server-stop"><i class="bx bx-stop"></i> Остановить сервер</button>') : ''}
+          ${this.syncClient.isOpen() ? ui('<button class="pill-btn" data-action="sync-request-merge"><i class="bx bx-refresh"></i> Сверить сейчас</button><button class="pill-btn" data-action="sync-disconnect"><i class="bx bx-link-break"></i> Отключиться</button>') : ''}
+          ${!this.isMobileLayout() ? `<button class="pill-btn" data-action="sync-toggle-manual"><i class="bx bx-link"></i>${s.discovery.manualOpen ? t('Вернуться к серверу') : t('Подключиться к другому ПК')}</button>` : ''}
         </div>
-        ${(s.rememberedDevices || []).length ? `<div class="sync-saved-devices"><h3>Сохранённые устройства</h3>${s.rememberedDevices.map(device => this.renderSyncDeviceCard(device, 'remembered')).join('')}</div>` : ''}
+        ${(s.rememberedDevices || []).length ? ui`<div class="sync-saved-devices"><h3>Сохранённые устройства</h3>${s.rememberedDevices.map(device => this.renderSyncDeviceCard(device, 'remembered')).join('')}</div>` : ''}
         ${s.mergePreview ? this.renderSyncMergePreview(s.mergePreview) : ''}
       </div>` : ''}`;
   }
@@ -24673,14 +24757,14 @@ ${raw}`;
     const s = this.state.sync;
     const connected = this.syncClient.isOpen();
     const remembered = (s.rememberedDevices || []).filter(device => device.trusted).slice(0, 3);
-    return `${this.mobilePanelHeader('Связь с компьютером', 'Телефон и ПК должны быть в одной сети Wi-Fi')}
+    return `${this.mobilePanelHeader(t('Связь с компьютером'), t('Телефон и ПК должны быть в одной сети Wi-Fi'))}
       <div class="mobile-panel-body mobile-sync-body sync-compact-body"><div class="sync-mobile-content">
-        ${connected || s.status === 'error' ? `<section class="mobile-sync-status ${escapeHtml(s.status)} compact" data-sync-status-card>${iconSvg('phonePc', 'mobile-sync-icon')}<div><strong data-sync-status-title>${this.syncStatusLabel(s.status)}</strong><span data-sync-status-detail>${escapeHtml(s.statusDetail || 'Изменения передаются автоматически.')}</span></div></section>` : ''}
-        ${connected ? '<p class="sync-intro">Можно продолжать писать. Главы и база знаний сверяются автоматически.</p>' : s.discovery.manualOpen ? this.renderSyncConnectionForm() : `<div class="sync-find-computer"><p class="sync-intro">Запустите связь по Wi-Fi в Nocturne на компьютере, затем найдите его здесь.</p><button class="pill-btn ai-btn sync-primary" data-surface-key="sync-scan" data-action="${s.discovery.scanning ? 'sync-scan-cancel' : 'sync-scan'}"><i class="bx ${s.discovery.scanning ? 'bx-stop' : 'bx-search'}"></i>${s.discovery.scanning ? 'Остановить поиск' : 'Найти компьютер'}</button>
-          ${s.discovery.scanning ? '<p class="form-helper" role="status">Ищем компьютер в сети…</p>' : s.discovery.message ? `<p class="form-helper">${escapeHtml(s.discovery.message)}</p>` : ''}
+        ${connected || s.status === 'error' ? `<section class="mobile-sync-status ${escapeHtml(s.status)} compact" data-sync-status-card>${iconSvg('phonePc', 'mobile-sync-icon')}<div><strong data-sync-status-title>${this.syncStatusLabel(s.status)}</strong><span data-sync-status-detail>${escapeHtml(s.statusDetail || t('Изменения передаются автоматически.'))}</span></div></section>` : ''}
+        ${connected ? ui('<p class="sync-intro">Можно продолжать писать. Главы и база знаний сверяются автоматически.</p>') : s.discovery.manualOpen ? this.renderSyncConnectionForm() : ui`<div class="sync-find-computer"><p class="sync-intro">Запустите связь по Wi-Fi в Nocturne на компьютере, затем найдите его здесь.</p><button class="pill-btn ai-btn sync-primary" data-surface-key="sync-scan" data-action="${s.discovery.scanning ? 'sync-scan-cancel' : 'sync-scan'}"><i class="bx ${s.discovery.scanning ? 'bx-stop' : 'bx-search'}"></i>${s.discovery.scanning ? t('Остановить поиск') : t('Найти компьютер')}</button>
+          ${s.discovery.scanning ? ui('<p class="form-helper" role="status">Ищем компьютер в сети…</p>') : s.discovery.message ? `<p class="form-helper">${escapeHtml(s.discovery.message)}</p>` : ''}
           <div class="sync-device-list">${(s.discoveredDevices || []).map(device => this.renderSyncDeviceCard(device, 'discovered')).join('')}${remembered.map(device => this.renderSyncDeviceCard(device, 'remembered')).join('')}</div></div>`}
-        ${!connected ? `<button class="sync-text-action" data-action="sync-toggle-manual">${s.discovery.manualOpen ? 'Найти компьютер в сети' : 'Ввести адрес и код вручную'}</button>` : ''}
-        ${s.conflicts ? '<button class="pill-btn" data-action="open-sync-conflicts"><i class="bx bx-git-compare"></i> Сравнить разные версии</button>' : ''}
+        ${!connected ? `<button class="sync-text-action" data-action="sync-toggle-manual">${s.discovery.manualOpen ? t('Найти компьютер в сети') : t('Ввести адрес и код вручную')}</button>` : ''}
+        ${s.conflicts ? ui('<button class="pill-btn" data-action="open-sync-conflicts"><i class="bx bx-git-compare"></i> Сравнить разные версии</button>') : ''}
         ${this.renderSyncOptions()}
       </div></div>`;
   }
@@ -24704,15 +24788,15 @@ ${raw}`;
 
         <strong>${escapeHtml(device.deviceName || 'Nocturne Sync')}</strong>
 
-        <span>${escapeHtml(host || 'адрес неизвестен')}:${escapeHtml(String(port))}</span>
+        <span>${escapeHtml(host || t('адрес неизвестен'))}:${escapeHtml(String(port))}</span>
 
       </div>
 
       <div class="sync-device-actions">
 
-        <button class="pill-btn mini" data-action="sync-connect-device" data-sync-device-id="${id}">${trusted ? 'Снова' : 'Подключить'}</button>
+        <button class="pill-btn mini" data-action="sync-connect-device" data-sync-device-id="${id}">${trusted ? t('Снова') : t('Подключить')}</button>
 
-        ${mode === 'remembered' && this.state.sync.optionsOpen ? `<button class="btn-icon" title="Автоподключение" aria-label="Автоподключение" aria-pressed="${!!device.autoReconnect}" data-action="sync-toggle-autoreconnect" data-sync-device-id="${id}">${iconSvg(device.autoReconnect ? 'trust' : 'sync', 'icon-btn-svg')}</button><button class="btn-icon" title="Забыть устройство" aria-label="Забыть устройство" data-action="sync-forget-device" data-sync-device-id="${id}"><i class="bx bx-trash"></i></button>` : ''}
+        ${mode === 'remembered' && this.state.sync.optionsOpen ? ui`<button class="btn-icon" title="Автоподключение" aria-label="Автоподключение" aria-pressed="${!!device.autoReconnect}" data-action="sync-toggle-autoreconnect" data-sync-device-id="${id}">${iconSvg(device.autoReconnect ? 'trust' : 'sync', 'icon-btn-svg')}</button><button class="btn-icon" title="Забыть устройство" aria-label="Забыть устройство" data-action="sync-forget-device" data-sync-device-id="${id}"><i class="bx bx-trash"></i></button>` : ''}
 
       </div>
 
@@ -24727,19 +24811,19 @@ ${raw}`;
 
     return {
 
-      offline: 'Не подключено',
+      offline: t('Не подключено'),
 
-      waiting: 'Ожидание',
+      waiting: t('Ожидание'),
 
-      connected: 'Подключено',
+      connected: t('Подключено'),
 
-      syncing: 'Синхронизация',
+      syncing: t('Синхронизация'),
 
-      error: 'Ошибка',
+      error: t('Ошибка'),
 
-      conflict: 'Есть конфликт',
+      conflict: t('Есть конфликт'),
 
-    }[status] || 'Не подключено';
+    }[status] || t('Не подключено');
 
   }
 
@@ -24752,7 +24836,7 @@ ${raw}`;
 
     const folders = preview.connectFolders || [];
 
-    return `<section class="sync-preview-card">
+    return ui`<section class="sync-preview-card">
 
       <h3>Предпросмотр объединения</h3>
 
@@ -24776,7 +24860,7 @@ ${raw}`;
 
       </div>
 
-      <p class="form-helper">Будут созданы/использованы папки: ${folders.map(escapeHtml).join(', ') || 'нет'}. Настройки не будут перезаписаны.</p>
+      <p class="form-helper">Будут созданы/использованы папки: ${folders.map(escapeHtml).join(', ') || t('нет')}. Настройки не будут перезаписаны.</p>
 
       <div class="mobile-panel-actions">
 
@@ -24818,7 +24902,7 @@ ${raw}`;
 
     const label = this.syncStatusLabel(status);
 
-    const detail = this.state.sync.statusDetail || 'Найдите компьютер в Wi-Fi или введите адрес вручную.';
+    const detail = this.state.sync.statusDetail || t('Найдите компьютер в Wi-Fi или введите адрес вручную.');
 
     document.querySelectorAll('[data-sync-status-card]').forEach((card) => {
 
@@ -24958,7 +25042,7 @@ ${raw}`;
 
     this.state.sync.discovery.scanning = false;
 
-    this.state.sync.discovery.message = 'Поиск остановлен.';
+    this.state.sync.discovery.message = t('Поиск остановлен.');
 
     this.renderSyncSurfaces();
 
@@ -24997,7 +25081,7 @@ ${raw}`;
 
     this.syncClient.disconnect();
 
-    this.toast('Локальная связь отключена.');
+    this.toast(t('Локальная связь отключена.'));
 
   }
 
@@ -25012,7 +25096,7 @@ ${raw}`;
 
     const timeline = lore.timeline || [];
 
-    const deviceName = message.deviceName || 'устройство';
+    const deviceName = message.deviceName || t('устройство');
 
     const folderTitle = this.remoteConnectFolderTitle(message);
 
@@ -25079,8 +25163,8 @@ ${raw}`;
     const server = await this.controlLanServer('connection-info');
     if (!server) return;
     const address = server.lanIps?.[0] || server.ips?.[0] || server.addresses?.[0] || '127.0.0.1';
-    const text = `Nocturne Writer\nАдрес: ${address}:${server.port || 8787}\nКод: ${server.token || ''}`;
-    try { await navigator.clipboard.writeText(text); this.toast('Адрес и код скопированы.'); } catch { this.toast('Не удалось скопировать. Адрес и код показаны в окне.'); }
+    const text = msg`Nocturne Writer\nАдрес: ${address}:${server.port || 8787}\nКод: ${server.token || ''}`;
+    try { await navigator.clipboard.writeText(text); this.toast(t('Адрес и код скопированы.')); } catch { this.toast(t('Не удалось скопировать. Адрес и код показаны в окне.')); }
   }
 
   openSyncPanel() {
@@ -25126,17 +25210,17 @@ ${raw}`;
 
   renderDesktopSyncCenter() {
     const s = this.state.sync, server = s.server || {};
-    const address = this.preferredLanIps(server.lanIps || [])[0] || s.host || 'Адрес не найден';
-    return `<div class="form-modal utility-modal sync-center-modal sync-compact">
+    const address = this.preferredLanIps(server.lanIps || [])[0] || s.host || t('Адрес не найден');
+    return ui`<div class="form-modal utility-modal sync-center-modal sync-compact">
       <div class="modal-head-row"><div><h2>Связь по Wi-Fi</h2><p>Сверяйте рукопись и базу знаний с телефоном.</p></div><button class="btn-icon" data-close-form aria-label="Закрыть"><i class="bx bx-x"></i></button></div>
-      ${s.discovery.manualOpen ? this.renderSyncConnectionForm() : server.running ? `<div class="sync-pairing">
+      ${s.discovery.manualOpen ? this.renderSyncConnectionForm() : server.running ? ui`<div class="sync-pairing">
         <div class="sync-ready-label"><i class="bx bx-check-circle"></i> Компьютер готов к подключению</div>
         <p class="sync-instruction">На телефоне откройте «Ещё → Связь с компьютером» и введите этот код.</p>
         <dl class="sync-pairing-data"><div><dt>Адрес компьютера</dt><dd>${escapeHtml(address)}:${escapeHtml(String(server.port || '8787'))}</dd></div><div><dt>Код подключения</dt><dd><code data-sync-pairing-code>${escapeHtml(server.token || s.token || '')}</code></dd></div></dl>
         <button class="pill-btn ai-btn sync-primary" data-action="sync-copy-info"><i class="bx bx-copy"></i> Скопировать адрес и код</button>
-      </div>` : `<div class="sync-start"><div class="sync-start-icon">${iconSvg('phonePc', 'sync-center-logo-svg')}</div><p class="sync-intro">Подключите телефон и компьютер к одной сети Wi-Fi. Затем включите связь на компьютере.</p><button class="pill-btn ai-btn sync-primary" data-action="sync-server-start"><i class="bx bx-wifi"></i> Включить связь</button></div>`}
-      ${s.status === 'error' ? `<p class="sync-feedback error" role="alert">${escapeHtml(s.statusDetail || 'Не удалось подключиться. Проверьте адрес и код.')}</p>` : ''}
-      ${s.conflicts ? '<button class="pill-btn sync-conflict-action" data-action="open-sync-conflicts"><i class="bx bx-git-compare"></i> Сравнить разные версии</button>' : ''}
+      </div>` : ui`<div class="sync-start"><div class="sync-start-icon">${iconSvg('phonePc', 'sync-center-logo-svg')}</div><p class="sync-intro">Подключите телефон и компьютер к одной сети Wi-Fi. Затем включите связь на компьютере.</p><button class="pill-btn ai-btn sync-primary" data-action="sync-server-start"><i class="bx bx-wifi"></i> Включить связь</button></div>`}
+      ${s.status === 'error' ? `<p class="sync-feedback error" role="alert">${escapeHtml(s.statusDetail || t('Не удалось подключиться. Проверьте адрес и код.'))}</p>` : ''}
+      ${s.conflicts ? ui('<button class="pill-btn sync-conflict-action" data-action="open-sync-conflicts"><i class="bx bx-git-compare"></i> Сравнить разные версии</button>') : ''}
       ${this.renderSyncOptions()}
     </div>`;
   }
@@ -25148,7 +25232,7 @@ async connectLocalSyncFromUi() {
 
     if (!host || !token) {
 
-      this.toast('Введите IP компьютера и код подключения.');
+      this.toast(t('Введите IP компьютера и код подключения.'));
 
       return;
 
@@ -25158,7 +25242,7 @@ async connectLocalSyncFromUi() {
 
       this.state.sync.status = 'error';
 
-      this.state.sync.statusDetail = '127.0.0.1 на телефоне — это сам телефон, а не компьютер. Введите LAN IP ПК.';
+      this.state.sync.statusDetail = t('127.0.0.1 на телефоне — это сам телефон, а не компьютер. Введите LAN IP ПК.');
 
       this.updateSyncStatusUi();
 
@@ -25176,7 +25260,7 @@ async connectLocalSyncFromUi() {
 
     this.state.sync.status = 'waiting';
 
-    this.state.sync.statusDetail = 'Проверяю /discovery на указанном адресе...';
+    this.state.sync.statusDetail = t('Проверяю /discovery на указанном адресе...');
 
     this.updateSyncStatusUi();
 
@@ -25186,7 +25270,7 @@ async connectLocalSyncFromUi() {
 
       if (!device) throw new Error('wrong protocol');
 
-      this.state.sync.statusDetail = device.pairingRequired ? 'Сервер найден, нужен код подключения.' : 'Сервер найден.';
+      this.state.sync.statusDetail = device.pairingRequired ? t('Сервер найден, нужен код подключения.') : t('Сервер найден.');
 
       this.updateSyncStatusUi();
 
@@ -25194,7 +25278,7 @@ async connectLocalSyncFromUi() {
 
       this.state.sync.status = 'error';
 
-      this.state.sync.statusDetail = `Сервер не найден: ${error?.name === 'AbortError' ? 'timeout' : (error?.message || 'host unreachable')}.`;
+      this.state.sync.statusDetail = msg`Сервер не найден: ${error?.name === 'AbortError' ? 'timeout' : (error?.message || 'host unreachable')}.`;
 
       this.updateSyncStatusUi();
 
@@ -25210,7 +25294,7 @@ async connectLocalSyncFromUi() {
 
       this.state.sync.status = 'error';
 
-      this.state.sync.statusDetail = error?.message || 'Подключение не удалось.';
+      this.state.sync.statusDetail = error?.message || t('Подключение не удалось.');
 
       this.updateSyncStatusUi();
 
@@ -25272,9 +25356,9 @@ async probeSyncDiscoveryHost(host, port = this.state.sync.port || '8787', method
 
   remoteConnectFolderTitle(message) {
 
-    const name = message.deviceName || 'устройство';
+    const name = message.deviceName || t('устройство');
 
-    const source = /android|phone|тел/i.test(name) ? 'С телефона' : 'С компьютера';
+    const source = /android|phone|тел/i.test(name) ? t('С телефона') : t('С компьютера');
 
     return `${source} — ${name}`;
 
@@ -25301,7 +25385,7 @@ async scanForSyncServers() {
 
     discovery.error = '';
 
-    discovery.message = 'Идёт поиск в Wi-Fi...';
+    discovery.message = t('Идёт поиск в Wi-Fi...');
 
     this.state.sync.discoveredDevices = [];
 
@@ -25367,9 +25451,9 @@ async scanForSyncServers() {
 
     discovery.message = token.cancelled
 
-      ? 'Поиск остановлен.'
+      ? t('Поиск остановлен.')
 
-      : (found.size ? 'Компьютеры найдены.' : `Компьютеры не найдены${discovery.error ? ` (${discovery.error})` : ''}. Проверьте, что ПК и телефон в одной Wi-Fi сети, сервер запущен и IP не 127.0.0.1.`);
+      : (found.size ? t('Компьютеры найдены.') : msg`Компьютеры не найдены${discovery.error ? ` (${discovery.error})` : ''}. Проверьте, что ПК и телефон в одной Wi-Fi сети, сервер запущен и IP не 127.0.0.1.`);
 
     this.state.sync.discoveredDevices = [...found.values()];
 
@@ -25546,70 +25630,70 @@ async httpGetJson(url, timeoutMs = 650) {
     const lunaImageSize = isLunaPortrait ? 300 : 320;
 
     const congratsPhrases = [
-      "Ты отлично справляешься!",
-      "Хорошо постарался!",
-      "Продолжай в том же духе!",
-      "Каждый шаг приближает тебя к шедевру!",
-      "Великолепная работа, писатель!",
-      "Слова так и льются из-под твоего пера!",
-      "Горжусь твоим упорством сегодня!",
-      "Ты просто космос!",
-      "Твоя история оживает на глазах!",
-      "Чудесный день для творчества, не так ли?",
-      "Каждое слово сегодня на вес золота!",
-      "Отличный темп, не останавливайся!",
-      "Твоя муза точно довольна тобой!",
-      "Ты пишешь историю, буквально!",
-      "Прекрасный результат!",
-      "Твои старания обязательно окупятся!",
-      "Потрясающая концентрация!",
-      "Так держать, звёздочка!",
-      "Ты делаешь огромный шаг вперёд!",
-      "Магия слов в действии!",
-      "Невероятное упорство!",
-      "Творчество — твоя суперсила!",
-      "Еще один день победы над белым листом!",
-      "Какая вдохновляющая продуктивность!",
-      "Твой внутренний творец ликует!",
-      "Ты создаешь что-то прекрасное!",
-      "Твоя история заслуживает быть написанной!",
-      "Это было мощно!",
-      "Сегодня ты превзошел себя!",
-      "Спасибо за этот чудесный творческий день!"
+      t("Ты отлично справляешься!"),
+      t("Хорошо постарался!"),
+      t("Продолжай в том же духе!"),
+      t("Каждый шаг приближает тебя к шедевру!"),
+      t("Великолепная работа, писатель!"),
+      t("Слова так и льются из-под твоего пера!"),
+      t("Горжусь твоим упорством сегодня!"),
+      t("Ты просто космос!"),
+      t("Твоя история оживает на глазах!"),
+      t("Чудесный день для творчества, не так ли?"),
+      t("Каждое слово сегодня на вес золота!"),
+      t("Отличный темп, не останавливайся!"),
+      t("Твоя муза точно довольна тобой!"),
+      t("Ты пишешь историю, буквально!"),
+      t("Прекрасный результат!"),
+      t("Твои старания обязательно окупятся!"),
+      t("Потрясающая концентрация!"),
+      t("Так держать, звёздочка!"),
+      t("Ты делаешь огромный шаг вперёд!"),
+      t("Магия слов в действии!"),
+      t("Невероятное упорство!"),
+      t("Творчество — твоя суперсила!"),
+      t("Еще один день победы над белым листом!"),
+      t("Какая вдохновляющая продуктивность!"),
+      t("Твой внутренний творец ликует!"),
+      t("Ты создаешь что-то прекрасное!"),
+      t("Твоя история заслуживает быть написанной!"),
+      t("Это было мощно!"),
+      t("Сегодня ты превзошел себя!"),
+      t("Спасибо за этот чудесный творческий день!")
     ];
 
     const cryPhrases = [
-      "Хнык... Так обидно, что ты оставил меня одну...",
-      "Я так ждала тебя вчера... Где же ты был?",
-      "Наша цепочка дней порвалась... Мне очень грустно.",
-      "Неужели ты забыл про меня? Хнык...",
-      "Вчера не было написано ни строчки... Моё лунное сердце разбито.",
-      "Грустно смотреть на пустой счётчик... Давай начнём сначала?",
-      "Я скучала по твоим историям... Пожалуйста, не уходи больше так надолго.",
-      "Вчерашний день прошел без магии твоих слов... Хнык...",
-      "Одиноко без твоего творчества... Давай вернем нашу искру?",
-      "Мой свет немного угас без твоих вчерашних строк... Напишем что-нибудь сегодня?"
+      t("Хнык... Так обидно, что ты оставил меня одну..."),
+      t("Я так ждала тебя вчера... Где же ты был?"),
+      t("Наша цепочка дней порвалась... Мне очень грустно."),
+      t("Неужели ты забыл про меня? Хнык..."),
+      t("Вчера не было написано ни строчки... Моё лунное сердце разбито."),
+      t("Грустно смотреть на пустой счётчик... Давай начнём сначала?"),
+      t("Я скучала по твоим историям... Пожалуйста, не уходи больше так надолго."),
+      t("Вчерашний день прошел без магии твоих слов... Хнык..."),
+      t("Одиноко без твоего творчества... Давай вернем нашу искру?"),
+      t("Мой свет немного угас без твоих вчерашних строк... Напишем что-нибудь сегодня?")
     ];
 
     let title = "";
     let message = "";
-    let buttonText = "Спасибо, Луна";
+    let buttonText = t("Спасибо, Луна");
     
     if (type === 'congrats') {
-      title = "Цель дня достигнута!";
+      title = t("Цель дня достигнута!");
       if (streakCount === 7) {
-        message = "Целая неделя! Молодец!";
+        message = t("Целая неделя! Молодец!");
       } else if (streakCount === 14) {
-        message = "Уже две недели! Я горжусь тобой!";
+        message = t("Уже две недели! Я горжусь тобой!");
       } else if (streakCount === 30) {
-        message = "Спасибо, проводишь столько времени со мной, я ценю это!";
+        message = t("Спасибо, проводишь столько времени со мной, я ценю это!");
       } else {
         message = congratsPhrases[Math.floor(Math.random() * congratsPhrases.length)];
       }
     } else {
-      title = "Цепочка прервалась...";
+      title = t("Цепочка прервалась...");
       message = cryPhrases[Math.floor(Math.random() * cryPhrases.length)];
-      buttonText = "Прости, Луна...";
+      buttonText = t("Прости, Луна...");
     }
 
     let streakBadgeHtml = "";
@@ -25618,8 +25702,8 @@ async httpGetJson(url, timeoutMs = 650) {
         const cases = [2, 0, 1, 1, 1, 2];
         return titles[(n % 100 > 4 && n % 100 < 20) ? 2 : cases[(n % 10 < 5) ? n % 10 : 5]];
       };
-      const pluralDay = getPluralRussian(streakCount, ['день', 'дня', 'дней']);
-      streakBadgeHtml = `
+      const pluralDay = getPluralRussian(streakCount, [t('день'), t('дня'), t('дней')]);
+      streakBadgeHtml = ui`
         <div style="display: inline-flex; align-items: center; justify-content: center; background: rgba(139, 92, 246, 0.15); border: 1px solid var(--accent); border-radius: 12px; padding: 12px 24px; margin: 12px 0;">
           <span style="font-size: 32px; font-weight: 800; color: var(--accent); margin-right: 8px;">${streakCount}</span>
           <span style="font-size: 14px; font-weight: 600; text-align: left; line-height: 1.2; color: var(--text-main);">
@@ -25721,7 +25805,7 @@ async httpGetJson(url, timeoutMs = 650) {
       document.body.appendChild(overlay);
     }
 
-    this.presentOverlay(overlay, `
+    this.presentOverlay(overlay, ui`
       <div class="cleaner-modal-container" style="margin-top: 50px;">
         <div class="cleaner-modal" style="max-width: 440px; width: 90%; background: #181824; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; text-align: left;">
           <h3 style="margin: 0 0 12px; font-size: 18px; color: var(--text-main); font-weight: 700; display: flex; align-items: center; gap: 8px;">
@@ -25763,7 +25847,7 @@ async httpGetJson(url, timeoutMs = 650) {
       const val = parseInt(overlay.querySelector('#luna-debug-streak-input').value, 10) || 0;
       streakStats.streakCount = val;
       await this.db.put('settings', streakStats);
-      this.toast(`Счётчик изменен на ${val}`);
+      this.toast(msg`Счётчик изменен на ${val}`);
     };
 
     overlay.querySelector('#luna-debug-trigger-congrats-btn').onclick = () => {
@@ -25779,7 +25863,7 @@ async httpGetJson(url, timeoutMs = 650) {
       streakStats.streakModalShownDate = null;
       streakStats.streakBrokenModalShownDate = null;
       await this.db.put('settings', streakStats);
-      this.toast('Сброшены отметки о показе окон на сегодня');
+      this.toast(t('Сброшены отметки о показе окон на сегодня'));
     };
 
     overlay.querySelector('#luna-debug-close-btn').onclick = () => {
@@ -25826,7 +25910,7 @@ app.init().catch((error) => {
   console.error(error);
   const appRoot = document.getElementById('app') || document.body.appendChild(document.createElement('div'));
   document.body.classList.add('boot-error');
-  appRoot.innerHTML = `
+  appRoot.innerHTML = ui`
     <main class="app-error-screen">
       <section class="app-error-panel">
         <div class="confirm-icon"><i class="bx bx-error-circle"></i></div>
@@ -25838,7 +25922,7 @@ app.init().catch((error) => {
         </div>
       </section>
     </main>`;
-  appRoot.querySelector('[data-error-message]').textContent = error?.message || 'Проверьте доступ к IndexedDB/localStorage и повторите запуск.';
+  appRoot.querySelector('[data-error-message]').textContent = error?.message || t('Проверьте доступ к IndexedDB/localStorage и повторите запуск.');
   appRoot.querySelector('[data-error-reload]').onclick = () => location.reload();
   appRoot.querySelector('[data-error-reset-ui]').onclick = () => {
     safeRemoveStorageItem(localStorage, 'nocturne-workspace-v1');

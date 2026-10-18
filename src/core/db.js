@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 import { defaultSettings, seedFolders } from './defaults.js';
 import { protectRecord, revealRecord } from './record-protection.js';
 import { localDateKey } from './utils.js';
@@ -37,7 +38,7 @@ function transactionDone(tx) {
   return new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted'));
+    tx.onabort = () => reject(tx.error || new Error(t('Операция базы данных прервана.')));
   });
 }
 
@@ -60,7 +61,7 @@ export class Database {
           if (!db.objectStoreNames.contains(store)) db.createObjectStore(store, { keyPath: 'id' });
         });
       };
-      request.onblocked = () => reject(new Error('IndexedDB upgrade blocked by another open Nocturne tab.'));
+      request.onblocked = () => reject(new Error(t('Обновление базы заблокировано другой вкладкой Nocturne. Закройте её и повторите запуск.')));
       request.onsuccess = () => {
         const db = request.result;
         db.onversionchange = () => {
@@ -69,7 +70,7 @@ export class Database {
         };
         resolve(db);
       };
-      request.onerror = () => reject(request.error || new Error('IndexedDB open failed'));
+      request.onerror = () => reject(request.error || new Error(t('Не удалось открыть локальную базу данных.')));
     });
     await this.seed(initialSettings);
     return this.db;

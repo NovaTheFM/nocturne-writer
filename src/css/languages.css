@@ -1,0 +1,67 @@
+.language-onboarding,
+.language-preloader {
+  position: fixed;
+  inset: 0;
+  z-index: 110000;
+  display: grid;
+  place-items: center;
+  padding: max(24px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+  font-family: var(--font-ui);
+}
+.preloader-subtitle { max-width: calc(100vw - 48px); line-height: 1.8; letter-spacing: clamp(.12em, 1vw, .5em); text-align: center; }
+.language-onboarding {
+  overflow-y: auto;
+  background: rgba(6,6,9,.38);
+  -webkit-backdrop-filter: blur(28px) saturate(.55);
+  backdrop-filter: blur(28px) saturate(.55);
+}
+.language-welcome {
+  width: min(100%, 370px);
+  margin: auto;
+  padding: 26px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-deep);
+  color: var(--text-main);
+  box-shadow: var(--shadow-float), 0 1px 0 var(--border-light) inset;
+  opacity: 0;
+  transform: translateY(10px) scale(.985);
+  transition: opacity 420ms ease, transform 520ms cubic-bezier(.16,1,.3,1);
+}
+.language-welcome:focus { outline: none; }
+.language-onboarding.active .language-welcome { opacity: 1; transform: none; }
+.language-onboarding.leaving .language-welcome { opacity: 0; transform: translateY(-6px) scale(.99); transition-duration: 300ms; }
+.language-brand { display: flex; align-items: center; gap: 9px; color: var(--text-muted); font-size: 10px; font-weight: 600; letter-spacing: .17em; }
+.language-brand .brand-logo-img { width: 22px; height: 22px; flex: 0 0 22px; }
+.language-welcome h1 { margin: 20px 0 22px; font: 600 21px/1.35 var(--font-ui); letter-spacing: -.035em; }
+.language-choices { display: grid; gap: 7px; }
+.language-flag { display: block; width: 24px; height: 17px; flex: 0 0 auto; overflow: hidden; border-radius: 4px; box-shadow: 0 0 0 1px rgba(128,128,148,.18); }
+.language-choice { display: flex; align-items: center; gap: 13px; width: 100%; min-height: 55px; padding: 12px 14px; border: 1px solid transparent; border-radius: var(--radius-md); background: var(--surface-soft); color: var(--text-main); font: 500 14px/1.4 var(--font-ui); text-align: left; cursor: pointer; transition: border-color 220ms ease, background 220ms ease, color 220ms ease; }
+.language-choice .language-flag { width: 28px; height: 20px; border-radius: 4px; }
+.language-choice:hover { border-color: var(--border); background: var(--hover-soft); }
+.language-choice.selected { border-color: rgba(var(--accent-rgb,139,92,246),.45); background: rgba(var(--accent-rgb,139,92,246),.09); }
+.language-choice-check { display: grid; place-items: center; width: 19px; height: 19px; margin-left: auto; border: 1px solid var(--border); border-radius: 50%; color: transparent; transition: color 200ms ease, background 200ms ease, border-color 200ms ease; }
+.language-choice-check .bx { font-size: 15px; color: inherit; }
+.language-choice.selected .language-choice-check { color: var(--button-text-strong); border-color: var(--accent); background: var(--accent); }
+.language-choice:focus-visible, .language-confirm:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.language-choice:disabled, .language-confirm:disabled { cursor: progress; opacity: .65; }
+.language-welcome .form-actions { margin-top: 22px; }
+.language-welcome .language-confirm { width: 100%; min-height: 43px; gap: 10px; font-family: var(--font-ui); }
+.language-confirm .bx { font-size: 18px; }
+.language-choice-error { margin: 15px 0 0; color: var(--text-main); font-size: 12px; line-height: 1.6; }
+.language-option-label { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+.language-preloader { background: #06060a; opacity: 0; overflow: hidden; }
+.language-preloader .preloader-brand { animation: none; }
+.language-preloader .preloader-subtitle,
+.language-preloader .preloader-progress-track { animation: none; opacity: 1; transform: none; }
+.language-preloader .preloader-subtitle { max-width: min(380px, calc(100vw - 48px)); letter-spacing: .25em; }
+@media (max-width: 480px) {
+  .language-welcome { padding: 24px; }
+  .language-welcome h1 { font-size: 20px; }
+  .language-choice { min-height: 56px; }
+  .language-welcome .language-confirm { min-height: 46px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .language-welcome, .language-choice, .language-choice-check { transition-duration: 0ms; transform: none; }
+  .language-preloader .preloader-logo-img, .language-preloader .preloader-glow-orb, .language-preloader .particle { animation: none; }
+}

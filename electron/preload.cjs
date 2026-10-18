@@ -6,6 +6,7 @@ function safeSuggestedName(value) {
 
 contextBridge.exposeInMainWorld('nocturneElectron', {
   isNocturneElectron: true,
+  setInterfaceLanguage: locale => ['ru', 'uk', 'en'].includes(locale) ? ipcRenderer.invoke('nocturne:interface-language', locale) : Promise.reject(new Error('Unsupported interface language.')),
   chooseBackupDirectory: () => ipcRenderer.invoke('nocturne:backup-directory'),
   writeBackup: (data, name) => ipcRenderer.invoke('nocturne:backup-write', data, name),
   readBackup: name => ipcRenderer.invoke('nocturne:backup-read', name),

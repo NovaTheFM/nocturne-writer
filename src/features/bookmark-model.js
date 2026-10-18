@@ -1,3 +1,4 @@
+import { t, ui, msg } from '../core/i18n.js';
 import { uid } from '../core/utils.js';
 
 export const BOOKMARK_VERSION = 2;
@@ -112,7 +113,7 @@ export function normalizeBookmarks(values = [], blocks = [], { plain = false, ow
       anchor.status = ['attached', 'unresolved'].includes(anchor.status) ? anchor.status : 'unresolved';
       if (blocks.length && (anchor.from < blocks[0].from || anchor.to > blocks.at(-1).to)) anchor.status = 'unresolved';
       return {
-        id: /^[\w.:-]{1,240}$/u.test(part.id || '') ? part.id : `${id}:part:${partIndex}`, title: string(part.title || (anchor.kind === 'point' ? `Закладка ${index + 1}` : bookmarkTitle(anchor.quote) || `Закладка ${index + 1}`), 160),
+        id: /^[\w.:-]{1,240}$/u.test(part.id || '') ? part.id : `${id}:part:${partIndex}`, title: string(part.title || (anchor.kind === 'point' ? msg`Закладка ${index + 1}` : bookmarkTitle(anchor.quote) || msg`Закладка ${index + 1}`), 160),
         note: string(part.note ?? part.description), color: /^#[\da-f]{6}$/iu.test(part.color || '') ? part.color : '',
         tags: [...new Set((Array.isArray(part.tags) ? part.tags : []).map(tag => string(tag, 40)).filter(Boolean))].slice(0, 20), anchor,
       };
@@ -124,7 +125,7 @@ export function normalizeBookmarks(values = [], blocks = [], { plain = false, ow
 export function makeBookmark(anchor, { number = 1, titleLength = 56, ownerKey = '' } = {}) {
   const id = uid('bookmark');
   return { version: BOOKMARK_VERSION, id, groupId: id, ownerKey, createdAt: Date.now(), order: number,
-    parts: [{ id: uid('bookmark-part'), title: anchor.kind === 'point' ? `Закладка ${number}` : bookmarkTitle(anchor.quote, titleLength) || `Закладка ${number}`, note: '', color: '', tags: [], anchor }] };
+    parts: [{ id: uid('bookmark-part'), title: anchor.kind === 'point' ? msg`Закладка ${number}` : bookmarkTitle(anchor.quote, titleLength) || msg`Закладка ${number}`, note: '', color: '', tags: [], anchor }] };
 }
 
 export const bookmarkBounds = bookmark => {

@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { _electron, chromium } from 'playwright';
+import { chooseDefaultInterfaceLanguage } from './qa/first-run-language.mjs';
 
 const url = 'http://localhost:5314';
 const server = spawn(process.execPath, ['server.mjs'], { env: { ...process.env, PORT: '5314', SYNC_PORT: '8914' }, stdio: 'ignore', windowsHide: true });
@@ -19,6 +20,7 @@ try {
     const desktop = await _electron.launch({ executablePath: resolve('node_modules/electron/dist/electron.exe'), args: ['electron/main.cjs', character], env });
     try {
       const page = await desktop.firstWindow(); await page.waitForSelector('#preloader.hidden', { state: 'attached' });
+      await chooseDefaultInterfaceLanguage(page);
       await page.waitForFunction(() => window.nocturneApp.state.lore.characters.some(item => item.id === 'association-character'), null, { timeout: 7000 });
       await desktop.evaluate(({ app }, filename) => app.emit('second-instance', {}, [process.execPath, filename], process.cwd()), note);
       await page.waitForFunction(() => window.nocturneApp.state.lore.notes.some(item => item.id === 'association-note'), null, { timeout: 7000 });
