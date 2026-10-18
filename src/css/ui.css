@@ -311,6 +311,7 @@ button { color: inherit; }
 ::-webkit-scrollbar-thumb:hover { background: #404050; }
 
 #preloader {
+  --startup-exit-duration: 850ms;
   position: fixed;
   inset: 0;
   z-index: 9999;
@@ -318,10 +319,37 @@ button { color: inherit; }
   align-items: center;
   justify-content: center;
   background: var(--bg-deep);
-  transition: opacity 700ms ease, visibility 700ms ease;
+  transition: opacity var(--startup-exit-duration) cubic-bezier(.4, 0, .2, 1), visibility 0s linear var(--startup-exit-duration);
   overflow: hidden;
 }
 #preloader.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+#preloader.hidden:not(.startup-complete) { display: flex !important; }
+#preloader .preloader-content { animation: startup-preloader-enter 900ms cubic-bezier(.22, 1, .36, 1) both; }
+#preloader.hidden .preloader-content { animation: startup-preloader-exit 550ms cubic-bezier(.4, 0, .2, 1) both; }
+@keyframes startup-preloader-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes startup-preloader-exit {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+body.mobile-shell-active.reduce-mobile-animations #preloader { --startup-exit-duration: 120ms; }
+body.mobile-shell-active.reduce-mobile-animations #preloader .preloader-content,
+body.mobile-shell-active.reduce-mobile-animations #preloader .preloader-content *,
+body.mobile-shell-active.reduce-mobile-animations #preloader .particle { animation: none; }
+body.mobile-shell-active.reduce-mobile-animations #preloader .preloader-subtitle,
+body.mobile-shell-active.reduce-mobile-animations #preloader .preloader-progress-track { opacity: 1; transform: none; }
+body.mobile-shell-active.reduce-mobile-animations #preloader.hidden .preloader-content { opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  #preloader { --startup-exit-duration: 120ms; }
+  #preloader .preloader-content,
+  #preloader .preloader-content *,
+  #preloader .particle { animation: none; }
+  #preloader .preloader-subtitle,
+  #preloader .preloader-progress-track { opacity: 1; transform: none; }
+  #preloader.hidden .preloader-content { opacity: 0; }
+}
 .preloader-brand {
   position: relative;
   z-index: 2;

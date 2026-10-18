@@ -3488,7 +3488,7 @@ class NocturneWriter {
       progressFill.style.transition = 'width 1500ms cubic-bezier(0.22, 1, 0.36, 1)';
       progressFill.style.width = '100%';
     }
-    return new Promise(resolve => setTimeout(() => {
+    return new Promise(resolve => setTimeout(async () => {
       const preloader = document.getElementById('preloader');
       if (preloader) preloader.classList.add('hidden');
       const appShell = document.getElementById('app-shell');
@@ -3497,6 +3497,8 @@ class NocturneWriter {
         const titlebar = document.getElementById('electron-titlebar');
         if (titlebar) titlebar.style.display = 'flex';
       }
+      await Promise.allSettled((preloader?.getAnimations() || []).map(animation => animation.finished));
+      preloader?.classList.add('startup-complete');
       if (!this.isMobileLayout() && this.interfaceLanguage.confirmed) document.querySelector('.page-content')?.focus();
       resolve();
     }, 1800));
