@@ -3893,6 +3893,11 @@ body.resizing-floating-note {
   padding: 24px 0;
   overflow-y: auto;
 }
+.settings-sidebar-title,
+.settings-sidebar .settings-tab {
+  -webkit-user-select: none;
+  user-select: none;
+}
 .settings-sidebar-title {
   padding: 0 24px;
   margin: 16px 0;
