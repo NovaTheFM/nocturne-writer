@@ -21008,11 +21008,74 @@ class NocturneWriter {
       this.interfaceLanguage.change(option.dataset.value).catch(error => this.toast(error.message));
       return;
     }
+    if (key === 'uiFontFamily') {
+      this.closeSettingsSelects();
+      this.changeInterfaceFont(option.dataset.value || '').catch(error => this.toast(error.message));
+      return;
+    }
     this.state.settings[key] = option.dataset.value || '';
     this.state.settings = this.validateSettings(this.state.settings);
     this.closeSettingsSelects();
     this.applySettingSideEffects(key);
     if (key !== 'aiProvider') this.syncSettingsSelectControl(key);
+  }
+
+  async changeInterfaceFont(value) {
+    const previous = this.interfaceFontTransition;
+    if (previous) { previous.next = value; previous.wake?.(); return previous.promise; }
+    if (value === this.state.settings.uiFontFamily) return false;
+    const transition = this.interfaceFontTransition = { next: value };
+    transition.promise = (async () => {
+      const appRoot = document.getElementById('app');
+      let cover, focused, wasInert;
+      const frame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const fade = async (opacity, duration) => {
+        const motion = this.runMotion(cover, [{ opacity: Number(getComputedStyle(cover).opacity) }, { opacity }], { channel: 'interface-font', duration, easing: 'cubic-bezier(.45, 0, .55, 1)', fill: 'forwards' });
+        await motion.finished;
+        cover.style.opacity = String(opacity);
+        motion.animation?.cancel();
+      };
+      try {
+        while (transition.next !== null) {
+          const font = transition.next;
+          transition.next = null;
+          const families = font ? [font] : ['Manrope', 'Lora'];
+          const loaded = Promise.allSettled(families.flatMap(family => [400, 500, 600, 700].map(weight => document.fonts.load(`${weight} 16px ${JSON.stringify(family)}`))));
+          await Promise.race([loaded, new Promise(resolve => { transition.wake = resolve; })]);
+          transition.wake = null;
+          if (transition.next !== null || font === this.state.settings.uiFontFamily) continue;
+          if (!cover && !this.shouldReduceSurfaceMotion()) {
+            focused = document.activeElement;
+            wasInert = appRoot.inert;
+            cover = document.createElement('div');
+            cover.className = 'interface-font-transition';
+            cover.setAttribute('aria-hidden', 'true');
+            document.body.append(cover);
+            appRoot.inert = true;
+            await fade(1, 260);
+            this.closeSettingsSelects(null, { immediate: true, restoreFocus: false });
+          }
+          if (transition.next !== null) continue;
+          this.state.settings = this.validateSettings({ ...this.state.settings, uiFontFamily: font });
+          this.applySettingSideEffects('uiFontFamily');
+          this.syncSettingsSelectControl('uiFontFamily');
+          await frame();
+          await document.fonts.ready;
+          await frame();
+        }
+        if (cover) await fade(0, 420);
+        return true;
+      } finally {
+        cover?.remove();
+        if (cover) {
+          appRoot.inert = wasInert;
+          if (focused?.isConnected && !wasInert) focused.focus({ preventScroll: true });
+        }
+        this.interfaceFontTransition = null;
+        if (transition.next !== null) await this.changeInterfaceFont(transition.next);
+      }
+    })();
+    return transition.promise;
   }
 
   syncSettingsSelectControl(key) {

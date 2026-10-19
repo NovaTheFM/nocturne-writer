@@ -37,6 +37,7 @@ try {
     const choose = async (key, value) => {
       await page.locator(`${root} [data-setting-select="${key}"] [data-setting-select-toggle]`).click();
       await page.locator(`${root} [data-setting-option="${key}"][data-value=${JSON.stringify(value)}]`).click();
+      if (key === 'uiFontFamily') await page.waitForFunction(value => window.nocturneApp.state.settings.uiFontFamily === value && !window.nocturneApp.interfaceFontTransition, value);
       await page.evaluate(async value => { if (value) await document.fonts.load(`16px ${JSON.stringify(value)}`); await document.fonts.ready; }, value);
     };
     try {
@@ -88,6 +89,7 @@ try {
       await page.locator(`${root} #settings-search-field, ${root} [data-settings-id="settings-search-field"]`).fill('Interface font');
       await page.locator(`${root} [data-setting-select="uiFontFamily"] [data-setting-select-toggle]`).press('Enter');
       await page.locator(`${root} [data-setting-option="uiFontFamily"][data-value="Manrope"]`).press('Enter');
+      await page.waitForFunction(() => window.nocturneApp.state.settings.uiFontFamily === 'Manrope' && !window.nocturneApp.interfaceFontTransition);
       assert.ok((await appearance(page)).body.includes('Manrope') && (await appearance(page)).text.includes('Lora'));
       await page.evaluate(() => window.nocturneApp.openSettingsTab('editor'));
       await page.locator(`${root} input[type="file"][id="custom-font-uploader"], ${root} input[type="file"][data-settings-id="custom-font-uploader"]`).setInputFiles({ name: `${customName}.ttf`, mimeType: 'font/ttf', buffer: fontFile });

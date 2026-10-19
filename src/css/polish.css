@@ -392,5 +392,19 @@ button.utility-row, label.utility-row { cursor: pointer; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
   .nocturne-select-menu, .kb-project-switcher-dropdown, .portal-floating-menu, .doc-context-menu, .app-context-menu { transform: none !important; }
 }
+.interface-font-transition {
+  position: fixed;
+  inset: 0;
+  z-index: 109000;
+  background: rgba(8, 8, 12, .14);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  opacity: 0;
+  cursor: progress;
+  touch-action: none;
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .interface-font-transition { background: var(--bg-deep); }
+}
 body.reduce-mobile-animations :is(.nocturne-select-menu, .kb-project-switcher-dropdown, .portal-floating-menu, .doc-context-menu, .app-context-menu) { transition: none; transform: none; }
 .reduce-mobile-animations .surface-busy::before, .reduce-mobile-animations .mobile-sync-body .bx-spin { animation: none !important; }

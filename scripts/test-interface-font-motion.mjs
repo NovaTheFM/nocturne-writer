@@ -61,6 +61,7 @@ try {
         assert.ok(first.frames.some(frame => frame.opacity > .05 && frame.opacity < .95), 'Blur must fade, not appear instantly');
         assert.ok(first.frames.some((frame, i) => i && frame.opacity < first.frames[i - 1].opacity - .015), 'Blur must reveal the interface gradually');
         assert.ok(first.frames.every(frame => frame.position === 'fixed' && frame.width === (mobile ? 390 : 1440) && frame.height === (mobile ? 844 : 1000)), 'Cover must include settings and the complete viewport');
+        assert.ok(first.frames.at(-1).at - first.frames[0].at >= 600, 'Blur must have a gentle entrance and reveal, not flash');
         assert.ok(first.frames.at(-1).at - first.frames[0].at < 1400, 'Cached font transition must stay quick');
       }
       await select('uiFontFamily', 'Inter'); await settled('Inter');
