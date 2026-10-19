@@ -21,6 +21,7 @@ export const defaultSettings = {
   caretBreath: true,
   textContrast: 90,
   fontFamily: 'Lora',
+  uiFontFamily: '',
   fontSize: 16,
   lineHeight: 1.5,
   letterSpacing: 0,

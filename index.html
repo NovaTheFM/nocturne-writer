@@ -70,7 +70,7 @@
     .preloader-brand {
       position: relative;
       z-index: 2;
-      font-family: 'Lora', Georgia, serif;
+      font-family: var(--font-ui-override, 'Lora', Georgia, serif);
       font-size: clamp(2.4rem, 8vw, 3.8rem);
       letter-spacing: 0.35em;
       font-weight: 500;
@@ -81,7 +81,7 @@
       animation: preloader-text-fade 1.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
     }
     .preloader-subtitle {
-      font-family: 'Manrope', sans-serif;
+      font-family: var(--font-ui, 'Manrope', sans-serif);
       font-size: 11px;
       font-weight: 600;
       letter-spacing: 0.5em;

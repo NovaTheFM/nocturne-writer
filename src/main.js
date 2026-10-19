@@ -576,6 +576,7 @@ class NocturneWriter {
       theme: ['nocturne', 'midnight', 'paper', 'matrix', 'lavender', 'crimson', 'adaptive', 'blazing'],
       caretStyle: ['line', 'block', 'underline'],
       fontFamily: allowedFonts,
+      uiFontFamily: ['', ...allowedFonts],
       dialogueLens: ['off', 'dialogues', 'descriptions'],
       aiProvider: allowedProviders,
       aiPersona: allowedPersonas,
@@ -2467,7 +2468,7 @@ class NocturneWriter {
       ['history', 'bx-history', t('История и восстановление'), t('Версии, условия сохранения и лимиты')],
       ['manuscript-search', 'bx-search-alt', t('Поиск рукописи'), t('Слова, псевдонимы, фильтры и результаты')],
       ['visual', 'bx-palette', t('Оформление'), t('Темы, акцент и каретка')],
-      ['editor', 'bx-text', t('Рукопись'), t('Шрифт, интервалы и типографика')],
+      ['editor', 'bx-text', t('Микро-типографика'), t('Шрифты интерфейса и рукописи, интервалы')],
       ['bookmarks', 'bx-bookmark', t('Закладки'), t('Привязка, отображение и история')],
       ['focus', 'bx-target-lock', t('Концентрация'), t('Дзен, страницы и фокус на тексте')],
       ['review', 'bx-edit-alt', t('Редактура'), t('Пометки и проверка рукописи')],
@@ -4413,10 +4414,12 @@ class NocturneWriter {
         const font = this.state.settings.customFonts[idx];
         this.state.settings.customFonts.splice(idx, 1);
         if (this.state.settings.fontFamily === font.name) {
-          this.state.settings.fontFamily = 'Lora';
+          this.state.settings.fontFamily = defaultSettings.fontFamily;
         }
+        if (this.state.settings.uiFontFamily === font.name) this.state.settings.uiFontFamily = defaultSettings.uiFontFamily;
         this.persistSettings();
         this.injectCustomFonts();
+        this.applySettings();
         this.renderSettings();
         this.toast(t('Шрифт удален.'));
       }
@@ -20005,23 +20008,12 @@ class NocturneWriter {
         </div>`,
       editor: ui`
         <div class="tab-content active">
-          ${(() => {
-            const presetFonts = [
-              ['Lora', 'Lora (Serif)'],
-              ['Georgia', 'Georgia (Classic)'],
-              ['Manrope', 'Manrope (Sans)'],
-              ['Inter', 'Inter (Modern)'],
-              ['Playfair Display', 'Playfair Display (Elegant)'],
-              ['Merriweather', 'Merriweather (Readability)'],
-              ['Courier New', 'Courier New (Monospace)'],
-            ];
-            const customFonts = (s.customFonts || []).map((f) => [f.name, f.name]);
-            return row(t('Шрифт рукописи'), t('Меняет семейство шрифта только в рабочей рукописи, не в интерфейсе.'), select('fontFamily', [...presetFonts, ...customFonts]));
-          })()}
+          ${row(t('Шрифт интерфейса'), t('Меняет шрифт меню, панелей и заметок. Рукопись использует свой шрифт.'), select('uiFontFamily', this.fontOptions(true)))}
+          ${row(t('Шрифт рукописи'), t('Меняет семейство шрифта только в рабочей рукописи, не в интерфейсе.'), select('fontFamily', this.fontOptions()))}
           <div class="setting-row">
             <div class="setting-info">
               <span>Добавить свой шрифт <i class="bx bx-info-circle info-icon" tabindex="0" data-tip="Загрузите файл шрифта .woff2, .woff, .ttf или .otf."></i></span>
-              <small>Поддерживаемые форматы: .woff2, .woff, .ttf, .otf</small>
+              <small>Загруженные шрифты доступны для интерфейса и рукописи.</small>
             </div>
             <div class="setting-control">
               <label class="pill-btn file-upload-label" style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px; user-select: none;">
@@ -20036,7 +20028,7 @@ class NocturneWriter {
               <div style="display: flex; flex-direction: column; gap: 6px;">
                 ${(s.customFonts || []).map((f, idx) => ui`
                   <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(var(--accent-rgb), 0.05); border: 1px solid rgba(var(--accent-rgb), 0.15); padding: 6px 12px; border-radius: 6px;">
-                    <span style="font-family: '${f.name}', sans-serif; font-size: 13px;">${escapeHtml(f.name)}</span>
+                    <span style="font-family: ${escapeHtml(JSON.stringify(f.name))}, sans-serif; font-size: 13px;">${escapeHtml(f.name)}</span>
                     <button class="btn-icon" data-action="delete-custom-font" data-font-idx="${idx}" title="Удалить" style="color: var(--accent);"><i class="bx bx-trash"></i></button>
                   </div>
                 `).join('')}
@@ -20196,17 +20188,13 @@ class NocturneWriter {
     return content[tab] || content.visual;
   }
 
+  fontOptions(forInterface = false) {
+    const fonts = ['Lora', 'Georgia', 'Manrope', 'Inter', 'Playfair Display', 'Merriweather', 'Courier New'];
+    const options = [...fonts, ...(this.state.settings.customFonts || []).map(font => font.name)].map(name => [name, name]);
+    return forInterface ? [['', t('Стандартное оформление')], ...options] : options;
+  }
+
   getSettingsRegistry() {
-    const presetFonts = [
-      ['Lora', 'Lora (Serif)'],
-      ['Georgia', 'Georgia (Classic)'],
-      ['Manrope', 'Manrope (Sans)'],
-      ['Inter', 'Inter (Modern)'],
-      ['Playfair Display', 'Playfair Display (Elegant)'],
-      ['Merriweather', 'Merriweather (Readability)'],
-      ['Courier New', 'Courier New (Monospace)'],
-    ];
-    const customFonts = (this.state.settings.customFonts || []).map((f) => [f.name, f.name]);
     return [
       ...workflowSettings,
       { tab: 'visual', label: t('Язык интерфейса'), note: t('Язык меню и уведомлений. Язык рукописи и проверки текста не меняется.'), key: 'interfaceLanguage', type: 'select', options: LANGUAGE_OPTIONS },
@@ -20220,7 +20208,8 @@ class NocturneWriter {
       { tab: 'visual', label: t('Уровень контрастности текста'), note: t('Поднимает или снижает яркость текста на странице, не меняя тему целиком.'), key: 'textContrast', type: 'range', min: 45, max: 100, step: 1, suffix: '%' },
       { tab: 'visual', label: t('Компактный вид'), note: t('Настройка плотности панелей, карточек, инструментов и заметок.'), key: 'compactSettingsMenu', type: 'action', action: 'open-compact-settings' },
       { tab: 'visual', label: t('Режим пишущей машинки'), note: t('Держит активную строку вертикально по центру экрана — как в профессиональных редакторах.'), key: 'typewriterMode', type: 'toggle' },
-      { tab: 'editor', label: t('Шрифт рукописи'), note: t('Меняет семейство шрифта только в рабочей рукописи, не в интерфейсе.'), key: 'fontFamily', type: 'select', options: [...presetFonts, ...customFonts] },
+      { tab: 'editor', label: t('Шрифт интерфейса'), note: t('Меняет шрифт меню, панелей и заметок. Рукопись использует свой шрифт.'), key: 'uiFontFamily', type: 'select', options: this.fontOptions(true) },
+      { tab: 'editor', label: t('Шрифт рукописи'), note: t('Меняет семейство шрифта только в рабочей рукописи, не в интерфейсе.'), key: 'fontFamily', type: 'select', options: this.fontOptions() },
       { tab: 'editor', label: t('Размер шрифта'), note: t('Базовый размер текста на странице редактора.'), key: 'fontSize', type: 'range', min: 14, max: 26, step: 1, suffix: 'px' },
       { tab: 'editor', label: t('Межстрочный интервал'), note: t('Высота строки. Большие значения дают больше воздуха для вычитки.'), key: 'lineHeight', type: 'range', min: 1.35, max: 2.25, step: 0.05 },
       { tab: 'editor', label: t('Межбуквенный интервал'), note: t('Дополнительный трекинг между буквами для комфортного чтения.'), key: 'letterSpacing', type: 'range', min: 0, max: 1.8, step: 0.1, suffix: 'px' },
@@ -20716,7 +20705,7 @@ class NocturneWriter {
             ` : rules.map((rule, idx) => ui`
               <div class="formatting-item" data-surface-key="formatting:${escapeHtml(rule.trigger)}" style="display: flex; align-items: center; justify-content: space-between; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); padding: 12px 18px; border-radius: 8px; gap: 16px;">
                 <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
-                  <span style="font-family: monospace; background: rgba(255, 255, 255, 0.05); padding: 4px 8px; border-radius: 4px; font-size: 14px; border: 1px solid rgba(255, 255, 255, 0.08); font-weight: bold; color: var(--accent);">${escapeHtml(rule.trigger)}</span>
+                  <span style="font-family: var(--font-ui-override, monospace); background: rgba(255, 255, 255, 0.05); padding: 4px 8px; border-radius: 4px; font-size: 14px; border: 1px solid rgba(255, 255, 255, 0.08); font-weight: bold; color: var(--accent);">${escapeHtml(rule.trigger)}</span>
                   <i class="bx bx-right-arrow-alt" style="color: var(--text-muted);"></i>
                   <span style="font-size: 13px; font-weight: 500;">${this.getFormattingActionLabel(rule.action, rule.customText)}</span>
                 </div>
@@ -20745,7 +20734,7 @@ class NocturneWriter {
       : rules.map((rule, idx) => ui`
           <div class="formatting-item" data-surface-key="formatting:${escapeHtml(rule.trigger)}" style="display: flex; align-items: center; justify-content: space-between; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); padding: 12px 18px; border-radius: 8px; gap: 16px;">
             <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
-              <span style="font-family: monospace; background: rgba(255, 255, 255, 0.05); padding: 4px 8px; border-radius: 4px; font-size: 14px; border: 1px solid rgba(255, 255, 255, 0.08); font-weight: bold; color: var(--accent);">${escapeHtml(rule.trigger)}</span>
+              <span style="font-family: var(--font-ui-override, monospace); background: rgba(255, 255, 255, 0.05); padding: 4px 8px; border-radius: 4px; font-size: 14px; border: 1px solid rgba(255, 255, 255, 0.08); font-weight: bold; color: var(--accent);">${escapeHtml(rule.trigger)}</span>
               <i class="bx bx-right-arrow-alt" style="color: var(--text-muted);"></i>
               <span style="font-size: 13px; font-weight: 500;">${this.getFormattingActionLabel(rule.action, rule.customText)}</span>
             </div>
@@ -21335,13 +21324,12 @@ class NocturneWriter {
     root.style.setProperty('--accent-hover-rgb', `${Math.min(255, rgb.r + 28)}, ${Math.min(255, rgb.g + 28)}, ${Math.min(255, rgb.b + 28)}`);
     root.style.setProperty('--accent-glow', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .25)`);
     root.style.setProperty('--accent-rgb', `${rgb.r}, ${rgb.g}, ${rgb.b}`);
-        let resolvedFont = s.fontFamily || 'Lora';
-    if (resolvedFont === 'Manrope') resolvedFont = "'Manrope', sans-serif";
-    else if (resolvedFont === 'Georgia') resolvedFont = "Georgia, serif";
-    else if (resolvedFont === 'Lora') resolvedFont = "'Lora', serif";
-    else if (resolvedFont === 'Courier New') resolvedFont = "'Courier New', monospace";
-    else resolvedFont = `'${resolvedFont}', serif`;
-    root.style.setProperty('--font-editor', resolvedFont);
+    const fontStack = name => `${JSON.stringify(name)}, ${name === 'Courier New' ? 'monospace' : ['Manrope', 'Inter'].includes(name) ? 'sans-serif' : 'serif'}`;
+    root.style.setProperty('--font-editor', fontStack(s.fontFamily || 'Lora'));
+    const customUi = !!s.uiFontFamily;
+    root.style.setProperty('--font-ui', fontStack(customUi ? s.uiFontFamily : 'Manrope'));
+    if (customUi) root.style.setProperty('--font-ui-override', fontStack(s.uiFontFamily));
+    else root.style.removeProperty('--font-ui-override');
     root.style.setProperty('--font-size-editor', `${s.fontSize}px`);
     root.style.setProperty('--line-height-editor', s.lineHeight);
     root.style.setProperty('--letter-spacing-editor', `${s.letterSpacing}px`);

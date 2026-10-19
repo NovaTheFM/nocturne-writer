@@ -2,7 +2,7 @@
 .knowledge-search { width: min(100%, 980px); margin-inline: auto; padding-bottom: 28px; }
 .knowledge-search-heading { display: flex; align-items: center; gap: 16px; margin: 0 0 26px; }
 .knowledge-search-symbol { display: grid; place-items: center; flex: 0 0 48px; height: 48px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-soft); color: var(--accent-hover); font-size: 24px; }
-.knowledge-search-heading h1 { margin: 0 0 6px; color: var(--text-main); font: 500 30px/1.2 'Lora', Georgia, serif; }
+.knowledge-search-heading h1 { margin: 0 0 6px; color: var(--text-main); font: 500 30px/1.2 var(--font-ui-override, 'Lora', Georgia, serif); }
 .knowledge-search-heading p { margin: 0; color: var(--text-muted); font-size: 13px; line-height: 1.6; text-wrap: pretty; }
 .knowledge-search-close { margin-left: auto; flex: 0 0 36px; }
 .knowledge-search-controls { display: grid; gap: 12px; padding: 18px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface-soft); }
@@ -70,7 +70,7 @@
 .note-read-topbar-actions { display: flex; align-items: center; gap: 10px; }
 .note-read-mode, .note-read-container { min-height: 0; }
 .note-read-search-shell { flex: 0 0 auto; min-height: 0; }
-.note-read-title { margin: 0 0 28px; color: var(--text-main); font: 500 26px/1.4 'Lora', Georgia, serif; overflow-wrap: anywhere; }
+.note-read-title { margin: 0 0 28px; color: var(--text-main); font: 500 26px/1.4 var(--font-ui-override, 'Lora', Georgia, serif); overflow-wrap: anywhere; }
 .note-read-search { display: flex; align-items: center; flex: 0 0 auto; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-soft); }
 .note-read-search label { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; }
 .note-read-search label > i { font-size: 18px; color: var(--text-muted); }

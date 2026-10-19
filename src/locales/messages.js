@@ -1,4 +1,24 @@
 export const messages = {
+  "Шрифты интерфейса и рукописи, интервалы": [
+    "Шрифти інтерфейсу й рукопису, інтервали",
+    "Interface and manuscript fonts, spacing"
+  ],
+  "Шрифт интерфейса": [
+    "Шрифт інтерфейсу",
+    "Interface font"
+  ],
+  "Меняет шрифт меню, панелей и заметок. Рукопись использует свой шрифт.": [
+    "Змінює шрифт меню, панелей і нотаток. Рукопис використовує власний шрифт.",
+    "Changes the font in menus, panels and notes. The manuscript uses its own font."
+  ],
+  "Стандартное оформление": [
+    "Стандартне оформлення",
+    "Default appearance"
+  ],
+  "Загруженные шрифты доступны для интерфейса и рукописи.": [
+    "Завантажені шрифти доступні для інтерфейсу й рукопису.",
+    "Uploaded fonts are available for both the interface and the manuscript."
+  ],
   "Закрыть": [
     "Закрити",
     "Close"
