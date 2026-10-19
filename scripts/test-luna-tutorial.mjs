@@ -157,6 +157,37 @@ async function discoverFeatures(page, mobile, { stopAt, keyboardPalette = false 
 try {
   for (let i = 0; i < 70; i++) { try { if ((await fetch(url)).ok) break; } catch {} await new Promise(resolve => setTimeout(resolve, 100)); }
   browser = await chromium.launch({ headless: true });
+  for (const viewport of [{ width: 1919, height: 950 }, { width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
+    const mobile = viewport.width < 768;
+    await scenario(`knowledge overview leaves character cards visible: ${viewport.width}`, mobile, async page => {
+      await page.goto(url); await choose(page, 'ru'); await step(page, 'welcome');
+      await page.locator('[data-luna-choice="yes"]').click(); await step(page, 'create');
+      await page.evaluate(async () => {
+        const app = window.nocturneApp;
+        if (app.isMobileLayout()) { app.state.mobile.kbTab = 'characters'; app.switchMobileTab('lore'); }
+        else app.openKb('characters');
+        await app.lunaTutorial.show('kb');
+      });
+      await step(page, 'kb');
+      const card = page.locator(mobile ? '#mobile-tab-surface.active .mobile-kb-list > .empty-card' : '#kb-modal.active .kb-section.active .character-grid > .empty-card').first();
+      await card.waitFor();
+      const geometry = await page.evaluate(selector => {
+        const c = document.querySelector('.luna-companion').getBoundingClientRect(), content = document.querySelector(selector).getBoundingClientRect();
+        return { coach: { x: c.x, y: c.y, right: c.right, bottom: c.bottom }, content: { x: content.x, y: content.y, right: content.right, bottom: content.bottom }, height: innerHeight };
+      }, mobile ? '#mobile-tab-surface.active .mobile-kb-list > .empty-card' : '#kb-modal.active .kb-section.active .character-grid > .empty-card');
+      assert.ok(geometry.coach.y >= geometry.content.bottom + 20, `Luna must move below the character card: ${JSON.stringify(geometry)}`);
+      assert.ok(geometry.coach.bottom <= geometry.height - 12);
+      await page.screenshot({ path: `${output}/knowledge-clear-${viewport.width}.png` });
+      await page.locator('[data-luna-choice="next"]').click(); await step(page, 'open-world-search');
+      const stillClear = await page.evaluate(selector => {
+        const c = document.querySelector('.luna-companion').getBoundingClientRect(), content = document.querySelector(selector).getBoundingClientRect();
+        return c.bottom <= content.top - 16 || c.top >= content.bottom + 16 || c.right <= content.left - 16 || c.left >= content.right + 16;
+      }, mobile ? '#mobile-tab-surface.active .mobile-kb-list > .empty-card' : '#kb-modal.active .kb-section.active .character-grid > .empty-card');
+      assert.ok(stillClear, 'The following action keeps the character card clear');
+      await page.keyboard.press('Escape'); await page.locator('#luna-tutorial').waitFor({ state: 'detached' });
+      assert.equal(await page.evaluate(() => window.nocturneApp.state.lore.characters.length), 0);
+    }, { viewport });
+  }
   for (const mobile of [false, true]) await scenario('quick refusal works during the welcome animation', mobile, async page => {
     await page.addInitScript(() => {
       const observer = new MutationObserver(() => {
