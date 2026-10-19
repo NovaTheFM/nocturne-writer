@@ -20,6 +20,9 @@ async function choose(page, locale) {
 }
 
 async function scenario(name, mobile, action, options = {}) {
+  if (process.env.NOCTURNE_TUTORIAL_CASE && !name.includes(process.env.NOCTURNE_TUTORIAL_CASE)) {
+    results.push({ name, mobile, status: 'SKIP', reason: 'Filtered by NOCTURNE_TUTORIAL_CASE' }); return;
+  }
   const context = await browser.newContext({ viewport: mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 }, isMobile: mobile, hasTouch: mobile, ...options });
   const page = await context.newPage(), errors = [];
   page.setDefaultTimeout(10_000);
@@ -58,6 +61,63 @@ async function reachForm(page) {
   await step(page, 'create-form');
 }
 
+async function discoverFeatures(page, mobile) {
+  const click = async name => (await step(page, name)).click();
+  const next = async name => { await step(page, name); await page.locator('[data-luna-choice="next"]').click(); };
+  const shot = async name => page.screenshot({ path: `${output}/${mobile ? 'mobile' : 'desktop'}-${name}.png` });
+  await next('write');
+  if (mobile) await click('bookmarks-actions');
+  await click('open-bookmarks'); await step(page, 'bookmarks'); await shot('bookmarks');
+  await page.locator('[data-luna-choice="back"]').click(); await step(page, 'write');
+  await next('write');
+  if (mobile) await click('bookmarks-actions');
+  await click('open-bookmarks'); await next('bookmarks');
+  if (mobile) await click('more-notes');
+  await click('open-notes'); await next('notes');
+  await click('open-floating'); await step(page, 'floating'); await shot('floating'); await next('floating');
+  await click('open-kb');
+  if (!mobile) { await (await step(page, 'kb-menu')).focus(); await page.keyboard.press('Enter'); }
+  await next('kb'); await click('open-world-search'); await step(page, 'world-search');
+  await page.locator('[data-knowledge-query]:visible').fill('A real story');
+  await shot('world-search'); await next('world-search');
+  if (!mobile) await click('tools-commands');
+  await click('open-commands'); await step(page, 'commands');
+  await page.locator('[data-command-palette-input]').fill('history');
+  await click('command-history'); await step(page, 'history'); await shot('history'); await next('history');
+  await click('open-modes'); await click('choose-editor'); await step(page, 'editor-mode');
+  assert.equal(await page.locator('.page-content-prosemirror').first().getAttribute('contenteditable'), 'false');
+  await next('editor-mode'); await click('open-finalization'); await click('choose-finalization');
+  await step(page, 'finalization'); await shot('review'); await next('finalization');
+  if (mobile) await click('focus-actions');
+  await click('enter-focus'); await step(page, 'focus');
+  assert.equal(await page.evaluate(() => window.nocturneApp.state.zenActive), true);
+  await shot('focus'); await next('focus');
+  if (!mobile) { await click('open-split'); await step(page, 'split'); await shot('split'); await next('split'); }
+  if (mobile) await click('more-search'); else await click('open-search-menu');
+  await click('open-search'); await click('choose-project-search'); await step(page, 'project-search');
+  await page.locator('#global-search-query').fill('A real story');
+  await page.waitForFunction(() => document.querySelector('#global-search-results')?.textContent.includes('A real story'));
+  await shot('manuscript-search'); await next('project-search');
+  await click(mobile ? 'more-book' : 'tools-book'); await click('open-book');
+  await step(page, 'book'); assert.equal(await page.locator('[data-export-chapter]').count(), 1);
+  await shot('book'); await next('book');
+  await click(mobile ? 'more-backups' : 'tools-backups'); await click('open-backups');
+  await step(page, 'backups'); await shot('backups'); await next('backups');
+  if (mobile) await click('more-settings');
+  await click('open-settings'); await step(page, 'settings');
+  if (mobile) {
+    await page.evaluate(async () => await window.nocturneApp.interfaceLanguage.change('en'));
+    await page.waitForFunction(() => document.querySelector('#luna-tutorial-text')?.textContent.startsWith('Change your language'));
+  }
+  await next('settings'); await click('open-macros'); await step(page, 'macros'); await shot('macros');
+  await next('macros'); await click('open-formatting'); await step(page, 'formatting'); await shot('formatting');
+  await next('formatting');
+  assert.equal(await page.evaluate(() => window.nocturneApp.state.reviewMode), 'write');
+  assert.equal(await page.evaluate(() => window.nocturneApp.state.zenActive), false);
+  assert.equal(await page.evaluate(() => window.nocturneApp.state.workspace.mode), 'single');
+  assert.deepEqual(await page.evaluate(async () => (await import('/src/core/i18n.js')).getMissingTranslations()), []);
+}
+
 try {
   for (let i = 0; i < 70; i++) { try { if ((await fetch(url)).ok) break; } catch {} await new Promise(resolve => setTimeout(resolve, 100)); }
   browser = await chromium.launch({ headless: true });
@@ -94,6 +154,9 @@ try {
       const editor = page.locator('.page-content-prosemirror').first();
       await editor.press('Control+Home'); await page.keyboard.type('A real story.');
       await page.screenshot({ path: `${output}/${mobile ? 'mobile' : 'desktop'}-writing.png` });
+      await discoverFeatures(page, mobile);
+      /* expanded tour replaces the earlier five-topic route */
+      /*
       await page.locator('[data-luna-choice="next"]').click();
       if (mobile) await (await step(page, 'more-notes')).click();
       await (await step(page, 'open-notes')).click();
@@ -113,6 +176,7 @@ try {
       await step(page, 'settings');
       await page.screenshot({ path: `${output}/${mobile ? 'mobile' : 'desktop'}-settings.png` });
       await page.locator('[data-luna-choice="next"]').click();
+      */
       await step(page, 'done');
       assert.equal(await page.locator('[data-luna-choice="skip"]').count(), 1);
       await page.locator('[data-luna-choice="done"]').click();
