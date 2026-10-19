@@ -2,11 +2,16 @@ import { tutorialDiscoveryMessages } from './tutorial-discovery.js';
 
 export const tutorialMessages = {
   ...tutorialDiscoveryMessages,
+  "Назови документ и нажми «Создать».": ["Назви документ і натисни «Створити».", "Name the document and press “Create”."],
   "Да": ["Так", "Yes"],
   "Нет": ["Ні", "No"],
-  "Здесь меняются язык, тема и шрифты. А снова найти меня можно в разделе «Прочее».": [
-    "Тут змінюються мова, тема й шрифти. А знову знайти мене можна в розділі «Інше».",
-    "Change your language, theme and fonts here. You can meet me again in “Other”."
+  "Здесь меняются язык, тема и шрифты. Настрой приложение под себя.": [
+    "Тут змінюються мова, тема й шрифти. Налаштуй застосунок під себе.",
+    "Change your language, theme and fonts here. Make the app feel right for you."
+  ],
+  "На этом всё! Снова найти меня можно в «Настройки → Прочее». Приятного письма!": [
+    "На цьому все! Знову знайти мене можна в «Налаштування → Інше». Приємного письма!",
+    "That’s everything! You can meet me again in “Settings → Other”. Happy writing!"
   ],
   "Привет! Я Луна. Ты здесь впервые?": [
     "Привіт! Я Луна. Ти тут уперше?",

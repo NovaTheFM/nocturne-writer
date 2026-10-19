@@ -27,6 +27,7 @@ export class LunaTutorial {
     this.initialZen = !!this.app.state.zenActive;
     this.viewTouched = false;
     this.highlight = { target: null, phase: 'hidden', opacity: 0, startedAt: 0 };
+    this.placement = null; this.pendingForm = null; this.reservedSurface = null;
     this.previousFocus = document.activeElement;
     this.locale = getLocale();
     this.mobileLayout = this.app.isMobileLayout();
@@ -45,6 +46,7 @@ export class LunaTutorial {
             <footer class="luna-dialog-actions"></footer>
           </div>
         </section>
+        <div class="luna-dialog-tail" aria-hidden="true"></div>
       </div>`;
     document.body.append(this.root);
     document.body.classList.add('luna-tutorial-active');
@@ -55,10 +57,12 @@ export class LunaTutorial {
     this.spotlight = this.root.querySelector('.luna-spotlight');
     this.onClick = event => {
       const choice = event.target.closest('[data-luna-choice]')?.dataset.lunaChoice;
-      if (!choice || this.changing || this.finishing) return;
+      if (!choice || this.finishing) return;
+      if (choice === 'no' || choice === 'skip') { this.finish('skipped'); return; }
+      if (choice === 'done') { this.finish('completed'); return; }
+      if (choice === 'yes' && this.step === 'welcome') { this.begin(); return; }
+      if (this.changing) return;
       if (choice === 'yes') this.begin();
-      else if (choice === 'no' || choice === 'skip') this.finish('skipped');
-      else if (choice === 'done') this.finish('completed');
       else if (choice === 'next') this.next();
       else if (choice === 'back') this.goBack()?.catch(error => { this.changing = false; this.app.toast(error.message); });
     };
@@ -164,7 +168,10 @@ export class LunaTutorial {
     this.dialog.setAttribute('aria-label', t('Луна'));
     if (description.topic && this.visitedTopics.at(-1) !== description.topic) this.visitedTopics.push(description.topic);
     this.app.animateHeightTransition(this.dialog, () => {
-      this.root.querySelector('.luna-dialog-copy').innerHTML = `<p id="luna-tutorial-text">${escapeHtml(t(this.copy()))}</p>`;
+      const copy = t(this.copy());
+      const letters = typeof Intl.Segmenter === 'function' ? [...new Intl.Segmenter(getLocale(), { granularity: 'grapheme' }).segment(copy)].map(item => item.segment) : Array.from(copy);
+      const interval = Math.min(14, 700 / Math.max(1, letters.length - 1));
+      this.root.querySelector('.luna-dialog-copy').innerHTML = `<p id="luna-tutorial-text"><span class="luna-screen-reader">${escapeHtml(copy)}</span><span aria-hidden="true">${letters.map((letter, index) => `<span class="luna-letter" style="--luna-letter-delay:${index * interval}ms">${escapeHtml(letter)}</span>`).join('')}</span></p>`;
       const primary = (choice, label) => `<button type="button" class="pill-btn ai-btn" data-luna-choice="${choice}">${escapeHtml(t(label))}<i class="bx bx-right-arrow-alt" aria-hidden="true"></i></button>`;
       const skip = `<button type="button" class="luna-skip" data-luna-choice="skip">${escapeHtml(t('Пропустить обучение'))}</button>`;
       const back = this.visitedTopics.filter(topic => this.topics().includes(topic)).length > 1 ? `<button type="button" class="pill-btn luna-back" data-luna-choice="back" aria-label="${escapeHtml(t('Вернуться к предыдущей теме'))}" title="${escapeHtml(t('Вернуться к предыдущей теме'))}"><i class="bx bx-left-arrow-alt" aria-hidden="true"></i></button>` : '';
@@ -177,6 +184,7 @@ export class LunaTutorial {
     this.updateTarget(); this.layout();
     outgoing?.animation?.cancel();
     await this.app.runMotion(this.dialogBody, [{ opacity: 0 }, { opacity: 1 }], { channel: 'tutorial-copy', duration: 280 }).finished;
+    await this.placementMotion?.finished;
     if (!this.active || this.finishing || generation !== this.generation) return;
     this.changing = false;
     (step === 'commands' && !this.app.isMobileLayout() ? this.target : this.dialog)?.focus({ preventScroll: true });
@@ -198,11 +206,43 @@ export class LunaTutorial {
   updateProgress() {
     const topics = this.topics(), current = this.description()?.topic;
     const progress = this.root.querySelector('.luna-progress');
-    progress.hidden = this.step === 'welcome' || this.step === 'create' || this.step === 'create-form' || this.step === 'open-docs';
+    progress.hidden = ['welcome', 'create', 'create-form', 'open-docs', 'done'].includes(this.step);
     const value = this.step === 'done' ? topics.length : Math.max(1, topics.indexOf(current) + 1);
     progress.setAttribute('aria-valuemax', topics.length);
     progress.setAttribute('aria-valuenow', value);
-    progress.querySelector('span').style.transform = `scaleX(${value / topics.length})`;
+    progress.innerHTML = `<span>${value}</span><span aria-hidden="true"> / </span><span>${topics.length}</span>`;
+  }
+
+  async prepareDocumentForm(form) {
+    this.pendingForm = form;
+    await this.show('create-form');
+    await frame();
+    await this.placementMotion?.finished;
+    if (this.finishing) await this.completion;
+    this.pendingForm = null;
+    return form?.isConnected;
+  }
+
+  modalSurface() {
+    if (this.pendingForm?.isConnected) return this.pendingForm;
+    const overlay = document.getElementById('form-overlay');
+    if (overlay && (overlay.classList.contains('active') || Number(getComputedStyle(overlay).opacity) > .01)) return overlay.querySelector('.form-modal');
+    return first('#floating-notes-modal.active .floating-notes-modal-panel');
+  }
+
+  surfaceRect(surface) {
+    const parent = surface.offsetParent;
+    const origin = parent?.getBoundingClientRect() || { left: 0, top: 0 };
+    return { left: origin.left + surface.offsetLeft, top: origin.top + surface.offsetTop, right: origin.left + surface.offsetLeft + surface.offsetWidth, bottom: origin.top + surface.offsetTop + surface.offsetHeight };
+  }
+
+  placeCompanion(x, y) {
+    x = Math.round(x); y = Math.round(y);
+    if (this.placement?.x === x && this.placement?.y === y) return;
+    const previous = this.placement && this.companion.getBoundingClientRect();
+    this.placement = { x, y };
+    this.companion.style.left = `${x}px`; this.companion.style.top = `${y}px`;
+    if (previous) this.placementMotion = this.app.runMotion(this.companion, [{ transform: `translate(${previous.left - x}px, ${previous.top - y}px)` }, { transform: 'translate(0, 0)' }], { channel: 'tutorial-placement', duration: 440, startFromCurrent: false });
   }
 
   updateTarget() {
@@ -241,22 +281,47 @@ export class LunaTutorial {
     this.root.classList.toggle('luna-reduced', this.app.shouldReduceSurfaceMotion());
     this.root.classList.toggle('luna-keyboard', mobile && height < innerHeight * .72);
     const rect = this.target?.getBoundingClientRect();
-    const coachHeight = this.companion.offsetHeight;
+    const coachHeight = Math.max(this.root.querySelector('.luna-mascot').offsetHeight, this.dialog.__surfaceSizeTransition?.targetHeight || this.dialog.offsetHeight) + (parseFloat(getComputedStyle(this.companion).paddingBottom) || 0);
     const margin = mobile ? 24 : Math.max(56, Math.min(112, width * .08));
-    const reservedLeft = `${margin + this.companion.offsetWidth + 32}px`;
-    if (document.body.style.getPropertyValue('--luna-preview-left') !== reservedLeft) document.body.style.setProperty('--luna-preview-left', reservedLeft);
-    const x = left + margin;
+    let x = left + margin;
     let y = top + height * .48 - coachHeight / 2;
-    if (mobile && this.step === 'create-form') y = top + 14;
-    const formPreview = document.body.classList.contains('luna-form-preview');
-    if (formPreview && width < 1100) y = top + 14;
-    if (mobile && !formPreview && this.root.classList.contains('luna-keyboard')) y = top + height - coachHeight - 12;
-    if (rect && rect.height < 200 && x < rect.right + 12 && x + this.companion.offsetWidth > rect.left - 12 && y < rect.bottom + 12 && y + coachHeight > rect.top - 12) {
+    const surface = this.modalSurface();
+    if (this.reservedSurface !== surface) {
+      this.reservedSurface?.classList.remove('luna-reserved-surface');
+      this.reservedSurface?.style.removeProperty('--luna-surface-height');
+      document.body.classList.remove('luna-stack-modal');
+      this.reservedSurface = surface;
+    }
+    if (surface) {
+      const coachWidth = this.companion.offsetWidth, gap = 24;
+      const reserveHeight = () => {
+        const available = height - 2 * (coachHeight + gap + 14);
+        const stacked = available < 160;
+        document.body.classList.toggle('luna-stack-modal', stacked);
+        surface.classList.add('luna-reserved-surface');
+        surface.style.setProperty('--luna-surface-height', `${Math.max(96, stacked ? height - coachHeight - gap - 28 : available)}px`);
+        return stacked;
+      };
+      if (surface.classList.contains('luna-reserved-surface')) reserveHeight();
+      const choose = box => {
+        const clear = (px, py) => px + coachWidth <= box.left - gap || px >= box.right + gap || py + coachHeight <= box.top - gap || py >= box.bottom + gap;
+        if (clear(x, y)) return { x, y };
+        return [{ x: box.left - coachWidth - gap, y }, { x, y: box.top - coachHeight - gap }, { x: box.right + gap, y }, { x, y: box.bottom + gap }]
+          .filter(point => point.x >= left + 24 && point.x + coachWidth <= left + width - 24 && point.y >= top + 14 && point.y + coachHeight <= top + height - 14)
+          .sort((a, b) => Math.hypot(a.x - x, a.y - y) - Math.hypot(b.x - x, b.y - y))[0];
+      };
+      let position = choose(this.surfaceRect(surface));
+      if (!position) {
+        const stacked = reserveHeight();
+        position = stacked ? { x, y: top + 14 } : choose(this.surfaceRect(surface));
+      }
+      if (position) { x = position.x; y = position.y; }
+    } else if (mobile && this.root.classList.contains('luna-keyboard')) y = top + height - coachHeight - 12;
+    if (!surface && rect && rect.height < 200 && x < rect.right + 12 && x + this.companion.offsetWidth > rect.left - 12 && y < rect.bottom + 12 && y + coachHeight > rect.top - 12) {
       const alternatives = [rect.top - coachHeight - 24, rect.bottom + 24].filter(value => value >= top + 14 && value + coachHeight <= top + height - 14);
       if (alternatives.length) y = alternatives.sort((a, b) => Math.abs(a - y) - Math.abs(b - y))[0];
     }
-    this.companion.style.left = `${Math.max(left + 8, x)}px`;
-    this.companion.style.top = `${Math.max(top + 8, y)}px`;
+    this.placeCompanion(Math.max(left + 24, x), Math.max(top + 14, y));
     const reserve = `${coachHeight + (mobile ? 28 : 48)}px`;
     if (document.body.style.getPropertyValue('--luna-coach-space') !== reserve) document.body.style.setProperty('--luna-coach-space', reserve);
     this.updateSpotlight(rect, { top, left, width, height });
@@ -264,9 +329,11 @@ export class LunaTutorial {
 
   updateSpotlight(rect, viewport) {
     const state = this.highlight, now = performance.now();
-    const x = Math.max(viewport.left + 5, (rect?.left || 0) - 6), y = Math.max(viewport.top + 5, (rect?.top || 0) - 6);
-    const width = Math.min(viewport.left + viewport.width - 5, (rect?.right || 0) + 6) - x;
-    const height = Math.min(viewport.top + viewport.height - 5, (rect?.bottom || 0) + 6) - y;
+    const action = this.description()?.then && rect?.height <= 128;
+    const padding = action ? 3 : 6;
+    const x = Math.max(viewport.left + 5, (rect?.left || 0) - padding), y = Math.max(viewport.top + 5, (rect?.top || 0) - padding);
+    const width = Math.min(viewport.left + viewport.width - 5, (rect?.right || 0) + padding) - x;
+    const height = Math.min(viewport.top + viewport.height - 5, (rect?.bottom || 0) + padding) - y;
     const desired = rect && width > 0 && height > 0 ? this.target : null;
     if (this.app.shouldReduceSurfaceMotion()) {
       state.target = desired; state.phase = desired ? 'visible' : 'hidden'; state.opacity = desired ? 1 : 0;
@@ -289,8 +356,8 @@ export class LunaTutorial {
     // Keep the old aperture still until it has faded; never sweep it across unrelated controls.
     if (desired && state.target === desired && state.phase !== 'out') {
       state.bounds = { x, y, width, height };
-      state.kind = this.description()?.then && rect.height <= 128 ? 'action' : 'panel';
-      state.radius = Math.min(22, Math.max(10, (parseFloat(getComputedStyle(desired).borderTopLeftRadius) || 8) + 6));
+      state.kind = action ? 'action' : 'panel';
+      state.radius = Math.min((rect.height + padding * 2) / 2, Math.max(6, (parseFloat(getComputedStyle(desired).borderTopLeftRadius) || 8) + padding));
     }
     if (state.bounds) {
       for (const [key, value] of Object.entries(state.bounds)) this.cutout.setAttribute(key, value);
@@ -306,9 +373,6 @@ export class LunaTutorial {
 
   tick() {
     if (!this.active || this.finishing) return;
-    const formOverlay = document.getElementById('form-overlay');
-    const formVisible = formOverlay?.classList.contains('active') || formOverlay && Number(getComputedStyle(formOverlay).opacity) > .01;
-    document.body.classList.toggle('luna-form-preview', !!formVisible && this.step !== 'create-form');
     for (const surface of document.querySelectorAll('#form-overlay, #settings-overlay, #kb-modal, #mobile-overlay, #floating-notes-modal, #command-palette-overlay')) {
       const closed = !surface.classList.contains('active');
       if (surface.inert !== closed) surface.inert = closed;
@@ -418,13 +482,15 @@ export class LunaTutorial {
 
   clearPreviewLayout() {
     const update = () => {
-      document.body.classList.remove('luna-form-preview', 'luna-tutorial-active');
+      document.body.classList.remove('luna-stack-modal', 'luna-tutorial-active');
+      this.reservedSurface?.classList.remove('luna-reserved-surface');
+      this.reservedSurface?.style.removeProperty('--luna-surface-height');
       delete document.body.dataset.lunaStep;
       document.body.style.removeProperty('--luna-preview-left');
       document.body.style.removeProperty('--luna-coach-space');
     };
     const overlay = document.getElementById('form-overlay');
-    if (overlay?.classList.contains('active') && (document.body.classList.contains('luna-form-preview') || this.step === 'create-form')) this.app.animateLayoutTransition(overlay, update, { targets: [...overlay.querySelectorAll(':scope > .form-modal')], duration: .34 });
+    if (overlay?.classList.contains('active') && this.reservedSurface) this.app.animateLayoutTransition(overlay, update, { targets: [...overlay.querySelectorAll(':scope > .form-modal')], duration: .34 });
     else update();
   }
 

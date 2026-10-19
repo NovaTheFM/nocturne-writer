@@ -42,6 +42,7 @@ async function scenario(name, mobile, action, options = {}) {
 async function step(page, name) {
   await page.locator(`#luna-tutorial[data-step="${name}"]`).waitFor();
   await page.waitForFunction(() => !window.nocturneApp.lunaTutorial.changing && getComputedStyle(document.querySelector('.luna-dialog')).opacity > .99);
+  await page.waitForFunction(() => !document.querySelector('.luna-companion').getAnimations().some(animation => animation.playState === 'running'));
   const geometry = await page.evaluate(() => {
     const dialog = document.querySelector('.luna-dialog').getBoundingClientRect(), mascot = document.querySelector('[data-luna-mascot]').getBoundingClientRect();
     return { x: dialog.x, y: dialog.y, right: dialog.right, bottom: dialog.bottom, mascotX: mascot.x, width: innerWidth, height: innerHeight, overflow: document.documentElement.scrollWidth > innerWidth, titles: document.querySelectorAll('#luna-tutorial h1, #luna-tutorial h2, .luna-dialog-header').length };
@@ -73,8 +74,25 @@ async function discoverFeatures(page, mobile, { stopAt, keyboardPalette = false 
   if (mobile) await click('bookmarks-actions');
   await click('open-bookmarks'); await next('bookmarks');
   if (mobile) await click('more-notes');
+  await step(page, 'open-notes');
+  const notesCue = await page.evaluate(() => {
+    const target = document.querySelector('[data-luna-target]').getBoundingClientRect();
+    const ring = document.querySelector('.luna-spotlight').getBoundingClientRect();
+    return { target: { x: target.x, y: target.y, right: target.right, bottom: target.bottom }, ring: { x: ring.x, y: ring.y, right: ring.right, bottom: ring.bottom }, width: innerWidth };
+  });
+  await page.waitForTimeout(320);
+  await shot('notes-button');
+  assert.ok(notesCue.ring.x <= notesCue.target.x && notesCue.ring.right >= Math.min(notesCue.width - 5, notesCue.target.right));
+  assert.ok(notesCue.ring.y <= notesCue.target.y && notesCue.ring.bottom >= notesCue.target.bottom);
   await click('open-notes'); await next('notes');
-  await click('open-floating'); await step(page, 'floating'); await shot('floating'); await next('floating');
+  await click('open-floating'); await step(page, 'floating');
+  const floatingLayout = await page.evaluate(() => {
+    const coach = document.querySelector('.luna-companion').getBoundingClientRect(), panel = document.querySelector('.floating-notes-modal-panel').getBoundingClientRect();
+    return { clear: coach.right <= panel.left - 8 || coach.left >= panel.right + 8 || coach.bottom <= panel.top - 8 || coach.top >= panel.bottom + 8, center: (panel.left + panel.right) / 2, width: innerWidth };
+  });
+  assert.equal(floatingLayout.clear, true, 'Luna leaves the whole All Notes window clear');
+  assert.ok(Math.abs(floatingLayout.center - floatingLayout.width / 2) < 2);
+  await shot('floating'); await next('floating');
   await click('open-kb');
   if (!mobile) { await (await step(page, 'kb-menu')).focus(); await page.keyboard.press('Enter'); }
   await next('kb'); await click('open-world-search'); await step(page, 'world-search');
@@ -85,7 +103,9 @@ async function discoverFeatures(page, mobile, { stopAt, keyboardPalette = false 
   else await click('open-commands');
   await step(page, 'commands');
   await page.locator('[data-command-palette-input]').fill('history');
-  await click('command-history'); await step(page, 'history'); await shot('history'); await next('history');
+  await click('command-history'); await step(page, 'history');
+  if (!mobile) assert.ok(await page.locator('.history-modal').evaluate(element => Math.abs(innerWidth - element.getBoundingClientRect().right - 32) < 2));
+  await shot('history'); await next('history');
   await click('open-modes'); await click('choose-editor'); await step(page, 'editor-mode');
   assert.equal(await page.locator('.page-content-prosemirror').first().getAttribute('contenteditable'), 'false');
   await next('editor-mode'); await click('open-finalization'); await click('choose-finalization');
@@ -109,6 +129,7 @@ async function discoverFeatures(page, mobile, { stopAt, keyboardPalette = false 
   await shot('manuscript-search'); await next('project-search');
   await click(mobile ? 'more-book' : 'tools-book'); await click('open-book');
   await step(page, 'book'); assert.equal(await page.locator('[data-export-chapter]').count(), 1);
+  assert.ok(await page.locator('.book-export-modal').evaluate(element => Math.abs((element.getBoundingClientRect().left + element.getBoundingClientRect().right) / 2 - innerWidth / 2) < 2));
   await page.locator('label:has([data-export-chapter])').click();
   assert.equal(await page.locator('[data-export-chapter]').isChecked(), false);
   assert.equal(await page.locator('[data-export-selected-book]').isDisabled(), true);
@@ -136,6 +157,23 @@ async function discoverFeatures(page, mobile, { stopAt, keyboardPalette = false 
 try {
   for (let i = 0; i < 70; i++) { try { if ((await fetch(url)).ok) break; } catch {} await new Promise(resolve => setTimeout(resolve, 100)); }
   browser = await chromium.launch({ headless: true });
+  for (const mobile of [false, true]) await scenario('quick refusal works during the welcome animation', mobile, async page => {
+    await page.addInitScript(() => {
+      const observer = new MutationObserver(() => {
+        const button = document.querySelector('[data-luna-choice="no"]');
+        if (!button || !window.nocturneApp?.lunaTutorial?.active) return;
+        window.__quickRefusal = { changing: window.nocturneApp.lunaTutorial.changing };
+        observer.disconnect(); button.click();
+      });
+      observer.observe(document, { childList: true, subtree: true });
+    });
+    await page.goto(url); await page.locator('#language-onboarding.active').waitFor();
+    await page.locator('[data-choose-language="en"]').click(); await page.locator('[data-confirm-language]').click();
+    await page.waitForFunction(() => window.nocturneApp?.startupInteractionReady);
+    assert.equal(await page.evaluate(() => window.__quickRefusal.changing), true);
+    assert.equal(await page.locator('#luna-tutorial').count(), 0);
+    assert.equal(await page.evaluate(async () => (await window.nocturneApp.db.get('settings', 'luna-tutorial')).status), 'skipped');
+  });
   for (const fixture of [
     { width: 1440, height: 1000 }, { width: 1920, height: 1080 },
     { width: 1280, height: 720 }, { width: 390, height: 844, mobile: true },
@@ -148,7 +186,9 @@ try {
       window.__creationFrames = [];
       const until = performance.now() + 1500;
       const sample = () => {
-        const coach = document.querySelector('.luna-companion').getBoundingClientRect();
+        const companion = document.querySelector('.luna-companion');
+        if (!companion) return;
+        const coach = companion.getBoundingClientRect();
         const overlay = document.getElementById('form-overlay'), form = document.getElementById('doc-form');
         window.__creationFrames.push({ active: overlay.classList.contains('active'), x: coach.x, y: coach.y, right: coach.right, bottom: coach.bottom, form: form ? { x: overlay.offsetLeft + form.offsetLeft, y: overlay.offsetTop + form.offsetTop, right: overlay.offsetLeft + form.offsetLeft + form.offsetWidth, bottom: overlay.offsetTop + form.offsetTop + form.offsetHeight } : null });
         if (performance.now() < until) requestAnimationFrame(sample);
@@ -164,6 +204,7 @@ try {
       return { form: { x: form.x, y: form.y, right: form.right, bottom: form.bottom }, width: innerWidth, height: innerHeight, frames: window.__creationFrames };
     });
     assert.ok(Math.abs((state.form.x + state.form.right) / 2 - state.width / 2) < 2, 'The document form keeps its normal horizontal center');
+    if (fixture.mobile) assert.ok(await page.locator('#doc-form button[type="submit"]').evaluate(button => button.getBoundingClientRect().bottom <= button.closest('form').getBoundingClientRect().bottom - 4), 'The mobile form shows Create without unnecessary scrolling');
     if (fixture.height >= 900) assert.ok(Math.abs((state.form.y + state.form.bottom) / 2 - state.height / 2) < 2, 'A normal desktop form keeps its vertical center');
     const opened = state.frames.find(sample => sample.active);
     assert.ok(opened?.form, 'Opening the real native form was observed');
@@ -184,6 +225,9 @@ try {
   for (const mobile of [false, true]) for (const motion of ['normal', 'reduced', ...(mobile ? ['application'] : [])]) {
     await scenario(`spotlight motion remains aligned and usable: ${motion}`, mobile, async page => {
       await page.goto(url); await choose(page, 'en'); await step(page, 'welcome');
+      const letters = await page.locator('.luna-letter').evaluateAll(nodes => nodes.map(node => Number(getComputedStyle(node).opacity)));
+      assert.ok(letters.length > 10);
+      if (motion === 'normal') assert.ok(Math.max(...letters) - Math.min(...letters) > .2, 'Text gently reveals one letter after another');
       await page.evaluate(reduce => { window.nocturneApp.state.settings.reduceMobileAnimations = reduce; }, motion === 'application');
       if (!mobile) await page.evaluate(() => { document.body.classList.add('theme-paper'); });
       await page.locator('[data-luna-choice="yes"]').click();
@@ -199,7 +243,7 @@ try {
         const sample = () => {
           const ring = document.querySelector('.luna-spotlight'), hole = document.querySelector('.luna-cutout');
           const r = ring.getBoundingClientRect(), d = document.querySelector('.luna-dialog');
-          window.__spotlightFrames.push({ x: r.x, y: r.y, width: r.width, height: r.height, opacity: Number(getComputedStyle(ring).opacity), holeOpacity: Number(getComputedStyle(hole).opacity), hole: ['x', 'y', 'width', 'height'].map(key => Number(hole.getAttribute(key))), shellOpacity: Number(getComputedStyle(d).opacity) });
+          window.__spotlightFrames.push({ x: r.x, y: r.y, width: r.width, height: r.height, opacity: Number(getComputedStyle(ring).opacity), holeOpacity: Number(getComputedStyle(hole).opacity), hole: ['x', 'y', 'width', 'height'].map(key => Number(hole.getAttribute(key))), shellOpacity: Number(getComputedStyle(d).opacity), tailVisible: document.querySelector('.luna-dialog-tail').checkVisibility() });
           if (performance.now() < until) requestAnimationFrame(sample);
         };
         sample();
@@ -219,6 +263,7 @@ try {
         for (const [index, key] of ['x', 'y', 'width', 'height'].entries()) assert.ok(Math.abs(sample[key] - sample.hole[index]) < 1, `Mask and ring diverged: ${JSON.stringify(sample)}`);
         assert.ok(Math.abs(sample.opacity - sample.holeOpacity) < .01, 'The mask and border fade together');
         assert.equal(sample.shellOpacity, 1, 'The speech surface stays present between messages');
+        assert.equal(sample.tailVisible, true, 'The speech tail remains visible during resizing');
       }
       assert.ok(Math.abs(state.ring.x - Math.max(5, state.target.x - 6)) < 2);
       assert.ok(Math.abs(state.ring.y - Math.max(5, state.target.y - 6)) < 2);
@@ -299,6 +344,12 @@ try {
       await page.locator('[data-luna-choice="done"]').click();
       await page.locator('#luna-tutorial').waitFor({ state: 'detached' });
       await page.waitForFunction(() => window.nocturneApp.startupInteractionReady);
+      if (!mobile) {
+        await page.evaluate(async () => await window.nocturneApp.showHistory());
+        await page.waitForTimeout(350);
+        assert.ok(await page.locator('.history-modal').evaluate(element => Math.abs(innerWidth - element.getBoundingClientRect().right - 32) < 2), 'History keeps its right-hand position outside the tour');
+        await page.evaluate(() => document.getElementById('form-overlay').classList.remove('active'));
+      }
       assert.equal(await page.evaluate(async () => (await window.nocturneApp.db.get('settings', 'luna-tutorial')).status), 'completed');
       assert.equal(await page.evaluate(() => window.nocturneApp.state.docs.length), 1);
       assert.match(await editor.textContent(), /A real story\./);

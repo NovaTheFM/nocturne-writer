@@ -29,6 +29,10 @@
 .form-error:empty { display: none; }
 .form-error { color: var(--danger, #fb8998); font-size: 12px; line-height: 1.6; }
 .history-modal.utility-modal { width: min(1120px, calc(100vw - 48px)); max-width: none; }
+@media (min-width: 1100px) {
+  #form-overlay:has(.history-modal) { justify-content: flex-end; padding: 24px 32px; }
+  #form-overlay .history-modal { width: min(1120px, calc(100vw - 64px)); }
+}
 .history-layout { display: grid; grid-template-columns: minmax(210px, 280px) minmax(0, 1fr); gap: 24px; margin-top: 24px; }
 .history-versions { max-height: 62vh; overflow: auto; padding: 2px 8px 2px 2px; }
 .history-version { border: 1px solid var(--border); border-radius: 14px; background: var(--surface-soft, var(--bg-page)); transition: border-color 200ms ease, background 200ms ease, box-shadow 200ms ease; }

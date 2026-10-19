@@ -9722,7 +9722,7 @@ class NocturneWriter {
     this.toast(t('Папка удалена.'));
   }
 
-  openDocForm(folderId) {
+  async openDocForm(folderId) {
     const targetFolderId = this.state.folders.some((folder) => folder.id === folderId) ? folderId : this.defaultFolderId();
     this.closeAllFloatingMenus();
     const overlay = document.getElementById('form-overlay');
@@ -9786,8 +9786,9 @@ class NocturneWriter {
         </div>
       </form>
     `);
+    if (this.lunaTutorial.active && !await this.lunaTutorial.prepareDocumentForm(overlay.querySelector('#doc-form'))) return;
     overlay.classList.add('active');
-    
+
     const typeRadios = overlay.querySelectorAll('input[name="docType"]');
     const bookFieldsWrapper = overlay.querySelector('.book-chapter-fields-wrapper');
     typeRadios.forEach(radio => {
