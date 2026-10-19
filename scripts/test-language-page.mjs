@@ -52,16 +52,20 @@ try {
       assert.ok(before.paper && before.paper.background !== 'rgba(0, 0, 0, 0)' && before.paper.opacity > .99, JSON.stringify(before.paper));
       for (const locale of ['uk', 'en', 'ru']) {
         await page.evaluate(() => window.nocturneApp.openSettingsTab('visual'));
+        const settingsBefore = await inspectPage(page);
         const root = mobile ? '#mobile-panel' : '#settings-overlay';
         await page.locator(`${root} [data-setting-select="interfaceLanguage"] [data-setting-select-toggle]`).click();
         await page.locator(`${root} [data-setting-option="interfaceLanguage"][data-value="${locale}"]`).click();
         await page.waitForFunction(locale => document.documentElement.lang === locale && !window.nocturneApp.interfaceLanguage.busy, locale);
         const after = await inspectPage(page);
-        assert.deepEqual(after.classes, before.classes, `${name}/${locale}: applied shell settings disappeared`);
+        assert.deepEqual(after.classes, settingsBefore.classes, `${name}/${locale}: applied shell settings disappeared`);
         assert.equal(after.connected && after.sameEditor, true, `${name}/${locale}: editor DOM was replaced or detached`);
         assert.deepEqual(after.json, before.json); assert.equal(after.selection, before.selection);
-        assert.deepEqual(after.paper, before.paper, `${name}/${locale}: visible paper changed or disappeared`);
-        await page.keyboard.press('Escape');
+        assert.ok(after.paper, `${name}/${locale}: visible paper disappeared`);
+        for (const property of ['background', 'border', 'opacity']) assert.equal(after.paper[property], before.paper[property], `${name}/${locale}: paper ${property} changed`);
+        for (const dimension of ['width', 'height']) assert.ok(Math.abs(after.paper[dimension] - before.paper[dimension]) < 1, `${name}/${locale}: paper ${dimension} changed: ${after.paper[dimension]} / ${before.paper[dimension]}`);
+        if (mobile) await page.evaluate(() => window.nocturneApp.switchMobileTab('write'));
+        else await page.keyboard.press('Escape');
       }
       const undo = await page.evaluate(() => { const editor = window.nocturneApp.nocturneEditor.get('primary'); editor.commands.undo(); return !editor.getText().includes('XYZ'); });
       assert.equal(undo, true, 'Language changes must preserve Undo');

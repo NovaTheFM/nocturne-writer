@@ -3539,6 +3539,7 @@ class NocturneWriter {
         } else paneElement.__paneConfig = null;
       }
     }
+    this.applySettings();
     this.renderAll();
     for (const [id, className] of panels) { const panel = document.getElementById(id); if (panel) panel.className = className; }
     if (settingsOpen) document.getElementById('settings-overlay')?.classList.add('active');
