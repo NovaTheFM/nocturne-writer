@@ -191,6 +191,19 @@ try {
       assert.equal(await page.locator('[data-luna-target]').count(), 0);
     }, { reducedMotion: motion === 'reduced' ? 'reduce' : 'no-preference' });
   }
+  for (const mobile of [false, true]) await scenario('spotlight motion can be interrupted without stale overlays', mobile, async page => {
+    await page.goto(url); await choose(page, 'en'); await page.locator('[data-luna-choice="yes"]').click();
+    if (await page.evaluate(() => window.nocturneApp.lunaTutorial.step === 'open-docs')) await (await step(page, 'open-docs')).click();
+    await (await step(page, 'create')).click();
+    await page.waitForFunction(() => window.nocturneApp.lunaTutorial.changing);
+    await page.keyboard.press('Escape'); await page.locator('#luna-tutorial').waitFor({ state: 'detached' });
+    assert.equal(await page.locator('[data-luna-target], .luna-tutorial-active, .luna-form-preview').count(), 0);
+    await page.locator('#doc-form input[name="title"]').fill('Continue after skipping');
+    await page.locator('#doc-form button[type="submit"]').click();
+    await page.waitForFunction(() => window.nocturneApp.nocturneEditor?.get('primary'));
+    await page.locator('.page-content-prosemirror').first().fill('Typing still works.');
+    assert.match(await page.locator('.page-content-prosemirror').first().textContent(), /Typing still works\./);
+  });
   for (const mobile of [false, true]) for (const locale of ['ru', 'uk', 'en']) {
     await scenario(`localized greeting and persistent No: ${locale}`, mobile, async page => {
       await page.goto(url); await choose(page, locale);

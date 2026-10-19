@@ -26,6 +26,7 @@ export class LunaTutorial {
     this.initialReviewMode = this.app.state.reviewMode;
     this.initialZen = !!this.app.state.zenActive;
     this.viewTouched = false;
+    this.highlight = { target: null, phase: 'hidden', opacity: 0, startedAt: 0 };
     this.previousFocus = document.activeElement;
     this.locale = getLocale();
     this.mobileLayout = this.app.isMobileLayout();
@@ -38,14 +39,17 @@ export class LunaTutorial {
       <div class="luna-companion">
         <div class="luna-mascot" data-luna-mascot aria-hidden="true"><svg viewBox="0 0 100 100" focusable="false"><path class="luna-moon" d="M70 12a38 38 0 1 0 17 62A40 40 0 0 1 70 12Z"/><path class="luna-star" d="m80 16 3 7 7 3-7 3-3 7-3-7-7-3 7-3Z"/><path class="luna-face" d="M32 57q3-5 6 0m9-1q3-5 6 0m-14 9q5 5 10-1"/></svg></div>
         <section class="luna-dialog" role="dialog" aria-modal="false" aria-label="${escapeHtml(t('Луна'))}" aria-describedby="luna-tutorial-text" tabindex="-1">
-          <div class="luna-dialog-copy" aria-live="polite" aria-atomic="true"></div>
-          <div class="luna-progress" role="progressbar" aria-label="${escapeHtml(t('Прогресс обучения'))}" aria-valuemin="1"><span></span></div>
-          <footer class="luna-dialog-actions"></footer>
+          <div class="luna-dialog-body">
+            <div class="luna-dialog-copy" aria-live="polite" aria-atomic="true"></div>
+            <div class="luna-progress" role="progressbar" aria-label="${escapeHtml(t('Прогресс обучения'))}" aria-valuemin="1"><span></span></div>
+            <footer class="luna-dialog-actions"></footer>
+          </div>
         </section>
       </div>`;
     document.body.append(this.root);
     document.body.classList.add('luna-tutorial-active');
     this.dialog = this.root.querySelector('.luna-dialog');
+    this.dialogBody = this.root.querySelector('.luna-dialog-body');
     this.companion = this.root.querySelector('.luna-companion');
     this.cutout = this.root.querySelector('.luna-cutout');
     this.spotlight = this.root.querySelector('.luna-spotlight');
@@ -147,7 +151,7 @@ export class LunaTutorial {
     this.changing = true;
     const generation = this.generation = (this.generation || 0) + 1;
     this.detachTarget();
-    const outgoing = animate && this.app.runMotion(this.dialog, [{ opacity: 1 }, { opacity: 0 }], { channel: 'tutorial-copy', duration: 110, fill: 'forwards' });
+    const outgoing = animate && this.app.runMotion(this.dialogBody, [{ opacity: 1 }, { opacity: 0 }], { channel: 'tutorial-copy', duration: 140, fill: 'forwards' });
     if (outgoing) await outgoing.finished;
     if (!this.active || this.finishing || generation !== this.generation) return;
     this.step = step;
@@ -172,7 +176,8 @@ export class LunaTutorial {
     this.updateProgress();
     this.updateTarget(); this.layout();
     outgoing?.animation?.cancel();
-    this.app.runMotion(this.dialog, [{ opacity: 0, transform: 'translateY(5px)' }, { opacity: 1, transform: 'translateY(0)' }], { channel: 'tutorial-copy', duration: 260 });
+    await this.app.runMotion(this.dialogBody, [{ opacity: 0 }, { opacity: 1 }], { channel: 'tutorial-copy', duration: 280 }).finished;
+    if (!this.active || this.finishing || generation !== this.generation) return;
     this.changing = false;
     (step === 'commands' && !this.app.isMobileLayout() ? this.target : this.dialog)?.focus({ preventScroll: true });
   }
@@ -254,14 +259,49 @@ export class LunaTutorial {
     this.companion.style.top = `${Math.max(top + 8, y)}px`;
     const reserve = `${coachHeight + (mobile ? 28 : 48)}px`;
     if (document.body.style.getPropertyValue('--luna-coach-space') !== reserve) document.body.style.setProperty('--luna-coach-space', reserve);
-    if (rect) {
-      const x1 = Math.max(5, rect.left - 6), y1 = Math.max(top + 5, rect.top - 6);
-      const x2 = Math.min(innerWidth - 5, rect.right + 6), y2 = Math.min(top + height - 5, rect.bottom + 6);
-      for (const [key, value] of Object.entries({ x: x1, y: y1, width: Math.max(0, x2 - x1), height: Math.max(0, y2 - y1) })) this.cutout.setAttribute(key, value);
-      Object.assign(this.spotlight.style, { left: `${x1}px`, top: `${y1}px`, width: `${Math.max(0, x2 - x1)}px`, height: `${Math.max(0, y2 - y1)}px` });
+    this.updateSpotlight(rect, { top, left, width, height });
+  }
+
+  updateSpotlight(rect, viewport) {
+    const state = this.highlight, now = performance.now();
+    const x = Math.max(viewport.left + 5, (rect?.left || 0) - 6), y = Math.max(viewport.top + 5, (rect?.top || 0) - 6);
+    const width = Math.min(viewport.left + viewport.width - 5, (rect?.right || 0) + 6) - x;
+    const height = Math.min(viewport.top + viewport.height - 5, (rect?.bottom || 0) + 6) - y;
+    const desired = rect && width > 0 && height > 0 ? this.target : null;
+    if (this.app.shouldReduceSurfaceMotion()) {
+      state.target = desired; state.phase = desired ? 'visible' : 'hidden'; state.opacity = desired ? 1 : 0;
+    } else {
+      if (state.target !== desired && state.phase !== 'out') {
+        state.startedAt = now;
+        if (state.opacity > 0) { state.phase = 'out'; state.from = state.opacity; }
+        else { state.target = desired; state.phase = desired ? 'in' : 'hidden'; }
+      }
+      const progress = Math.min(1, (now - state.startedAt) / (state.phase === 'out' ? 180 : 280));
+      const eased = .5 - Math.cos(Math.PI * progress) / 2;
+      if (state.phase === 'out') {
+        state.opacity = state.from * (1 - eased);
+        if (progress === 1) { state.target = desired; state.phase = desired ? 'in' : 'hidden'; state.opacity = 0; state.startedAt = now; }
+      } else if (state.phase === 'in') {
+        state.opacity = eased;
+        if (progress === 1) state.phase = 'visible';
+      }
     }
-    this.spotlight.hidden = !rect;
-    this.cutout.style.display = rect ? '' : 'none';
+    // Keep the old aperture still until it has faded; never sweep it across unrelated controls.
+    if (desired && state.target === desired && state.phase !== 'out') {
+      state.bounds = { x, y, width, height };
+      state.kind = this.description()?.then && rect.height <= 128 ? 'action' : 'panel';
+      state.radius = Math.min(22, Math.max(10, (parseFloat(getComputedStyle(desired).borderTopLeftRadius) || 8) + 6));
+    }
+    if (state.bounds) {
+      for (const [key, value] of Object.entries(state.bounds)) this.cutout.setAttribute(key, value);
+      this.cutout.setAttribute('rx', state.radius);
+      Object.assign(this.spotlight.style, { left: `${state.bounds.x}px`, top: `${state.bounds.y}px`, width: `${state.bounds.width}px`, height: `${state.bounds.height}px`, borderRadius: `${state.radius}px` });
+      this.spotlight.dataset.kind = state.kind;
+    }
+    this.spotlight.hidden = !state.bounds;
+    this.spotlight.style.opacity = state.opacity;
+    this.cutout.style.opacity = state.opacity;
+    this.root.classList.toggle('luna-overview', !!desired && !this.description()?.then);
   }
 
   tick() {
@@ -280,13 +320,14 @@ export class LunaTutorial {
       if (this.app.isMobileLayout() !== this.mobileLayout && !this.app.interfaceLanguage.busy) this.adaptLayout().catch(error => { this.changing = false; this.app.toast(error.message); });
       else if (getLocale() !== this.locale && !this.app.interfaceLanguage.busy) this.show(this.step);
       else {
-        this.updateTarget(); this.layout();
+        this.updateTarget();
         const description = this.description();
         if (this.step === 'create-form' && this.formCancelled && !first('#form-overlay.active')) this.show('create');
         else if (description?.ready?.()) this.show(description.then);
         if (this.description()?.topic === 'split' && !this.canShowSplit()) this.reviewTopic('search').catch(error => { this.changing = false; this.app.toast(error.message); });
       }
     }
+    this.layout();
     this.animationFrame = requestAnimationFrame(() => this.tick());
   }
 

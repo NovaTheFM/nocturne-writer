@@ -1,26 +1,35 @@
 #luna-tutorial { position: fixed; inset: 0; z-index: 20000; pointer-events: none; color: var(--text-main); font-family: var(--font-ui); }
 .luna-tutorial-shade { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-.luna-tutorial-shade > rect { fill: rgba(0, 0, 0, .6); }
-.luna-spotlight { position: fixed; border: 2px solid var(--accent-hover); border-radius: 14px; box-shadow: 0 0 0 4px rgba(var(--accent-rgb), .12), 0 0 28px rgba(var(--accent-rgb), .24); }
+.luna-tutorial-shade > rect { fill: rgba(5, 4, 10, .52); transition: fill 240ms ease; }
+.luna-overview .luna-tutorial-shade > rect { fill: rgba(5, 4, 10, .42); }
+body.theme-paper .luna-tutorial-shade > rect { fill: rgba(33, 24, 43, .32); }
+body.theme-paper .luna-overview .luna-tutorial-shade > rect { fill: rgba(33, 24, 43, .23); }
+.luna-spotlight { position: fixed; box-sizing: border-box; pointer-events: none; opacity: 0; border: 1.5px solid var(--accent-hover); border-radius: 14px; box-shadow: 0 0 0 4px rgba(var(--accent-rgb), .09), 0 0 24px rgba(var(--accent-rgb), .18), inset 0 0 0 1px rgba(var(--accent-rgb), .07); }
+.luna-spotlight[data-kind="action"] { background: rgba(var(--accent-rgb), .035); }
+.luna-spotlight[data-kind="panel"] { border-width: 1px; border-color: rgba(var(--accent-rgb), .48); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .045), 0 0 18px rgba(var(--accent-rgb), .09); }
 .luna-spotlight[hidden] { display: none; }
+.luna-spotlight, .luna-cutout { transition-property: none; }
 .luna-companion { position: fixed; display: flex; align-items: center; gap: 18px; width: min(480px, calc(100vw - 112px)); max-height: calc(var(--luna-viewport-height, 100dvh) - 32px); transition: top 280ms cubic-bezier(.16, 1, .3, 1), left 280ms cubic-bezier(.16, 1, .3, 1); }
 .luna-mascot { order: 2; width: 88px; height: 110px; flex: 0 0 88px; display: grid; place-items: center; filter: drop-shadow(0 8px 24px rgba(var(--accent-rgb), .2)); }
 .luna-mascot svg { width: 100%; height: auto; overflow: visible; }
 .luna-moon { fill: color-mix(in srgb, var(--accent) 30%, #eee8ff); stroke: color-mix(in srgb, var(--accent-hover) 50%, #fff); stroke-width: 1.5; }
 .luna-star { fill: var(--accent-hover); }
 .luna-face { fill: none; stroke: #403052; stroke-width: 2.5; stroke-linecap: round; }
-.luna-dialog { position: relative; flex: 1; min-width: 0; padding: 20px 22px 16px; border: 1px solid var(--popover-border); border-radius: var(--radius-lg); background: var(--bg-deep); box-shadow: var(--popover-shadow); pointer-events: auto; outline: none; }
+.luna-dialog { position: relative; flex: 1; min-width: 0; padding: 20px 22px 16px; border: 1px solid var(--popover-border); border-radius: var(--radius-lg); background: radial-gradient(ellipse at 0 0, rgba(var(--accent-rgb), .065), transparent 70%), var(--bg-deep); box-shadow: var(--popover-shadow); pointer-events: auto; outline: none; }
 .luna-dialog::before { content: ''; position: absolute; top: calc(50% - 7px); right: -8px; width: 14px; height: 14px; transform: rotate(45deg); background: var(--bg-deep); border-right: 1px solid var(--popover-border); border-top: 1px solid var(--popover-border); }
 .luna-dialog-copy p { color: var(--text-main); font-size: 14px; line-height: 1.75; margin: 0; text-wrap: pretty; }
 .luna-dialog-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; }
-.luna-dialog-actions .pill-btn { min-height: 40px; padding-inline: 14px; gap: 7px; font-size: 12px; }
+.luna-dialog-actions .pill-btn { min-height: 40px; padding-inline: 14px; gap: 7px; font-size: 12px; transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease; }
+.luna-dialog-actions .pill-btn:active { transform: scale(.97); }
+.luna-dialog-actions .ai-btn i { transition: transform 180ms ease; }
+.luna-dialog-actions .ai-btn:hover i { transform: translateX(2px); }
 .luna-progress { height: 2px; margin-top: 16px; overflow: hidden; border-radius: 2px; background: var(--border); }
 .luna-progress[hidden] { display: none; }
-.luna-progress span { display: block; height: 100%; background: var(--accent); transform-origin: left; transition: transform 320ms cubic-bezier(.16, 1, .3, 1); }
+.luna-progress span { display: block; height: 100%; border-radius: inherit; background: var(--accent); box-shadow: 0 0 8px rgba(var(--accent-rgb), .22); transform-origin: left; transition: transform 320ms cubic-bezier(.16, 1, .3, 1); }
 .luna-forward { display: flex; align-items: center; gap: 8px; margin-left: auto; }
-.luna-dialog-actions .luna-back { width: 36px; padding: 0; flex-shrink: 0; justify-content: center; }
+.luna-dialog-actions .luna-back { width: 40px; padding: 0; flex-shrink: 0; justify-content: center; }
 .luna-back i { font-size: 17px; }
-.luna-skip { appearance: none; border: 0; background: transparent; padding: 6px 0; color: var(--text-muted); font: inherit; font-size: 11px; cursor: pointer; text-align: left; transition: color 180ms ease; }
+.luna-skip { appearance: none; border: 0; background: transparent; min-height: 40px; padding: 6px 0; color: var(--text-muted); font: inherit; font-size: 11px; cursor: pointer; text-align: left; transition: color 180ms ease; }
 .luna-skip:hover { color: var(--text-main); }
 .luna-skip:focus-visible, .luna-dialog button:focus-visible { outline: 2px solid var(--accent-hover); outline-offset: 4px; }
 #luna-tutorial[data-step="welcome"] .luna-dialog-actions { justify-content: flex-end; }
@@ -33,6 +42,7 @@ body.luna-tutorial-active[data-luna-step="create-form"] #doc-form { max-height: 
 .luna-mobile .luna-dialog-copy p { font-size: 13px; line-height: 1.7; }
 .luna-mobile .luna-dialog-actions { gap: 7px 10px; margin-top: 14px; }
 .luna-mobile .luna-dialog-actions .pill-btn, .luna-mobile .luna-skip { min-height: 44px; }
+.luna-mobile .luna-dialog-actions .luna-back { width: 44px; }
 .luna-mobile .luna-companion { padding-bottom: var(--app-safe-bottom); }
 .luna-keyboard .luna-dialog { padding: 10px 14px; }
 .luna-keyboard .luna-dialog-copy p { font-size: 12px; line-height: 1.4; }
@@ -41,9 +51,12 @@ body.mobile-shell-active.luna-tutorial-active[data-luna-step="create-form"] #for
 body.mobile-shell-active.luna-tutorial-active[data-luna-step="create-form"] #doc-form { max-height: calc(var(--mobile-viewport-height, 100dvh) - var(--luna-coach-space, 220px) - 20px); }
 body.mobile-shell-active.luna-tutorial-active[data-luna-step="notes"] .mobile-notes-body { padding-bottom: calc(var(--luna-coach-space, 260px) + 20px); }
 body.mobile-shell-active.luna-tutorial-active[data-luna-step="settings"] #mobile-panel .mobile-panel-body { padding-bottom: calc(var(--luna-coach-space, 260px) + 20px); }
-@media (prefers-reduced-motion: reduce) { .luna-skip { transition: none; } }
-.luna-reduced .luna-companion, .luna-reduced .luna-progress span { transition: none; }
-@media (prefers-reduced-motion: reduce) { .luna-companion, .luna-progress span { transition: none; } }
+.luna-reduced :is(.luna-companion, .luna-progress span, .luna-skip, .pill-btn, .ai-btn i), .luna-reduced .luna-tutorial-shade > rect { transition: none; }
+.luna-reduced .luna-dialog-actions :is(.pill-btn:active, .ai-btn:hover i) { transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  #luna-tutorial :is(.luna-companion, .luna-progress span, .luna-skip, .pill-btn, .ai-btn i), .luna-tutorial-shade > rect { transition: none; }
+  .luna-dialog-actions :is(.pill-btn:active, .ai-btn:hover i) { transform: none; }
+}
 @media (min-width: 1100px) {
   body.luna-tutorial-active.luna-form-preview #form-overlay { justify-content: flex-end; padding: 24px 32px; }
   body.luna-tutorial-active.luna-form-preview #form-overlay .form-modal { max-width: calc(100vw - var(--luna-preview-left, 620px) - 32px); max-height: calc(100dvh - 48px); overflow-y: auto; }
