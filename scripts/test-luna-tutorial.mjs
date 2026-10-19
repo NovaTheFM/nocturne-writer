@@ -157,6 +157,26 @@ async function discoverFeatures(page, mobile, { stopAt, keyboardPalette = false 
 try {
   for (let i = 0; i < 70; i++) { try { if ((await fetch(url)).ok) break; } catch {} await new Promise(resolve => setTimeout(resolve, 100)); }
   browser = await chromium.launch({ headless: true });
+  for (const viewport of [{ width: 1919, height: 950 }, { width: 1440, height: 1000 }]) await scenario(`settings make room after Luna apologizes: ${viewport.width}`, false, async page => {
+    await page.goto(url); await choose(page, 'en'); await step(page, 'welcome');
+    await page.evaluate(async () => await window.nocturneApp.lunaTutorial.show('open-settings'));
+    await (await step(page, 'open-settings')).click(); await step(page, 'settings-apology');
+    assert.match(await page.locator('#luna-tutorial-text').textContent(), /sorry/i);
+    assert.ok(await page.locator('#settings-overlay .settings-modal').evaluate(panel => Math.abs((panel.getBoundingClientRect().left + panel.getBoundingClientRect().right) / 2 - innerWidth / 2) < 2), 'Settings start in their ordinary centered position');
+    await step(page, 'settings');
+    const layout = await page.evaluate(() => {
+      const panel = document.querySelector('#settings-overlay .settings-modal').getBoundingClientRect(), coach = document.querySelector('.luna-companion').getBoundingClientRect();
+      return { left: panel.left, right: panel.right, coachRight: coach.right, width: innerWidth };
+    });
+    assert.ok(layout.left >= layout.coachRight + 20);
+    assert.ok(Math.abs(layout.width - layout.right - 32) < 2);
+    await page.screenshot({ path: `${output}/settings-clear-${viewport.width}.png` });
+    await page.locator('[data-luna-choice="next"]').click();
+    await (await step(page, 'open-macros')).click(); await step(page, 'macros');
+    await page.keyboard.press('Escape'); await page.locator('#luna-tutorial').waitFor({ state: 'detached' });
+    await page.waitForFunction(() => !document.querySelector('#settings-overlay .settings-modal').classList.contains('is-flipping'));
+    assert.ok(await page.locator('#settings-overlay .settings-modal').evaluate(panel => Math.abs((panel.getBoundingClientRect().left + panel.getBoundingClientRect().right) / 2 - innerWidth / 2) < 2), 'Leaving the tutorial returns settings to the center');
+  }, { viewport });
   for (const viewport of [{ width: 1919, height: 950 }, { width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
     const mobile = viewport.width < 768;
     await scenario(`knowledge overview leaves character cards visible: ${viewport.width}`, mobile, async page => {
