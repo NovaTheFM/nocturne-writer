@@ -7,7 +7,7 @@ const scenarioReports = {
 const check = (id, args, areas, options = {}) => ({ id, args, areas, platforms: shared, executable: process.execPath, timeout: 120_000, modes: ['full'], ports: [], scenarioReport:scenarioReports[id], ...options });
 
 export const PROJECT_CHECKS = [
-  check('luna-tutorial', ['scripts/test-luna-tutorial.mjs'], ['settings', 'database', 'localization', 'navigation', 'responsive', 'keyboard', 'writing', 'motion'], { ports: [5357], ownScenarioReport: 'results.json', timeout: 240_000, modes: ['smoke', 'full'] }),
+  check('luna-tutorial', ['scripts/test-luna-tutorial.mjs'], ['settings', 'database', 'localization', 'navigation', 'responsive', 'keyboard', 'writing', 'motion', 'bookmarks', 'lore', 'history', 'export', 'backups', 'search'], { ports: [5357], ownScenarioReport: 'results.json', timeout: 360_000, modes: ['smoke', 'full'] }),
   check('interface-language-unit', ['--test', 'scripts/test-interface-language.mjs'], ['settings', 'database', 'localization'], { modes: ['smoke', 'full'] }),
   check('interface-language-ui', ['scripts/test-interface-language-ui.mjs'], ['settings', 'database', 'localization', 'responsive', 'keyboard', 'writing', 'security'], { ports: [5351], ownScenarioReport: 'results.json', timeout: 180_000, modes: ['smoke', 'full'] }),
   check('language-page', ['scripts/test-language-page.mjs'], ['settings', 'localization', 'writing', 'pagination', 'responsive', 'visual'], { ports: [5353], ownScenarioReport: 'results.json', timeout: 120_000, modes: ['smoke', 'full'] }),

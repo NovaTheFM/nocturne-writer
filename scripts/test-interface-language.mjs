@@ -6,6 +6,18 @@ import {
   localizedLabels, localizedOptions, localizedSettings, getMissingTranslations,
 } from '../src/core/i18n.js';
 import { messages } from '../src/locales/messages.js';
+import { lunaTutorialSteps, lunaTutorialCopy } from '../src/ui/luna-tutorial-steps.js';
+
+test('every desktop and mobile tutorial scene has Ukrainian and English copy', () => {
+  for (const mobile of [false, true]) {
+    const steps = lunaTutorialSteps({ app: { isMobileLayout: () => mobile }, find: () => null, canShowSplit: () => !mobile });
+    for (const step of Object.keys(steps)) {
+      const source = lunaTutorialCopy(step, mobile);
+      assert.ok(source, `No tutorial copy for ${step}`);
+      for (const locale of ['uk', 'en']) assert.notEqual(t(source, locale), source, `${locale}: ${step}: ${source}`);
+    }
+  }
+});
 
 test('all supported languages have natural interface translations', () => {
   for (const [locale, close, settings] of [['ru', 'Закрыть', 'Настройки'], ['uk', 'Закрити', 'Налаштування'], ['en', 'Close', 'Settings']]) {

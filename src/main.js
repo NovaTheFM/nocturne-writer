@@ -15520,7 +15520,7 @@ class NocturneWriter {
       <div class="tab-content active misc-settings">
         <p class="settings-section-note">Сервисные, тестовые и редкие функции.</p>
         <section class="misc-card">
-          <div class="misc-card-head"><div><h3>Знакомство с Луной</h3><p>Короткое обучение: первая глава, заметки, база знаний и настройки.</p></div></div>
+          <div class="misc-card-head"><div><h3>Знакомство с Луной</h3><p>Путеводитель по основным и скрытым инструментам: от закладок и истории до сборки книги.</p></div></div>
           <div class="misc-action-grid">${action('bx-moon', t('Пройти обучение'), 'start-tutorial')}</div>
         </section>
         <section class="misc-card">
@@ -20208,7 +20208,7 @@ class NocturneWriter {
 
   getSettingsRegistry() {
     return [
-      { tab: 'misc', label: t('Знакомство с Луной'), note: t('Короткое обучение: первая глава, заметки, база знаний и настройки.'), key: 'lunaTutorial', type: 'action', action: 'start-tutorial' },
+      { tab: 'misc', label: t('Знакомство с Луной'), note: t('Путеводитель по основным и скрытым инструментам: от закладок и истории до сборки книги.'), key: 'lunaTutorial', type: 'action', action: 'start-tutorial' },
       ...workflowSettings,
       { tab: 'visual', label: t('Язык интерфейса'), note: t('Язык меню и уведомлений. Язык рукописи и проверки текста не меняется.'), key: 'interfaceLanguage', type: 'select', options: LANGUAGE_OPTIONS },
       { tab: 'visual', label: t('Тема оформления'), note: t('Меняет базовую палитру интерфейса без изменения структуры документов.'), key: 'theme', type: 'select', options: [['nocturne', 'Nocturne Dark'], ['adaptive', 'Nocturne Adaptive'], ['blazing', 'Blazing Black'], ['midnight', 'Deep Midnight'], ['paper', 'Paper Light'], ['matrix', 'Cyberpunk Matrix'], ['lavender', 'Lavender Bloom'], ['crimson', 'Crimson Flame']] },

@@ -61,7 +61,7 @@ async function reachForm(page) {
   await step(page, 'create-form');
 }
 
-async function discoverFeatures(page, mobile) {
+async function discoverFeatures(page, mobile, { stopAt, keyboardPalette = false } = {}) {
   const click = async name => (await step(page, name)).click();
   const next = async name => { await step(page, name); await page.locator('[data-luna-choice="next"]').click(); };
   const shot = async name => page.screenshot({ path: `${output}/${mobile ? 'mobile' : 'desktop'}-${name}.png` });
@@ -81,7 +81,9 @@ async function discoverFeatures(page, mobile) {
   await page.locator('[data-knowledge-query]:visible').fill('A real story');
   await shot('world-search'); await next('world-search');
   if (!mobile) await click('tools-commands');
-  await click('open-commands'); await step(page, 'commands');
+  if (keyboardPalette && !mobile) { await step(page, 'open-commands'); await page.keyboard.press('Control+k'); }
+  else await click('open-commands');
+  await step(page, 'commands');
   await page.locator('[data-command-palette-input]').fill('history');
   await click('command-history'); await step(page, 'history'); await shot('history'); await next('history');
   await click('open-modes'); await click('choose-editor'); await step(page, 'editor-mode');
@@ -89,9 +91,16 @@ async function discoverFeatures(page, mobile) {
   await next('editor-mode'); await click('open-finalization'); await click('choose-finalization');
   await step(page, 'finalization'); await shot('review'); await next('finalization');
   if (mobile) await click('focus-actions');
-  await click('enter-focus'); await step(page, 'focus');
-  assert.equal(await page.evaluate(() => window.nocturneApp.state.zenActive), true);
-  await shot('focus'); await next('focus');
+  const zenButton = mobile || await page.locator('[data-action="toggle-zen"]:visible').count();
+  if (zenButton) {
+    await click('enter-focus'); await step(page, 'focus');
+    assert.equal(await page.evaluate(() => window.nocturneApp.state.zenActive), true);
+  } else {
+    await click('focus-settings'); await click('focus-tab'); await step(page, 'focus-options');
+  }
+  await shot('focus');
+  if (stopAt === 'focus') return;
+  await next(zenButton ? 'focus' : 'focus-options');
   if (!mobile) { await click('open-split'); await step(page, 'split'); await shot('split'); await next('split'); }
   if (mobile) await click('more-search'); else await click('open-search-menu');
   await click('open-search'); await click('choose-project-search'); await step(page, 'project-search');
@@ -100,6 +109,11 @@ async function discoverFeatures(page, mobile) {
   await shot('manuscript-search'); await next('project-search');
   await click(mobile ? 'more-book' : 'tools-book'); await click('open-book');
   await step(page, 'book'); assert.equal(await page.locator('[data-export-chapter]').count(), 1);
+  await page.locator('label:has([data-export-chapter])').click();
+  assert.equal(await page.locator('[data-export-chapter]').isChecked(), false);
+  assert.equal(await page.locator('[data-export-selected-book]').isDisabled(), true);
+  await page.locator('label:has([data-export-chapter])').click();
+  assert.equal(await page.locator('[data-export-chapter]').isChecked(), true);
   await shot('book'); await next('book');
   await click(mobile ? 'more-backups' : 'tools-backups'); await click('open-backups');
   await step(page, 'backups'); await shot('backups'); await next('backups');
@@ -111,7 +125,8 @@ async function discoverFeatures(page, mobile) {
   }
   await next('settings'); await click('open-macros'); await step(page, 'macros'); await shot('macros');
   await next('macros'); await click('open-formatting'); await step(page, 'formatting'); await shot('formatting');
-  await next('formatting');
+  await next('formatting'); await step(page, 'done');
+  await page.locator('[data-luna-choice="back"]').click(); await next('formatting');
   assert.equal(await page.evaluate(() => window.nocturneApp.state.reviewMode), 'write');
   assert.equal(await page.evaluate(() => window.nocturneApp.state.zenActive), false);
   assert.equal(await page.evaluate(() => window.nocturneApp.state.workspace.mode), 'single');
@@ -153,30 +168,19 @@ try {
       await step(page, 'write');
       const editor = page.locator('.page-content-prosemirror').first();
       await editor.press('Control+Home'); await page.keyboard.type('A real story.');
+      await page.evaluate(() => {
+        const a = window.nocturneApp;
+        window.__tutorialEditor = a.nocturneEditor.get('primary');
+        window.__tutorialJson = window.__tutorialEditor.getJSON();
+      });
       await page.screenshot({ path: `${output}/${mobile ? 'mobile' : 'desktop'}-writing.png` });
       await discoverFeatures(page, mobile);
-      /* expanded tour replaces the earlier five-topic route */
-      /*
-      await page.locator('[data-luna-choice="next"]').click();
-      if (mobile) await (await step(page, 'more-notes')).click();
-      await (await step(page, 'open-notes')).click();
-      await step(page, 'notes');
-      await page.screenshot({ path: `${output}/${mobile ? 'mobile' : 'desktop'}-notes.png` });
-      await page.locator('[data-luna-choice="next"]').click();
-      await (await step(page, 'open-kb')).click();
-      if (!mobile) {
-        const characters = await step(page, 'kb-menu');
-        await characters.focus(); await page.keyboard.press('Enter');
-      }
-      await step(page, 'kb');
-      await page.screenshot({ path: `${output}/${mobile ? 'mobile' : 'desktop'}-knowledge.png` });
-      await page.locator('[data-luna-choice="next"]').click();
-      if (mobile) await (await step(page, 'more-settings')).click();
-      await (await step(page, 'open-settings')).click();
-      await step(page, 'settings');
-      await page.screenshot({ path: `${output}/${mobile ? 'mobile' : 'desktop'}-settings.png` });
-      await page.locator('[data-luna-choice="next"]').click();
-      */
+      assert.equal(await page.evaluate(() => window.nocturneApp.nocturneEditor.get('primary') === window.__tutorialEditor), true, 'Tour must retain the live editor');
+      assert.deepEqual(await page.evaluate(() => window.__tutorialEditor.getJSON()), await page.evaluate(() => window.__tutorialJson));
+      await page.evaluate(() => window.__tutorialEditor.commands.undo());
+      assert.notDeepEqual(await page.evaluate(() => window.__tutorialEditor.getJSON()), await page.evaluate(() => window.__tutorialJson), 'Undo must survive every preview');
+      await page.evaluate(() => window.__tutorialEditor.commands.redo());
+      assert.deepEqual(await page.evaluate(() => window.__tutorialEditor.getJSON()), await page.evaluate(() => window.__tutorialJson));
       await step(page, 'done');
       assert.equal(await page.locator('[data-luna-choice="skip"]').count(), 1);
       await page.locator('[data-luna-choice="done"]').click();
@@ -225,8 +229,31 @@ try {
       assert.equal(await page.locator('[data-luna-target]').count(), 0);
       await page.locator('#doc-form button[type="submit"]').click();
       await page.waitForFunction(() => window.nocturneApp.state.docs.length === 1);
-    }, { reducedMotion: 'reduce' });
+    }, { reducedMotion: mobile ? 'reduce' : 'no-preference' });
   }
+  for (const mobile of [false, true]) await scenario('skip restores the original mode and hidden focus controls stay reachable', mobile, async page => {
+    await page.goto(url); await choose(page, 'en');
+    await page.locator('[data-luna-choice="no"]').click();
+    await page.waitForFunction(() => window.nocturneApp.startupInteractionReady);
+    const before = await page.evaluate(async mobile => {
+      const a = window.nocturneApp;
+      await a.createDoc(a.defaultFolderId(), 'Existing chapter', '');
+      a.nocturneEditor.get('primary').commands.setContent('<p>A real story.</p>');
+      await a.flushOpenDocuments();
+      a.state.settings.showZenButton = false; a.applySettings();
+      a.setReviewMode('finalization'); await a.toggleZen(mobile);
+      a.openSettingsTab('misc');
+      return await a.db.getAllRaw('docs');
+    }, mobile);
+    await page.locator('[data-action="start-tutorial"]:visible').click();
+    await step(page, 'welcome'); await page.locator('[data-luna-choice="yes"]').click();
+    await discoverFeatures(page, mobile, { stopAt: 'focus', keyboardPalette: true });
+    await page.keyboard.press('Escape'); await page.locator('#luna-tutorial').waitFor({ state: 'detached' });
+    assert.equal(await page.evaluate(() => window.nocturneApp.state.reviewMode), 'finalization');
+    assert.equal(await page.evaluate(() => !!window.nocturneApp.state.zenActive), mobile);
+    assert.equal(await page.evaluate(() => window.nocturneApp.state.settings.showZenButton), false);
+    assert.deepEqual(await page.evaluate(async () => await window.nocturneApp.db.getAllRaw('docs')), before);
+  }, { reducedMotion: 'reduce' });
   await scenario('existing profile, resizing, locale changes and Android Back leave manuscripts intact', false, async page => {
     await page.goto(url); await choose(page, 'ru');
     await page.locator('[data-luna-choice="no"]').click();
@@ -247,18 +274,20 @@ try {
     await page.locator('[data-luna-choice="yes"]').click(); await step(page, 'write');
     assert.equal(await page.locator('#doc-form').count(), 0, 'Use the existing document without creating a demo');
     await page.locator('[data-luna-choice="next"]').click();
+    await (await step(page, 'bookmarks-actions')).click();
+    await (await step(page, 'open-bookmarks')).click(); await step(page, 'bookmarks');
+    await page.locator('[data-luna-choice="next"]').click();
     await (await step(page, 'more-notes')).click();
     await (await step(page, 'open-notes')).click(); await step(page, 'notes');
     await page.setViewportSize({ width: 1280, height: 900 }); await step(page, 'notes');
     await page.locator('[data-luna-choice="next"]').click();
-    await (await step(page, 'open-kb')).click(); await step(page, 'kb-menu');
-    await page.setViewportSize({ width: 390, height: 844 }); await step(page, 'kb');
+    await (await step(page, 'open-floating')).click(); await step(page, 'floating');
     await page.locator('[data-luna-choice="next"]').click();
-    await (await step(page, 'more-settings')).click();
-    await (await step(page, 'open-settings')).click(); await step(page, 'settings');
+    await (await step(page, 'open-kb')).click(); await step(page, 'kb-menu');
+    await page.setViewportSize({ width: 390, height: 844 }); await step(page, 'world-search');
     await page.evaluate(async () => await window.nocturneApp.interfaceLanguage.change('en'));
-    await page.waitForFunction(() => document.querySelector('#luna-tutorial-text')?.textContent.startsWith('Change your language'));
-    await step(page, 'settings');
+    await page.waitForFunction(() => document.querySelector('#luna-tutorial-text')?.textContent.startsWith('Find characters'));
+    await step(page, 'world-search');
     await page.evaluate(() => window.nocturneApp.closeTopMobileOverlay());
     await page.locator('#luna-tutorial').waitFor({ state: 'detached' });
     assert.deepEqual(await page.evaluate(async () => await window.nocturneApp.db.getAllRaw('docs')), before);

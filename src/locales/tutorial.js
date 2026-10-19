@@ -1,4 +1,7 @@
+import { tutorialDiscoveryMessages } from './tutorial-discovery.js';
+
 export const tutorialMessages = {
+  ...tutorialDiscoveryMessages,
   "Да": ["Так", "Yes"],
   "Нет": ["Ні", "No"],
   "Здесь меняются язык, тема и шрифты. А снова найти меня можно в разделе «Прочее».": [
