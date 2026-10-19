@@ -136,6 +136,51 @@ async function discoverFeatures(page, mobile, { stopAt, keyboardPalette = false 
 try {
   for (let i = 0; i < 70; i++) { try { if ((await fetch(url)).ok) break; } catch {} await new Promise(resolve => setTimeout(resolve, 100)); }
   browser = await chromium.launch({ headless: true });
+  for (const fixture of [
+    { width: 1440, height: 1000 }, { width: 1920, height: 1080 },
+    { width: 1280, height: 720 }, { width: 390, height: 844, mobile: true },
+    { width: 1440, height: 1000, reduced: true },
+  ]) await scenario(`centered creation form waits for Luna: ${fixture.width}x${fixture.height}${fixture.reduced ? ' reduced' : ''}`, !!fixture.mobile, async page => {
+    await page.goto(url); await choose(page, 'en'); await page.locator('[data-luna-choice="yes"]').click();
+    if (await page.evaluate(() => window.nocturneApp.lunaTutorial.step === 'open-docs')) await (await step(page, 'open-docs')).click();
+    await step(page, 'create');
+    await page.evaluate(() => {
+      window.__creationFrames = [];
+      const until = performance.now() + 1500;
+      const sample = () => {
+        const coach = document.querySelector('.luna-companion').getBoundingClientRect();
+        const overlay = document.getElementById('form-overlay'), form = document.getElementById('doc-form');
+        window.__creationFrames.push({ active: overlay.classList.contains('active'), x: coach.x, y: coach.y, right: coach.right, bottom: coach.bottom, form: form ? { x: overlay.offsetLeft + form.offsetLeft, y: overlay.offsetTop + form.offsetTop, right: overlay.offsetLeft + form.offsetLeft + form.offsetWidth, bottom: overlay.offsetTop + form.offsetTop + form.offsetHeight } : null });
+        if (performance.now() < until) requestAnimationFrame(sample);
+      };
+      sample();
+    });
+    const target = await step(page, 'create');
+    if (fixture.width === 1920) { await target.focus(); await page.keyboard.press('Enter'); } else await target.click();
+    await page.locator('#form-overlay.active #doc-form').waitFor(); await step(page, 'create-form');
+    await page.waitForTimeout(400);
+    const state = await page.evaluate(() => {
+      const form = document.querySelector('#doc-form').getBoundingClientRect();
+      return { form: { x: form.x, y: form.y, right: form.right, bottom: form.bottom }, width: innerWidth, height: innerHeight, frames: window.__creationFrames };
+    });
+    assert.ok(Math.abs((state.form.x + state.form.right) / 2 - state.width / 2) < 2, 'The document form keeps its normal horizontal center');
+    if (fixture.height >= 900) assert.ok(Math.abs((state.form.y + state.form.bottom) / 2 - state.height / 2) < 2, 'A normal desktop form keeps its vertical center');
+    const opened = state.frames.find(sample => sample.active);
+    assert.ok(opened?.form, 'Opening the real native form was observed');
+    assert.ok(opened.right <= opened.form.x - 8 || opened.x >= opened.form.right + 8 || opened.bottom <= opened.form.y - 8 || opened.y >= opened.form.bottom + 8, `Luna must clear the form before it opens: ${JSON.stringify(opened)}`);
+    if (fixture.width === 1440 && !fixture.reduced) {
+      const initial = state.frames[0];
+      assert.ok(state.frames.filter(sample => !sample.active && Math.abs(sample.y - initial.y) > 3 && Math.abs(sample.y - opened.y) > 3).length > 2, 'Luna visibly moves before the form opens');
+    }
+    await page.locator('#doc-form input[name="title"]').fill('Centered without losing input');
+    await page.screenshot({ path: `${output}/centered-form-${fixture.width}-${fixture.height}${fixture.reduced ? '-reduced' : ''}.png` });
+    await page.locator('#doc-form [data-close-form]').click(); await step(page, 'create');
+    await (await step(page, 'create')).click(); await page.locator('#form-overlay.active #doc-form').waitFor(); await step(page, 'create-form');
+    await page.locator('#doc-form input[name="title"]').fill('Second opening survives skip');
+    await page.keyboard.press('Escape'); await page.locator('#luna-tutorial').waitFor({ state: 'detached' });
+    assert.equal(await page.locator('#doc-form input[name="title"]').inputValue(), 'Second opening survives skip');
+    await page.locator('#doc-form button[type="submit"]').click(); await page.waitForFunction(() => window.nocturneApp.state.docs.length === 1);
+  }, { viewport: { width: fixture.width, height: fixture.height }, reducedMotion: fixture.reduced ? 'reduce' : 'no-preference' });
   for (const mobile of [false, true]) for (const motion of ['normal', 'reduced', ...(mobile ? ['application'] : [])]) {
     await scenario(`spotlight motion remains aligned and usable: ${motion}`, mobile, async page => {
       await page.goto(url); await choose(page, 'en'); await step(page, 'welcome');
