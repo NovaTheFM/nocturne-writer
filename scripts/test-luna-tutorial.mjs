@@ -136,6 +136,61 @@ async function discoverFeatures(page, mobile, { stopAt, keyboardPalette = false 
 try {
   for (let i = 0; i < 70; i++) { try { if ((await fetch(url)).ok) break; } catch {} await new Promise(resolve => setTimeout(resolve, 100)); }
   browser = await chromium.launch({ headless: true });
+  for (const mobile of [false, true]) for (const motion of ['normal', 'reduced', ...(mobile ? ['application'] : [])]) {
+    await scenario(`spotlight motion remains aligned and usable: ${motion}`, mobile, async page => {
+      await page.goto(url); await choose(page, 'en'); await step(page, 'welcome');
+      await page.evaluate(reduce => { window.nocturneApp.state.settings.reduceMobileAnimations = reduce; }, motion === 'application');
+      if (!mobile) await page.evaluate(() => { document.body.classList.add('theme-paper'); });
+      await page.locator('[data-luna-choice="yes"]').click();
+      if (await page.evaluate(() => window.nocturneApp.lunaTutorial.step === 'open-docs')) await (await step(page, 'open-docs')).click();
+      await step(page, 'create');
+      await page.waitForFunction(() => {
+        const spot = document.querySelector('.luna-spotlight');
+        return spot.dataset.kind === 'action' && Number(getComputedStyle(spot).opacity) > .99;
+      });
+      await page.evaluate(() => {
+        window.__spotlightFrames = [];
+        const until = performance.now() + 800;
+        const sample = () => {
+          const ring = document.querySelector('.luna-spotlight'), hole = document.querySelector('.luna-cutout');
+          const r = ring.getBoundingClientRect(), d = document.querySelector('.luna-dialog');
+          window.__spotlightFrames.push({ x: r.x, y: r.y, width: r.width, height: r.height, opacity: Number(getComputedStyle(ring).opacity), holeOpacity: Number(getComputedStyle(hole).opacity), hole: ['x', 'y', 'width', 'height'].map(key => Number(hole.getAttribute(key))), shellOpacity: Number(getComputedStyle(d).opacity) });
+          if (performance.now() < until) requestAnimationFrame(sample);
+        };
+        sample();
+      });
+      await (await step(page, 'create')).click(); await step(page, 'create-form');
+      await page.locator('#doc-form input[name="title"]').fill('Motion preserves this title');
+      await page.waitForTimeout(850);
+      const state = await page.evaluate(() => {
+        const spot = document.querySelector('.luna-spotlight'), hole = document.querySelector('.luna-cutout');
+        const ring = spot.getBoundingClientRect(), target = document.querySelector('[data-luna-target]').getBoundingClientRect();
+        return { kind: spot.dataset.kind, ring: { x: ring.x, y: ring.y, width: ring.width, height: ring.height }, target: { x: target.x, y: target.y, right: target.right, bottom: target.bottom }, hole: ['x', 'y', 'width', 'height'].map(key => Number(hole.getAttribute(key))), samples: window.__spotlightFrames, animations: document.querySelector('#luna-tutorial').getAnimations({ subtree: true }).filter(a => a.playState === 'running').length, reduced: document.querySelector('#luna-tutorial').classList.contains('luna-reduced'), pointerEvents: getComputedStyle(spot).pointerEvents, width: innerWidth, height: innerHeight };
+      });
+      assert.equal(state.kind, 'panel');
+      assert.equal(state.pointerEvents, 'none');
+      assert.ok(state.samples.length > 3);
+      for (const sample of state.samples) {
+        for (const [index, key] of ['x', 'y', 'width', 'height'].entries()) assert.ok(Math.abs(sample[key] - sample.hole[index]) < 1, `Mask and ring diverged: ${JSON.stringify(sample)}`);
+        assert.ok(Math.abs(sample.opacity - sample.holeOpacity) < .01, 'The mask and border fade together');
+        assert.equal(sample.shellOpacity, 1, 'The speech surface stays present between messages');
+      }
+      assert.ok(Math.abs(state.ring.x - Math.max(5, state.target.x - 6)) < 2);
+      assert.ok(Math.abs(state.ring.y - Math.max(5, state.target.y - 6)) < 2);
+      assert.ok(state.ring.x + state.ring.width <= state.width && state.ring.y + state.ring.height <= state.height);
+      assert.equal(state.animations, 0, 'The guide settles instead of pulsing forever');
+      assert.equal(state.reduced, motion !== 'normal');
+      if (motion === 'normal') {
+        assert.ok(state.samples.some(sample => sample.opacity > .15 && sample.opacity < .85), 'The highlight fades through intermediate opacity');
+        const fromWidth = state.samples[0].width, toWidth = state.ring.width;
+        assert.ok(state.samples.filter(sample => sample.opacity > .1).every(sample => Math.abs(sample.width - fromWidth) < 12 || Math.abs(sample.width - toWidth) < 25), 'The highlight fades at its targets instead of travelling across the screen');
+      }
+      await page.screenshot({ path: `${output}/${mobile ? 'mobile' : 'desktop'}-spotlight-${motion}.png` });
+      await page.keyboard.press('Escape'); await page.locator('#luna-tutorial').waitFor({ state: 'detached' });
+      assert.equal(await page.locator('#doc-form input[name="title"]').inputValue(), 'Motion preserves this title');
+      assert.equal(await page.locator('[data-luna-target]').count(), 0);
+    }, { reducedMotion: motion === 'reduced' ? 'reduce' : 'no-preference' });
+  }
   for (const mobile of [false, true]) for (const locale of ['ru', 'uk', 'en']) {
     await scenario(`localized greeting and persistent No: ${locale}`, mobile, async page => {
       await page.goto(url); await choose(page, locale);
