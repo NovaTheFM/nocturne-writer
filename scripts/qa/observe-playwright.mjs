@@ -49,7 +49,7 @@ async function observeContext(context) {
   await context.addInitScript(install);
   const observePage = page => {
     if(pages.includes(page))return;pages.push(page);
-    if (process.env.NOCTURNE_QA_SUITE !== 'interface-language-ui') {
+    if (!['interface-language-ui', 'luna-tutorial'].includes(process.env.NOCTURNE_QA_SUITE)) {
       let preparing;
       const prepare = () => preparing ||= chooseDefaultInterfaceLanguage(page).finally(() => { preparing = null; });
       const prepareLoaded = () => prepare().catch(error => { if (!page.isClosed()) log({ type: 'fixture-error', message: error.message }); });
