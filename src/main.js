@@ -1,5 +1,6 @@
 import { t, ui, msg, getLocale, getLocaleName, formatCount, LOCALE_RECORD_ID } from './core/i18n.js';
 import { InterfaceLanguage, LANGUAGE_OPTIONS, languageFlag } from './ui/interface-language.js';
+import { LunaTutorial, TUTORIAL_RECORD_ID } from './ui/luna-tutorial.js';
 import { inferLanguage } from './core/language-detection.js';
 import { Database } from './core/db.js';
 import { defaultSettings, seedDocs, seedFolders, seedLore } from './core/defaults.js';
@@ -129,6 +130,7 @@ class NocturneWriter {
   constructor() {
     this.db = new Database();
     this.interfaceLanguage = new InterfaceLanguage(this);
+    this.lunaTutorial = new LunaTutorial(this);
     this.db.protection = () => ({ enabled: !!this.state?.settings.e2e, password: this.state?.sessionPassword || '' });
     this.draftWrites = new Map();
     this.runtime = detectRuntime();
@@ -435,9 +437,11 @@ class NocturneWriter {
     this.startMobileSystemBar();
     this.applyAndroidSystemBars();
     this.startGitAutosave();
-    this.disposeNativeOpenFiles = platformFiles.onOpenFilesPending(() => this.interfaceLanguage.confirmed && this.openPendingNativeFiles());
+    this.disposeNativeOpenFiles = platformFiles.onOpenFilesPending(() => this.startupInteractionReady && !this.lunaTutorial.active && this.openPendingNativeFiles());
     await this.startupReveal;
     await this.interfaceLanguage.welcomeIfNeeded();
+    await this.lunaTutorial.welcomeIfNeeded();
+    this.startupInteractionReady = true;
     const openedNativeFiles = await this.openPendingNativeFiles();
 
     // Check if new version first run (specifically for Electron desktop users)
@@ -447,7 +451,8 @@ class NocturneWriter {
       this.state.settings.lastSeenVersion = currentVersion;
       await this.persistSettings();
     } else if (showWhatsNew) {
-      setTimeout(() => {
+      setTimeout(async () => {
+        if (this.lunaTutorial.active) await this.lunaTutorial.completion;
         this.openWhatsNewModal();
         this.state.settings.lastSeenVersion = currentVersion;
         this.persistSettings();
@@ -3506,6 +3511,7 @@ class NocturneWriter {
   }
 
   installModalFocus() {
+    if (this.lunaTutorial.active) return;
     this.disposeModalFocus = manageModalFocus({ onOverlayClose: overlay => this.closeSettingsSelects(null, { root: overlay, immediate: true, restoreFocus: false }) });
   }
 
@@ -4033,6 +4039,7 @@ class NocturneWriter {
   }
 
   closeTopMobileOverlay() {
+    if (this.lunaTutorial.active) { this.lunaTutorial.finish('skipped'); return true; }
     const openSelect = document.querySelector('.nocturne-select.open, .kb-project-switcher.open');
     if (openSelect) {
       if (openSelect.matches('.nocturne-select')) this.closeSettingsSelects();
@@ -8199,6 +8206,7 @@ class NocturneWriter {
         }
       },
       'open-settings': () => this.openSettingsTab(this.state.activeSettingsTab),
+      'start-tutorial': () => this.lunaTutorial.start(),
       'open-command-palette': () => this.commandPalette.open(),
             'close-command-palette': () => this.commandPalette.close(),
       'close-settings': () => document.getElementById('settings-overlay').classList.remove('active'),
@@ -15512,6 +15520,10 @@ class NocturneWriter {
       <div class="tab-content active misc-settings">
         <p class="settings-section-note">Сервисные, тестовые и редкие функции.</p>
         <section class="misc-card">
+          <div class="misc-card-head"><div><h3>Знакомство с Луной</h3><p>Короткое обучение: первая глава, заметки, база знаний и настройки.</p></div></div>
+          <div class="misc-action-grid">${action('bx-moon', t('Пройти обучение'), 'start-tutorial')}</div>
+        </section>
+        <section class="misc-card">
           <div class="misc-card-head">
             <div>
               <h3>Демо-контент</h3>
@@ -20196,6 +20208,7 @@ class NocturneWriter {
 
   getSettingsRegistry() {
     return [
+      { tab: 'misc', label: t('Знакомство с Луной'), note: t('Короткое обучение: первая глава, заметки, база знаний и настройки.'), key: 'lunaTutorial', type: 'action', action: 'start-tutorial' },
       ...workflowSettings,
       { tab: 'visual', label: t('Язык интерфейса'), note: t('Язык меню и уведомлений. Язык рукописи и проверки текста не меняется.'), key: 'interfaceLanguage', type: 'select', options: LANGUAGE_OPTIONS },
       { tab: 'visual', label: t('Тема оформления'), note: t('Меняет базовую палитру интерфейса без изменения структуры документов.'), key: 'theme', type: 'select', options: [['nocturne', 'Nocturne Dark'], ['adaptive', 'Nocturne Adaptive'], ['blazing', 'Blazing Black'], ['midnight', 'Deep Midnight'], ['paper', 'Paper Light'], ['matrix', 'Cyberpunk Matrix'], ['lavender', 'Lavender Bloom'], ['crimson', 'Crimson Flame']] },
@@ -22709,7 +22722,7 @@ ${raw}`;
       typoRules: await readRecords('typoRules'),
       reviewMarks: await readRecords('reviewMarks'),
       snapshots: await readRecords('snapshots'),
-      settingsRecords: (await readRecords('settings')).filter(record => !['sync-identity', 'sync-connection', 'backup-directory'].includes(record.id)).map(record => record.id === 'app' ? { ...record, value: stripSecrets(record.value) } : record),
+      settingsRecords: (await readRecords('settings')).filter(record => !['sync-identity', 'sync-connection', 'backup-directory', TUTORIAL_RECORD_ID].includes(record.id)).map(record => record.id === 'app' ? { ...record, value: stripSecrets(record.value) } : record),
       trash: await readRecords('trash'),
       syncMappings: await readRecords('syncMappings'),
       syncRevisions: await readRecords('syncRevisions'),
@@ -24000,9 +24013,9 @@ ${raw}`;
   async persistImportedProject(payload = {}, onCommit = () => {}) {
     const settingsRecords = payload.settingsRecords || [];
     const protectedPreferences = settingsRecords.find(record => record.id === 'app' && record.protectedStore);
-    const localSettings = (await this.db.getAllRaw('settings')).filter(record => ['sync-identity', 'sync-connection', 'backup-directory', LOCALE_RECORD_ID].includes(record.id));
+    const localSettings = (await this.db.getAllRaw('settings')).filter(record => ['sync-identity', 'sync-connection', 'backup-directory', LOCALE_RECORD_ID, TUTORIAL_RECORD_ID].includes(record.id));
     await this.db.atomicWrite({
-      settings: [protectedPreferences || { id: 'app', value: this.state.settings }, ...settingsRecords.filter(record => !['app', 'global-notes', 'sync-identity', 'sync-connection', 'backup-directory', LOCALE_RECORD_ID].includes(record.id)), ...localSettings, settingsRecords.find(record => record.id === 'global-notes') || { id: 'global-notes', text: this.state.globalNotes, bookmarks: this.state.globalBookmarks || [], updatedAt: Date.now() }],
+      settings: [protectedPreferences || { id: 'app', value: this.state.settings }, ...settingsRecords.filter(record => !['app', 'global-notes', 'sync-identity', 'sync-connection', 'backup-directory', LOCALE_RECORD_ID, TUTORIAL_RECORD_ID].includes(record.id)), ...localSettings, settingsRecords.find(record => record.id === 'global-notes') || { id: 'global-notes', text: this.state.globalNotes, bookmarks: this.state.globalBookmarks || [], updatedAt: Date.now() }],
       folders: this.state.folders, docs: this.state.docs,
       lore: payload.lores?.length ? payload.lores : [{ id: 'world', ...this.state.lore }],
       floatingNotes: this.state.floatingNotes, typoRules: this.state.typoRules, reviewMarks: this.state.reviewMarks,
@@ -24735,9 +24748,9 @@ ${raw}`;
     this.activeAiRequest?.controller.abort();
     for (const save of this.saveDocDebouncers.values()) save.cancel?.();
     await Promise.allSettled([...this.docSaves?.values() || [], ...this.draftWrites.values(), this.databaseSync?.work, this.databaseSync?.incomingWork, this.backups?.running, this.history.work]);
-    const languagePreference = await this.db.getRaw('settings', LOCALE_RECORD_ID);
+    const localPreferences = await Promise.all([LOCALE_RECORD_ID, TUTORIAL_RECORD_ID].map(id => this.db.getRaw('settings', id)));
     await this.db.clearAll();
-    if (languagePreference) await this.db.put('settings', languagePreference);
+    for (const preference of localPreferences.filter(Boolean)) await this.db.put('settings', preference);
     const localPrefixes = [LIVE_PREFIX, 'goal-done-'];
     const localKeys = [
       'nocturne-global-notes',
@@ -25616,6 +25629,7 @@ async httpGetJson(url, timeoutMs = 650) {
   }
 
   async checkAndShowSadMoonModal() {
+    if (this.lunaTutorial.active) { await this.lunaTutorial.completion; return this.checkAndShowSadMoonModal(); }
     if (!this.needToShowSadMoon) return;
     const today = localDateKey();
     let streakStats = await this.db.get('settings', 'streak_stats');
@@ -25628,6 +25642,7 @@ async httpGetJson(url, timeoutMs = 650) {
   }
 
   async checkCaretIdleStreakTrigger() {
+    if (this.lunaTutorial.active) return;
     const today = localDateKey();
     const words = this.todayStatsCache?.id === today ? Number(this.todayStatsCache.words || 0) : 0;
     const goal = Number(this.state.settings.dailyGoal) || 1;

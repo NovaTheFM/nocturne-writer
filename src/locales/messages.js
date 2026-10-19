@@ -1,4 +1,7 @@
+import { tutorialMessages } from './tutorial.js';
+
 export const messages = {
+  ...tutorialMessages,
   "Шрифты интерфейса и рукописи, интервалы": [
     "Шрифти інтерфейсу й рукопису, інтервали",
     "Interface and manuscript fonts, spacing"

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { dismissDefaultTutorial } from './qa/first-run-language.mjs';
 import { spawn } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
@@ -63,6 +64,7 @@ async function choose(page, locale) {
   await page.locator(`[data-choose-language="${locale}"]`).click();
   await page.locator('[data-confirm-language]').click();
   await page.waitForSelector('#language-onboarding', { state: 'detached' });
+  await dismissDefaultTutorial(page);
 }
 
 try {
