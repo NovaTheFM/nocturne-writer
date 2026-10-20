@@ -2,6 +2,7 @@ import { tutorialDiscoveryMessages } from './tutorial-discovery.js';
 
 export const tutorialMessages = {
   ...tutorialDiscoveryMessages,
+  'Повторить загрузку Луны': ['Завантажити Луну ще раз', 'Load Luna again'],
   'Ой, прости, я закрываю тебе меню! Сейчас подвинем настройки чуть вправо.': [
     'Ой, вибач, я затуляю тобі меню! Зараз посунемо налаштування трохи праворуч.',
     'Oh, sorry, I’m covering the menu! Let’s move settings a little to the right.'

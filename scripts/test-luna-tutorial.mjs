@@ -399,10 +399,16 @@ try {
       assert.equal((await page.locator('[data-luna-choice="yes"]').textContent()).trim(), { ru: 'Да', uk: 'Так', en: 'Yes' }[locale]);
       assert.equal((await page.locator('[data-luna-choice="no"]').textContent()).trim(), { ru: 'Нет', uk: 'Ні', en: 'No' }[locale]);
       await step(page, 'welcome');
+      await page.waitForFunction(() => getComputedStyle(document.querySelector('.luna-mascot canvas')).opacity === '1');
+      await page.locator('.luna-dialog').focus();
       await page.keyboard.press('Shift+Tab');
-      assert.equal(await page.evaluate(() => document.activeElement.dataset.lunaChoice), 'yes', 'Reverse Tab starts at the last button');
+      assert.equal(await page.evaluate(() => document.activeElement.matches('.luna-mascot canvas')), true, 'Reverse Tab reaches the interactive model');
       await page.keyboard.press('Tab');
-      assert.equal(await page.evaluate(() => document.activeElement.dataset.lunaChoice), 'no', 'Tab wraps from the last button to the first');
+      assert.equal(await page.evaluate(() => document.activeElement.dataset.lunaChoice), 'no', 'Tab wraps from the model to the first choice');
+      await page.keyboard.press('Tab');
+      assert.equal(await page.evaluate(() => document.activeElement.dataset.lunaChoice), 'yes');
+      await page.keyboard.press('Tab');
+      assert.equal(await page.evaluate(() => document.activeElement.matches('.luna-mascot canvas')), true);
       await page.screenshot({ path: `${output}/${mobile ? 'mobile' : 'desktop'}-${locale}-welcome.png` });
       await page.locator('[data-luna-choice="no"]').click();
       await page.locator('#luna-tutorial').waitFor({ state: 'detached' });

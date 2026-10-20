@@ -1,6 +1,7 @@
 import { t, getLocale } from '../core/i18n.js';
 import { escapeHtml } from '../core/utils.js';
 import { lunaTutorialSteps, lunaTutorialCopy } from './luna-tutorial-steps.js';
+import { LunaMascot } from './luna-mascot.js';
 
 export const TUTORIAL_RECORD_ID = 'luna-tutorial';
 const focusable = 'button:not(:disabled), a[href], input:not(:disabled):not([type="hidden"]), textarea:not(:disabled), select:not(:disabled), [contenteditable="true"], [tabindex]:not([tabindex="-1"])';
@@ -38,7 +39,7 @@ export class LunaTutorial {
     this.root.innerHTML = `<svg class="luna-tutorial-shade" aria-hidden="true" focusable="false"><defs><mask id="luna-spotlight-mask" maskUnits="userSpaceOnUse"><rect width="100%" height="100%" fill="white"/><rect class="luna-cutout" rx="14" fill="black"/></mask></defs><rect width="100%" height="100%" mask="url(#luna-spotlight-mask)"/></svg>
       <div class="luna-spotlight" aria-hidden="true"></div>
       <div class="luna-companion">
-        <div class="luna-mascot" data-luna-mascot aria-hidden="true"><svg viewBox="0 0 100 100" focusable="false"><path class="luna-moon" d="M70 12a38 38 0 1 0 17 62A40 40 0 0 1 70 12Z"/><path class="luna-star" d="m80 16 3 7 7 3-7 3-3 7-3-7-7-3 7-3Z"/><path class="luna-face" d="M32 57q3-5 6 0m9-1q3-5 6 0m-14 9q5 5 10-1"/></svg></div>
+        <div class="luna-mascot" data-luna-mascot><canvas tabindex="0" role="button" aria-label="${escapeHtml(t('Луна'))}"></canvas><button type="button" class="luna-rig-retry" hidden></button></div>
         <section class="luna-dialog" role="dialog" aria-modal="false" aria-label="${escapeHtml(t('Луна'))}" aria-describedby="luna-tutorial-text" tabindex="-1">
           <div class="luna-dialog-body">
             <div class="luna-dialog-copy" aria-live="polite" aria-atomic="true"></div>
@@ -55,6 +56,7 @@ export class LunaTutorial {
     this.companion = this.root.querySelector('.luna-companion');
     this.cutout = this.root.querySelector('.luna-cutout');
     this.spotlight = this.root.querySelector('.luna-spotlight');
+    this.mascot = new LunaMascot(this);
     this.onClick = event => {
       const choice = event.target.closest('[data-luna-choice]')?.dataset.lunaChoice;
       if (!choice || this.finishing) return;
@@ -109,7 +111,7 @@ export class LunaTutorial {
   }
 
   focusTargets() {
-    const islands = [this.description()?.interactive !== false ? this.target : null, ...(this.extraTargets || []), this.dialog].filter(Boolean);
+    const islands = [this.description()?.interactive !== false ? this.target : null, ...(this.extraTargets || []), this.dialog, this.mascot?.host].filter(Boolean);
     return [...new Set(islands.flatMap(island => [...(island.matches(focusable) ? [island] : []), ...island.querySelectorAll(focusable)]))].filter(element => visible(element) && element.tabIndex >= 0);
   }
 
@@ -155,6 +157,7 @@ export class LunaTutorial {
   async show(step, animate = true) {
     if (!this.active || this.finishing) return;
     this.changing = true;
+    this.mascot.stopSpeaking();
     const generation = this.generation = (this.generation || 0) + 1;
     if (step === 'settings' && this.step === 'settings-apology' && this.canShowSettingsAside() && !this.settingsAside) await this.moveSettingsAside();
     if (!this.active || this.finishing || generation !== this.generation) return;
@@ -177,6 +180,7 @@ export class LunaTutorial {
       const copy = t(this.copy());
       const letters = typeof Intl.Segmenter === 'function' ? [...new Intl.Segmenter(getLocale(), { granularity: 'grapheme' }).segment(copy)].map(item => item.segment) : Array.from(copy);
       const interval = Math.min(14, 700 / Math.max(1, letters.length - 1));
+      this.mascot.speak(Math.max(700, (letters.length - 1) * interval + 220));
       this.root.querySelector('.luna-dialog-copy').innerHTML = `<p id="luna-tutorial-text"><span class="luna-screen-reader">${escapeHtml(copy)}</span><span aria-hidden="true">${letters.map((letter, index) => `<span class="luna-letter" style="--luna-letter-delay:${index * interval}ms">${escapeHtml(letter)}</span>`).join('')}</span></p>`;
       const primary = (choice, label) => `<button type="button" class="pill-btn ai-btn" data-luna-choice="${choice}">${escapeHtml(t(label))}<i class="bx bx-right-arrow-alt" aria-hidden="true"></i></button>`;
       const skip = `<button type="button" class="luna-skip" data-luna-choice="skip">${escapeHtml(t('Пропустить обучение'))}</button>`;
@@ -244,7 +248,7 @@ export class LunaTutorial {
     if (this.pendingForm?.isConnected) return this.pendingForm;
     const overlay = document.getElementById('form-overlay');
     if (overlay && (overlay.classList.contains('active') || Number(getComputedStyle(overlay).opacity) > .01)) return overlay.querySelector('.form-modal');
-    return first('#floating-notes-modal.active .floating-notes-modal-panel') || (!this.canShowSettingsAside() && first('#settings-overlay.active .settings-modal'));
+    return first('#floating-notes-modal.active .floating-notes-modal-panel') || (!this.canShowSettingsAside() ? first('#settings-overlay.active .settings-modal') : null);
   }
 
   surfaceRect(surface) {
@@ -296,6 +300,7 @@ export class LunaTutorial {
     const mobile = this.app.isMobileLayout();
     this.root.classList.toggle('luna-mobile', mobile);
     this.root.classList.toggle('luna-reduced', this.app.shouldReduceSurfaceMotion());
+    this.mascot.syncMotion();
     this.root.classList.toggle('luna-keyboard', mobile && height < innerHeight * .72);
     const rect = this.target?.getBoundingClientRect();
     const coachHeight = Math.max(this.root.querySelector('.luna-mascot').offsetHeight, this.dialog.__surfaceSizeTransition?.targetHeight || this.dialog.offsetHeight) + (parseFloat(getComputedStyle(this.companion).paddingBottom) || 0);
@@ -345,6 +350,7 @@ export class LunaTutorial {
       const below = content.bottom + 24, above = content.top - coachHeight - 24;
       if (below + coachHeight <= top + height - 14) y = below;
       else if (above >= top + 14) y = above;
+      else if (content.right + 24 + this.companion.offsetWidth <= left + width - 24) x = content.right + 24;
     }
     this.placeCompanion(Math.max(left + 24, x), Math.max(top + 14, y));
     const reserve = `${coachHeight + (mobile ? 28 : 48)}px`;
@@ -525,6 +531,7 @@ export class LunaTutorial {
   async finish(status) {
     if (!this.active || this.finishing) return;
     this.finishing = true;
+    this.mascot.stopSpeaking();
     cancelAnimationFrame(this.animationFrame);
     this.generation = (this.generation || 0) + 1;
     this.root.querySelectorAll('button').forEach(button => { button.disabled = true; });
@@ -534,6 +541,7 @@ export class LunaTutorial {
     await this.app.runMotion(this.root, [{ opacity: 1 }, { opacity: 0 }], { channel: 'tutorial', duration: 280 }).finished;
     this.detachTarget();
     this.root.remove();
+    this.mascot.destroy();
     for (const type of ['pointerdown', 'click', 'dblclick', 'contextmenu']) document.removeEventListener(type, this.onPointer, true);
     document.removeEventListener('keydown', this.onKey, true);
     document.removeEventListener('focusin', this.onFocus, true);

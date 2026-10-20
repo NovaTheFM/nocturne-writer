@@ -1,0 +1,1028 @@
+{
+  "source": "C:/Users/sasat/OneDrive/Рабочий стол/RigMe",
+  "importedAt": "2026-10-20T05:22:30.768Z",
+  "entry": "src/luna-state-rig.js",
+  "layers": 55,
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 28932,
+      "sha256": "829146787ee855d8712072f304f004bc925d0c0aeeb639ea6935835af8851880"
+    },
+    {
+      "path": "assets/luna.png",
+      "bytes": 909724,
+      "sha256": "735a95a20baafa58e8f2b470b067694a728a01c15a72ae0f78c9b444dfe8ca95"
+    },
+    {
+      "path": "assets/luna_wave.png",
+      "bytes": 916624,
+      "sha256": "6e9be1aa2a5f1ff9f131caebf71ba78e4c6a7450ee274375addc8355b328cc28"
+    },
+    {
+      "path": "assets/manifest.json",
+      "bytes": 2383102,
+      "sha256": "fedb11d34a124e8d9a1b66db867731015828b50311128d8424c103702b786029"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-0-distance.png",
+      "bytes": 359372,
+      "sha256": "6a240d2093a24522dc5fce0f6c3657962ecf6021da61b2553d843d58e496591a"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-0-paint.png",
+      "bytes": 71396,
+      "sha256": "7130fc0229f64eb4a69155e2aa0e1493f3ebdb6c3ae10aa44a8d16d8c2fd9e40"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-0.png",
+      "bytes": 45253,
+      "sha256": "b22b0b0d363ff7e4ec44279a532396e195160a5526638b7a15e19ad51ba1e6ba"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-1-distance.png",
+      "bytes": 294237,
+      "sha256": "287af844584b33fedb5fd649dcd49385e82348ac7d0d096ab348118daeff52ce"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-1-paint.png",
+      "bytes": 167702,
+      "sha256": "08b42e3fe4eac53af5a81cccd4edcfb16f67c5f007bc55745b35e2e5eabee701"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-1.png",
+      "bytes": 152772,
+      "sha256": "d666ae0522d0ccd2ec4cf0692f684dd9687275de88001c560485dc0685bb704d"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-2-distance.png",
+      "bytes": 311687,
+      "sha256": "30e785c40cbcabbbf9cd9d9a4df8604cf78524136c82df1a6983690803e96282"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-2-paint.png",
+      "bytes": 148191,
+      "sha256": "7a8f718b29c89e74eb7a4f08989c230dede901d78a37d5bd9d252887bece4fd3"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-2.png",
+      "bytes": 133568,
+      "sha256": "561337f5379aa3aca7fac10247d36032e42c392521c156ebd9fb991c9bf69ba7"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-3-distance.png",
+      "bytes": 321397,
+      "sha256": "765e6f3a5f2bb95c158814f5c169f3e1bc7f86377de616a8a99d5111ee56c4d9"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-3-paint.png",
+      "bytes": 114639,
+      "sha256": "652cbdd4d0d46d6c107f7836d5cb468e64e4652cc781d474df40c74c932090ae"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-3.png",
+      "bytes": 100120,
+      "sha256": "3a763b61e59ca6b6ffef95cdeab1d5508bbb14b3930dd60846f60202a0a59104"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-4-distance.png",
+      "bytes": 332592,
+      "sha256": "a2389510d6e926db3d77e7e78d6620451750c3bdc1d3221c504b32637999dc19"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-4-paint.png",
+      "bytes": 117681,
+      "sha256": "007134e3a94a96739ea8b2b2d521d13f3a5732eda9e913cef1f1f7dff554ba10"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-4.png",
+      "bytes": 95418,
+      "sha256": "43f4b7c28540caa325bf84f53a8a5535a002a92fc2cc4e3a6bfc42a21f9f2ba4"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-5-distance.png",
+      "bytes": 333316,
+      "sha256": "b97dad03bdc09484f14e9b87136ba97d4f22b142de4127559990fcf94ad109bc"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-5-paint.png",
+      "bytes": 117262,
+      "sha256": "8055166f7cd1ffca9ca1eb613d508bf88fd33e959ec981b468a99487e50ebf2d"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-5.png",
+      "bytes": 96242,
+      "sha256": "a15b641f117d34341a966919776d3265e89752e3a42c80a621eb465fc39f583d"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-6-distance.png",
+      "bytes": 309599,
+      "sha256": "4f1efa2dadee0cd4de0273eb0d4c5b7341e67cfd79bd2a6e8ce17bdc09de7c29"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-6-paint.png",
+      "bytes": 122238,
+      "sha256": "4fbd42c5e822e22212e2b5bf8b92842db95e71a1e932124656b2e4113f46be97"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-6.png",
+      "bytes": 101361,
+      "sha256": "e5d7a963c9089c2857eb6af432521c1cc33bc69967b5f87dcb0a7b048f15f36f"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-7-distance.png",
+      "bytes": 302132,
+      "sha256": "bfe3098d0a08bbd6cd8b4f24e95df5a73119586a27b4f98efdbf67f060d32586"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-7-paint.png",
+      "bytes": 139225,
+      "sha256": "fddffb12835532b6e25b108dc3a4e6b20fbbe158ebfe0ef2727d79abdafb9ef5"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-7.png",
+      "bytes": 122213,
+      "sha256": "fd982ad9c07e7d81ef968648409170d05a621edd115bf023c6db7183ff3e3eed"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-8-distance.png",
+      "bytes": 309352,
+      "sha256": "3a84b07b3dfb3bb1b9edda624d4e8b076e8a72d831395cfc438dd8bec153d830"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-8-paint.png",
+      "bytes": 129702,
+      "sha256": "0729617fc7a39ba7750104afb0af2083ea1793aa66113aa27d0e12149fb1a08c"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-8.png",
+      "bytes": 113705,
+      "sha256": "2d536387ee9cf37eb05173ab9f793cf8204af382c01f3eb617b528671f201d1f"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-depth-0.png",
+      "bytes": 7160,
+      "sha256": "50db419f372b7ad45d829e22892a3975405df4d0210331be184eadf7a9480421"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-depth-1.png",
+      "bytes": 7183,
+      "sha256": "270a7cb5e723775853ec55c66610b554f72d59f7e67b1dd09c9364691314b775"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-depth-2.png",
+      "bytes": 6218,
+      "sha256": "9fc08a78041a0cba2777b712c821c8781549a2914f838a80a6954e662dc1037d"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-depth-3.png",
+      "bytes": 5998,
+      "sha256": "38a8cae60502df1df35425b0a4738961c21963ae774aaa194078965d69d30d86"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-depth-4.png",
+      "bytes": 6092,
+      "sha256": "118dc6285e6e7602c80da9c8ae4e13f4df00fe5e22d6353f20a1ee99a2a71c8a"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-depth-5.png",
+      "bytes": 6228,
+      "sha256": "1059baf5281dca0c3e000bb0009641057f51223fa8c150c51928fb3520885d27"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-depth-6.png",
+      "bytes": 6212,
+      "sha256": "36d67955efdd4d3efc5f3a50084545fde4d6b7c2d9189861eb27d6f8a4eaa4d1"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-complete-cloth-depth-7.png",
+      "bytes": 6391,
+      "sha256": "6396a52e762b4d923714bc73b371cfaaccbecaa689c0d424d5617685ef10a05b"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-elbow-frill-complete-root.png",
+      "bytes": 11423,
+      "sha256": "68b14c8282528b26084f48a4626f41357926d16efc784b41517c128476baab1d"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-elbow-frill-file.png",
+      "bytes": 10227,
+      "sha256": "017e8ffb35d2c449975593b2bb1194840dde5f8d8e803b739620be4e6f58a6ea"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-hand-0.png",
+      "bytes": 10993,
+      "sha256": "6b97fce78b3ab17b1786428a2b6b3a127b379da141f6000590792e22aa593874"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-hand-1.png",
+      "bytes": 25846,
+      "sha256": "1d0a8d5c0484bd5101528f0cbcb9a1100d9cf697fc145ec8ed17aebcecddc51f"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-hand-2.png",
+      "bytes": 34957,
+      "sha256": "021c3a6bc5a5e30bae4829f12be1fa15f5655f78143e30ea6ae1ffa795702465"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-hand-3.png",
+      "bytes": 39721,
+      "sha256": "ecd60d81680684c8fb1776c2be33b4d284a7d88253fef3f991b456bd74a79f39"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-hand-4.png",
+      "bytes": 45162,
+      "sha256": "6159adb8246b6a09f3697a541e849ec402a09d0e23a5eb8f4a809a40decebde2"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-hand-distance-0.png",
+      "bytes": 60779,
+      "sha256": "35757a1e042d49a605e6d7d1e0f46631a6a00c4c7ac94014a0bce94bcd0ca307"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-hand-distance-1.png",
+      "bytes": 57820,
+      "sha256": "9af85486212870519de5719bea8f6d1f027cebcfedba4d31c0237b93aadbf5ba"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-hand-distance-2.png",
+      "bytes": 68994,
+      "sha256": "5ba1371f5bd4ecf4c1cc1ea55aae6449831fb95a1331255dfa62f367da6dd424"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-hand-distance-3.png",
+      "bytes": 71055,
+      "sha256": "9472d442c9943e490f40d0576865ee401f1d3b0a1c8f9b3c62fae19599469c1d"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-hand-distance-4.png",
+      "bytes": 71932,
+      "sha256": "8f7e74e240e524662e392c5a438e8d9619f1995fc53e3d50a171213eb35bdfd6"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-hand-flow-0.png",
+      "bytes": 781223,
+      "sha256": "c6faeee5beade157f0bfcfea2519afed7c5e15f74423cc939f3f058fc75cf3c1"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-hand-flow-1.png",
+      "bytes": 860867,
+      "sha256": "7dd41f2c6bb158dea499f92e5c6130c2012814a4ff0273840c24871dbe7ad388"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-hand-flow-2.png",
+      "bytes": 1031911,
+      "sha256": "469bc0999038282ffe6d872553469f3992e6f1c7742bac05187db2db4e76db87"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-hand-flow-3.png",
+      "bytes": 1114169,
+      "sha256": "eba649dd31f38f404ffcdd0ca164373a0dafc4a7a1e8b357997c2eb134e3643e"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-hand-paint-0.png",
+      "bytes": 12885,
+      "sha256": "74f330bf4e20ee3a58a05e0c8000e2b7bb4a24b839db8e489a432b7194a38225"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-hand-paint-1.png",
+      "bytes": 32315,
+      "sha256": "b242595e372f008015374a540b64200c02277f51687be98a1d092f4e4d7b7445"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-hand-paint-2.png",
+      "bytes": 39492,
+      "sha256": "05f92afbe1e2b3044d101635434101a47cd371e38904482bee2a7f1f61af4caf"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-hand-paint-3.png",
+      "bytes": 44941,
+      "sha256": "6d81e87caae22bc6c397e8b2595ebd00b5d91f25b7945ce168dcd396b552bed3"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-hand-paint-4.png",
+      "bytes": 39198,
+      "sha256": "8b53b6cadf5e201acced4a3b4c6f02ce6c184fc9c1d75fdc44c37cb19e7ad881"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-native-forearm.png",
+      "bytes": 18964,
+      "sha256": "871d7590267fcca3f9f14eaa7a0c141c0002284e8bf5f00bf4cf456591df2be6"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-0-distance.png",
+      "bytes": 364218,
+      "sha256": "583c9a06a90109984f975fb8667defc3689b65356801a54885e7ee80df53a346"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-0-paint.png",
+      "bytes": 72781,
+      "sha256": "99c38e0eec5b89af4534da11353c0904fb7dd9025ea5ba46d490aa3bc2cdb0fd"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-0.png",
+      "bytes": 47512,
+      "sha256": "761c83ab9eac2ea10a44b8b67acbff1d36c4ad37f52718f1650a6c929007bd30"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-1-distance.png",
+      "bytes": 301073,
+      "sha256": "5b9f051c5deb1743f578387839a9babbf160c15c355f1444cc54fac061ef8fe6"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-1-paint.png",
+      "bytes": 163522,
+      "sha256": "0c701f5d706591b381723464f7e55234a6ae44449a0f20bc89be9c5e4969e047"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-1.png",
+      "bytes": 151074,
+      "sha256": "406d430b9056299cf110383242d76a850edc30fff21a0216310991f907066a12"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-2-distance.png",
+      "bytes": 328013,
+      "sha256": "4b3956f6c371e3184021fe8f65c4ba1152334eafc1b161bbaf744705cb6f2385"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-2-paint.png",
+      "bytes": 150101,
+      "sha256": "461c8adced6eb99c49061b24df21c0823a10461979d57a4c6379fd1b21c04077"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-2.png",
+      "bytes": 131452,
+      "sha256": "4fa76462b6374f5053e6a67f73e58a4daa30b8b931a48abfba449c8fe7a80fd3"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-3-distance.png",
+      "bytes": 323008,
+      "sha256": "a186a35ca03eb98025798a383b25f23223aa60de91d929c12c8518a99ae33894"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-3-paint.png",
+      "bytes": 112750,
+      "sha256": "44e85b0fd1772defe2b2d1158d61e49ae32376a2392bad473c0d3443bd4d1f01"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-3.png",
+      "bytes": 100472,
+      "sha256": "de7360e0c400507fde359bc2077aa5310e0a02dadc053dcaefff807bffcfc715"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-4-distance.png",
+      "bytes": 347432,
+      "sha256": "4286fe5270348c7d80bfc9bacf406021d7506dcdc143b76e0587d93ac78ced73"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-4-paint.png",
+      "bytes": 114138,
+      "sha256": "2d442714512612e6d4d27f1b64f8d6a69aa59ea192723cb2f91f6588b022c013"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-4.png",
+      "bytes": 94740,
+      "sha256": "c8cd4c67758455b52ce2d43e6f325fa4a4103a61bea570a2928c3275c3a1c69c"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-5-distance.png",
+      "bytes": 348222,
+      "sha256": "127c0cebcdbd491ec349e20d76140fb4b3c3ce77a425b943a9dacbdd86f34af7"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-5-paint.png",
+      "bytes": 114241,
+      "sha256": "d16d33a7e5ad6e98911f59f0a8c01936a6990396ceeb732d524c8e0675676ccf"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-5.png",
+      "bytes": 94414,
+      "sha256": "b3030435ca1ab284b7fadb1f7d1bfca18e9d71ee09debf39593afacee644ff37"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-6-distance.png",
+      "bytes": 323557,
+      "sha256": "37a70968808bd4574754b24fa5a66a906338e24f1a7ef5cf94fdda9b42318a9e"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-6-paint.png",
+      "bytes": 117103,
+      "sha256": "6926399618e50eb4a05694052519f23c355c0f6d261443fd707f9c0da910bc03"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-6.png",
+      "bytes": 101362,
+      "sha256": "0cacbbe04e1b9c1c51196ccc32c0c508805408f1e388cc167ea06e302d640d88"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-7-distance.png",
+      "bytes": 315827,
+      "sha256": "c35d5e158db051a73a82b41c0d3520ec512a485ed3083c73a2e144cc77ba221b"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-7-paint.png",
+      "bytes": 137593,
+      "sha256": "8b3371207943628dac8538745382381800e8d664649adcddff48c9ef25d5c539"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-7.png",
+      "bytes": 122006,
+      "sha256": "5e06876021feb01599d5418f6fc098f389762b0e2e00bac795f75db2bdfbece5"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-8-distance.png",
+      "bytes": 314397,
+      "sha256": "a44bba1add5c1977b78d14aa2154218ce640427c38285debc7407607842ffbbb"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-8-paint.png",
+      "bytes": 131771,
+      "sha256": "f7b5af83f96456f976ccbde3eadfbc284f4e6271072387184e844615c8abf02a"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-8.png",
+      "bytes": 114396,
+      "sha256": "ce24dc46274185d8dce72c28bb32c36bf8314c0fce2d6e14197f6a2797192c36"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-depth-0.png",
+      "bytes": 7784,
+      "sha256": "65d8357ca07c8bf446b6ea5da910d3b13f5a8e787fbde98d82a7f95dc81ca91c"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-depth-1.png",
+      "bytes": 7332,
+      "sha256": "94dedde33ab0b0595d66de1cbfc0a419456b47ccc15ea9233c7566509efc58d2"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-depth-2.png",
+      "bytes": 6328,
+      "sha256": "80f7abddfcbe93425848262b2e0fe7ad67b187434e0edd1539553cbca3220ff4"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-depth-3.png",
+      "bytes": 5973,
+      "sha256": "bf7dc7ca26a6e0efe5e357bc41f43a7e6ab60bc65c12893c659e015df02e6c6f"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-depth-4.png",
+      "bytes": 6024,
+      "sha256": "1836cb03db5af63fd629f18f3f00e2747bfdc79290f4247163f0b6aba35ebce7"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-depth-5.png",
+      "bytes": 6198,
+      "sha256": "29053a2f7e92f0f1f862ce782a1bafd410b72a977c51d6833ada62331e1ea358"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-depth-6.png",
+      "bytes": 6361,
+      "sha256": "6cba5fac36e91499842718d62805f344b63343dcad12958b6ed0fa11e5361653"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-complete-cloth-depth-7.png",
+      "bytes": 6575,
+      "sha256": "b1624f5ea130786476d1d6c360ce1b02050382664a9f36f276d69a74935eb94b"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-elbow-frill-complete-root.png",
+      "bytes": 11273,
+      "sha256": "0bb7c6f09661698da8e11e893e21af8cd8f17740f5d888121391a43df9922a7f"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-elbow-frill-file.png",
+      "bytes": 11434,
+      "sha256": "343f250bcba691d485e1e144cc7c11e2434b9d0921d53250ec4fbb1c2cdee8bf"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-hand-0.png",
+      "bytes": 9972,
+      "sha256": "2dd1535c5c937b44eaa888f461faac894d531b9262738a71c7d3a8f205e1fd5f"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-hand-1.png",
+      "bytes": 25586,
+      "sha256": "48baaf92a981c85a2a463c1ae6d860f215f58ecc0181e7b3f70c235d2ee0ca7e"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-hand-2.png",
+      "bytes": 34482,
+      "sha256": "8e7d5ac2fc46fb9fde779799dd6ec4170b4b1578da269c0cd026b06abba6e4e0"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-hand-3.png",
+      "bytes": 39406,
+      "sha256": "535efd1b1c0c9c316ee02f32f1f3d39bd885825ea0cefb87f3138d4f7ced2dc7"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-hand-4.png",
+      "bytes": 44085,
+      "sha256": "f56e07a2cbc9319d8252cfca618eeed4f7ac144e81a5df33f44418a39d594fd5"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-hand-distance-0.png",
+      "bytes": 60441,
+      "sha256": "d91be013c607a886687bf4a06cb0adfe98a8451b6c7952205e9a3e5b5770b09e"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-hand-distance-1.png",
+      "bytes": 57889,
+      "sha256": "b92e8ffba374fff4b6854fd48056e5e417691e3bf01eb01fe1f7a863ca9c2a45"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-hand-distance-2.png",
+      "bytes": 67365,
+      "sha256": "ab6905c63c3ba04f5a4321aaef4061e1b04eda4ed1b27f1209b0e7df01e7b8e5"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-hand-distance-3.png",
+      "bytes": 69489,
+      "sha256": "273743a2d6486fef76e741066a69f3bf0860b57d6d90882420a7838cb1815375"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-hand-distance-4.png",
+      "bytes": 71771,
+      "sha256": "7dd5bcc408feb2d8707d0a0699282dc6ad183fcca535efd55bd37a249a777f69"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-hand-flow-0.png",
+      "bytes": 794694,
+      "sha256": "1f8fde2d290d4eb0efdd9674dc7db09fafbbb01c2a1385590db1520b971c3fbb"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-hand-flow-1.png",
+      "bytes": 862389,
+      "sha256": "220289ddc0589a27c6cc5eb31bf383573a92e87401809086c75cae112f2e2e5b"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-hand-flow-2.png",
+      "bytes": 1040765,
+      "sha256": "6dcc967b395beac7b722f10702da1039a5cf0098101606536a821b0f0cdc8052"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-hand-flow-3.png",
+      "bytes": 1125949,
+      "sha256": "dcde392c5ed037ad9a9587f960c5c10951093ac956328f6b0e83ce54d37057dd"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-hand-paint-0.png",
+      "bytes": 13128,
+      "sha256": "2905e5316b72c0f6fc65b8e2125fce1b5d99e88b5763b2870e06abe782bb786f"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-hand-paint-1.png",
+      "bytes": 32414,
+      "sha256": "5ef32059ed4fdb8f634c3c94a21cef61db5de4baa0d9702319136a3d9ecd41da"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-hand-paint-2.png",
+      "bytes": 40064,
+      "sha256": "bf227533b690abd23ccada859c2aba187e9fd060cfaa2864468adbe3a3c12f8d"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-hand-paint-3.png",
+      "bytes": 45196,
+      "sha256": "246eb59e19931677d5d5fda8be9c87458f5f7f65f7f54ab7868581ecdb1c6762"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-hand-paint-4.png",
+      "bytes": 39105,
+      "sha256": "d502487d053121402e468745b95e5f96825c84eb7c662601029ad683bd737804"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-native-forearm.png",
+      "bytes": 18832,
+      "sha256": "14499f92dfce6d2d7b2f52f32642ecd548b3428ce3979fa0d49403d21702f610"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-upper-complete-root.png",
+      "bytes": 21683,
+      "sha256": "48cecc13bbf247fd160fd2dedc93bbaaa89783e94f91c69e8e63240d2a1679c8"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-right-upper.png",
+      "bytes": 30368,
+      "sha256": "e063cc3db8b4f78b7ae8744b48fd2f285c0a548679ce1d240c052bd4debd39dc"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-upper-complete-root.png",
+      "bytes": 21757,
+      "sha256": "e387fdd8ae1e07c2b48b520669d3d7b06b2a9400834e5bbad53bde3935657251"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/arm-upper.png",
+      "bytes": 33331,
+      "sha256": "f6f218a1f2c5ef9f1893ca09f841815863b17d48e265d2488cdcc525cfb24834"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/authored-closed-left-distance-closed.png",
+      "bytes": 35224,
+      "sha256": "b43108443fa832780708396f3f9f20474844f79b2301b65f006bd2aff89d8d7d"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/authored-closed-left-distance-open.png",
+      "bytes": 27031,
+      "sha256": "4e8d1a230bc616f2b2a33db4385ec241edadf2f03e51023b4384bc8698245e05"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/authored-closed-left-morph.png",
+      "bytes": 12655,
+      "sha256": "0ffcd981cfd87260af726fa5a6571d74411b8d927f25ccf7f3362b7098710a8f"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/authored-closed-right-distance-closed.png",
+      "bytes": 39553,
+      "sha256": "fc4188145206f9fb7706ee8a16585171b3f2511c81ccac8dbf2c29cd669afda7"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/authored-closed-right-distance-open.png",
+      "bytes": 30675,
+      "sha256": "37d1218d762a43124a028e0aa5529d5e0ab98338a3aeff0260e7b4e2ecfc4222"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/authored-closed-right-morph.png",
+      "bytes": 13590,
+      "sha256": "6d6404dc9fe467fbb35d1da5c53ba88aca05475339f979cefc105141c53cf986"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/boot-left.png",
+      "bytes": 37202,
+      "sha256": "cb62ab1ab3bb1d7d5acc8b7798d17658e5ed0a15634222c5017cdf379d4957de"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/boot-right.png",
+      "bytes": 41704,
+      "sha256": "7894faf00243522cf65a62e760e5d5dfc2189d1ed0f0371c0f743e7f9fcd6a59"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/bow-loop-left.png",
+      "bytes": 6734,
+      "sha256": "f425fc5104bf66540c15946131da1437b41c99d1a2cf33098a9a0e9da6da8d3b"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/bow-loop-right.png",
+      "bytes": 5977,
+      "sha256": "dac3d3f631afb63231dc279c8baeaa0ec04ade0c29e6487f82ab5041d12e2f96"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/bow-tail-left.png",
+      "bytes": 10718,
+      "sha256": "86c4328bac7200198a2b365f6453675b77bc0b0f715d4ef38fae227b17bb0332"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/bow-tail-right.png",
+      "bytes": 13073,
+      "sha256": "c7c3ddcf2f23c4546d521317664598347bf6a489153278e5d55e4c04dc1fdec1"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/brooch.png",
+      "bytes": 4438,
+      "sha256": "c838392a9ed0aadf7428278624d8235942f69ca9f8df1d25735a1891acdd120b"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/complete-mouth-distance-closed.png",
+      "bytes": 8908,
+      "sha256": "3910f2b335c3de069637d197f516b67ae62fe5bfeab8cb7f5c33f9e2645830f1"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/complete-mouth-distance-open.png",
+      "bytes": 7046,
+      "sha256": "b5ca2e65638a0dce8927408926fe23d8e6754586412f229c7b1fb6c9e15f5c04"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/complete-mouth-morph.png",
+      "bytes": 3725,
+      "sha256": "aae16f3096df71ff953a6ec555350151f218714aec387b520b2bbbee5622cac7"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/dress-back.png",
+      "bytes": 262886,
+      "sha256": "c02d8d86cc8aa7b36e766ebdba253e88a86073e05bf719e7274efe2aecf6f801"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/dress-front.png",
+      "bytes": 216174,
+      "sha256": "5c1a4695830aab4f950d26d444be8588f03489b6048116d58316f05b88875014"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/ear-left.png",
+      "bytes": 3655,
+      "sha256": "c5580a8ff59247aee2c0f27e7223b37b04c6db566336de56a30a0539501a3e14"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/ear-right.png",
+      "bytes": 2380,
+      "sha256": "4ab072f7d51620ac68784693fe55cdb1b3b7d1ad6bfeb02e077bc3085fa6d8cd"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/eye-edge-observation.png",
+      "bytes": 6643,
+      "sha256": "1a16d518cf76be2e96c17da63bb07cc8f5e698faafd5a02bff28b3fbaa9324ea"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/eye-fold-left.png",
+      "bytes": 2213,
+      "sha256": "7159edeb1821ec61527a71366dc5327a74ecdb04cd1ecc741a4947e27ca513f2"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/eye-fold-right.png",
+      "bytes": 3057,
+      "sha256": "729b2eded3b74585f3e3b789c879b5feb83e21c39d3520fe262ddf61692e8e9e"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/eye-iris-left.png",
+      "bytes": 2361,
+      "sha256": "59e338ddec859411e63bd3fb8b75badddbf0e10e798557af95a40406c2af1e7b"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/eye-iris-right.png",
+      "bytes": 2571,
+      "sha256": "a9175030142232c9687059f2fcf1ab3bb326b8623f57df341c9cf5865175d624"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/eye-lower-left.png",
+      "bytes": 1657,
+      "sha256": "e29b8a1e99783b6b15650413aa70e1887e662ea88136f6ade70109e42f31c3e6"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/eye-lower-right.png",
+      "bytes": 1180,
+      "sha256": "9c9db11d87dcbe6007fdc4da68081ddce596c2d4664054496da3f1559f0bdb8f"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/eye-upper-left.png",
+      "bytes": 4360,
+      "sha256": "1dc1afb4ec582d59dfb4df8d0612bc844a34c83676ea75253f20eccaa0edd2c5"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/eye-upper-right.png",
+      "bytes": 4770,
+      "sha256": "342d6368c8655665de117ef8ffddc37e7da53d0659a232f6ca23145791a90585"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/eye-white-left.png",
+      "bytes": 3212,
+      "sha256": "d45de9ab6fbf9dd7633119c06df9a6da791786b2871b002970555d26952e195e"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/eye-white-right.png",
+      "bytes": 3324,
+      "sha256": "560371dfbb72023ad13d4a8e8f1ec358b4893d1aa4d002d77fd4fcd7e81be9b5"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/face-clean-fringe.png",
+      "bytes": 27957,
+      "sha256": "21d226eb5f72b2b49c2a33e5059d944f4400cd5ae33f341659444a25699cd288"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/face.png",
+      "bytes": 29400,
+      "sha256": "86665623e92105d593ce38503a75614e1395b85646660904228d36e22bd75bbd"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/hair-crown-clean-fringe.png",
+      "bytes": 80806,
+      "sha256": "0a0c6e2ec4800d8fee93c5dfe5d24a9b6ca76107caf2878d1f1500b612291454"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/hair-crown.png",
+      "bytes": 80294,
+      "sha256": "f05e9f3c9f33c43a479122bb379d92eca256616175139479e0082fe30bee3ea4"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/hair-depth-mask.png",
+      "bytes": 3479,
+      "sha256": "faec4508ec2e8b6df960f212ff657dadeaaff01c3265cdb05950073abb8d1582"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/hair-front-left.png",
+      "bytes": 24689,
+      "sha256": "000e242b122694893a85e1942cf2402eeb8b3f5dd383f70930aa60b5c808f489"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/hair-front-right.png",
+      "bytes": 26562,
+      "sha256": "5282cd4e65315860564d79a0e301488c353db3231d600f61ee8560b270a09579"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/hair-rear.png",
+      "bytes": 431534,
+      "sha256": "8967df3993cfb1c3c38a37a763da4a92d47cc1726854a4a8e7306b31af3a1bcc"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/hat-brim-mask.png",
+      "bytes": 1538,
+      "sha256": "4557be493d44f20f2dd095f79086fe345116182e6795366c7252db729ee4b4c1"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/hat.png",
+      "bytes": 51915,
+      "sha256": "03c502d2aade954b4b29e34f2328e3afaa270bfb86fc940aa831a5ce3a8d6930"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/leg-contact-left.png",
+      "bytes": 8502,
+      "sha256": "d6b7bc3499994453f8f17923b0bd142b50e4c1879595ae33e69bfadf4caa2c3d"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/leg-contact-right.png",
+      "bytes": 7700,
+      "sha256": "a642ba96e19d1613655b4880d60be801920bf044ba96ca0c7444950b9c16f993"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/leg-left-complete.png",
+      "bytes": 40834,
+      "sha256": "ac40207167289b7c8710f7bcc0f4ba784c298ff6f918f4ba92a5b6d91053ed6e"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/leg-left.png",
+      "bytes": 45606,
+      "sha256": "10d89c7070821d06a73d3e0b6528e858368a74af4334e7dbdd71e52f98bf59ed"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/leg-right-complete.png",
+      "bytes": 40816,
+      "sha256": "e1fbb32d4b809a34799466aa78adc3ffdef102877d0a07d295b8f8a9088a27e0"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/leg-right.png",
+      "bytes": 45392,
+      "sha256": "e11f5278a97ad7078eece135315ade3798313d3aba8371d98e9dfd0315047a5a"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/mouth-cavity.png",
+      "bytes": 1796,
+      "sha256": "7b0c704abfbc2d634d3d84b1bb7c32ced01ef77d1c7b5633c6da86523e27f081"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/mouth-round-distance.png",
+      "bytes": 8194,
+      "sha256": "88f8e4cca3da42b3818db79af78e99df403279c9b2e1319a902a31195c7707cd"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/mouth-round.png",
+      "bytes": 14682,
+      "sha256": "7a7b9d4ccf433ff8fd8267e45886be2e0345fb1ce0d212a1fa71e74415f4b86a"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/mouth-seat.png",
+      "bytes": 2878,
+      "sha256": "db716674eae1a9aa62d9baa937bbe0bb546e4eedfb3d289f19911a9f166c301d"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/neck-depth-mask.png",
+      "bytes": 425,
+      "sha256": "2480cd8e343cf31b95716efe22dc8a5951b7bd27306890012d8f2c772df52e3d"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/neck.png",
+      "bytes": 13048,
+      "sha256": "53f919ff1b5d8242b31b095f4329ef11848e162dbd6878c35777be287d2f5bea"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/pompom.png",
+      "bytes": 6605,
+      "sha256": "162f7fd6ee32db749fc9bc80876c295a4bec3ca9e06fe0ad91a751da39ee8593"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/shoulder-frill-left.png",
+      "bytes": 3947,
+      "sha256": "7c10b78826f72486b3b18dc2ddce061a768739e46e9624f25a25deaafaab80a5"
+    },
+    {
+      "path": "assets/rig/connected-eadec2001063/shoulder-frill-right.png",
+      "bytes": 6575,
+      "sha256": "0b854715d9df3627d17f9271e7c4498237c6c3fbbb6f2e41911c3047da6032f5"
+    },
+    {
+      "path": "reports/rig-status.md",
+      "bytes": 5491,
+      "sha256": "dec0f4cafccce64cacfac69fa1baedf352b3459dc9a96f5f4494750c20a5a1b5"
+    },
+    {
+      "path": "src/arm-articulation.js",
+      "bytes": 641,
+      "sha256": "2f469056eb3214f379c9564f814fd229eaa4184c478ce95ee6801cda8c6a71e0"
+    },
+    {
+      "path": "src/arm-context.js",
+      "bytes": 765,
+      "sha256": "a2b0fa8bf40691f6dfb05a3e27d83156573be748737318546f3fb96658f8e888"
+    },
+    {
+      "path": "src/cloth-chart.js",
+      "bytes": 3955,
+      "sha256": "2c7386ba46ade8c50db0cc52d5d9d4265069ac64c6b8e213d3a6772cc16b7363"
+    },
+    {
+      "path": "src/cloth-physics.js",
+      "bytes": 11400,
+      "sha256": "ca127ca1fc9b848e5183af5f9987c5156378466e6b988df69f82d9c67d0fef6d"
+    },
+    {
+      "path": "src/cloth-rig.js",
+      "bytes": 4880,
+      "sha256": "bef1b2cb1fc268cf92b17561e950795f7b7fe3bfe62669f8dd0f4ea3abde704a"
+    },
+    {
+      "path": "src/cuff-chart.js",
+      "bytes": 3673,
+      "sha256": "8092540034081f761a19ef4f9725a74aa9a1a4d13e1e35c31c528087031ba1ab"
+    },
+    {
+      "path": "src/face-rig.js",
+      "bytes": 8631,
+      "sha256": "f362e85cfb7c73f0f9f97bc45b786f66ee035101061b5ebbd68cad0086bf9c69"
+    },
+    {
+      "path": "src/frame-clock.js",
+      "bytes": 609,
+      "sha256": "2a25f54045dd81de0b04e2f7fc53e737cfa4a5cde577cf47e2b3296774510500"
+    },
+    {
+      "path": "src/garment-chart.js",
+      "bytes": 1634,
+      "sha256": "010ab18fc4d83489e8cb0570500638415634cd0cdad76995ed0f49289451cf50"
+    },
+    {
+      "path": "src/hair-physics.js",
+      "bytes": 2675,
+      "sha256": "b8e4df9852a6baca5821895b1c202c93588de70cafeda6b644c4ce14c714861a"
+    },
+    {
+      "path": "src/hand-rig.js",
+      "bytes": 9535,
+      "sha256": "0358ea7d5822c3df34ff625a1afba84ff20f5447bc4d633ed283c5021c4baf57"
+    },
+    {
+      "path": "src/hand-surface.js",
+      "bytes": 1436,
+      "sha256": "461d6116c257eca5dd387a612f0643b37daf29ea38f9fe3792a0b359d59fca5e"
+    },
+    {
+      "path": "src/hat-physics.js",
+      "bytes": 5961,
+      "sha256": "ba8c38858445759206049a3a1c74db221ea690a4466212ca6cd5e01b9eabccd0"
+    },
+    {
+      "path": "src/luna-rig.js",
+      "bytes": 22014,
+      "sha256": "fb8617a48182ed8218a15d9414c62a4d7bcbce2b742b7759b3da8a9af9dd26b8"
+    },
+    {
+      "path": "src/luna-state-rig.js",
+      "bytes": 5580,
+      "sha256": "ade307f3fb4f07abe0fdd20266392f7780fbd73ea870510febf0232823ffa510"
+    },
+    {
+      "path": "src/math.js",
+      "bytes": 3272,
+      "sha256": "c611cee3aaadd631a10cb52e8532169d35922f26a10144bab566039b0f5f9d80"
+    },
+    {
+      "path": "src/native-assembly.js",
+      "bytes": 28339,
+      "sha256": "8f941a68af58b1a3477676bfdaa0d47d8a090e1e0150bd5a41b64fa81a1c7d17"
+    },
+    {
+      "path": "src/png-rgba.js",
+      "bytes": 2313,
+      "sha256": "beae7b752a696d41610e51eea8f094a1f0618184aa776985c0a98ac6b17909fa"
+    },
+    {
+      "path": "src/point-warp.js",
+      "bytes": 2180,
+      "sha256": "7c535b708ae061f6b59264765a13b36cd4dbda9d0c8d6c7efc2d3af5f7ba8aad"
+    },
+    {
+      "path": "src/pose-art.js",
+      "bytes": 4413,
+      "sha256": "dc7a9e2a326cf9a90957e55139b2b4967e2f988a9de0fee5b32f90d98df63145"
+    },
+    {
+      "path": "src/rig-controller.js",
+      "bytes": 24033,
+      "sha256": "2e25af77c84458a8ce290c05d8f15e5d8e47f994d4a9145b2b92babdbc0fd9c3"
+    },
+    {
+      "path": "src/sleeve-drape.js",
+      "bytes": 6295,
+      "sha256": "b4faddb42a6aad9e8a0ee5483a4c995fad6a581dfecae325005b7143159c52cd"
+    },
+    {
+      "path": "src/sprite-blend-surface.js",
+      "bytes": 7640,
+      "sha256": "8cfcaa7cbe2ef07054b2c9ef9da695dec5a65c28e6a5feefbf9183da48171bb5"
+    },
+    {
+      "path": "src/state-sprite-transition.js",
+      "bytes": 4987,
+      "sha256": "33fc2da99e5b1ece7bd91f7858abae8a306c29c4257f7da6bbe2da32c0a8775d"
+    },
+    {
+      "path": "src/webgl.js",
+      "bytes": 52027,
+      "sha256": "8ae3bb051715f8a878a5e288cccb65d8d5cca92c870c19e53f041195ee204912"
+    }
+  ]
+}
