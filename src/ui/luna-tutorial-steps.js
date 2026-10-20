@@ -16,6 +16,7 @@ export function lunaTutorialSteps(tour) {
   const settingsTab = id => find(`[${mobile ? 'data-mobile-settings-tab' : 'data-settings-tab'}="${id}"]`);
   const selectedTab = id => mobile ? app.state.mobile.settingsTab === id : app.state.activeSettingsTab === id;
   const settings = () => mobile ? find('#mobile-panel') : find('#settings-overlay.active .settings-modal');
+  const characterCard = () => find(mobile ? '#mobile-tab-surface.active .mobile-kb-list > :first-child' : '#kb-modal.active .kb-section.active .character-grid > :first-child');
   return {
     welcome: {},
     'open-docs': action('write', () => button('mobile-open-docs'), () => app.state.mobile.activeTab === 'docs', 'create'),
@@ -32,8 +33,8 @@ export function lunaTutorialSteps(tour) {
     floating: info('notes', () => find('#floating-notes-modal.active .floating-notes-modal-panel'), 'open-kb'),
     'open-kb': action('kb', () => button(mobile ? 'mobile-open-lore' : 'toggle-kb-menu'), () => mobile ? app.state.mobile.activeTab === 'lore' : app.isFloatingMenuOpen('kb'), mobile ? 'kb' : 'kb-menu'),
     'kb-menu': action('kb', () => find('#kb-menu.active [data-kb-open="characters"]'), () => panel('#kb-modal.active'), 'kb'),
-    kb: info('kb', () => mobile ? find('#mobile-tab-surface.active', '#mobile-panel') : find('#kb-modal.active .kb-main'), 'open-world-search'),
-    'open-world-search': action('kb', () => find(`[${mobile ? 'data-mobile-kb-tab' : 'data-kb-tab'}="search"]`), () => panel('[data-knowledge-query]'), 'world-search'),
+    kb: { ...info('kb', () => mobile ? find('#mobile-tab-surface.active', '#mobile-panel') : find('#kb-modal.active .kb-main'), 'open-world-search'), avoid: characterCard },
+    'open-world-search': { ...action('kb', () => find(`[${mobile ? 'data-mobile-kb-tab' : 'data-kb-tab'}="search"]`), () => panel('[data-knowledge-query]'), 'world-search'), avoid: mobile ? null : characterCard },
     'world-search': info('kb', () => find('.knowledge-search'), mobile ? 'open-commands' : 'tools-commands', true),
     'tools-commands': tools('commands', 'open-commands'),
     'open-commands': action('commands', () => button('open-command-palette'), () => app.commandPalette.opened, 'commands'),
@@ -69,6 +70,7 @@ export function lunaTutorialSteps(tour) {
     backups: info('backups', () => find('.backups-modal'), mobile ? 'more-settings' : 'open-settings'),
     'more-settings': more('settings', 'open-settings'),
     'open-settings': action('settings', () => button(mobile ? 'mobile-open-settings' : 'open-settings'), () => mobile ? app.state.mobile.panel === 'settings' : panel('#settings-overlay.active'), 'settings'),
+    'settings-apology': { topic: 'settings', ready: () => performance.now() - tour.stepStartedAt >= 2400, then: 'settings' },
     settings: info('settings', settings, 'open-macros', true),
     'open-macros': action('macros', () => settingsTab('macros'), () => selectedTab('macros'), 'macros'),
     macros: info('macros', () => find('.macros-settings'), 'open-formatting'),
@@ -133,6 +135,7 @@ export function lunaTutorialCopy(step, mobile) {
     'more-settings': 'Открой «Ещё» — осталось показать пару полезных настроек.',
     'open-settings': mobile ? 'Нажми «Настройки» — здесь спрятаны ещё два инструмента для быстрого ввода.' : 'Нажми шестерёнку слева вверху — здесь спрятаны ещё два инструмента для быстрого ввода.',
     settings: 'Здесь меняются язык, тема и шрифты. Настрой приложение под себя.',
+    'settings-apology': 'Ой, прости, я закрываю тебе меню! Сейчас подвинем настройки чуть вправо.',
     'open-macros': 'Открой раздел «Макросы». Это собственные сочетания клавиш для текста.',
     macros: 'Макрос вставляет символ или короткую фразу по твоему сочетанию клавиш. Удобно для кавычек, тире и повторяющихся выражений.',
     'open-formatting': 'Открой подсвеченный раздел автозамены. Здесь другой способ ускорить ввод.',

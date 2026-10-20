@@ -61,5 +61,9 @@ body.mobile-shell-active.luna-tutorial-active[data-luna-step="settings"] #mobile
   .luna-letter { animation: none; }
 }
 body.luna-tutorial-active .luna-reserved-surface { max-height: var(--luna-surface-height); overflow-y: auto; }
-body.luna-stack-modal :is(#form-overlay, #floating-notes-modal) { align-items: flex-start; padding-top: calc(var(--luna-coach-space, 220px) + var(--app-safe-top)); }
+body.luna-stack-modal :is(#form-overlay, #floating-notes-modal, #settings-overlay) { align-items: flex-start; padding-top: calc(var(--luna-coach-space, 220px) + var(--app-safe-top)); }
 @media (min-width: 1100px) { body.luna-tutorial-active #form-overlay .history-modal { width: min(1120px, calc(100vw - 620px)); } }
+@media (min-width: 1280px) {
+  body.luna-settings-aside #settings-overlay { justify-content: flex-end; padding: 24px 32px; }
+  body.luna-settings-aside #settings-overlay .settings-modal { max-width: calc(100vw - var(--luna-settings-left, 624px) - 32px); }
+}

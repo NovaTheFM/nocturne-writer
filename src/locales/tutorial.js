@@ -2,6 +2,10 @@ import { tutorialDiscoveryMessages } from './tutorial-discovery.js';
 
 export const tutorialMessages = {
   ...tutorialDiscoveryMessages,
+  'Ой, прости, я закрываю тебе меню! Сейчас подвинем настройки чуть вправо.': [
+    'Ой, вибач, я затуляю тобі меню! Зараз посунемо налаштування трохи праворуч.',
+    'Oh, sorry, I’m covering the menu! Let’s move settings a little to the right.'
+  ],
   "Назови документ и нажми «Создать».": ["Назви документ і натисни «Створити».", "Name the document and press “Create”."],
   "Да": ["Так", "Yes"],
   "Нет": ["Ні", "No"],

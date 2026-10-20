@@ -20,7 +20,7 @@ async function choose(page, locale) {
 }
 
 async function scenario(name, mobile, action, options = {}) {
-  if (process.env.NOCTURNE_TUTORIAL_CASE && !name.includes(process.env.NOCTURNE_TUTORIAL_CASE)) {
+  if (process.env.NOCTURNE_TUTORIAL_CASE && !process.env.NOCTURNE_TUTORIAL_CASE.split(',').some(filter => name.includes(filter.trim()))) {
     results.push({ name, mobile, status: 'SKIP', reason: 'Filtered by NOCTURNE_TUTORIAL_CASE' }); return;
   }
   const context = await browser.newContext({ viewport: mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 }, isMobile: mobile, hasTouch: mobile, ...options });
@@ -163,6 +163,16 @@ try {
     await (await step(page, 'open-settings')).click(); await step(page, 'settings-apology');
     assert.match(await page.locator('#luna-tutorial-text').textContent(), /sorry/i);
     assert.ok(await page.locator('#settings-overlay .settings-modal').evaluate(panel => Math.abs((panel.getBoundingClientRect().left + panel.getBoundingClientRect().right) / 2 - innerWidth / 2) < 2), 'Settings start in their ordinary centered position');
+    const positions = await page.evaluate(() => new Promise(resolve => {
+      const positions = [], started = performance.now(), panel = document.querySelector('#settings-overlay .settings-modal');
+      const sample = () => {
+        positions.push(panel.getBoundingClientRect().left);
+        const guide = window.nocturneApp.lunaTutorial;
+        if (guide.step === 'settings' && !guide.changing || performance.now() - started > 6000) resolve(positions);
+        else requestAnimationFrame(sample);
+      };
+      sample();
+    }));
     await step(page, 'settings');
     const layout = await page.evaluate(() => {
       const panel = document.querySelector('#settings-overlay .settings-modal').getBoundingClientRect(), coach = document.querySelector('.luna-companion').getBoundingClientRect();
@@ -170,6 +180,7 @@ try {
     });
     assert.ok(layout.left >= layout.coachRight + 20);
     assert.ok(Math.abs(layout.width - layout.right - 32) < 2);
+    assert.ok(positions.some(left => left > positions[0] + 3 && left < layout.left - 3), 'Settings slide through intermediate positions');
     await page.screenshot({ path: `${output}/settings-clear-${viewport.width}.png` });
     await page.locator('[data-luna-choice="next"]').click();
     await (await step(page, 'open-macros')).click(); await step(page, 'macros');
@@ -177,6 +188,39 @@ try {
     await page.waitForFunction(() => !document.querySelector('#settings-overlay .settings-modal').classList.contains('is-flipping'));
     assert.ok(await page.locator('#settings-overlay .settings-modal').evaluate(panel => Math.abs((panel.getBoundingClientRect().left + panel.getBoundingClientRect().right) / 2 - innerWidth / 2) < 2), 'Leaving the tutorial returns settings to the center');
   }, { viewport });
+  for (const phase of ['apology', 'moving']) await scenario(`settings make room can be skipped while ${phase}`, false, async page => {
+    await page.goto(url); await choose(page, 'en'); await step(page, 'welcome');
+    await page.evaluate(async () => await window.nocturneApp.lunaTutorial.show('open-settings'));
+    await (await step(page, 'open-settings')).click(); await step(page, 'settings-apology');
+    if (phase === 'moving') await page.waitForFunction(() => document.body.classList.contains('luna-settings-aside') && document.querySelector('#settings-overlay .settings-modal').classList.contains('is-flipping'));
+    await page.keyboard.press('Escape'); await page.locator('#luna-tutorial').waitFor({ state: 'detached' });
+    await page.waitForFunction(() => !document.querySelector('#settings-overlay .settings-modal').classList.contains('is-flipping'));
+    assert.equal(await page.locator('body.luna-settings-aside').count(), 0);
+    assert.ok(await page.locator('#settings-overlay .settings-modal').evaluate(panel => Math.abs((panel.getBoundingClientRect().left + panel.getBoundingClientRect().right) / 2 - innerWidth / 2) < 2));
+  });
+  await scenario('settings make room respect reduced motion', false, async page => {
+    await page.goto(url); await choose(page, 'uk'); await step(page, 'welcome');
+    await page.evaluate(async () => await window.nocturneApp.lunaTutorial.show('open-settings'));
+    await (await step(page, 'open-settings')).click(); await step(page, 'settings-apology');
+    assert.match(await page.locator('#luna-tutorial-text').textContent(), /вибач/);
+    await step(page, 'settings');
+    assert.equal(await page.locator('#settings-overlay .settings-modal.is-flipping').count(), 0);
+    assert.ok(await page.locator('#settings-overlay .settings-modal').evaluate(panel => panel.getBoundingClientRect().left >= document.querySelector('.luna-companion').getBoundingClientRect().right + 20));
+    await page.keyboard.press('Escape'); await page.locator('#luna-tutorial').waitFor({ state: 'detached' });
+  }, { reducedMotion: 'reduce' });
+  await scenario('settings make room above a narrow desktop window', false, async page => {
+    await page.goto(url); await choose(page, 'en'); await step(page, 'welcome');
+    await page.evaluate(async () => await window.nocturneApp.lunaTutorial.show('open-settings'));
+    await (await step(page, 'open-settings')).click(); await step(page, 'settings');
+    const layout = await page.evaluate(() => {
+      const panel = document.querySelector('#settings-overlay .settings-modal').getBoundingClientRect(), coach = document.querySelector('.luna-companion').getBoundingClientRect();
+      return { clear: coach.bottom <= panel.top - 14 || coach.top >= panel.bottom + 14 || coach.right <= panel.left - 14 || coach.left >= panel.right + 14, width: panel.width, centered: Math.abs((panel.left + panel.right) / 2 - innerWidth / 2) < 2 };
+    });
+    assert.equal(layout.clear, true); assert.equal(layout.centered, true); assert.ok(layout.width >= 1000);
+    await page.screenshot({ path: `${output}/settings-clear-narrow.png` });
+    await page.keyboard.press('Escape'); await page.locator('#luna-tutorial').waitFor({ state: 'detached' });
+    assert.equal(await page.locator('.luna-reserved-surface').count(), 0);
+  }, { viewport: { width: 1180, height: 800 } });
   for (const viewport of [{ width: 1919, height: 950 }, { width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
     const mobile = viewport.width < 768;
     await scenario(`knowledge overview leaves character cards visible: ${viewport.width}`, mobile, async page => {
@@ -195,11 +239,11 @@ try {
         const c = document.querySelector('.luna-companion').getBoundingClientRect(), content = document.querySelector(selector).getBoundingClientRect();
         return { coach: { x: c.x, y: c.y, right: c.right, bottom: c.bottom }, content: { x: content.x, y: content.y, right: content.right, bottom: content.bottom }, height: innerHeight };
       }, mobile ? '#mobile-tab-surface.active .mobile-kb-list > .empty-card' : '#kb-modal.active .kb-section.active .character-grid > .empty-card');
-      assert.ok(geometry.coach.y >= geometry.content.bottom + 20, `Luna must move below the character card: ${JSON.stringify(geometry)}`);
+      assert.ok(geometry.coach.y >= geometry.content.bottom + 20 || mobile && geometry.coach.bottom <= geometry.content.y - 20, `Luna must leave the character card clear: ${JSON.stringify(geometry)}`);
       assert.ok(geometry.coach.bottom <= geometry.height - 12);
       await page.screenshot({ path: `${output}/knowledge-clear-${viewport.width}.png` });
       await page.locator('[data-luna-choice="next"]').click(); await step(page, 'open-world-search');
-      const stillClear = await page.evaluate(selector => {
+      const stillClear = mobile || await page.evaluate(selector => {
         const c = document.querySelector('.luna-companion').getBoundingClientRect(), content = document.querySelector(selector).getBoundingClientRect();
         return c.bottom <= content.top - 16 || c.top >= content.bottom + 16 || c.right <= content.left - 16 || c.left >= content.right + 16;
       }, mobile ? '#mobile-tab-surface.active .mobile-kb-list > .empty-card' : '#kb-modal.active .kb-section.active .character-grid > .empty-card');
