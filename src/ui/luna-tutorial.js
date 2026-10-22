@@ -2,6 +2,8 @@ import { t, getLocale } from '../core/i18n.js';
 import { escapeHtml } from '../core/utils.js';
 import { lunaTutorialSteps, lunaTutorialCopy } from './luna-tutorial-steps.js';
 import { LunaMascot } from './luna-mascot.js';
+import { LunaPractice, bindPracticeChild } from './luna-practice.js';
+import { tutorialContext, notifyTutorialParent } from '../core/tutorial-context.js';
 
 export const TUTORIAL_RECORD_ID = 'luna-tutorial';
 const focusable = 'button:not(:disabled), a[href], input:not(:disabled):not([type="hidden"]), textarea:not(:disabled), select:not(:disabled), [contenteditable="true"], [tabindex]:not([tabindex="-1"])';
@@ -11,11 +13,12 @@ const first = (...selectors) => selectors.flatMap(selector => [...document.query
 const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
 
 export class LunaTutorial {
-  constructor(app) { this.app = app; this.active = false; }
+  constructor(app) { this.app = app; this.active = false; this.practice = new LunaPractice(this); bindPracticeChild(this); }
 
   async prepareIfNeeded() {
     try { if (terminal(await this.app.db.get('settings', TUTORIAL_RECORD_ID))) return; }
     catch (error) { console.warn('Luna tutorial preference:', error); }
+    if (this.practice.needed()) return this.practice.prepare();
     const holder = this.preparationHolder = document.createElement('div');
     holder.className = `luna-preparation${this.app.isMobileLayout() ? ' luna-mobile' : ''}`;
     holder.inert = true;
@@ -34,6 +37,7 @@ export class LunaTutorial {
 
   start() {
     if (this.active) return this.completion;
+    if (this.practice.needed()) return this.practice.start();
     this.active = true;
     this.finishing = false;
     this.visitedTopics = [];
@@ -66,6 +70,8 @@ export class LunaTutorial {
     document.body.classList.add('luna-tutorial-active');
     this.dialog = this.root.querySelector('.luna-dialog');
     this.dialogBody = this.root.querySelector('.luna-dialog-body');
+    this.dialogCopy = this.root.querySelector('.luna-dialog-copy');
+    this.progress = this.root.querySelector('.luna-progress');
     this.companion = this.root.querySelector('.luna-companion');
     this.cutout = this.root.querySelector('.luna-cutout');
     this.spotlight = this.root.querySelector('.luna-spotlight');
@@ -119,8 +125,16 @@ export class LunaTutorial {
     for (const type of ['pointerdown', 'click', 'dblclick', 'contextmenu']) document.addEventListener(type, this.onPointer, true);
     document.addEventListener('keydown', this.onKey, true);
     document.addEventListener('focusin', this.onFocus, true);
-    this.show('welcome', false);
+    this.show('welcome', false).then(async () => {
+      await this.mascot.loaded;
+      if (!this.active || this.finishing) return;
+      if (tutorialContext) {
+        this.mascot.rig?.setSuspended('practice-hidden', true);
+        notifyTutorialParent('luna-practice-ready');
+      }
+    });
     this.app.runMotion(this.root, [{ opacity: 0 }, { opacity: 1 }], { channel: 'tutorial', duration: 360 });
+    this.app.runMotion(this.companion, [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'translateY(0)' }], { channel: 'tutorial-arrival', duration: 560, easing: 'cubic-bezier(.22, 1, .36, 1)' });
     this.tick();
     return this.completion;
   }
@@ -181,12 +195,17 @@ export class LunaTutorial {
     if (step === 'settings' && this.step === 'settings-apology' && this.canShowSettingsAside() && !this.settingsAside) await this.moveSettingsAside();
     if (!this.active || this.finishing || generation !== this.generation) return;
     this.detachTarget();
-    const outgoing = animate && this.app.runMotion(this.dialogBody, [{ opacity: 1 }, { opacity: 0 }], { channel: 'tutorial-copy', duration: 140, fill: 'forwards' });
+    const outgoing = animate && this.app.runMotion(this.dialogCopy, [{ opacity: 1 }, { opacity: 0 }], { channel: 'tutorial-copy', duration: 180, fill: 'forwards' });
     if (outgoing) await outgoing.finished;
     if (!this.active || this.finishing || generation !== this.generation) return;
     if (step === 'settings' && this.step !== 'settings-apology' && this.canShowSettingsAside() && !this.settingsAside) step = 'settings-apology';
     this.step = step;
     this.stepStartedAt = performance.now();
+    if (step !== 'name-card') this.app.hideEntityHoverCards();
+    else {
+      const mention = this.find('.page-content-prosemirror .entity-link');
+      if (mention) this.app.showEntityHoverCard(mention);
+    }
     if (step === 'focus' && this.app.isMobileLayout()) this.app.closeMobileToEditor();
     if (step === 'create-form') this.formCancelled = false;
     this.root.dataset.step = step;
@@ -198,8 +217,8 @@ export class LunaTutorial {
     this.app.animateHeightTransition(this.dialog, () => {
       const copy = t(this.copy());
       const letters = typeof Intl.Segmenter === 'function' ? [...new Intl.Segmenter(getLocale(), { granularity: 'grapheme' }).segment(copy)].map(item => item.segment) : Array.from(copy);
-      const interval = Math.min(14, 700 / Math.max(1, letters.length - 1));
-      this.mascot.speak(Math.max(700, (letters.length - 1) * interval + 220));
+      const interval = Math.min(24, 2200 / Math.max(1, letters.length - 1));
+      this.mascot.speak(Math.max(850, (letters.length - 1) * interval + 260));
       this.root.querySelector('.luna-dialog-copy').innerHTML = `<p id="luna-tutorial-text"><span class="luna-screen-reader">${escapeHtml(copy)}</span><span aria-hidden="true">${letters.map((letter, index) => `<span class="luna-letter" style="--luna-letter-delay:${index * interval}ms">${escapeHtml(letter)}</span>`).join('')}</span></p>`;
       const primary = (choice, label) => `<button type="button" class="pill-btn ai-btn" data-luna-choice="${choice}">${escapeHtml(t(label))}<i class="bx bx-right-arrow-alt" aria-hidden="true"></i></button>`;
       const skip = `<button type="button" class="luna-skip" data-luna-choice="skip">${escapeHtml(t('Пропустить обучение'))}</button>`;
@@ -208,11 +227,12 @@ export class LunaTutorial {
         ? `<button type="button" class="pill-btn" data-luna-choice="no">${escapeHtml(t('Нет'))}</button>${primary('yes', 'Да')}`
         : step === 'done' ? `${skip}<div class="luna-forward">${back}${primary('done', 'Начать писать')}</div>`
           : `${skip}<div class="luna-forward">${back}${description.go ? primary('next', 'Дальше') : ''}</div>`;
-    }, { duration: animate ? 300 : 0 });
+      (this.root.querySelector('.luna-forward') || this.root.querySelector('.luna-dialog-actions')).prepend(this.progress);
+    }, { duration: animate ? 440 : 0 });
     this.updateProgress();
     this.updateTarget(); this.layout();
     outgoing?.animation?.cancel();
-    await this.app.runMotion(this.dialogBody, [{ opacity: 0 }, { opacity: 1 }], { channel: 'tutorial-copy', duration: 280 }).finished;
+    await this.app.runMotion(this.dialogCopy, [{ opacity: 0 }, { opacity: 1 }], { channel: 'tutorial-copy', duration: 340 }).finished;
     await this.placementMotion?.finished;
     if (!this.active || this.finishing || generation !== this.generation) return;
     this.changing = false;
@@ -230,11 +250,15 @@ export class LunaTutorial {
     this.target = null; this.extraTargets = []; this.addedTabIndex = false; this.addedRole = false;
   }
 
-  copy() { return lunaTutorialCopy(this.step, this.app.isMobileLayout()); }
+  copy() {
+    if (this.step === 'welcome' && tutorialContext) return 'Я приготовила временную главу и персонажа. Здесь можно спокойно пробовать — твои записи останутся на месте. Начнём?';
+    if (this.step === 'done' && tutorialContext) return 'На этом всё! Сейчас вернёмся к твоим записям. Снова найти меня можно в «Настройки → Прочее».';
+    return lunaTutorialCopy(this.step, this.app.isMobileLayout());
+  }
 
   updateProgress() {
     const topics = this.topics(), current = this.description()?.topic;
-    const progress = this.root.querySelector('.luna-progress');
+    const progress = this.progress;
     progress.hidden = ['welcome', 'create', 'create-form', 'open-docs', 'done'].includes(this.step);
     const value = this.step === 'done' ? topics.length : Math.max(1, topics.indexOf(current) + 1);
     progress.setAttribute('aria-valuemax', topics.length);
@@ -282,7 +306,7 @@ export class LunaTutorial {
     const previous = this.placement && this.companion.getBoundingClientRect();
     this.placement = { x, y };
     this.companion.style.left = `${x}px`; this.companion.style.top = `${y}px`;
-    if (previous) this.placementMotion = this.app.runMotion(this.companion, [{ transform: `translate(${previous.left - x}px, ${previous.top - y}px)` }, { transform: 'translate(0, 0)' }], { channel: 'tutorial-placement', duration: 440, startFromCurrent: false });
+    if (previous) this.placementMotion = this.app.runMotion(this.companion, [{ transform: `translate(${previous.left - x}px, ${previous.top - y}px)` }, { transform: 'translate(0, 0)' }], { channel: 'tutorial-placement', duration: Math.min(720, 460 + Math.hypot(previous.left - x, previous.top - y) * .3), easing: 'cubic-bezier(.22, 1, .36, 1)', startFromCurrent: false });
   }
 
   updateTarget() {
@@ -393,7 +417,7 @@ export class LunaTutorial {
         if (state.opacity > 0) { state.phase = 'out'; state.from = state.opacity; }
         else { state.target = desired; state.phase = desired ? 'in' : 'hidden'; }
       }
-      const progress = Math.min(1, (now - state.startedAt) / (state.phase === 'out' ? 180 : 280));
+      const progress = Math.min(1, (now - state.startedAt) / (state.phase === 'out' ? 220 : 360));
       const eased = .5 - Math.cos(Math.PI * progress) / 2;
       if (state.phase === 'out') {
         state.opacity = state.from * (1 - eased);
@@ -455,6 +479,7 @@ export class LunaTutorial {
   }
 
   cleanupPreview() {
+    this.app.hideEntityHoverCards();
     this.app.closeAllFloatingMenus();
     if (this.app.commandPalette.opened) this.app.commandPalette.close({ restoreFocus: false });
     for (const id of ['kb-modal', 'settings-overlay', 'form-overlay']) document.getElementById(id)?.classList.remove('active');
@@ -548,6 +573,7 @@ export class LunaTutorial {
   }
 
   async finish(status) {
+    if (this.practice.opened) return this.practice.finish(status);
     if (!this.active || this.finishing) return;
     this.finishing = true;
     this.mascot.stopSpeaking();
@@ -557,7 +583,8 @@ export class LunaTutorial {
     this.restoreView();
     try { await this.app.db.put('settings', { id: TUTORIAL_RECORD_ID, version: 1, status, updatedAt: Date.now() }); }
     catch (error) { console.warn('Luna tutorial preference:', error); this.app.toast(t('Не удалось запомнить прохождение обучения. При следующем запуске я могу появиться снова.')); }
-    await this.app.runMotion(this.root, [{ opacity: 1 }, { opacity: 0 }], { channel: 'tutorial', duration: 280 }).finished;
+    this.app.hideEntityHoverCards();
+    await this.app.runMotion(this.root, [{ opacity: 1 }, { opacity: 0 }], { channel: 'tutorial', duration: 360 }).finished;
     this.detachTarget();
     this.root.remove();
     this.mascot.destroy();
@@ -572,6 +599,7 @@ export class LunaTutorial {
     const restore = form || (visible(this.previousFocus) ? this.previousFocus : first('.page-content-prosemirror', '.workspace-empty button', '[data-action="open-settings"]', '[data-action="mobile-open-more"]'));
     restore?.focus({ preventScroll: true });
     this.resolve(status);
+    notifyTutorialParent('luna-practice-finished', { status });
     if (this.app.startupInteractionReady) this.app.openPendingNativeFiles().catch(error => console.warn('Pending native files:', error));
   }
 }

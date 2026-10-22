@@ -3,6 +3,8 @@ import { InterfaceLanguage, LANGUAGE_OPTIONS, languageFlag } from './ui/interfac
 import { LunaTutorial, TUTORIAL_RECORD_ID } from './ui/luna-tutorial.js';
 import { inferLanguage } from './core/language-detection.js';
 import { Database } from './core/db.js';
+import { TutorialDatabase } from './core/tutorial-db.js';
+import { tutorialContext, notifyTutorialParent } from './core/tutorial-context.js';
 import { defaultSettings, seedDocs, seedFolders, seedLore } from './core/defaults.js';
 import {
   applySmartPunctuationToHtml,
@@ -68,6 +70,7 @@ function storageNotice(message) {
 }
 
 function safeGetStorageItem(storage, key, fallback = '') {
+  if (tutorialContext) return fallback;
   try {
     const value = storage?.getItem(key);
     return value === null || value === undefined ? fallback : value;
@@ -78,6 +81,7 @@ function safeGetStorageItem(storage, key, fallback = '') {
 }
 
 function safeSetStorageItem(storage, key, value) {
+  if (tutorialContext) return true;
   try {
     storage?.setItem(key, value);
     return true;
@@ -88,6 +92,7 @@ function safeSetStorageItem(storage, key, value) {
 }
 
 function safeRemoveStorageItem(storage, key) {
+  if (tutorialContext) return true;
   try {
     storage?.removeItem(key);
     return true;
@@ -98,6 +103,7 @@ function safeRemoveStorageItem(storage, key) {
 }
 
 function safeStorageKeys(storage) {
+  if (tutorialContext) return [];
   try {
     return Object.keys(storage || {});
   } catch {
@@ -128,7 +134,7 @@ function defaultDeviceName(runtime) {
 
 class NocturneWriter {
   constructor() {
-    this.db = new Database();
+    this.db = tutorialContext ? new TutorialDatabase(tutorialContext) : new Database();
     this.interfaceLanguage = new InterfaceLanguage(this);
     this.lunaTutorial = new LunaTutorial(this);
     this.db.protection = () => ({ enabled: !!this.state?.settings.e2e, password: this.state?.sessionPassword || '' });
@@ -424,6 +430,7 @@ class NocturneWriter {
     this.startupReveal = this.startPreloader(this.lunaTutorial.prepareIfNeeded());
     this.bindGlobalEvents();
     this.installModalFocus();
+    if (!tutorialContext) {
     this.databaseSync = new DatabaseSync({ db: this.db, deviceId: this.state.sync.deviceId,
       onChange: result => this.refreshAfterDatabaseSync(result),
       onPending: () => this.scheduleDatabaseSync(),
@@ -438,10 +445,15 @@ class NocturneWriter {
     this.applyAndroidSystemBars();
     this.startGitAutosave();
     this.disposeNativeOpenFiles = platformFiles.onOpenFilesPending(() => this.startupInteractionReady && !this.lunaTutorial.active && this.openPendingNativeFiles());
+    } else {
+      this.backups = new ProjectBackups({ db: this.db, files: { writeBackup: async () => ({ external: false }) }, buildDump: () => this.buildNocturneDump(), enabled: () => false });
+      this.history.start();
+    }
     await this.startupReveal;
     await this.interfaceLanguage.welcomeIfNeeded();
     await this.lunaTutorial.welcomeIfNeeded();
     this.startupInteractionReady = true;
+    if (tutorialContext) return;
     const openedNativeFiles = await this.openPendingNativeFiles();
 
     // Check if new version first run (specifically for Electron desktop users)
@@ -25978,6 +25990,7 @@ const app = new NocturneWriter();
 window.nocturneApp = app;
 app.init().catch((error) => {
   console.error(error);
+  notifyTutorialParent('luna-practice-load-error');
   const appRoot = document.getElementById('app') || document.body.appendChild(document.createElement('div'));
   document.body.classList.add('boot-error');
   appRoot.innerHTML = ui`

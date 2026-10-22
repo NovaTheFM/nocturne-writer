@@ -1,4 +1,5 @@
 import { t } from '../core/i18n.js';
+import { notifyTutorialParent } from '../core/tutorial-context.js';
 
 let loading = Promise.resolve();
 
@@ -80,6 +81,7 @@ export class LunaMascot {
     this.host.setAttribute('aria-busy', 'false');
     this.retry.hidden = false;
     this.retry.textContent = t('Повторить загрузку Луны');
+    notifyTutorialParent('luna-practice-load-error');
     if (this.preparing) {
       this.retry.classList.add('luna-startup-retry', 'pill-btn');
       document.querySelector('#preloader .preloader-content')?.append(this.retry);

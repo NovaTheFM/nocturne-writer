@@ -1,14 +1,15 @@
 import { Capacitor, nativePlugins } from '../vendor/capacitor/native.bundle.js';
+import { tutorialContext } from '../core/tutorial-context.js';
 
 export { nativePlugins };
 
 export function detectRuntime() {
-  const electronApi = window.nocturneElectron || null;
+  const electronApi = !tutorialContext && window.nocturneElectron || null;
   const capacitor = Capacitor;
   const platform = capacitor?.getPlatform?.() || '';
   const userAgent = navigator.userAgent || '';
   const isElectron = !!electronApi?.isNocturneElectron;
-  const isCapacitor = !!capacitor?.isNativePlatform?.();
+  const isCapacitor = !tutorialContext && !!capacitor?.isNativePlatform?.();
   const isAndroid = platform === 'android' || /Android/i.test(userAgent);
   const supportsNativeShare = !!navigator.share || isCapacitor;
   return {
@@ -36,6 +37,7 @@ export function nativeBarColor(color = '#08080a') {
 }
 
 export async function configureNativeBars({ light = false, color = '#08080a' } = {}) {
+  if (tutorialContext) return;
   if (!Capacitor.isNativePlatform()) return;
   color = nativeBarColor(color);
   try {
@@ -52,6 +54,7 @@ export async function minimizeNativeApp() {
 }
 
 export function bindNativeLifecycle({ onBack, onSuspend, onResume }) {
+  if (tutorialContext) return;
   if (!Capacitor.isNativePlatform()) return;
   nativePlugins.App.addListener('backButton', onBack);
   nativePlugins.App.addListener('appStateChange', ({ isActive }) => isActive ? onResume?.() : onSuspend?.());

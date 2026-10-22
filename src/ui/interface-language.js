@@ -1,5 +1,6 @@
 import { getLocale, setLocale, supportedLocales, loadLocalePreference, saveLocalePreference, t } from '../core/i18n.js';
 import { platformFiles } from '../platform/file-adapter.js';
+import { tutorialContext } from '../core/tutorial-context.js';
 
 export const LANGUAGE_OPTIONS = [['en', 'English'], ['uk', 'Українська'], ['ru', 'Русский']];
 export function languageFlag(locale) {
@@ -26,7 +27,7 @@ export class InterfaceLanguage {
     document.documentElement.lang = value;
     for (const element of document.querySelectorAll('[data-i18n-title]')) { element.title = t(element.dataset.i18nTitle); element.setAttribute('aria-label', element.title); }
     for (const element of document.querySelectorAll('[data-i18n]')) element.textContent = t(element.dataset.i18n);
-    await platformFiles.setInterfaceLanguage(value);
+    if (!tutorialContext) await platformFiles.setInterfaceLanguage(value);
   }
 
   async welcomeIfNeeded() {
