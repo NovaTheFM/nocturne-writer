@@ -17,14 +17,20 @@ export class TutorialDatabase extends Database {
     await this.atomicWrite({
       settings: [{ id: 'app', value: settings }, { id: 'interface-language', locale: this.context.locale, confirmed: true }],
       folders: seedFolders,
+      lore: [{ id: 'world', characters: [], locations: [], timeline: [], notes: [], rules: [] }],
+      stats: [{ id: localDateKey(), words: 0, completed: false }],
+    });
+    return this.db;
+  }
+
+  async prepareStory() {
+    await this.atomicWrite({
       docs: [{ id: 'luna-practice-document', folderId: 'manuscript', title: t('Учебная глава'), loreId: 'world', order: 0, notes: '', createdAt: Date.now(), updatedAt: Date.now(), ast: { type: 'doc', blocks: [
         { id: 'practice-heading', type: 'heading', html: escapeHtml(t('Учебная глава')) },
         { id: 'practice-paragraph', type: 'paragraph', html: escapeHtml(t('Мира остановилась у окна. Сегодня начиналась её новая история.')) },
       ] } }],
       lore: [{ id: 'world', title: t('Учебная история'), characters: [{ id: 'luna-practice-character', name: t('Мира'), aliases: [t('Звёздочка')], role: t('Героиня учебной истории'), description: t('Она собирает истории и замечает то, что другие пропускают.'), documentIds: ['luna-practice-document'], order: 0 }], locations: [], timeline: [], notes: [], rules: [] }],
-      stats: [{ id: localDateKey(), words: 0, completed: false }],
     });
-    return this.db;
   }
 
   store() { throw new Error('Tutorial records are held in memory.'); }

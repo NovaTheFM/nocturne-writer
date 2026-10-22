@@ -91,6 +91,10 @@ export function bindPracticeChild(tour) {
     const { type } = event.data;
     if (type === 'luna-practice-show') {
       await tour.app.interfaceLanguage.change(event.data.locale, { welcome: true });
+      await tour.app.db.prepareStory();
+      tour.app.state.docs = await tour.app.loadDocs();
+      tour.app.state.lore = await tour.app.loadLore();
+      tour.app.renderAll();
       await tour.show(tour.step);
       tour.mascot.rig?.setSuspended('practice-hidden', false);
       notifyTutorialParent('luna-practice-visible');
