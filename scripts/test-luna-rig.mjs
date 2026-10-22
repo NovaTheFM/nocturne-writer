@@ -124,9 +124,11 @@ try {
     await page.waitForFunction(() => window.nocturneApp.startupInteractionReady);
     let release; const pending = new Promise(resolve => { release = resolve; });
     await page.route('**/luna-rig/assets/manifest.json', async route => { await pending; await route.continue(); });
-    await page.evaluate(() => { void window.nocturneApp.lunaTutorial.start(); window.__pendingMascot = window.nocturneApp.lunaTutorial.mascot; });
-    await page.locator('[data-luna-choice="no"]').click(); await page.locator('#luna-tutorial').waitFor({ state: 'detached' });
-    release(); await page.evaluate(async () => await window.__pendingMascot.ready);
+    await page.evaluate(() => { void window.nocturneApp.lunaTutorial.start(); });
+    await page.waitForFunction(() => document.querySelector('iframe[data-luna-practice]')?.contentWindow.nocturneApp?.lunaTutorial.preparedMascot);
+    await page.evaluate(() => { window.__pendingMascot = document.querySelector('iframe[data-luna-practice]').contentWindow.nocturneApp.lunaTutorial.preparedMascot; });
+    await page.locator('.luna-practice-close').click(); await page.locator('iframe[data-luna-practice]').waitFor({ state: 'detached' });
+    release(); await page.waitForTimeout(100);
     assert.ok(await page.evaluate(() => window.__pendingMascot.destroyed && !window.__pendingMascot.rig));
   });
   await scenario('first appearance uses only the live rig at a stable size', async page => {

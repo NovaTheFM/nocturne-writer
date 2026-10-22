@@ -43,6 +43,18 @@ try {
     }));
     await page.screenshot({ path: `${output}/wave.png` });
     assert.ok(range > 5, `Raised hand only moves ${range.toFixed(3)} CSS pixels sideways`);
+    await page.evaluate(() => {
+      const tour = window.nocturneApp.lunaTutorial;
+      tour.mascot.rig.setPaused(true);
+      tour.companion.style.setProperty('--luna-mascot-width', '420px'); tour.companion.style.width = '420px';
+      tour.dialog.style.display = 'none'; tour.root.querySelector('.luna-dialog-tail').style.display = 'none';
+    });
+    for (const phase of [0, .25, .5, .75]) {
+      await page.evaluate(phase => { const rig = window.nocturneApp.lunaTutorial.mascot.rig; rig.resize(); rig.time = phase; rig.update(0); rig.render(); }, phase);
+      await page.locator('.luna-mascot canvas').screenshot({ path: `${output}/model-wave-${phase}.png` });
+    }
+    await page.evaluate(async () => { const rig = window.nocturneApp.lunaTutorial.mascot.rig; await rig.setPose(0, true); rig.render(); });
+    await page.locator('.luna-mascot canvas').screenshot({ path: `${output}/model-idle.png` });
   });
   await scenario('pose transition starts from the old frame and blends both silhouettes', async page => {
     await greeting(page);
@@ -89,9 +101,11 @@ try {
       editor.commands.insertContent('This must stay exactly as the author left it.'); await app.flushOpenDocuments();
       app.state.lore.characters.push({ id: 'author-character', name: 'Author character', role: 'Private' }); await app.saveLore();
       window.__authorEditor = editor;
-      const snapshot = async () => Object.fromEntries(await Promise.all(['docs','lore','drafts','snapshots','stats','floatingNotes','reviewMarks','trash'].map(async store => [store, await app.db.getAllRaw(store)])));
+      await app.databaseSync.work; await app.history.work;
+      const { DATABASE_STORES } = await import('/src/core/db.js');
+      const snapshot = async () => Object.fromEntries(await Promise.all(DATABASE_STORES.map(async store => [store, (await app.db.getAllRaw(store)).filter(record => store !== 'settings' || record.id !== 'luna-tutorial')])));
       window.__authorSnapshot = snapshot;
-      return { data: await snapshot(), workspace: JSON.stringify(app.state.workspace) };
+      return { data: await snapshot(), workspace: JSON.stringify(app.state.workspace), local: JSON.stringify({ ...localStorage }), session: JSON.stringify({ ...sessionStorage }) };
     });
     await page.evaluate(() => { void window.nocturneApp.lunaTutorial.start(); });
     await page.locator('iframe[data-luna-practice]').waitFor();
@@ -109,11 +123,25 @@ try {
     await page.locator('iframe[data-luna-practice]').waitFor({ state: 'detached' });
     assert.deepEqual(await page.evaluate(() => window.__authorSnapshot()), before.data);
     assert.equal(await page.evaluate(() => JSON.stringify(window.nocturneApp.state.workspace)), before.workspace);
+    assert.equal(await page.evaluate(() => JSON.stringify({ ...localStorage })), before.local);
+    assert.equal(await page.evaluate(() => JSON.stringify({ ...sessionStorage })), before.session);
     assert.ok(await page.evaluate(() => window.nocturneApp.nocturneEditor.instances.get('primary').editor === window.__authorEditor && !window.__authorEditor.isDestroyed));
     await page.reload(); await page.waitForFunction(() => window.nocturneApp.startupInteractionReady);
     assert.equal(await page.locator('iframe[data-luna-practice]').count(), 0);
     assert.equal(await page.evaluate(() => window.nocturneApp.state.docs.length), 1);
   }, mobile ? { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } : {});
+  await scenario('replay loading failure offers a retry and can still be skipped', async page => {
+    await greeting(page); await page.locator('[data-luna-choice="no"]').click();
+    await page.waitForFunction(() => window.nocturneApp.startupInteractionReady);
+    await page.route('**/luna-rig/assets/manifest.json', route => route.fulfill({ status: 503, body: 'Unavailable' }));
+    await page.evaluate(() => { void window.nocturneApp.lunaTutorial.start(); });
+    await page.locator('.luna-practice-loading .luna-startup-retry').waitFor();
+    await page.unroute('**/luna-rig/assets/manifest.json');
+    await page.locator('.luna-practice-loading .luna-startup-retry').click();
+    await page.locator('.luna-practice-host.is-ready').waitFor();
+    await page.frameLocator('iframe[data-luna-practice]').locator('[data-luna-choice="no"]').click();
+    await page.locator('iframe[data-luna-practice]').waitFor({ state: 'detached' });
+  });
 } finally {
   await browser?.close(); server.kill();
   await writeFile(`${output}/results.json`, JSON.stringify(results, null, 2));

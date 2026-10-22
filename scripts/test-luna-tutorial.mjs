@@ -62,15 +62,23 @@ async function reachForm(page) {
   await step(page, 'create-form');
 }
 
+async function practiceView(page) {
+  await page.locator('.luna-practice-host.is-ready iframe').waitFor();
+  const frame = page.frames().find(frame => frame.parentFrame() === page.mainFrame());
+  assert.ok(frame, 'The isolated practice app is present');
+  frame.keyboard = page.keyboard; frame.screenshot = page.screenshot.bind(page);
+  return frame;
+}
+
 async function discoverFeatures(page, mobile, { stopAt, keyboardPalette = false } = {}) {
   const click = async name => (await step(page, name)).click();
   const next = async name => { await step(page, name); await page.locator('[data-luna-choice="next"]').click(); };
   const shot = async name => page.screenshot({ path: `${output}/${mobile ? 'mobile' : 'desktop'}-${name}.png` });
-  await next('write');
+  await next('write'); await next('name-links'); await shot('name-links'); await next('name-card');
   if (mobile) await click('bookmarks-actions');
   await click('open-bookmarks'); await step(page, 'bookmarks'); await shot('bookmarks');
   await page.locator('[data-luna-choice="back"]').click(); await step(page, 'write');
-  await next('write');
+  await next('write'); await next('name-links'); await next('name-card');
   if (mobile) await click('bookmarks-actions');
   await click('open-bookmarks'); await next('bookmarks');
   if (mobile) await click('more-notes');
@@ -84,7 +92,7 @@ async function discoverFeatures(page, mobile, { stopAt, keyboardPalette = false 
   await shot('notes-button');
   assert.ok(notesCue.ring.x <= notesCue.target.x && notesCue.ring.right >= Math.min(notesCue.width - 5, notesCue.target.right));
   assert.ok(notesCue.ring.y <= notesCue.target.y && notesCue.ring.bottom >= notesCue.target.bottom);
-  await click('open-notes'); await next('notes');
+  await click('open-notes'); await next('notes'); await shot('notes-checklist'); await next('notes-checklist');
   await click('open-floating'); await step(page, 'floating');
   const floatingLayout = await page.evaluate(() => {
     const coach = document.querySelector('.luna-companion').getBoundingClientRect(), panel = document.querySelector('.floating-notes-modal-panel').getBoundingClientRect();
@@ -95,7 +103,7 @@ async function discoverFeatures(page, mobile, { stopAt, keyboardPalette = false 
   await shot('floating'); await next('floating');
   await click('open-kb');
   if (!mobile) { await (await step(page, 'kb-menu')).focus(); await page.keyboard.press('Enter'); }
-  await next('kb'); await click('open-world-search'); await step(page, 'world-search');
+  await next('kb'); await next('character-aliases'); await click('open-world-search'); await step(page, 'world-search');
   await page.locator('[data-knowledge-query]:visible').fill('A real story');
   await shot('world-search'); await next('world-search');
   if (!mobile) await click('tools-commands');
@@ -138,6 +146,8 @@ async function discoverFeatures(page, mobile, { stopAt, keyboardPalette = false 
   await shot('book'); await next('book');
   await click(mobile ? 'more-backups' : 'tools-backups'); await click('open-backups');
   await step(page, 'backups'); await shot('backups'); await next('backups');
+  await click(mobile ? 'more-trash' : 'tools-trash'); await click('open-trash');
+  await step(page, 'trash'); await shot('trash'); await next('trash');
   if (mobile) await click('more-settings');
   await click('open-settings'); await step(page, 'settings');
   if (mobile) {
@@ -242,6 +252,7 @@ try {
       assert.ok(geometry.coach.y >= geometry.content.bottom + 20 || geometry.coach.bottom <= geometry.content.y - 20 || geometry.coach.x >= geometry.content.right + 20, `Luna must leave the character card clear: ${JSON.stringify(geometry)}`);
       assert.ok(geometry.coach.bottom <= geometry.height - 12);
       await page.screenshot({ path: `${output}/knowledge-clear-${viewport.width}.png` });
+      await page.locator('[data-luna-choice="next"]').click(); await step(page, 'character-aliases');
       await page.locator('[data-luna-choice="next"]').click(); await step(page, 'open-world-search');
       const stillClear = mobile || await page.evaluate(selector => {
         const c = document.querySelector('.luna-companion').getBoundingClientRect(), content = document.querySelector(selector).getBoundingClientRect();
@@ -475,11 +486,12 @@ try {
       assert.deepEqual(await page.evaluate(async () => await window.nocturneApp.db.getAllRaw('docs')), before, 'Reload must preserve the document exactly');
       await page.evaluate(() => { const a = window.nocturneApp; if (a.isMobileLayout()) a.openMobilePanel('settings', 'more', { settingsTab: 'misc' }); else a.openSettingsTab('misc'); });
       await page.locator('[data-action="start-tutorial"]:visible').click();
-      await step(page, 'welcome');
+      const practice = await practiceView(page);
+      await step(practice, 'welcome');
       await page.keyboard.press('Tab');
-      assert.equal(await page.evaluate(() => document.activeElement.closest('#luna-tutorial') !== null), true);
+      assert.equal(await practice.evaluate(() => document.activeElement.closest('#luna-tutorial') !== null), true);
       await page.keyboard.press('Escape');
-      await page.locator('#luna-tutorial').waitFor({ state: 'detached' });
+      await page.locator('iframe[data-luna-practice]').waitFor({ state: 'detached' });
       assert.deepEqual(await page.evaluate(async () => await window.nocturneApp.db.getAllRaw('docs')), before, 'Replaying and skipping must preserve manuscripts');
     });
     await scenario('skip keeps an unfinished form and restores modal focus', mobile, async page => {
@@ -511,9 +523,10 @@ try {
       return await a.db.getAllRaw('docs');
     }, mobile);
     await page.locator('[data-action="start-tutorial"]:visible').click();
-    await step(page, 'welcome'); await page.locator('[data-luna-choice="yes"]').click();
-    await discoverFeatures(page, mobile, { stopAt: 'focus', keyboardPalette: true });
-    await page.keyboard.press('Escape'); await page.locator('#luna-tutorial').waitFor({ state: 'detached' });
+    const practice = await practiceView(page);
+    await step(practice, 'welcome'); await practice.locator('[data-luna-choice="yes"]').click();
+    await discoverFeatures(practice, mobile, { stopAt: 'focus', keyboardPalette: true });
+    await page.keyboard.press('Escape'); await page.locator('iframe[data-luna-practice]').waitFor({ state: 'detached' });
     assert.equal(await page.evaluate(() => window.nocturneApp.state.reviewMode), 'finalization');
     assert.equal(await page.evaluate(() => !!window.nocturneApp.state.zenActive), mobile);
     assert.equal(await page.evaluate(() => window.nocturneApp.state.settings.showZenButton), false);
@@ -532,29 +545,30 @@ try {
       await a.db.delete('settings', 'luna-tutorial');
     });
     const before = await page.evaluate(() => window.__existingRows);
-    await page.reload(); await step(page, 'welcome');
+    await page.reload(); const practice = await practiceView(page); await step(practice, 'welcome');
     assert.equal(await page.locator('#language-onboarding').count(), 0);
     await page.setViewportSize({ width: 390, height: 844 });
-    await step(page, 'welcome');
-    await page.locator('[data-luna-choice="yes"]').click(); await step(page, 'write');
-    assert.equal(await page.locator('#doc-form').count(), 0, 'Use the existing document without creating a demo');
-    await page.locator('[data-luna-choice="next"]').click();
-    await (await step(page, 'bookmarks-actions')).click();
-    await (await step(page, 'open-bookmarks')).click(); await step(page, 'bookmarks');
-    await page.locator('[data-luna-choice="next"]').click();
-    await (await step(page, 'more-notes')).click();
-    await (await step(page, 'open-notes')).click(); await step(page, 'notes');
-    await page.setViewportSize({ width: 1280, height: 900 }); await step(page, 'notes');
-    await page.locator('[data-luna-choice="next"]').click();
-    await (await step(page, 'open-floating')).click(); await step(page, 'floating');
-    await page.locator('[data-luna-choice="next"]').click();
-    await (await step(page, 'open-kb')).click(); await step(page, 'kb-menu');
-    await page.setViewportSize({ width: 390, height: 844 }); await step(page, 'world-search');
-    await page.evaluate(async () => await window.nocturneApp.interfaceLanguage.change('en'));
-    await page.waitForFunction(() => document.querySelector('#luna-tutorial-text')?.textContent.startsWith('Find characters'));
-    await step(page, 'world-search');
+    await step(practice, 'welcome');
+    await practice.locator('[data-luna-choice="yes"]').click(); await step(practice, 'write');
+    assert.equal(await practice.evaluate(() => window.nocturneApp.getFocusedDoc().id), 'luna-practice-document');
+    for (const name of ['write', 'name-links', 'name-card']) { await step(practice, name); await practice.locator('[data-luna-choice="next"]').click(); }
+    await (await step(practice, 'bookmarks-actions')).click();
+    await (await step(practice, 'open-bookmarks')).click(); await step(practice, 'bookmarks');
+    await practice.locator('[data-luna-choice="next"]').click();
+    await (await step(practice, 'more-notes')).click();
+    await (await step(practice, 'open-notes')).click(); await step(practice, 'notes');
+    await page.setViewportSize({ width: 1280, height: 900 }); await step(practice, 'notes');
+    await practice.locator('[data-luna-choice="next"]').click(); await step(practice, 'notes-checklist');
+    await practice.locator('[data-luna-choice="next"]').click();
+    await (await step(practice, 'open-floating')).click(); await step(practice, 'floating');
+    await practice.locator('[data-luna-choice="next"]').click();
+    await (await step(practice, 'open-kb')).click(); await step(practice, 'kb-menu');
+    await page.setViewportSize({ width: 390, height: 844 }); await step(practice, 'world-search');
+    await practice.evaluate(async () => await window.nocturneApp.interfaceLanguage.change('en'));
+    await practice.waitForFunction(() => document.querySelector('#luna-tutorial-text')?.textContent.startsWith('Find characters'));
+    await step(practice, 'world-search');
     await page.evaluate(() => window.nocturneApp.closeTopMobileOverlay());
-    await page.locator('#luna-tutorial').waitFor({ state: 'detached' });
+    await page.locator('iframe[data-luna-practice]').waitFor({ state: 'detached' });
     assert.deepEqual(await page.evaluate(async () => await window.nocturneApp.db.getAllRaw('docs')), before);
     assert.equal(await page.locator('.luna-tutorial-active').count(), 0);
   });

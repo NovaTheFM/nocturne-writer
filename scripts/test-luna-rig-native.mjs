@@ -20,7 +20,23 @@ try {
   const image = await app.evaluate(async ({ BrowserWindow }) => (await BrowserWindow.getAllWindows()[0].webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG().toString('base64'));
   await writeFile(`${output}/electron-wave.png`, Buffer.from(image, 'base64'));
   await page.keyboard.press('Escape'); await page.locator('#luna-tutorial').waitFor({ state: 'detached' });
+  await page.waitForFunction(() => window.nocturneApp.startupInteractionReady);
+  const before = await page.evaluate(async () => {
+    const a = window.nocturneApp;
+    await a.createDoc(a.defaultFolderId(), 'Native manuscript');
+    a.nocturneEditor.get('primary').commands.setContent('<p>Keep the native author’s work.</p>'); await a.flushOpenDocuments();
+    return a.db.getAllRaw('docs');
+  });
+  await page.evaluate(() => { void window.nocturneApp.lunaTutorial.start(); });
+  await page.locator('.luna-practice-host.is-ready').waitFor({ timeout: 25000 });
+  const practice = page.frameLocator('iframe[data-luna-practice]');
+  await practice.locator('[data-luna-choice="yes"]').click();
+  await practice.locator('#luna-tutorial[data-step="write"]').waitFor();
+  await practice.locator('.page-content-prosemirror').first().fill('Native tutorial practice');
+  await page.waitForTimeout(700);
+  await practice.locator('[data-luna-choice="skip"]').click(); await page.locator('iframe[data-luna-practice]').waitFor({ state: 'detached' });
+  assert.deepEqual(await page.evaluate(() => window.nocturneApp.db.getAllRaw('docs')), before);
   assert.deepEqual(errors, []);
-  await writeFile(`${output}/results.json`, JSON.stringify([{ name: 'real Electron loads the original rig from file origin', status: 'PASS' }], null, 2));
+  await writeFile(`${output}/results.json`, JSON.stringify([{ name: 'real Electron loads the original rig from file origin', status: 'PASS' }, { name: 'file-origin tutorial replay edits only its in-memory manuscript', status: 'PASS' }], null, 2));
   console.log('PASS real Electron loads original rig from file origin');
 } finally { await app?.close(); }
