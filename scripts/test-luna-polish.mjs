@@ -15,6 +15,7 @@ async function greeting(page) {
   await page.waitForFunction(() => !window.nocturneApp.lunaTutorial.changing);
 }
 async function scenario(name, action, options = {}) {
+  if (process.env.NOCTURNE_LUNA_CASE && !name.includes(process.env.NOCTURNE_LUNA_CASE)) { results.push({ name, status: 'SKIP', reason: 'Filtered by NOCTURNE_LUNA_CASE' }); return; }
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, ...options });
   const page = await context.newPage(), errors = [];
   page.setDefaultTimeout(20000); page.on('pageerror', error => errors.push(error.message));
@@ -97,6 +98,8 @@ try {
     const practice = page.frameLocator('iframe[data-luna-practice]');
     await practice.locator('[data-luna-choice="yes"]').click();
     await practice.locator('#luna-tutorial[data-step="write"]').waitFor();
+    assert.match(await practice.locator('.page-content-prosemirror').first().textContent(), /Mira/, 'The practice story uses the chosen language');
+    assert.equal(await practice.locator('.entity-link[data-entity-id="luna-practice-character"]').count(), 1, 'The example character is really linked to the manuscript');
     await practice.locator('.page-content-prosemirror').first().fill('Practicing a completely different story.');
     await practice.locator('.page-content-prosemirror').first().press('Control+a');
     await practice.locator('.page-content-prosemirror').first().press('Backspace');
