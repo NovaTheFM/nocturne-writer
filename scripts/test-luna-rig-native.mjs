@@ -16,7 +16,7 @@ try {
   await page.locator('[data-confirm-language]').click();
   await page.locator('[data-luna-rig-ready="true"]').waitFor({ timeout: 25000 });
   const state = await page.evaluate(() => window.nocturneApp.lunaTutorial.mascot.rig.getState());
-  assert.equal(state.layers, 55); assert.equal(state.poseState, 'wave');
+  assert.equal(state.layers, 56); assert.equal(state.poseState, 'wave');
   const image = await app.evaluate(async ({ BrowserWindow }) => (await BrowserWindow.getAllWindows()[0].webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG().toString('base64'));
   await writeFile(`${output}/electron-wave.png`, Buffer.from(image, 'base64'));
   await page.keyboard.press('Escape'); await page.locator('#luna-tutorial').waitFor({ state: 'detached' });

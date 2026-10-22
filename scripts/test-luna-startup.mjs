@@ -44,9 +44,16 @@ try {
       assert.equal(await page.locator('#language-onboarding.active').count(), 0);
       assert.equal(await page.locator('#luna-tutorial').count(), 0);
       release(); await page.locator('#language-onboarding.active').waitFor({ timeout: 20000 });
+      const before = await page.evaluate(() => {
+        window.__preparedRig = window.nocturneApp.lunaTutorial.preparedMascot.rig;
+        return window.__preparedRig.time;
+      });
+      await page.waitForTimeout(200);
+      assert.equal(await page.evaluate(() => window.__preparedRig.time), before, 'A prepared, hidden rig does not keep animating');
       await page.locator('[data-choose-language="uk"]').click(); await page.locator('[data-confirm-language]').click();
       await page.locator('#luna-tutorial[data-step="welcome"]').waitFor();
       assert.equal(await page.locator('#luna-tutorial [data-luna-rig-ready="true"]').count(), 1);
+      assert.equal(await page.evaluate(() => window.nocturneApp.lunaTutorial.mascot.rig === window.__preparedRig), true, 'The prepared WebGL rig is reused');
       assert.equal(await page.locator('.luna-mascot img').count(), 0);
       await page.keyboard.press('Escape');
     } finally { release(); }
@@ -72,6 +79,32 @@ try {
     assert.ok(distance < .01, `Shoe fragment is attached to the wrong leg: ${distance}px`);
     await page.screenshot({ path: `${output}/shoe-left.png` }); await page.keyboard.press('Escape');
   });
+  await scenario('completed startup does not load a rig again on the next visit', async page => {
+    await welcome(page); await page.locator('[data-luna-choice="no"]').click();
+    await page.waitForFunction(() => window.nocturneApp.startupInteractionReady);
+    let requested = 0;
+    page.on('request', request => { if (request.url().includes('/luna-rig/assets/manifest.json')) requested++; });
+    await page.reload(); await page.waitForFunction(() => window.nocturneApp?.startupInteractionReady);
+    assert.equal(requested, 0); assert.equal(await page.locator('.luna-preparation, #luna-tutorial, #language-onboarding').count(), 0);
+  });
+  await scenario('failed first load keeps the preloader and can be retried', async page => {
+    await page.route('**/luna-rig/assets/manifest.json', route => route.fulfill({ status: 503, body: 'unavailable' }));
+    await page.goto(url); await page.locator('#preloader .luna-startup-retry:not([hidden])').waitFor();
+    assert.equal(await page.locator('#preloader.hidden, #language-onboarding, #luna-tutorial').count(), 0);
+    await page.unroute('**/luna-rig/assets/manifest.json'); await page.locator('.luna-startup-retry').click();
+    await page.locator('[data-confirm-language]').click();
+    await page.locator('#luna-tutorial [data-luna-rig-ready="true"]').waitFor();
+    assert.equal(await page.locator('.luna-startup-retry').count(), 0); await page.keyboard.press('Escape');
+  });
+  await scenario('larger mobile Luna renders at retina resolution', async page => {
+    await welcome(page);
+    const size = await page.locator('#luna-tutorial canvas').evaluate(canvas => {
+      const box = canvas.getBoundingClientRect(); return { width: box.width, right: box.right, bottom: box.bottom, buffer: canvas.width };
+    });
+    assert.ok(size.width >= 104 && size.right < 390 && size.bottom < 844, JSON.stringify(size));
+    assert.ok(size.buffer >= size.width * 3 - 1, JSON.stringify(size));
+    await page.screenshot({ path: `${output}/quality-mobile.png` }); await page.keyboard.press('Escape');
+  }, { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 } finally {
   await browser?.close(); server.kill(); await writeFile(`${output}/results.json`, JSON.stringify(results, null, 2));
 }

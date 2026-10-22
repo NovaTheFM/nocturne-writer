@@ -4,6 +4,8 @@ import { readFile, access } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { splitBootTip } from '../src/ui/luna-rig.js';
+import { rgbaPng } from '../src/vendor/luna-rig/src/png-rgba.js';
 
 const root = resolve('src/vendor/luna-rig');
 const provenance = JSON.parse(await readFile(`${root}/PROVENANCE.json`, 'utf8'));
@@ -28,4 +30,14 @@ test('all original manifest texture references are included for offline use', as
     else if (typeof value === 'string' && value.endsWith('.png')) await access(`${root}/assets/${value}`);
   };
   await visit(manifest.parts);
+});
+test('shoe ownership repair preserves every original RGBA byte', async () => {
+  const manifest = JSON.parse(await readFile(`${root}/assets/manifest.json`, 'utf8'));
+  const bytes = await readFile(`${root}/assets/${manifest.parts['boot-right'].file}`);
+  const { pixels, width, height } = await rgbaPng(`data:image/png;base64,${bytes.toString('base64')}`);
+  const { main, tip } = splitBootTip(pixels, width, height);
+  let attached = 0, retained = 0;
+  for (let i = 0; i < pixels.length; i++) assert.equal(main[i] + tip[i], pixels[i], `RGBA byte ${i}`);
+  for (let i = 3; i < pixels.length; i += 4) { if (tip[i] >= 8) attached++; if (main[i] >= 8) retained++; }
+  assert.equal(attached, 495); assert.equal(retained, 21918);
 });

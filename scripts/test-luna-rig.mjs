@@ -51,7 +51,7 @@ try {
     await start(page);
     assert.equal(await page.locator('.luna-mascot canvas').getAttribute('aria-label'), 'Luna');
     const state = await page.evaluate(() => window.nocturneApp.lunaTutorial.mascot.rig.getState());
-    assert.equal(state.layers, 55); assert.equal(state.poseState, 'wave');
+    assert.equal(state.layers, 56); assert.equal(state.poseState, 'wave');
     const mouth = await page.evaluate(() => new Promise(resolve => {
       const values = [], rig = window.nocturneApp.lunaTutorial.mascot.rig, started = performance.now();
       const sample = () => { values.push(rig.mouthOpening.value); if (performance.now() - started >= 500) resolve(values); else requestAnimationFrame(sample); }; sample();
@@ -111,15 +111,20 @@ try {
   }, { reducedMotion: 'reduce' });
   await scenario('failed material load can be retried without blocking the tutorial', async page => {
     await page.route('**/luna-rig/assets/manifest.json', route => route.fulfill({ status: 503, body: 'unavailable' }));
-    await start(page, false); await page.locator('.luna-rig-retry:not([hidden])').waitFor();
+    await page.goto(url); await page.locator('.luna-rig-retry:not([hidden])').waitFor();
+    assert.equal(await page.locator('#preloader.hidden').count(), 0);
     await page.unroute('**/luna-rig/assets/manifest.json'); await page.locator('.luna-rig-retry').click();
+    await page.locator('[data-confirm-language]').click();
+    await page.locator('#luna-tutorial').waitFor();
     await page.locator('[data-luna-rig-ready="true"]').waitFor({ timeout: 20000 });
     assert.equal(await page.locator('.luna-rig-retry').isVisible(), false); await page.keyboard.press('Escape');
   });
   await scenario('skipping during texture loading leaves no live rig', async page => {
+    await start(page); await page.locator('[data-luna-choice="no"]').click();
+    await page.waitForFunction(() => window.nocturneApp.startupInteractionReady);
     let release; const pending = new Promise(resolve => { release = resolve; });
     await page.route('**/luna-rig/assets/manifest.json', async route => { await pending; await route.continue(); });
-    await start(page, false); await page.evaluate(() => { window.__pendingMascot = window.nocturneApp.lunaTutorial.mascot; });
+    await page.evaluate(() => { void window.nocturneApp.lunaTutorial.start(); window.__pendingMascot = window.nocturneApp.lunaTutorial.mascot; });
     await page.locator('[data-luna-choice="no"]').click(); await page.locator('#luna-tutorial').waitFor({ state: 'detached' });
     release(); await page.evaluate(async () => await window.__pendingMascot.ready);
     assert.ok(await page.evaluate(() => window.__pendingMascot.destroyed && !window.__pendingMascot.rig));
@@ -128,12 +133,15 @@ try {
     let release; const pending = new Promise(resolve => { release = resolve; });
     await page.route('**/luna-rig/assets/manifest.json', async route => { await pending; await route.continue(); });
     try {
-      await start(page, false);
+      await page.goto(url);
+      await page.waitForFunction(() => window.nocturneApp?.lunaTutorial.preparedMascot);
       assert.equal(await page.locator('.luna-mascot img').count(), 0);
-      const canvas = page.locator('.luna-mascot canvas'), before = await canvas.boundingBox();
-      assert.equal(await canvas.evaluate(element => getComputedStyle(element).opacity), '0');
-      release(); await page.locator('[data-luna-rig-ready="true"]').waitFor({ timeout: 20000 });
+      assert.equal(await page.locator('#luna-tutorial').count(), 0);
+      release(); await page.locator('[data-confirm-language]').click();
+      await page.locator('#luna-tutorial [data-luna-rig-ready="true"]').waitFor({ timeout: 20000 });
       assert.equal(await page.evaluate(() => window.nocturneApp.lunaTutorial.mascot.rig.getState().poseState), 'wave');
+      const canvas = page.locator('#luna-tutorial .luna-mascot canvas'), before = await canvas.boundingBox();
+      await page.waitForTimeout(320);
       const after = await canvas.boundingBox();
       assert.equal(before.width, after.width); assert.equal(before.height, after.height);
       await page.waitForFunction(() => getComputedStyle(document.querySelector('.luna-mascot canvas')).opacity === '1');

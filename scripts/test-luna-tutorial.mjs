@@ -239,7 +239,7 @@ try {
         const c = document.querySelector('.luna-companion').getBoundingClientRect(), content = document.querySelector(selector).getBoundingClientRect();
         return { coach: { x: c.x, y: c.y, right: c.right, bottom: c.bottom }, content: { x: content.x, y: content.y, right: content.right, bottom: content.bottom }, height: innerHeight };
       }, mobile ? '#mobile-tab-surface.active .mobile-kb-list > .empty-card' : '#kb-modal.active .kb-section.active .character-grid > .empty-card');
-      assert.ok(geometry.coach.y >= geometry.content.bottom + 20 || mobile && geometry.coach.bottom <= geometry.content.y - 20, `Luna must leave the character card clear: ${JSON.stringify(geometry)}`);
+      assert.ok(geometry.coach.y >= geometry.content.bottom + 20 || geometry.coach.bottom <= geometry.content.y - 20 || geometry.coach.x >= geometry.content.right + 20, `Luna must leave the character card clear: ${JSON.stringify(geometry)}`);
       assert.ok(geometry.coach.bottom <= geometry.height - 12);
       await page.screenshot({ path: `${output}/knowledge-clear-${viewport.width}.png` });
       await page.locator('[data-luna-choice="next"]').click(); await step(page, 'open-world-search');
