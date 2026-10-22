@@ -3,13 +3,19 @@ import { t } from '../core/i18n.js';
 let loading = Promise.resolve();
 
 export class LunaMascot {
-  constructor(tour) {
+  static markup() {
+    return `<div class="luna-mascot" data-luna-mascot><canvas tabindex="0" role="button" aria-label="${t('Луна')}"></canvas><button type="button" class="luna-rig-retry" hidden></button></div>`;
+  }
+
+  constructor(tour, { host = tour.root.querySelector('[data-luna-mascot]'), preparing = false } = {}) {
     this.tour = tour;
-    this.host = tour.root.querySelector('[data-luna-mascot]');
+    this.host = host;
+    this.preparing = preparing;
     this.canvas = this.host.querySelector('canvas');
     this.retry = this.host.querySelector('button');
     this.destroyed = false;
     this.speech = 0;
+    this.loaded = new Promise(resolve => { this.resolveLoaded = resolve; });
     this.retry.onclick = () => this.enqueue();
     this.onKey = event => {
       if (!['Enter', ' '].includes(event.key) || !this.rig) return;
@@ -41,9 +47,9 @@ export class LunaMascot {
     if (this.destroyed) return;
     let rig;
     try {
-      const { LunaStateRig } = await import('../vendor/luna-rig/src/luna-state-rig.js');
+      const { LunaAppRig } = await import('./luna-rig.js');
       if (this.destroyed) return;
-      rig = new LunaStateRig(this.canvas, { autoStart: false });
+      rig = new LunaAppRig(this.canvas, { autoStart: false });
       await rig.load();
       if (this.destroyed) { rig.destroy(); return; }
       this.rig = rig;
@@ -53,9 +59,13 @@ export class LunaMascot {
       if (this.destroyed || rig.destroyed) return;
       rig.resize();
       this.restrictMotion();
+      rig.setSuspended('startup', this.preparing);
       rig.start();
       this.host.dataset.lunaRigReady = 'true';
       this.host.setAttribute('aria-busy', 'false');
+      this.retry.hidden = true;
+      if (this.retry.parentElement !== this.host) this.host.append(this.retry);
+      this.resolveLoaded(this);
     } catch (error) {
       rig?.destroy();
       if (!this.destroyed) this.fail(error.message);
@@ -70,17 +80,27 @@ export class LunaMascot {
     this.host.setAttribute('aria-busy', 'false');
     this.retry.hidden = false;
     this.retry.textContent = t('Повторить загрузку Луны');
+    if (this.preparing) {
+      this.retry.classList.add('luna-startup-retry', 'pill-btn');
+      document.querySelector('#preloader .preloader-content')?.append(this.retry);
+    }
+  }
+
+  reveal() {
+    this.preparing = false;
+    this.retry.classList.remove('luna-startup-retry');
+    this.rig?.setSuspended('startup', false);
   }
 
   syncPose(immediate = this.tour.app.shouldReduceSurfaceMotion()) {
-    const greeting = this.tour.step === 'welcome';
+    const greeting = !this.tour.active || this.tour.step === 'welcome';
     if (!this.rig) return;
     return this.rig.setPose(greeting ? 1 : 0, immediate);
   }
 
   restrictMotion() {
     if (!this.rig || !this.tour.app.shouldReduceSurfaceMotion()) return;
-    this.rig.setPose(this.tour.step === 'welcome' ? 1 : 0, true);
+    this.rig.setPose(!this.tour.active || this.tour.step === 'welcome' ? 1 : 0, true);
     this.rig.setEmotion(this.rig.emotion, Infinity, true);
     this.rig.setPaused(true);
   }

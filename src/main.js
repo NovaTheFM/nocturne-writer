@@ -421,7 +421,7 @@ class NocturneWriter {
     this.applySettings();
     this.setStartupProgress(90);
     this.renderAll();
-    this.startupReveal = this.startPreloader();
+    this.startupReveal = this.startPreloader(this.lunaTutorial.prepareIfNeeded());
     this.bindGlobalEvents();
     this.installModalFocus();
     this.databaseSync = new DatabaseSync({ db: this.db, deviceId: this.state.sync.deviceId,
@@ -3473,7 +3473,7 @@ class NocturneWriter {
     this.renderMobileTopbarStatus();
   }
 
-  startPreloader() {
+  startPreloader(ready = Promise.resolve()) {
     const particles = document.getElementById('particles-container');
     if (particles) {
       particles.innerHTML = '';
@@ -3492,9 +3492,10 @@ class NocturneWriter {
     const progressFill = document.querySelector('.preloader-progress-fill');
     if (progressFill) {
       progressFill.style.transition = 'width 1500ms cubic-bezier(0.22, 1, 0.36, 1)';
-      progressFill.style.width = '100%';
+      progressFill.style.width = '95%';
     }
-    return new Promise(resolve => setTimeout(async () => {
+    return Promise.all([new Promise(resolve => setTimeout(resolve, 1800)), ready]).then(async () => {
+      if (progressFill) { progressFill.style.transitionDuration = '260ms'; progressFill.style.width = '100%'; }
       const preloader = document.getElementById('preloader');
       if (preloader) preloader.classList.add('hidden');
       const appShell = document.getElementById('app-shell');
@@ -3506,8 +3507,7 @@ class NocturneWriter {
       await Promise.allSettled((preloader?.getAnimations() || []).map(animation => animation.finished));
       preloader?.classList.add('startup-complete');
       if (!this.isMobileLayout() && this.interfaceLanguage.confirmed) document.querySelector('.page-content')?.focus();
-      resolve();
-    }, 1800));
+    });
   }
 
   installModalFocus() {

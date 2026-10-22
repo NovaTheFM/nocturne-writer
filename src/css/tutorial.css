@@ -9,7 +9,10 @@ body.theme-paper .luna-overview .luna-tutorial-shade > rect { fill: rgba(33, 24,
 .luna-spotlight[data-kind="panel"] { border-width: 1px; border-color: rgba(var(--accent-rgb), .48); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .045), 0 0 18px rgba(var(--accent-rgb), .09); }
 .luna-spotlight[hidden] { display: none; }
 .luna-spotlight, .luna-cutout { transition-property: none; }
-.luna-companion { --luna-mascot-width: 208px; --luna-companion-gap: 18px; position: fixed; display: flex; align-items: center; gap: var(--luna-companion-gap); width: min(600px, calc(100vw - 112px)); max-height: calc(var(--luna-viewport-height, 100dvh) - 32px); transition-property: none; }
+.luna-companion { --luna-mascot-width: 236px; --luna-companion-gap: 18px; position: fixed; display: flex; align-items: center; gap: var(--luna-companion-gap); width: min(628px, calc(100vw - 112px)); max-height: calc(var(--luna-viewport-height, 100dvh) - 32px); transition-property: none; }
+.luna-preparation { position: fixed; left: -10000px; top: 0; visibility: hidden; pointer-events: none; }
+.luna-preparation .luna-companion { position: relative; }
+.luna-startup-retry { position: static; transform: none; margin-top: 22px; max-width: none; }
 .luna-mascot { position: relative; order: 2; width: var(--luna-mascot-width); aspect-ratio: 680 / 1265; flex: 0 0 var(--luna-mascot-width); pointer-events: auto; }
 .luna-mascot canvas { position: absolute; inset: 0; width: 100%; height: 100%; transition: opacity 300ms ease; }
 .luna-mascot canvas { opacity: 0; touch-action: none; pointer-events: none; outline: none; }
@@ -39,7 +42,7 @@ body.theme-paper .luna-overview .luna-tutorial-shade > rect { fill: rgba(33, 24,
 .luna-skip:focus-visible, .luna-dialog button:focus-visible { outline: 2px solid var(--accent-hover); outline-offset: 4px; }
 #luna-tutorial[data-step="welcome"] .luna-dialog-actions { justify-content: flex-end; }
 #luna-tutorial[data-step="done"] .luna-dialog-actions { justify-content: flex-end; }
-.luna-mobile .luna-companion { --luna-mascot-width: 96px; --luna-companion-gap: 10px; width: calc(100vw - 48px); }
+.luna-mobile .luna-companion { --luna-mascot-width: 108px; --luna-companion-gap: 10px; width: calc(100vw - 48px); }
 .luna-mobile .luna-dialog { padding: 17px; }
 .luna-mobile[data-step="create-form"] .luna-dialog { padding: 12px 14px; }
 .luna-mobile[data-step="create-form"] .luna-dialog-actions { margin-top: 6px; }
@@ -65,11 +68,11 @@ body.mobile-shell-active.luna-tutorial-active[data-luna-step="settings"] #mobile
 body.luna-tutorial-active .luna-reserved-surface { max-height: var(--luna-surface-height); overflow-y: auto; }
 body.luna-stack-modal :is(#form-overlay, #floating-notes-modal, #settings-overlay) { align-items: flex-start; padding-top: calc(var(--luna-coach-space, 220px) + var(--app-safe-top)); }
 @media (min-width: 1100px) { body.luna-tutorial-active #form-overlay .history-modal { width: min(1120px, calc(100vw - 620px)); } }
-@media (min-width: 1280px) {
+@media (min-width: 1440px) {
   body.luna-settings-aside #settings-overlay { justify-content: flex-end; padding: 24px 32px; }
   body.luna-settings-aside #settings-overlay .settings-modal { max-width: calc(100vw - var(--luna-settings-left, 624px) - 32px); }
 }
-@media (min-width: 1280px) and (max-width: 1599px) {
+@media (min-width: 1440px) and (max-width: 1599px) {
   body.luna-settings-aside #settings-overlay .setting-row { align-items: flex-start; flex-direction: column; gap: 12px; }
   body.luna-settings-aside #settings-overlay .setting-info { max-width: 100%; }
   body.luna-settings-aside #settings-overlay .setting-control { justify-content: flex-start; max-width: 100%; }

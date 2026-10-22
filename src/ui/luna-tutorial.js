@@ -13,6 +13,19 @@ const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
 export class LunaTutorial {
   constructor(app) { this.app = app; this.active = false; }
 
+  async prepareIfNeeded() {
+    try { if (terminal(await this.app.db.get('settings', TUTORIAL_RECORD_ID))) return; }
+    catch (error) { console.warn('Luna tutorial preference:', error); }
+    const holder = this.preparationHolder = document.createElement('div');
+    holder.className = `luna-preparation${this.app.isMobileLayout() ? ' luna-mobile' : ''}`;
+    holder.inert = true;
+    holder.setAttribute('aria-hidden', 'true');
+    holder.innerHTML = `<div class="luna-companion">${LunaMascot.markup()}</div>`;
+    document.body.append(holder);
+    this.preparedMascot = new LunaMascot(this, { host: holder.querySelector('[data-luna-mascot]'), preparing: true });
+    await this.preparedMascot.loaded;
+  }
+
   async welcomeIfNeeded() {
     try { if (terminal(await this.app.db.get('settings', TUTORIAL_RECORD_ID))) return; }
     catch (error) { console.warn('Luna tutorial preference:', error); }
@@ -39,7 +52,7 @@ export class LunaTutorial {
     this.root.innerHTML = `<svg class="luna-tutorial-shade" aria-hidden="true" focusable="false"><defs><mask id="luna-spotlight-mask" maskUnits="userSpaceOnUse"><rect width="100%" height="100%" fill="white"/><rect class="luna-cutout" rx="14" fill="black"/></mask></defs><rect width="100%" height="100%" mask="url(#luna-spotlight-mask)"/></svg>
       <div class="luna-spotlight" aria-hidden="true"></div>
       <div class="luna-companion">
-        <div class="luna-mascot" data-luna-mascot><canvas tabindex="0" role="button" aria-label="${escapeHtml(t('Луна'))}"></canvas><button type="button" class="luna-rig-retry" hidden></button></div>
+        ${LunaMascot.markup()}
         <section class="luna-dialog" role="dialog" aria-modal="false" aria-label="${escapeHtml(t('Луна'))}" aria-describedby="luna-tutorial-text" tabindex="-1">
           <div class="luna-dialog-body">
             <div class="luna-dialog-copy" aria-live="polite" aria-atomic="true"></div>
@@ -56,7 +69,13 @@ export class LunaTutorial {
     this.companion = this.root.querySelector('.luna-companion');
     this.cutout = this.root.querySelector('.luna-cutout');
     this.spotlight = this.root.querySelector('.luna-spotlight');
-    this.mascot = new LunaMascot(this);
+    if (this.preparedMascot) {
+      this.mascot = this.preparedMascot;
+      this.root.querySelector('[data-luna-mascot]').replaceWith(this.mascot.host);
+      this.preparationHolder.remove();
+      this.preparedMascot = null; this.preparationHolder = null;
+      this.mascot.reveal();
+    } else this.mascot = new LunaMascot(this);
     this.onClick = event => {
       const choice = event.target.closest('[data-luna-choice]')?.dataset.lunaChoice;
       if (!choice || this.finishing) return;
@@ -136,7 +155,7 @@ export class LunaTutorial {
 
   canShowSplit() { return !this.app.isMobileLayout() && innerWidth >= 1024; }
 
-  canShowSettingsAside() { return !this.app.isMobileLayout() && innerWidth >= 1280; }
+  canShowSettingsAside() { return !this.app.isMobileLayout() && innerWidth >= 1440; }
 
   topics() {
     return ['write', 'bookmarks', 'notes', 'kb', 'commands', 'history', 'review', 'focus', ...(this.canShowSplit() ? ['split'] : []), 'search', 'book', 'backups', 'settings', 'macros', 'formatting'];
