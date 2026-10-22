@@ -34,10 +34,10 @@ export class LunaPractice {
         this.host.classList.add('is-ready');
         this.frame.contentWindow?.focus();
       } else if (event.data.type === 'luna-practice-finished') await this.finish(event.data.status);
-      else if (event.data.type === 'luna-practice-load-error' && !this.opened) {
+      else if (event.data.type === 'luna-practice-load-error') {
         this.retry ||= document.createElement('button'); this.retry.className = 'luna-startup-retry pill-btn'; this.retry.textContent = t('Повторить загрузку Луны');
         this.retry.onclick = () => this.send('luna-practice-retry');
-        document.querySelector('#preloader .preloader-content')?.append(this.retry);
+        (this.opened ? this.host.querySelector('.preloader-content') : document.querySelector('#preloader .preloader-content'))?.append(this.retry);
       }
     };
     window.addEventListener('message', this.onMessage);
@@ -98,7 +98,9 @@ export function bindPracticeChild(tour) {
       await tour.show(tour.step);
       tour.mascot.rig?.setSuspended('practice-hidden', false);
       notifyTutorialParent('luna-practice-visible');
-    } else if (type === 'luna-practice-retry') tour.preparedMascot?.enqueue();
-    else if (type === 'luna-practice-stop') tour.mascot?.destroy();
+    } else if (type === 'luna-practice-retry') {
+      if (document.body.classList.contains('boot-error')) location.reload();
+      else (tour.preparedMascot || tour.mascot)?.enqueue();
+    } else if (type === 'luna-practice-stop') (tour.mascot || tour.preparedMascot)?.destroy();
   });
 }
