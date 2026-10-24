@@ -201,6 +201,52 @@ async function discoverFeatures(page, mobile, { stopAt, keyboardPalette = false 
 try {
   for (let i = 0; i < 70; i++) { try { if ((await fetch(url)).ok) break; } catch {} await new Promise(resolve => setTimeout(resolve, 100)); }
   browser = await chromium.launch({ headless: true });
+  for (const fixture of [
+    { width: 1440, height: 1000, locale: 'en' },
+    { width: 1180, height: 820, locale: 'ru' },
+    { width: 390, height: 844, locale: 'uk', mobile: true },
+    { width: 1440, height: 1000, locale: 'en', reduced: true },
+  ]) await scenario(`speech bubble resizes smoothly with next and back: ${fixture.width}${fixture.reduced ? ' reduced' : ''}`, !!fixture.mobile, async page => {
+    await page.goto(url); await choose(page, fixture.locale); await step(page, 'welcome');
+    await page.evaluate(async () => { const a = window.nocturneApp; await a.createDoc(a.defaultFolderId(), 'Speech practice'); await a.lunaTutorial.show('write'); });
+    await step(page, 'write'); await page.waitForTimeout(550);
+    const capture = async (choice, label) => {
+      await page.evaluate(() => {
+        window.__speechFrames = [];
+        const started = performance.now();
+        const sample = () => {
+          const d = document.querySelector('.luna-dialog'), r = d.getBoundingClientRect();
+          const resize = d.__surfaceSizeTransition;
+          window.__speechFrames.push({ time: performance.now() - started, height: r.height, top: r.top, step: window.nocturneApp.lunaTutorial.step, target: resize?.targetHeight, resizeAge: resize ? performance.now() - resize.startedAt : null, duration: resize?.duration, inline: d.style.height, transition: getComputedStyle(d).transition });
+          if (performance.now() - started < 1250) window.__speechSampler = requestAnimationFrame(sample);
+        }; sample();
+      });
+      await page.locator(`[data-luna-choice="${choice}"]`).click();
+      await page.waitForTimeout(1300);
+      await page.waitForFunction(() => !window.nocturneApp.lunaTutorial.changing);
+      const frames = await page.evaluate(() => window.__speechFrames);
+      await writeFile(`${output}/speech-${fixture.width}-${fixture.locale}-${label}${fixture.reduced ? '-reduced' : ''}.json`, JSON.stringify(frames, null, 2));
+      const start = frames[0].height, end = frames.at(-1).height, distance = Math.abs(end - start);
+      if (fixture.reduced || distance < 6) return;
+      const middle = frames.filter(f => Math.abs(f.height - start) > 1 && Math.abs(f.height - end) > 1);
+      assert.ok(middle.length >= 5, `The bubble interpolates its height: ${JSON.stringify({ start, end, middle: middle.length })}`);
+      const jumps = frames.slice(1).map((f, i) => Math.abs(f.height - frames[i].height));
+      assert.ok(Math.max(...jumps) < Math.max(5, distance * .4), `No instant size jump: ${JSON.stringify({ start, end, jump: Math.max(...jumps) })}`);
+      assert.ok(frames.every(f => f.height >= Math.min(start, end) - 2 && f.height <= Math.max(start, end) + 2), 'The bubble never overshoots its natural height');
+      const quarter = frames.filter(f => f.resizeAge !== null).sort((a, b) => Math.abs(a.resizeAge / a.duration - .25) - Math.abs(b.resizeAge / b.duration - .25))[0];
+      assert.ok(quarter && Math.abs(quarter.height - start) / distance < .5, `The resize starts gently instead of spending most of its distance immediately: ${JSON.stringify({ start, end, quarter })}`);
+    };
+    await capture('next', 'next'); await step(page, 'name-links');
+    await capture('next', 'next-card'); await step(page, 'name-card');
+    await capture('next', 'next-short'); await step(page, 'open-bookmarks');
+    await page.evaluate(async () => { await window.nocturneApp.lunaTutorial.reviewTopic('formatting'); });
+    await step(page, 'formatting'); await page.waitForTimeout(550);
+    await capture('back', 'back'); await step(page, 'bookmarks');
+    await capture('back', 'back-write'); await step(page, 'write');
+    await page.screenshot({ path: `${output}/speech-${fixture.width}-${fixture.locale}${fixture.reduced ? '-reduced' : ''}.png` });
+    await page.keyboard.press('Escape'); await page.locator('#luna-tutorial').waitFor({ state: 'detached' });
+    assert.equal(await page.locator('.luna-dialog').count(), 0);
+  }, { viewport: { width: fixture.width, height: fixture.height }, reducedMotion: fixture.reduced ? 'reduce' : 'no-preference' });
   for (const viewport of [{ width: 1919, height: 950 }, { width: 1440, height: 1000 }]) await scenario(`settings make room after Luna apologizes: ${viewport.width}`, false, async page => {
     await page.goto(url); await choose(page, 'en'); await step(page, 'welcome');
     await page.evaluate(async () => await window.nocturneApp.lunaTutorial.show('open-settings'));
