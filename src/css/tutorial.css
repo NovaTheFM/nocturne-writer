@@ -88,6 +88,24 @@ body.mobile-shell-active.luna-tutorial-active[data-luna-step="settings"] #mobile
 body.reduce-mobile-animations .luna-practice-host :is(iframe, .luna-practice-loading) { transition-duration: 0s; }
 body.luna-tutorial-active .luna-reserved-surface { max-height: var(--luna-surface-height); overflow-y: auto; }
 body.luna-stack-modal :is(#form-overlay, #floating-notes-modal, #settings-overlay) { align-items: flex-start; padding-top: var(--luna-surface-top, calc(var(--luna-coach-space, 220px) + var(--app-safe-top))); padding-bottom: 14px; }
+body.luna-dock-surfaces :is(#form-overlay > .form-modal, #settings-overlay > .settings-modal, .floating-notes-modal-panel, .command-palette-panel) { max-width: var(--luna-window-width); }
+body.luna-dock-surfaces :is(#form-overlay, #settings-overlay, #floating-notes-modal, #command-palette-overlay, #kb-modal) { transition-property: opacity, visibility, transform; }
+body.luna-dock-surfaces :is(#form-overlay, #settings-overlay, #floating-notes-modal, #command-palette-overlay):has(> .luna-docked-window) { justify-content: flex-start; padding-left: var(--luna-window-left); padding-right: 32px; }
+body.luna-dock-surfaces #kb-modal { inset: 24px auto 24px calc((100vw - var(--luna-window-width)) / 2); width: var(--luna-window-width); border: 1px solid var(--popover-border); border-radius: 22px; box-shadow: var(--shadow-lg); }
+body.luna-dock-surfaces #kb-modal.luna-docked-window { left: var(--luna-window-left); }
+body.luna-dock-surfaces #kb-modal .kb-sidebar { width: 168px; padding: 22px 16px; }
+body.luna-dock-surfaces #kb-modal .kb-title { padding-inline: 8px; }
+body.luna-dock-surfaces #kb-modal .kb-dump-sidebar-section { padding-inline: 0; }
+body.luna-dock-surfaces #kb-modal .kb-sidebar-dump-btn { white-space: normal; line-height: 1.5; padding: 10px; }
+body.luna-dock-surfaces #kb-modal .kb-main { min-width: 0; }
+body.luna-dock-surfaces #kb-modal .kb-content { padding: 24px; }
+body.luna-dock-surfaces #entity-hover-card.luna-docked-window { left: var(--luna-window-left) !important; max-width: var(--luna-window-width); }
+body.luna-dock-surfaces .settings-sidebar { width: 180px; min-width: 0; flex-shrink: 0; }
+body.luna-dock-surfaces .settings-content { min-width: 0; }
+body.luna-dock-surfaces .settings-modal .setting-row { align-items: flex-start; flex-direction: column; gap: 12px; }
+body.luna-dock-surfaces .settings-modal .setting-info { max-width: 100%; }
+body.luna-dock-surfaces .settings-modal .setting-control { justify-content: flex-start; max-width: 100%; }
+body.luna-dock-surfaces .settings-modal .setting-control :is(input, select) { max-width: 100%; }
 @media (min-width: 1100px) { body.luna-tutorial-active #form-overlay .history-modal { width: min(1120px, calc(100vw - 620px)); } }
 @media (min-width: 1440px) {
   body.luna-settings-aside #settings-overlay { justify-content: flex-end; padding: 24px 32px; }

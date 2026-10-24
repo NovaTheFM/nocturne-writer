@@ -46,6 +46,7 @@ async function step(page, name) {
   await page.locator(`#luna-tutorial[data-step="${name}"]`).waitFor();
   await page.waitForFunction(() => !window.nocturneApp.lunaTutorial.changing && getComputedStyle(document.querySelector('.luna-dialog')).opacity > .99);
   await page.waitForFunction(() => !document.querySelector('.luna-companion').getAnimations().some(animation => animation.playState === 'running'));
+  if (name !== 'settings-apology') await page.waitForFunction(() => !document.querySelector('body.luna-dock-surfaces [data-luna-dock="opening"], body.luna-dock-surfaces [data-luna-dock="moving"]'));
   const geometry = await page.evaluate(() => {
     const dialog = document.querySelector('.luna-dialog').getBoundingClientRect(), mascot = document.querySelector('[data-luna-mascot]').getBoundingClientRect();
     return { x: dialog.x, y: dialog.y, right: dialog.right, bottom: dialog.bottom, mascotX: mascot.x, width: innerWidth, height: innerHeight, overflow: document.documentElement.scrollWidth > innerWidth, titles: document.querySelectorAll('#luna-tutorial h1, #luna-tutorial h2, .luna-dialog-header').length };
@@ -103,7 +104,8 @@ async function discoverFeatures(page, mobile, { stopAt, keyboardPalette = false 
   if (previewExpected) {
     const frames = await page.evaluate(() => window.__characterPreviewFrames);
     if (!mobile) assert.ok(frames.length > 3, 'The native character preview is actually shown');
-    assert.ok(frames.every(frame => frame.clear), `The preview appears after Luna clears it: ${JSON.stringify(frames.find(frame => !frame.clear))}`);
+    if (mobile) assert.ok(frames.every(frame => frame.clear), `The preview appears after Luna clears it: ${JSON.stringify(frames.find(frame => !frame.clear))}`);
+    else assert.ok(frames.at(-1)?.clear, 'The preview settles beside Luna after gliding right');
   }
   await next('name-card');
   if (mobile) await click('bookmarks-actions');
@@ -130,7 +132,8 @@ async function discoverFeatures(page, mobile, { stopAt, keyboardPalette = false 
     return { clear: coach.right <= panel.left - 8 || coach.left >= panel.right + 8 || coach.bottom <= panel.top - 8 || coach.top >= panel.bottom + 8, center: (panel.left + panel.right) / 2, width: innerWidth };
   });
   assert.equal(floatingLayout.clear, true, 'Luna leaves the whole All Notes window clear');
-  assert.ok(Math.abs(floatingLayout.center - floatingLayout.width / 2) < 2);
+  if (mobile) assert.ok(Math.abs(floatingLayout.center - floatingLayout.width / 2) < 2);
+  else assert.ok(floatingLayout.center > floatingLayout.width / 2);
   await shot('floating'); await next('floating');
   await click('open-kb');
   if (!mobile) { await (await step(page, 'kb-menu')).focus(); await page.keyboard.press('Enter'); }
@@ -168,7 +171,7 @@ async function discoverFeatures(page, mobile, { stopAt, keyboardPalette = false 
   await shot('manuscript-search'); await next('project-search');
   await click(mobile ? 'more-book' : 'tools-book'); await click('open-book');
   await step(page, 'book'); assert.equal(await page.locator('[data-export-chapter]').count(), 1);
-  assert.ok(await page.locator('.book-export-modal').evaluate(element => Math.abs((element.getBoundingClientRect().left + element.getBoundingClientRect().right) / 2 - innerWidth / 2) < 2));
+  assert.ok(await page.locator('.book-export-modal').evaluate((element, mobile) => { const r = element.getBoundingClientRect(); return mobile ? Math.abs((r.left + r.right) / 2 - innerWidth / 2) < 2 : r.left >= document.querySelector('.luna-companion').getBoundingClientRect().right + 20; }, mobile));
   await page.locator('label:has([data-export-chapter])').click();
   assert.equal(await page.locator('[data-export-chapter]').isChecked(), false);
   assert.equal(await page.locator('[data-export-selected-book]').isDisabled(), true);
@@ -220,12 +223,13 @@ try {
       return { left: panel.left, right: panel.right, coachRight: coach.right, width: innerWidth };
     });
     assert.ok(layout.left >= layout.coachRight + 20);
-    assert.ok(Math.abs(layout.width - layout.right - 32) < 2);
+    assert.ok(layout.right <= layout.width - 30);
     assert.ok(positions.some(left => left > positions[0] + 3 && left < layout.left - 3), 'Settings slide through intermediate positions');
     await page.screenshot({ path: `${output}/settings-clear-${viewport.width}.png` });
     await page.locator('[data-luna-choice="next"]').click();
     await (await step(page, 'open-macros')).click(); await step(page, 'macros');
     await page.keyboard.press('Escape'); await page.locator('#luna-tutorial').waitFor({ state: 'detached' });
+    await page.waitForTimeout(600);
     await page.waitForFunction(() => !document.querySelector('#settings-overlay .settings-modal').classList.contains('is-flipping'));
     assert.ok(await page.locator('#settings-overlay .settings-modal').evaluate(panel => Math.abs((panel.getBoundingClientRect().left + panel.getBoundingClientRect().right) / 2 - innerWidth / 2) < 2), 'Leaving the tutorial returns settings to the center');
   }, { viewport });
@@ -233,8 +237,9 @@ try {
     await page.goto(url); await choose(page, 'en'); await step(page, 'welcome');
     await page.evaluate(async () => await window.nocturneApp.lunaTutorial.show('open-settings'));
     await (await step(page, 'open-settings')).click(); await step(page, 'settings-apology');
-    if (phase === 'moving') await page.waitForFunction(() => document.body.classList.contains('luna-settings-aside') && document.querySelector('#settings-overlay .settings-modal').classList.contains('is-flipping'));
+    if (phase === 'moving') await page.waitForFunction(() => document.querySelector('#settings-overlay .settings-modal').dataset.lunaDock === 'moving');
     await page.keyboard.press('Escape'); await page.locator('#luna-tutorial').waitFor({ state: 'detached' });
+    await page.waitForTimeout(600);
     await page.waitForFunction(() => !document.querySelector('#settings-overlay .settings-modal').classList.contains('is-flipping'));
     assert.equal(await page.locator('body.luna-settings-aside').count(), 0);
     assert.ok(await page.locator('#settings-overlay .settings-modal').evaluate(panel => Math.abs((panel.getBoundingClientRect().left + panel.getBoundingClientRect().right) / 2 - innerWidth / 2) < 2));
@@ -249,7 +254,7 @@ try {
     assert.ok(await page.locator('#settings-overlay .settings-modal').evaluate(panel => panel.getBoundingClientRect().left >= document.querySelector('.luna-companion').getBoundingClientRect().right + 20));
     await page.keyboard.press('Escape'); await page.locator('#luna-tutorial').waitFor({ state: 'detached' });
   }, { reducedMotion: 'reduce' });
-  await scenario('settings make room above a narrow desktop window', false, async page => {
+  await scenario('settings glide beside Luna on a narrow desktop window', false, async page => {
     await page.goto(url); await choose(page, 'en'); await step(page, 'welcome');
     await page.evaluate(async () => await window.nocturneApp.lunaTutorial.show('open-settings'));
     await (await step(page, 'open-settings')).click(); await step(page, 'settings');
@@ -257,7 +262,7 @@ try {
       const panel = document.querySelector('#settings-overlay .settings-modal').getBoundingClientRect(), coach = document.querySelector('.luna-companion').getBoundingClientRect();
       return { clear: coach.bottom <= panel.top - 14 || coach.top >= panel.bottom + 14 || coach.right <= panel.left - 14 || coach.left >= panel.right + 14, width: panel.width, centered: Math.abs((panel.left + panel.right) / 2 - innerWidth / 2) < 2 };
     });
-    assert.equal(layout.clear, true); assert.equal(layout.centered, true); assert.ok(layout.width >= 1000);
+    assert.equal(layout.clear, true); assert.equal(layout.centered, false); assert.ok(layout.width >= 500);
     await page.screenshot({ path: `${output}/settings-clear-narrow.png` });
     await page.keyboard.press('Escape'); await page.locator('#luna-tutorial').waitFor({ state: 'detached' });
     assert.equal(await page.locator('.luna-reserved-surface').count(), 0);
@@ -280,7 +285,7 @@ try {
         const c = document.querySelector('.luna-companion').getBoundingClientRect(), content = document.querySelector(selector).getBoundingClientRect();
         return { coach: { x: c.x, y: c.y, right: c.right, bottom: c.bottom }, content: { x: content.x, y: content.y, right: content.right, bottom: content.bottom }, height: innerHeight };
       }, mobile ? '#mobile-tab-surface.active .mobile-kb-list > .empty-card' : '#kb-modal.active .kb-section.active .character-grid > .empty-card');
-      assert.ok(geometry.coach.y >= geometry.content.bottom + 20 || geometry.coach.bottom <= geometry.content.y - 20 || geometry.coach.x >= geometry.content.right + 20, `Luna must leave the character card clear: ${JSON.stringify(geometry)}`);
+      assert.ok(geometry.coach.y >= geometry.content.bottom + 20 || geometry.coach.bottom <= geometry.content.y - 20 || geometry.coach.x >= geometry.content.right + 20 || geometry.coach.right <= geometry.content.x - 20, `Luna must leave the character card clear: ${JSON.stringify(geometry)}`);
       assert.ok(geometry.coach.bottom <= geometry.height - 12);
       await page.screenshot({ path: `${output}/knowledge-clear-${viewport.width}.png` });
       await page.locator('[data-luna-choice="next"]').click(); await step(page, 'character-aliases');
@@ -315,19 +320,20 @@ try {
     { width: 1440, height: 1000 }, { width: 1920, height: 1080 },
     { width: 1280, height: 720 }, { width: 390, height: 844, mobile: true },
     { width: 1440, height: 1000, reduced: true },
-  ]) await scenario(`centered creation form waits for Luna: ${fixture.width}x${fixture.height}${fixture.reduced ? ' reduced' : ''}`, !!fixture.mobile, async page => {
+  ]) await scenario(`creation form appears then glides beside Luna: ${fixture.width}x${fixture.height}${fixture.reduced ? ' reduced' : ''}`, !!fixture.mobile, async page => {
     await page.goto(url); await choose(page, 'en'); await page.locator('[data-luna-choice="yes"]').click();
     if (await page.evaluate(() => window.nocturneApp.lunaTutorial.step === 'open-docs')) await (await step(page, 'open-docs')).click();
     await step(page, 'create');
     await page.evaluate(() => {
       window.__creationFrames = [];
-      const until = performance.now() + 1500;
+      const until = performance.now() + 2400;
       const sample = () => {
         const companion = document.querySelector('.luna-companion');
         if (!companion) return;
         const coach = companion.getBoundingClientRect();
         const overlay = document.getElementById('form-overlay'), form = document.getElementById('doc-form');
-        window.__creationFrames.push({ active: overlay.classList.contains('active'), x: coach.x, y: coach.y, right: coach.right, bottom: coach.bottom, form: form ? { x: overlay.offsetLeft + form.offsetLeft, y: overlay.offsetTop + form.offsetTop, right: overlay.offsetLeft + form.offsetLeft + form.offsetWidth, bottom: overlay.offsetTop + form.offsetTop + form.offsetHeight } : null });
+        const f = form?.getBoundingClientRect();
+        window.__creationFrames.push({ active: overlay.classList.contains('active'), phase: form?.dataset.lunaDock, x: coach.x, y: coach.y, right: coach.right, bottom: coach.bottom, form: f ? { x: f.x, y: f.y, right: f.right, bottom: f.bottom } : null });
         if (performance.now() < until) requestAnimationFrame(sample);
       };
       sample();
@@ -340,15 +346,16 @@ try {
       const form = document.querySelector('#doc-form').getBoundingClientRect();
       return { form: { x: form.x, y: form.y, right: form.right, bottom: form.bottom }, width: innerWidth, height: innerHeight, frames: window.__creationFrames };
     });
-    assert.ok(Math.abs((state.form.x + state.form.right) / 2 - state.width / 2) < 2, 'The document form keeps its normal horizontal center');
+    if (fixture.mobile) assert.ok(Math.abs((state.form.x + state.form.right) / 2 - state.width / 2) < 2, 'The mobile document form keeps its horizontal center');
+    else assert.ok(await page.locator('#doc-form').evaluate(form => form.getBoundingClientRect().left >= document.querySelector('.luna-companion').getBoundingClientRect().right + 20), 'The desktop form settles beside Luna');
     if (fixture.mobile) assert.ok(await page.locator('#doc-form button[type="submit"]').evaluate(button => button.getBoundingClientRect().bottom <= button.closest('form').getBoundingClientRect().bottom - 4), 'The mobile form shows Create without unnecessary scrolling');
     if (fixture.height >= 900) assert.ok(Math.abs((state.form.y + state.form.bottom) / 2 - state.height / 2) < 2, 'A normal desktop form keeps its vertical center');
     const opened = state.frames.find(sample => sample.active);
     assert.ok(opened?.form, 'Opening the real native form was observed');
-    assert.ok(opened.right <= opened.form.x - 8 || opened.x >= opened.form.right + 8 || opened.bottom <= opened.form.y - 8 || opened.y >= opened.form.bottom + 8, `Luna must clear the form before it opens: ${JSON.stringify(opened)}`);
-    if (fixture.width === 1440 && !fixture.reduced) {
-      const initial = state.frames[0];
-      assert.ok(state.frames.filter(sample => !sample.active && Math.abs(sample.y - initial.y) > 3 && Math.abs(sample.y - opened.y) > 3).length > 2, 'Luna visibly moves before the form opens');
+    if (fixture.mobile) assert.ok(opened.right <= opened.form.x - 8 || opened.x >= opened.form.right + 8 || opened.bottom <= opened.form.y - 8 || opened.y >= opened.form.bottom + 8, `Luna must clear the mobile form before it opens: ${JSON.stringify(opened)}`);
+    else {
+      assert.ok(Math.abs((opened.form.x + opened.form.right) / 2 - state.width / 2) < 2, 'The desktop form first appears centered');
+      if (!fixture.reduced) assert.ok(state.frames.filter(sample => sample.phase === 'moving' && sample.form.x > opened.form.x + 4 && sample.form.x < state.form.x - 4).length > 2, 'The visible form glides right after opening');
     }
     await page.locator('#doc-form input[name="title"]').fill('Centered without losing input');
     await page.screenshot({ path: `${output}/centered-form-${fixture.width}-${fixture.height}${fixture.reduced ? '-reduced' : ''}.png` });

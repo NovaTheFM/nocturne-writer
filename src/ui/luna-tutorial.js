@@ -4,6 +4,7 @@ import { lunaTutorialSteps, lunaTutorialCopy } from './luna-tutorial-steps.js';
 import { LunaMascot } from './luna-mascot.js';
 import { LunaPractice, bindPracticeChild } from './luna-practice.js';
 import { tutorialContext, notifyTutorialParent } from '../core/tutorial-context.js';
+import { LunaWindowDock } from './luna-window-dock.js';
 
 export const TUTORIAL_RECORD_ID = 'luna-tutorial';
 const focusable = 'button:not(:disabled), a[href], input:not(:disabled):not([type="hidden"]), textarea:not(:disabled), select:not(:disabled), [contenteditable="true"], [tabindex]:not([tabindex="-1"])';
@@ -48,6 +49,7 @@ export class LunaTutorial {
     this.previewCard = null;
     this.previewClearanceHeight = 0;
     this.placement = null; this.pendingForm = null; this.reservedSurface = null; this.settingsAside = false; this.surfaceAside = '';
+    this.windowDock = new LunaWindowDock(this);
     this.previousFocus = document.activeElement;
     this.locale = getLocale();
     this.mobileLayout = this.app.isMobileLayout();
@@ -197,7 +199,7 @@ export class LunaTutorial {
     this.changing = true;
     this.mascot.stopSpeaking();
     const generation = this.generation = (this.generation || 0) + 1;
-    if (step === 'name-card' && this.step !== 'name-card') await this.prepareCharacterPreview();
+    if (step === 'name-card' && this.step !== 'name-card' && !this.windowDock.enabled) await this.prepareCharacterPreview();
     if (step === 'settings' && this.step === 'settings-apology' && this.canShowSettingsAside() && !this.settingsAside) await this.moveSettingsAside();
     if (!this.active || this.finishing || generation !== this.generation) return;
     this.detachTarget();
@@ -240,6 +242,7 @@ export class LunaTutorial {
     outgoing?.animation?.cancel();
     await this.app.runMotion(this.dialogCopy, [{ opacity: 0 }, { opacity: 1 }], { channel: 'tutorial-copy', duration: 340 }).finished;
     await this.placementMotion?.finished;
+    if (this.step !== 'settings-apology') await this.windowDock.settled();
     while (this.active && !this.finishing && this.companion.querySelector('.is-flipping')) await frame();
     if (!this.active || this.finishing || generation !== this.generation) return;
     this.changing = false;
@@ -287,6 +290,7 @@ export class LunaTutorial {
     const overlay = document.getElementById('settings-overlay'), panel = overlay?.querySelector('.settings-modal');
     if (!panel || !overlay.classList.contains('active')) return;
     this.settingsAside = true;
+    if (this.windowDock.enabled) return this.windowDock.moveSettings();
     this.app.animateLayoutTransition(overlay, () => {
       document.body.classList.add('luna-settings-aside');
     }, { targets: [panel], duration: .56 });
@@ -393,7 +397,17 @@ export class LunaTutorial {
     this.root.classList.toggle('luna-keyboard', mobile && height < innerHeight * .72);
     const surface = this.modalSurface();
     const characterCard = ['name-links', 'name-card'].includes(this.step) ? this.characterPreview() : null;
-    this.fitBesideSurface(surface || characterCard, { left, width }, mobile);
+    const docked = !mobile && width >= 1024;
+    const windowOpen = this.windowDock.sync(docked, { left, width });
+    if (docked) {
+      this.root.classList.toggle('luna-surface-aside', this.windowDock.geometry.width < 628);
+      this.root.style.setProperty('--luna-side-coach-width', `${this.windowDock.geometry.width}px`);
+      this.root.style.setProperty('--luna-side-mascot-width', `${this.windowDock.geometry.mascot}px`);
+    } else {
+      if (this.dockedLayout) { this.root.classList.remove('luna-surface-aside'); this.surfaceAside = null; }
+      this.fitBesideSurface(surface || characterCard, { left, width }, mobile);
+    }
+    this.dockedLayout = docked;
     const rect = this.target?.getBoundingClientRect();
     const coachHeight = Math.max(this.root.querySelector('.luna-mascot').offsetHeight, this.dialog.__surfaceSizeTransition?.targetHeight || this.dialog.offsetHeight) + (parseFloat(getComputedStyle(this.companion).paddingBottom) || 0);
     if (mobile && characterCard && this.previewCard) {
@@ -402,7 +416,7 @@ export class LunaTutorial {
       const lastTop = top + height - this.previewClearanceHeight - cardHeight - 52;
       if (lastTop >= top + 14 && characterCard.offsetTop > lastTop) characterCard.style.top = `${Math.floor(lastTop)}px`;
     }
-    const margin = mobile ? 24 : Math.max(56, Math.min(112, width * .08));
+    const margin = docked ? this.windowDock.geometry.left - left : mobile ? 24 : Math.max(56, Math.min(112, width * .08));
     const settingsLeft = `${margin + this.companion.offsetWidth + 32}px`;
     if (document.body.style.getPropertyValue('--luna-settings-left') !== settingsLeft) document.body.style.setProperty('--luna-settings-left', settingsLeft);
     let x = left + margin;
@@ -413,7 +427,11 @@ export class LunaTutorial {
       document.body.classList.remove('luna-stack-modal');
       this.reservedSurface = surface;
     }
-    if (surface) {
+    if (docked) {
+      document.body.classList.remove('luna-stack-modal');
+      surface?.classList.remove('luna-reserved-surface');
+      surface?.style.removeProperty('--luna-surface-height');
+    } else if (surface) {
       const coachWidth = this.companion.offsetWidth, gap = 24;
       const reserveHeight = () => {
         const available = height - 2 * (coachHeight + gap + 14);
@@ -439,12 +457,12 @@ export class LunaTutorial {
       }
       if (position) { x = position.x; y = position.y; }
     } else if (mobile && this.root.classList.contains('luna-keyboard')) y = top + height - coachHeight - 12;
-    if (!surface && rect && rect.height < 200 && x < rect.right + 12 && x + this.companion.offsetWidth > rect.left - 12 && y < rect.bottom + 12 && y + coachHeight > rect.top - 12) {
+    if (!surface && !windowOpen && rect && rect.height < 200 && x < rect.right + 12 && x + this.companion.offsetWidth > rect.left - 12 && y < rect.bottom + 12 && y + coachHeight > rect.top - 12) {
       const alternatives = [rect.top - coachHeight - 24, rect.bottom + 24].filter(value => value >= top + 14 && value + coachHeight <= top + height - 14);
       if (alternatives.length) y = alternatives.sort((a, b) => Math.abs(a - y) - Math.abs(b - y))[0];
     }
     const content = this.description()?.avoid?.()?.getBoundingClientRect();
-    if (!surface && content && x < content.right + 24 && x + this.companion.offsetWidth > content.left - 24 && y < content.bottom + 24 && y + coachHeight > content.top - 24) {
+    if (!surface && !windowOpen && content && x < content.right + 24 && x + this.companion.offsetWidth > content.left - 24 && y < content.bottom + 24 && y + coachHeight > content.top - 24) {
       const below = content.bottom + 24, above = content.top - coachHeight - 24;
       if (below + coachHeight <= top + height - 14) y = below;
       else if (above >= top + 14) y = above;
@@ -616,6 +634,8 @@ export class LunaTutorial {
   }
 
   clearPreviewLayout() {
+    const wasDocked = this.windowDock?.enabled;
+    this.windowDock?.dispose();
     const update = () => {
       document.body.classList.remove('luna-stack-modal', 'luna-tutorial-active', 'luna-settings-aside');
       this.reservedSurface?.classList.remove('luna-reserved-surface');
@@ -631,7 +651,8 @@ export class LunaTutorial {
     };
     const overlay = document.getElementById('form-overlay');
     const settings = document.getElementById('settings-overlay');
-    if (settings?.classList.contains('active') && this.settingsAside) this.app.animateLayoutTransition(settings, update, { targets: [...settings.querySelectorAll('.settings-modal')], duration: .5 });
+    if (wasDocked) update();
+    else if (settings?.classList.contains('active') && this.settingsAside) this.app.animateLayoutTransition(settings, update, { targets: [...settings.querySelectorAll('.settings-modal')], duration: .5 });
     else if (overlay?.classList.contains('active') && this.reservedSurface) this.app.animateLayoutTransition(overlay, update, { targets: [...overlay.querySelectorAll(':scope > .form-modal')], duration: .34 });
     else update();
   }

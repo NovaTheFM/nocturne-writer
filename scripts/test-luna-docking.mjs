@@ -43,20 +43,53 @@ try {
         if (process.env.NOCTURNE_DOCK_CASE && !process.env.NOCTURNE_DOCK_CASE.split(',').includes(name)) continue;
         try {
           await page.evaluate(() => window.nocturneApp.lunaTutorial.cleanupPreview());
+          await page.waitForTimeout(420);
+          await page.evaluate(selector => {
+            window.__dockFrames = [];
+            const until = performance.now() + 6500;
+            const sample = () => {
+              const panel = document.querySelector(selector);
+              if (panel?.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) {
+                const rect = panel.getBoundingClientRect();
+                window.__dockFrames.push({ x: rect.x, y: rect.y, width: rect.width, phase: panel.dataset.lunaDock });
+              }
+              if (performance.now() < until) window.__dockSampler = requestAnimationFrame(sample);
+            }; sample();
+          }, selector);
           await page.evaluate(`(async () => { const a=window.nocturneApp; await (${open.toString()})(a); if(a.lunaTutorial.step!==${JSON.stringify(step)}) await a.lunaTutorial.show(${JSON.stringify(step)}); })()`);
           await page.waitForFunction(() => !window.nocturneApp.lunaTutorial.changing && !document.querySelector('.luna-companion').getAnimations().some(animation => animation.playState === 'running'));
-          await page.locator(selector).waitFor(); await page.waitForTimeout(380);
+          await page.locator(selector).waitFor();
+          if (name !== 'notes') await page.waitForFunction(selector => document.querySelector(selector)?.dataset.lunaDock === 'settled', selector);
+          await page.waitForTimeout(80);
           const geometry = await page.evaluate(selector => {
             const panel = document.querySelector(selector), p = panel.getBoundingClientRect(), c = document.querySelector('.luna-companion').getBoundingClientRect();
             return { panel: p.toJSON(), coach: c.toJSON(), width: innerWidth, height: innerHeight, overflow: panel.scrollWidth - panel.clientWidth, stacked: document.body.classList.contains('luna-stack-modal') };
           }, selector);
           await page.screenshot({ path: `${output}/${width}-${name}.png` });
-          assert.ok(geometry.panel.left >= geometry.coach.right + 20, `The window opens to Luna’s right: ${JSON.stringify(geometry)}`);
+          assert.ok(geometry.panel.left >= geometry.coach.right + 20, `The window rests to Luna’s right: ${JSON.stringify(geometry)}`);
           assert.ok(Math.min(geometry.panel.bottom, geometry.coach.bottom) - Math.max(geometry.panel.top, geometry.coach.top) > 80, 'The window stays beside Luna');
-          assert.ok(geometry.panel.right <= width - 14 && geometry.panel.top >= 10 && geometry.panel.bottom <= 990);
+          assert.ok(geometry.panel.right <= width - (name === 'notes' ? 0 : 14) && geometry.panel.top >= 10 && geometry.panel.bottom <= (name === 'notes' ? 1000 : 990));
           assert.ok(geometry.overflow <= 2, `Panel content has no horizontal clipping: ${JSON.stringify(geometry)}`);
           assert.equal(geometry.stacked, false);
+          const frames = await page.evaluate(() => { cancelAnimationFrame(window.__dockSampler); return window.__dockFrames; });
+          await writeFile(`${output}/${width}-${name}-motion.json`, JSON.stringify(frames));
+          if (!['notes', 'history'].includes(name)) {
+            const opening = frames.filter(frame => frame.phase === 'opening').at(-1);
+            assert.ok(opening, 'The ordinary opening position is actually visible');
+            assert.ok(Math.abs(opening.x + opening.width / 2 - width / 2) < 3, 'The window first appears at its normal horizontal center');
+            assert.ok(geometry.panel.left - opening.x > (width >= 1900 ? 20 : 60), 'The window moves right after appearing');
+            const intermediate = frames.filter(frame => frame.phase === 'moving' && frame.x > opening.x + 5 && frame.x < geometry.panel.left - 5);
+            assert.ok(intermediate.length >= 4, 'The glide has several visible intermediate positions');
+            assert.ok(intermediate.every(frame => Math.abs(frame.y - geometry.panel.y) < 3), 'The glide remains horizontal');
+            const moving = frames.filter(frame => frame.phase === 'moving');
+            assert.ok(moving.every(frame => frame.x <= geometry.panel.left + 2 && frame.x >= opening.x - 2), 'The glide never overshoots its destination');
+            assert.ok(moving.every((frame, i) => i === 0 || frame.x >= moving[i - 1].x - 2), 'The glide never reverses direction');
+          }
           results.push({ name: `${width}: ${name}`, status: 'PASS' }); console.log(`PASS ${width}: ${name}`);
+          if (name === 'settings') {
+            await page.evaluate(async () => { const a = window.nocturneApp; a.openSettingsTab('macros'); await a.lunaTutorial.show('macros'); });
+            assert.ok(await page.locator('.settings-modal').evaluate(panel => panel.dataset.lunaDock === 'settled' && panel.getBoundingClientRect().left >= document.querySelector('.luna-companion').getBoundingClientRect().right + 20), 'Updating a settings tab preserves its resting position');
+          }
         } catch (error) {
           results.push({ name: `${width}: ${name}`, status: 'FAIL', error: error.stack }); console.error(`FAIL ${width}: ${name}: ${error.message}`);
         }
