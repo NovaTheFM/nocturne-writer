@@ -1,4 +1,5 @@
 export const tutorialDiscoveryMessages = {
+  'Досье можно открыть в базе знаний. Другие имена и прозвища персонажа тоже подсвечиваются в рукописи.': ['Досьє можна відкрити в базі знань. Інші імена та прізвиська персонажа теж підсвічуються в рукописі.', 'Open a character’s profile in the knowledge base. Their other names and nicknames are highlighted in your manuscript too.'],
   'Обучение с Луной': ['Навчання з Луною', 'A tour with Luna'],
   'Учебная история': ['Навчальна історія', 'Practice story'],
   'Учебная глава': ['Навчальний розділ', 'Practice chapter'],

@@ -20,6 +20,9 @@ async function choose(page, locale) {
 }
 
 async function scenario(name, mobile, action, options = {}) {
+  if (process.env.NOCTURNE_TUTORIAL_DEVICE && (process.env.NOCTURNE_TUTORIAL_DEVICE === 'mobile') !== mobile) {
+    results.push({ name, mobile, status: 'SKIP', reason: 'Filtered by NOCTURNE_TUTORIAL_DEVICE' }); return;
+  }
   if (process.env.NOCTURNE_TUTORIAL_CASE && !process.env.NOCTURNE_TUTORIAL_CASE.split(',').some(filter => name.includes(filter.trim()))) {
     results.push({ name, mobile, status: 'SKIP', reason: 'Filtered by NOCTURNE_TUTORIAL_CASE' }); return;
   }
@@ -74,13 +77,33 @@ async function discoverFeatures(page, mobile, { stopAt, keyboardPalette = false 
   const click = async name => (await step(page, name)).click();
   const next = async name => { await step(page, name); await page.locator('[data-luna-choice="next"]').click(); };
   const shot = async name => page.screenshot({ path: `${output}/${mobile ? 'mobile' : 'desktop'}-${name}.png` });
-  await next('write'); await next('name-links'); await shot('name-links');
+  await next('write'); await step(page, 'name-links');
+  const previewExpected = await page.locator('.page-content-prosemirror .entity-link').count();
+  if (previewExpected) await page.evaluate(() => {
+    window.__characterPreviewFrames = new Promise(resolve => {
+      const frames = [], until = performance.now() + 2000;
+      const sample = () => {
+        const element = document.querySelector('#entity-hover-card.active');
+        if (element?.checkVisibility() && Number(getComputedStyle(element).opacity) > .1) {
+          const coach = document.querySelector('.luna-companion').getBoundingClientRect(), card = element.getBoundingClientRect();
+          frames.push({ clear: coach.right <= card.left - 8 || coach.left >= card.right + 8 || coach.bottom <= card.top - 8 || coach.top >= card.bottom + 8, coach: coach.toJSON(), card: card.toJSON() });
+        }
+        if (performance.now() < until) requestAnimationFrame(sample); else resolve(frames);
+      }; sample();
+    });
+  });
+  await next('name-links'); await step(page, 'name-card'); await shot('name-links');
   if (await page.locator('#entity-hover-card.active').count()) {
     const clear = await page.evaluate(() => {
       const coach = document.querySelector('.luna-companion').getBoundingClientRect(), card = document.querySelector('#entity-hover-card').getBoundingClientRect();
       return coach.right <= card.left - 8 || coach.left >= card.right + 8 || coach.bottom <= card.top - 8 || coach.top >= card.bottom + 8;
     });
     assert.equal(clear, true, 'The real character preview remains readable beside Luna');
+  }
+  if (previewExpected) {
+    const frames = await page.evaluate(() => window.__characterPreviewFrames);
+    if (!mobile) assert.ok(frames.length > 3, 'The native character preview is actually shown');
+    assert.ok(frames.every(frame => frame.clear), `The preview appears after Luna clears it: ${JSON.stringify(frames.find(frame => !frame.clear))}`);
   }
   await next('name-card');
   if (mobile) await click('bookmarks-actions');

@@ -45,7 +45,9 @@ export class LunaTutorial {
     this.initialZen = !!this.app.state.zenActive;
     this.viewTouched = false;
     this.highlight = { target: null, phase: 'hidden', opacity: 0, startedAt: 0 };
-    this.placement = null; this.pendingForm = null; this.reservedSurface = null; this.settingsAside = false; this.formAside = '';
+    this.previewCard = null;
+    this.previewClearanceHeight = 0;
+    this.placement = null; this.pendingForm = null; this.reservedSurface = null; this.settingsAside = false; this.surfaceAside = '';
     this.previousFocus = document.activeElement;
     this.locale = getLocale();
     this.mobileLayout = this.app.isMobileLayout();
@@ -141,12 +143,13 @@ export class LunaTutorial {
   }
 
   allowed(node) {
-    if (['name-links', 'name-card'].includes(this.step) && (this.editorTarget()?.contains(node) || node.closest?.('#entity-hover-card.active, #kb-modal.active .lore-detail'))) return true;
+    if (['name-links', 'name-card'].includes(this.step) && (this.editorTarget()?.contains(node) || node.closest?.('#entity-hover-card.active, #kb-modal.active, #form-overlay.active'))) return true;
     return this.root?.contains(node) || this.description()?.interactive !== false && this.target?.contains(node) || this.extraTargets?.some(target => target.contains(node));
   }
 
   focusTargets() {
-    const islands = [this.description()?.interactive !== false ? this.target : null, ...(this.extraTargets || []), this.dialog, this.mascot?.host].filter(Boolean);
+    const characterWindows = ['name-links', 'name-card'].includes(this.step) ? [first('#form-overlay.active'), first('#kb-modal.active')] : [];
+    const islands = [this.description()?.interactive !== false ? this.target : null, ...(this.extraTargets || []), ...characterWindows, this.dialog, this.mascot?.host].filter(Boolean);
     return [...new Set(islands.flatMap(island => [...(island.matches(focusable) ? [island] : []), ...island.querySelectorAll(focusable)]))].filter(element => visible(element) && element.tabIndex >= 0);
   }
 
@@ -194,6 +197,7 @@ export class LunaTutorial {
     this.changing = true;
     this.mascot.stopSpeaking();
     const generation = this.generation = (this.generation || 0) + 1;
+    if (step === 'name-card' && this.step !== 'name-card') await this.prepareCharacterPreview();
     if (step === 'settings' && this.step === 'settings-apology' && this.canShowSettingsAside() && !this.settingsAside) await this.moveSettingsAside();
     if (!this.active || this.finishing || generation !== this.generation) return;
     this.detachTarget();
@@ -203,10 +207,10 @@ export class LunaTutorial {
     if (step === 'settings' && this.step !== 'settings-apology' && this.canShowSettingsAside() && !this.settingsAside) step = 'settings-apology';
     this.step = step;
     this.stepStartedAt = performance.now();
-    if (step !== 'name-card') this.app.hideEntityHoverCards();
+    if (step !== 'name-card') { this.app.hideEntityHoverCards(); this.previewCard = null; this.previewClearanceHeight = 0; }
     else {
       const mention = this.find('.page-content-prosemirror .entity-link');
-      if (mention) this.app.showEntityHoverCard(mention);
+      if (mention && !document.querySelector('#entity-hover-card.active')) this.app.showEntityHoverCard(mention);
     }
     if (step === 'focus' && this.app.isMobileLayout()) this.app.closeMobileToEditor();
     if (step === 'create-form') this.formCancelled = false;
@@ -303,6 +307,30 @@ export class LunaTutorial {
     return { left: origin.left + surface.offsetLeft, top: origin.top + surface.offsetTop, right: origin.left + surface.offsetLeft + surface.offsetWidth, bottom: origin.top + surface.offsetTop + surface.offsetHeight };
   }
 
+  characterPreview() {
+    const card = this.previewCard?.classList.contains('active') ? this.previewCard : first('#entity-hover-card.active');
+    return card?.getClientRects().length && (card.classList.contains('luna-preview-preparing') || getComputedStyle(card).visibility !== 'hidden') ? card : null;
+  }
+
+  async prepareCharacterPreview() {
+    const mention = first('.page-content-prosemirror .entity-link'), card = document.getElementById('entity-hover-card');
+    if (!mention || !card) return;
+    // The app's bubbling click handler dismisses hover cards before the next frame.
+    await frame();
+    if (!this.active || this.finishing) return;
+    this.previewCard = card;
+    card.classList.add('luna-preview-preparing');
+    const previousStep = this.step;
+    try {
+      this.step = 'name-card';
+      this.app.showEntityHoverCard(mention);
+      this.updateTarget();
+      this.layout();
+      await frame();
+      while (this.active && !this.finishing && (this.companion.querySelector('.is-flipping') || this.companion.getAnimations().some(animation => animation.playState === 'running'))) await frame();
+    } finally { this.step = previousStep; card.classList.remove('luna-preview-preparing'); }
+  }
+
   placeCompanion(x, y) {
     x = Math.round(x); y = Math.round(y);
     if (this.placement?.x === x && this.placement?.y === y) return;
@@ -312,17 +340,17 @@ export class LunaTutorial {
     if (previous) this.placementMotion = this.app.runMotion(this.companion, [{ transform: `translate(${previous.left - x}px, ${previous.top - y}px)` }, { transform: 'translate(0, 0)' }], { channel: 'tutorial-placement', duration: Math.min(720, 460 + Math.hypot(previous.left - x, previous.top - y) * .3), easing: 'cubic-bezier(.4, 0, .2, 1)', startFromCurrent: false });
   }
 
-  fitBesideForm(surface, viewport, mobile) {
-    const box = surface?.matches('.doc-form') && this.surfaceRect(surface);
+  fitBesideSurface(surface, viewport, mobile) {
+    const box = surface?.matches('.doc-form, #entity-hover-card') && this.surfaceRect(surface);
     const space = !mobile && box ? Math.floor(Math.max(box.left - viewport.left - 48, viewport.left + viewport.width - box.right - 48)) : 0;
     const width = space >= 360 && space < 628 ? space : 0;
     const key = width ? String(width) : '';
-    if (this.formAside === key) return;
-    this.formAside = key;
+    if (this.surfaceAside === key) return;
+    this.surfaceAside = key;
     this.app.animateLayoutTransition(this.companion, () => {
-      this.root.classList.toggle('luna-form-aside', !!width);
-      this.root.style.setProperty('--luna-form-coach-width', `${width}px`);
-      this.root.style.setProperty('--luna-form-mascot-width', `${Math.min(208, width - 164)}px`);
+      this.root.classList.toggle('luna-surface-aside', !!width);
+      this.root.style.setProperty('--luna-side-coach-width', `${width}px`);
+      this.root.style.setProperty('--luna-side-mascot-width', `${Math.min(surface?.matches('.doc-form') ? 208 : 236, width - 164)}px`);
     }, { targets: [this.dialog, this.mascot.host], duration: .5 });
   }
 
@@ -364,9 +392,16 @@ export class LunaTutorial {
     this.mascot.syncMotion();
     this.root.classList.toggle('luna-keyboard', mobile && height < innerHeight * .72);
     const surface = this.modalSurface();
-    this.fitBesideForm(surface, { left, width }, mobile);
+    const characterCard = ['name-links', 'name-card'].includes(this.step) ? this.characterPreview() : null;
+    this.fitBesideSurface(surface || characterCard, { left, width }, mobile);
     const rect = this.target?.getBoundingClientRect();
     const coachHeight = Math.max(this.root.querySelector('.luna-mascot').offsetHeight, this.dialog.__surfaceSizeTransition?.targetHeight || this.dialog.offsetHeight) + (parseFloat(getComputedStyle(this.companion).paddingBottom) || 0);
+    if (mobile && characterCard && this.previewCard) {
+      this.previewClearanceHeight = Math.max(this.previewClearanceHeight, coachHeight);
+      const cardHeight = characterCard.__surfaceSizeTransition?.targetHeight || characterCard.offsetHeight;
+      const lastTop = top + height - this.previewClearanceHeight - cardHeight - 52;
+      if (lastTop >= top + 14 && characterCard.offsetTop > lastTop) characterCard.style.top = `${Math.floor(lastTop)}px`;
+    }
     const margin = mobile ? 24 : Math.max(56, Math.min(112, width * .08));
     const settingsLeft = `${margin + this.companion.offsetWidth + 32}px`;
     if (document.body.style.getPropertyValue('--luna-settings-left') !== settingsLeft) document.body.style.setProperty('--luna-settings-left', settingsLeft);
@@ -413,6 +448,7 @@ export class LunaTutorial {
       const below = content.bottom + 24, above = content.top - coachHeight - 24;
       if (below + coachHeight <= top + height - 14) y = below;
       else if (above >= top + 14) y = above;
+      else if (content.left - 24 - this.companion.offsetWidth >= left + 24) x = content.left - 24 - this.companion.offsetWidth;
       else if (content.right + 24 + this.companion.offsetWidth <= left + width - 24) x = content.right + 24;
     }
     this.placeCompanion(Math.max(left + 24, x), Math.max(top + 14, y));
@@ -475,6 +511,10 @@ export class LunaTutorial {
       if (!closed && dialog?.getAttribute('aria-modal') === 'true') dialog.setAttribute('aria-modal', 'false');
     }
     if (!this.changing) {
+      if (this.step === 'name-card' && !document.querySelector('#entity-hover-card.active') && !first('#form-overlay.active', '#kb-modal.active')) {
+        const mention = first('.page-content-prosemirror .entity-link');
+        if (mention) this.app.showEntityHoverCard(mention);
+      }
       if (this.app.isMobileLayout() !== this.mobileLayout && !this.app.interfaceLanguage.busy) this.adaptLayout().catch(error => { this.changing = false; this.app.toast(error.message); });
       else if (getLocale() !== this.locale && !this.app.interfaceLanguage.busy) this.show(this.step);
       else {
@@ -585,6 +625,9 @@ export class LunaTutorial {
       document.body.style.removeProperty('--luna-coach-space');
       document.body.style.removeProperty('--luna-settings-left');
       document.body.style.removeProperty('--luna-surface-top');
+      this.previewCard?.classList.remove('luna-preview-preparing');
+      this.previewCard = null;
+      this.previewClearanceHeight = 0;
     };
     const overlay = document.getElementById('form-overlay');
     const settings = document.getElementById('settings-overlay');

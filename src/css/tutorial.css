@@ -54,10 +54,11 @@ body.theme-paper .luna-overview .luna-tutorial-shade > rect { fill: rgba(33, 24,
 .luna-mobile .luna-dialog-actions .pill-btn, .luna-mobile .luna-skip { min-height: 44px; }
 .luna-mobile .luna-dialog-actions .luna-back { width: 44px; }
 .luna-mobile .luna-companion { padding-bottom: var(--app-safe-bottom); }
-.luna-form-aside .luna-companion { --luna-mascot-width: var(--luna-form-mascot-width); --luna-companion-gap: 14px; width: var(--luna-form-coach-width); }
-.luna-form-aside .luna-dialog { padding: 16px; }
-.luna-form-aside .luna-dialog-copy p { font-size: 13px; line-height: 1.65; }
-.luna-form-aside .luna-dialog-actions { margin-top: 12px; }
+.luna-surface-aside .luna-companion { --luna-mascot-width: var(--luna-side-mascot-width); --luna-companion-gap: 14px; width: var(--luna-side-coach-width); }
+.luna-surface-aside .luna-dialog { padding: 16px; }
+.luna-surface-aside .luna-dialog-copy p { font-size: 13px; line-height: 1.65; }
+.luna-surface-aside .luna-dialog-actions { margin-top: 12px; }
+.entity-hover-card.luna-preview-preparing { opacity: 0 !important; pointer-events: none; }
 body.mobile-shell-active.luna-tutorial-active #doc-form textarea[name="description"] { min-height: 72px; height: 72px; }
 .luna-keyboard .luna-dialog { padding: 10px 14px; }
 .luna-keyboard .luna-dialog-copy p { font-size: 12px; line-height: 1.4; }
