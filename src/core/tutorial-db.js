@@ -29,7 +29,7 @@ export class TutorialDatabase extends Database {
         { id: 'practice-heading', type: 'heading', html: escapeHtml(t('Учебная глава')) },
         { id: 'practice-paragraph', type: 'paragraph', html: escapeHtml(t('Мира остановилась у окна. Сегодня начиналась её новая история.')) },
       ] } }],
-      lore: [{ id: 'world', title: t('Учебная история'), characters: [{ id: 'luna-practice-character', name: t('Мира'), aliases: [t('Звёздочка')], role: t('Героиня учебной истории'), description: t('Она собирает истории и замечает то, что другие пропускают.'), documentIds: ['luna-practice-document'], order: 0 }], locations: [], timeline: [], notes: [], rules: [] }],
+      lore: [{ id: 'world', title: t('Учебная история'), characters: [{ id: 'luna-practice-character', name: t('Мира'), aliases: [t('Звёздочка')], role: t('Героиня учебной истории'), body: t('Она собирает истории и замечает то, что другие пропускают.'), documentIds: ['luna-practice-document'], order: 0 }], locations: [], timeline: [], notes: [], rules: [] }],
     });
   }
 
