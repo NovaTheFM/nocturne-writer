@@ -6,7 +6,7 @@ body.theme-paper .luna-tutorial-shade > rect { fill: rgba(33, 24, 43, .32); }
 body.theme-paper .luna-overview .luna-tutorial-shade > rect { fill: rgba(33, 24, 43, .23); }
 .luna-spotlight { position: fixed; box-sizing: border-box; pointer-events: none; opacity: 0; border: 1.5px solid rgba(var(--accent-rgb), .85); border-radius: 14px; box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .07), 0 4px 26px rgba(var(--accent-rgb), .14), inset 0 0 0 1px rgba(var(--accent-rgb), .035); }
 .luna-spotlight[data-kind="action"] { background: rgba(var(--accent-rgb), .025); }
-.luna-spotlight[data-kind="action"]::after { content: ''; position: absolute; inset: -5px; border: 1px solid rgba(var(--accent-rgb), .32); border-radius: inherit; animation: luna-cue-breathe 2800ms ease-in-out infinite; }
+.luna-spotlight[data-kind="action"]::after { content: ''; position: absolute; inset: -5px; border: 1px solid rgba(var(--accent-rgb), .32); border-radius: inherit; animation: luna-cue-breathe 2800ms ease-in-out 2; opacity: .25; }
 @keyframes luna-cue-breathe { 0%, 100% { opacity: .25; transform: scale(.995); } 50% { opacity: .7; transform: scale(1.015); } }
 .luna-spotlight[data-kind="panel"] { border-width: 1px; border-color: rgba(var(--accent-rgb), .48); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .045), 0 0 18px rgba(var(--accent-rgb), .09); }
 .luna-spotlight[hidden] { display: none; }
@@ -79,6 +79,7 @@ body.mobile-shell-active.luna-tutorial-active[data-luna-step="settings"] #mobile
 .luna-practice-host.is-ready .luna-practice-loading { opacity: 0; visibility: hidden; pointer-events: none; }
 .luna-practice-host.is-ready .luna-practice-close { display: none; }
 @media (prefers-reduced-motion: reduce) { .luna-practice-host iframe, .luna-practice-loading { transition-duration: 0s; } }
+body.reduce-mobile-animations .luna-practice-host :is(iframe, .luna-practice-loading) { transition-duration: 0s; }
 body.luna-tutorial-active .luna-reserved-surface { max-height: var(--luna-surface-height); overflow-y: auto; }
 body.luna-stack-modal :is(#form-overlay, #floating-notes-modal, #settings-overlay) { align-items: flex-start; padding-top: calc(var(--luna-coach-space, 220px) + var(--app-safe-top)); }
 @media (min-width: 1100px) { body.luna-tutorial-active #form-overlay .history-modal { width: min(1120px, calc(100vw - 620px)); } }

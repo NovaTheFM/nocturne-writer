@@ -360,7 +360,7 @@ try {
       const state = await page.evaluate(() => {
         const spot = document.querySelector('.luna-spotlight'), hole = document.querySelector('.luna-cutout');
         const ring = spot.getBoundingClientRect(), target = document.querySelector('[data-luna-target]').getBoundingClientRect();
-        return { kind: spot.dataset.kind, ring: { x: ring.x, y: ring.y, width: ring.width, height: ring.height }, target: { x: target.x, y: target.y, right: target.right, bottom: target.bottom }, hole: ['x', 'y', 'width', 'height'].map(key => Number(hole.getAttribute(key))), samples: window.__spotlightFrames, animations: document.querySelector('#luna-tutorial').getAnimations({ subtree: true }).filter(a => a.playState === 'running').length, reduced: document.querySelector('#luna-tutorial').classList.contains('luna-reduced'), pointerEvents: getComputedStyle(spot).pointerEvents, width: innerWidth, height: innerHeight };
+        return { kind: spot.dataset.kind, ring: { x: ring.x, y: ring.y, width: ring.width, height: ring.height }, target: { x: target.x, y: target.y, right: target.right, bottom: target.bottom }, hole: ['x', 'y', 'width', 'height'].map(key => Number(hole.getAttribute(key))), samples: window.__spotlightFrames, animations: document.querySelector('#luna-tutorial').getAnimations({ subtree: true }).filter(a => a.playState === 'running' && a.animationName !== 'luna-letter-in').length, reduced: document.querySelector('#luna-tutorial').classList.contains('luna-reduced'), pointerEvents: getComputedStyle(spot).pointerEvents, width: innerWidth, height: innerHeight };
       });
       assert.equal(state.kind, 'panel');
       assert.equal(state.pointerEvents, 'none');
@@ -532,6 +532,29 @@ try {
     assert.equal(await page.evaluate(() => window.nocturneApp.state.settings.showZenButton), false);
     assert.deepEqual(await page.evaluate(async () => await window.nocturneApp.db.getAllRaw('docs')), before);
   }, { reducedMotion: 'reduce' });
+  for (const mobile of [false, true]) await scenario('complete tour in isolated practice preserves every author store and editor', mobile, async page => {
+    await page.goto(url); await choose(page, 'en'); await page.locator('[data-luna-choice="no"]').click();
+    await page.waitForFunction(() => window.nocturneApp.startupInteractionReady);
+    const before = await page.evaluate(async () => {
+      const a = window.nocturneApp;
+      await a.createDoc(a.defaultFolderId(), 'Private original');
+      a.nocturneEditor.get('primary').commands.setContent('<p>This is the author’s original work.</p>'); await a.flushOpenDocuments();
+      await a.databaseSync.work; await a.history.work;
+      window.__originalEditor = a.nocturneEditor.get('primary');
+      const { DATABASE_STORES } = await import('/src/core/db.js');
+      window.__rawAuthorStores = async () => Object.fromEntries(await Promise.all(DATABASE_STORES.map(async store => [store, (await a.db.getAllRaw(store)).filter(record => store !== 'settings' || record.id !== 'luna-tutorial')])));
+      return window.__rawAuthorStores();
+    });
+    await page.evaluate(() => { void window.nocturneApp.lunaTutorial.start(); });
+    const practice = await practiceView(page);
+    await step(practice, 'welcome'); await practice.locator('[data-luna-choice="yes"]').click(); await step(practice, 'write');
+    await practice.evaluate(() => { window.nocturneApp.nocturneEditor.get('primary').commands.insertContent('<p>A real story.</p>'); });
+    await discoverFeatures(practice, mobile);
+    await practice.locator('[data-luna-choice="done"]').click();
+    await page.locator('iframe[data-luna-practice]').waitFor({ state: 'detached' });
+    assert.deepEqual(await page.evaluate(() => window.__rawAuthorStores()), before);
+    assert.ok(await page.evaluate(() => window.nocturneApp.nocturneEditor.get('primary') === window.__originalEditor && !window.__originalEditor.isDestroyed));
+  });
   await scenario('existing profile, resizing, locale changes and Android Back leave manuscripts intact', false, async page => {
     await page.goto(url); await choose(page, 'ru');
     await page.locator('[data-luna-choice="no"]').click();

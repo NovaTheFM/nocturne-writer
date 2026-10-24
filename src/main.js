@@ -431,20 +431,20 @@ class NocturneWriter {
     this.bindGlobalEvents();
     this.installModalFocus();
     if (!tutorialContext) {
-    this.databaseSync = new DatabaseSync({ db: this.db, deviceId: this.state.sync.deviceId,
-      onChange: result => this.refreshAfterDatabaseSync(result),
-      onPending: () => this.scheduleDatabaseSync(),
-    });
-    await this.databaseSync.start();
-    await this.loadRememberedSyncDevices();
-    this.attemptTrustedAutoReconnect().catch(error => console.warn('LAN reconnect:', error.message));
-    await platformFiles.initializeBackupDirectory(this.db);
-    this.backups = new ProjectBackups({ db: this.db, files: platformFiles, buildDump: () => this.buildNocturneDump(), enabled: () => !this.resettingData && this.state.settings.automaticBackups !== false && (!this.state.settings.e2e || !!this.state.sessionPassword) });
-    this.history.start();
-    this.startMobileSystemBar();
-    this.applyAndroidSystemBars();
-    this.startGitAutosave();
-    this.disposeNativeOpenFiles = platformFiles.onOpenFilesPending(() => this.startupInteractionReady && !this.lunaTutorial.active && this.openPendingNativeFiles());
+      this.databaseSync = new DatabaseSync({ db: this.db, deviceId: this.state.sync.deviceId,
+        onChange: result => this.refreshAfterDatabaseSync(result),
+        onPending: () => this.scheduleDatabaseSync(),
+      });
+      await this.databaseSync.start();
+      await this.loadRememberedSyncDevices();
+      this.attemptTrustedAutoReconnect().catch(error => console.warn('LAN reconnect:', error.message));
+      await platformFiles.initializeBackupDirectory(this.db);
+      this.backups = new ProjectBackups({ db: this.db, files: platformFiles, buildDump: () => this.buildNocturneDump(), enabled: () => !this.resettingData && this.state.settings.automaticBackups !== false && (!this.state.settings.e2e || !!this.state.sessionPassword) });
+      this.history.start();
+      this.startMobileSystemBar();
+      this.applyAndroidSystemBars();
+      this.startGitAutosave();
+      this.disposeNativeOpenFiles = platformFiles.onOpenFilesPending(() => this.startupInteractionReady && !this.lunaTutorial.active && this.openPendingNativeFiles());
     } else {
       this.backups = new ProjectBackups({ db: this.db, files: { writeBackup: async () => ({ external: false }) }, buildDump: () => this.buildNocturneDump(), enabled: () => false });
       this.history.start();
@@ -482,6 +482,7 @@ class NocturneWriter {
     }
     const minutes = Math.max(1, this.state.settings.autosaveMinutes || 3);
     this.gitAutosaveInterval = setInterval(async () => {
+      if (this.lunaTutorial.practice.opened) return;
       try {
         await this.flushOpenDocuments();
         await this.persistGlobalNotes();

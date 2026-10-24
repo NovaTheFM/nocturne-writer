@@ -101,6 +101,7 @@ export class LunaTutorial {
     };
     this.onKey = event => {
       if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); this.finish('skipped'); return; }
+      if (['name-links', 'name-card'].includes(this.step) && ['Control', 'Meta'].includes(event.key)) return;
       if (!this.changing && (event.ctrlKey || event.metaKey) && event.code === 'KeyK' && ['tools-commands', 'open-commands'].includes(this.step)) {
         event.preventDefault(); event.stopImmediatePropagation();
         this.app.closeAllFloatingMenus(); this.app.commandPalette.open({ focusInput: false }); this.show('commands'); return;
@@ -140,6 +141,7 @@ export class LunaTutorial {
   }
 
   allowed(node) {
+    if (['name-links', 'name-card'].includes(this.step) && (this.editorTarget()?.contains(node) || node.closest?.('#entity-hover-card.active, #kb-modal.active .lore-detail'))) return true;
     return this.root?.contains(node) || this.description()?.interactive !== false && this.target?.contains(node) || this.extraTargets?.some(target => target.contains(node));
   }
 
@@ -324,6 +326,7 @@ export class LunaTutorial {
       target.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
     }
     if (this.step === 'write') this.extraTargets = [first('.toolbar-center')].filter(Boolean);
+    if (['name-links', 'name-card'].includes(this.step)) this.extraTargets = [this.editorTarget(), first('#entity-hover-card.active')].filter(Boolean);
     if (this.step === 'book') this.extraTargets = [first('.chapter-selection'), first('.export-notes-option')].filter(Boolean);
     if (this.step === 'create-form') {
       target.setAttribute('role', 'dialog');

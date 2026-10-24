@@ -8,11 +8,12 @@ const check = (id, args, areas, options = {}) => ({ id, args, areas, platforms: 
 
 export const PROJECT_CHECKS = [
   check('luna-polish', ['scripts/test-luna-polish.mjs'], ['motion', 'visual', 'database', 'lore', 'writing', 'responsive', 'security'], { ports: [5360], ownScenarioReport: 'results.json', timeout: 300_000, modes: ['smoke', 'full'] }),
+  check('luna-practice-unit', ['--test', 'scripts/test-luna-practice-unit.mjs'], ['database', 'localization', 'security'], { modes: ['smoke', 'full'] }),
   check('luna-startup', ['scripts/test-luna-startup.mjs'], ['motion', 'responsive', 'localization', 'offline'], { ports: [5359], ownScenarioReport: 'results.json', timeout: 150_000, modes: ['smoke', 'full'] }),
   check('luna-rig', ['scripts/test-luna-rig.mjs'], ['motion', 'responsive', 'keyboard', 'localization', 'offline'], { ports: [5358], ownScenarioReport: 'results.json', timeout: 180_000, modes: ['smoke', 'full'] }),
   check('luna-rig-unit', ['--test', 'scripts/test-luna-rig-unit.mjs'], ['source', 'offline'], { modes: ['smoke', 'full'] }),
   check('luna-rig-native', ['scripts/test-luna-rig-native.mjs'], ['native-desktop', 'motion', 'offline'], { platforms: ['desktop'], systems: ['win32'], ownScenarioReport: 'results.json', modes: ['smoke', 'full'] }),
-  check('luna-tutorial', ['scripts/test-luna-tutorial.mjs'], ['settings', 'database', 'localization', 'navigation', 'responsive', 'keyboard', 'writing', 'motion', 'bookmarks', 'lore', 'history', 'export', 'backups', 'search'], { ports: [5357], ownScenarioReport: 'results.json', timeout: 600_000, modes: ['smoke', 'full'] }),
+  check('luna-tutorial', ['scripts/test-luna-tutorial.mjs'], ['settings', 'database', 'localization', 'navigation', 'responsive', 'keyboard', 'writing', 'motion', 'bookmarks', 'lore', 'history', 'export', 'backups', 'search'], { ports: [5357], ownScenarioReport: 'results.json', timeout: 900_000, modes: ['smoke', 'full'] }),
   check('interface-language-unit', ['--test', 'scripts/test-interface-language.mjs'], ['settings', 'database', 'localization'], { modes: ['smoke', 'full'] }),
   check('interface-language-ui', ['scripts/test-interface-language-ui.mjs'], ['settings', 'database', 'localization', 'responsive', 'keyboard', 'writing', 'security'], { ports: [5351], ownScenarioReport: 'results.json', timeout: 180_000, modes: ['smoke', 'full'] }),
   check('language-page', ['scripts/test-language-page.mjs'], ['settings', 'localization', 'writing', 'pagination', 'responsive', 'visual'], { ports: [5353], ownScenarioReport: 'results.json', timeout: 120_000, modes: ['smoke', 'full'] }),

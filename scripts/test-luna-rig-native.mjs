@@ -29,6 +29,8 @@ try {
   });
   await page.evaluate(() => { void window.nocturneApp.lunaTutorial.start(); });
   await page.locator('.luna-practice-host.is-ready').waitFor({ timeout: 25000 });
+  assert.ok(await page.locator('#electron-titlebar .titlebar-controls').evaluate(element => !element.closest('[inert]')));
+  assert.ok(await page.locator('iframe[data-luna-practice]').evaluate(frame => frame.getBoundingClientRect().top >= document.getElementById('electron-titlebar').getBoundingClientRect().bottom));
   const practice = page.frameLocator('iframe[data-luna-practice]');
   await practice.locator('[data-luna-choice="yes"]').click();
   await practice.locator('#luna-tutorial[data-step="write"]').waitFor();

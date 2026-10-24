@@ -16,10 +16,13 @@ export class LunaPractice {
     this.session = crypto.randomUUID();
     this.host = document.createElement('div'); this.host.className = 'luna-practice-host';
     this.frame = document.createElement('iframe');
+    this.frame.inert = true;
     this.frame.setAttribute('data-luna-practice', ''); this.frame.title = t('Обучение с Луной');
     this.frame.setAttribute('sandbox', 'allow-scripts allow-same-origin');
     this.frame.name = JSON.stringify({ kind: 'nocturne-tutorial', version: 1, session: this.session, locale: getLocale(), settings: Object.fromEntries(visualSettings.filter(key => key in this.app.state.settings).map(key => [key, this.app.state.settings[key]])) });
     this.frame.src = new URL('index.html', document.baseURI).href;
+    const titlebar = this.app.runtime.isElectron && document.getElementById('electron-titlebar');
+    if (titlebar) this.host.style.top = `${titlebar.getBoundingClientRect().height}px`;
     const loading = document.getElementById('preloader').cloneNode(true);
     loading.removeAttribute('id'); loading.className = 'luna-practice-loading';
     loading.querySelectorAll('[id]').forEach(element => element.removeAttribute('id'));
@@ -32,6 +35,7 @@ export class LunaPractice {
       if (event.data.type === 'luna-practice-ready') { this.loaded = true; this.resolveReady(); this.retry?.remove(); }
       else if (event.data.type === 'luna-practice-visible') {
         this.host.classList.add('is-ready');
+        this.frame.inert = false;
         this.frame.contentWindow?.focus();
       } else if (event.data.type === 'luna-practice-finished') await this.finish(event.data.status);
       else if (event.data.type === 'luna-practice-load-error') {
@@ -54,11 +58,18 @@ export class LunaPractice {
     tour.previousFocus = document.activeElement;
     this.app.disposeModalFocus?.();
     const ready = this.prepare();
-    this.previousInert = [...document.body.children].filter(element => element !== this.host && !['SCRIPT', 'STYLE', 'LINK'].includes(element.tagName)).map(element => [element, element.inert]);
+    const titlebar = this.app.runtime.isElectron && document.getElementById('electron-titlebar');
+    const roots = [...document.body.children].filter(element => element !== this.host && element !== titlebar && !['SCRIPT', 'STYLE', 'LINK'].includes(element.tagName));
+    if (titlebar) roots.push(...[...titlebar.children].filter(element => !element.classList.contains('titlebar-controls')));
+    this.previousInert = roots.map(element => [element, element.inert]);
     for (const [element] of this.previousInert) element.inert = true;
     this.host.classList.add('is-open'); this.opened = true;
+    this.host.querySelector('.luna-practice-close').focus({ preventScroll: true });
     this.app.runMotion(this.host, [{ opacity: 0 }, { opacity: 1 }], { channel: 'tutorial', duration: 420 });
-    this.onKey = event => { if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); this.finish('skipped'); } };
+    this.onKey = event => {
+      if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); this.finish('skipped'); }
+      else if (event.key === 'Tab' && !this.host.classList.contains('is-ready')) { event.preventDefault(); this.host.querySelector('.luna-practice-close').focus(); }
+    };
     document.addEventListener('keydown', this.onKey, true);
     ready.then(() => { if (this.opened) this.send('luna-practice-show', { locale: getLocale() }); });
     return tour.completion;
@@ -75,7 +86,7 @@ export class LunaPractice {
     for (const [element, inert] of this.previousInert || []) if (element.isConnected) element.inert = inert;
     this.ready = null; this.host = null; this.frame = null; this.loaded = false;
     try { await this.app.db.put('settings', { id: 'luna-tutorial', version: 1, status, updatedAt: Date.now() }); }
-    catch (error) { console.warn('Luna tutorial preference:', error); }
+    catch (error) { console.warn('Luna tutorial preference:', error); this.app.toast(t('Не удалось запомнить прохождение обучения. При следующем запуске я могу появиться снова.')); }
     tour.active = false; tour.finishing = false;
     this.app.installModalFocus();
     if (tour.previousFocus?.isConnected) tour.previousFocus.focus({ preventScroll: true });
