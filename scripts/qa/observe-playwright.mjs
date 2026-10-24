@@ -49,7 +49,7 @@ async function observeContext(context) {
   await context.addInitScript(install);
   const observePage = page => {
     if(pages.includes(page))return;pages.push(page);
-    if (!['interface-language-ui', 'luna-tutorial', 'luna-rig', 'luna-rig-native', 'luna-startup', 'luna-polish'].includes(process.env.NOCTURNE_QA_SUITE)) {
+    if (!['interface-language-ui', 'luna-tutorial', 'luna-rig', 'luna-rig-native', 'luna-startup', 'luna-polish', 'luna-docking'].includes(process.env.NOCTURNE_QA_SUITE)) {
       let preparing;
       const prepare = () => preparing ||= chooseDefaultInterfaceLanguage(page).finally(() => { preparing = null; });
       const prepareLoaded = () => prepare().catch(error => { if (!page.isClosed()) log({ type: 'fixture-error', message: error.message }); });

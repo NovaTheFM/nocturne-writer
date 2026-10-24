@@ -7,6 +7,7 @@ const scenarioReports = {
 const check = (id, args, areas, options = {}) => ({ id, args, areas, platforms: shared, executable: process.execPath, timeout: 120_000, modes: ['full'], ports: [], scenarioReport:scenarioReports[id], ...options });
 
 export const PROJECT_CHECKS = [
+  check('luna-docking', ['scripts/test-luna-docking.mjs'], ['motion', 'visual', 'responsive', 'navigation'], { ports: [5361], ownScenarioReport: 'results.json', timeout: 300_000, modes: ['smoke', 'full'] }),
   check('luna-polish', ['scripts/test-luna-polish.mjs'], ['motion', 'visual', 'database', 'lore', 'writing', 'responsive', 'security'], { ports: [5360], ownScenarioReport: 'results.json', timeout: 300_000, modes: ['smoke', 'full'] }),
   check('luna-practice-unit', ['--test', 'scripts/test-luna-practice-unit.mjs'], ['database', 'localization', 'security'], { modes: ['smoke', 'full'] }),
   check('luna-startup', ['scripts/test-luna-startup.mjs'], ['motion', 'responsive', 'localization', 'offline'], { ports: [5359], ownScenarioReport: 'results.json', timeout: 150_000, modes: ['smoke', 'full'] }),
