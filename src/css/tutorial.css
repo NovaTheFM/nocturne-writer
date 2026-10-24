@@ -54,6 +54,11 @@ body.theme-paper .luna-overview .luna-tutorial-shade > rect { fill: rgba(33, 24,
 .luna-mobile .luna-dialog-actions .pill-btn, .luna-mobile .luna-skip { min-height: 44px; }
 .luna-mobile .luna-dialog-actions .luna-back { width: 44px; }
 .luna-mobile .luna-companion { padding-bottom: var(--app-safe-bottom); }
+.luna-form-aside .luna-companion { --luna-mascot-width: var(--luna-form-mascot-width); --luna-companion-gap: 14px; width: var(--luna-form-coach-width); }
+.luna-form-aside .luna-dialog { padding: 16px; }
+.luna-form-aside .luna-dialog-copy p { font-size: 13px; line-height: 1.65; }
+.luna-form-aside .luna-dialog-actions { margin-top: 12px; }
+body.mobile-shell-active.luna-tutorial-active #doc-form textarea[name="description"] { min-height: 72px; height: 72px; }
 .luna-keyboard .luna-dialog { padding: 10px 14px; }
 .luna-keyboard .luna-dialog-copy p { font-size: 12px; line-height: 1.4; }
 .luna-keyboard .luna-dialog-actions { margin-top: 4px; }
@@ -81,7 +86,7 @@ body.mobile-shell-active.luna-tutorial-active[data-luna-step="settings"] #mobile
 @media (prefers-reduced-motion: reduce) { .luna-practice-host iframe, .luna-practice-loading { transition-duration: 0s; } }
 body.reduce-mobile-animations .luna-practice-host :is(iframe, .luna-practice-loading) { transition-duration: 0s; }
 body.luna-tutorial-active .luna-reserved-surface { max-height: var(--luna-surface-height); overflow-y: auto; }
-body.luna-stack-modal :is(#form-overlay, #floating-notes-modal, #settings-overlay) { align-items: flex-start; padding-top: calc(var(--luna-coach-space, 220px) + var(--app-safe-top)); }
+body.luna-stack-modal :is(#form-overlay, #floating-notes-modal, #settings-overlay) { align-items: flex-start; padding-top: var(--luna-surface-top, calc(var(--luna-coach-space, 220px) + var(--app-safe-top))); padding-bottom: 14px; }
 @media (min-width: 1100px) { body.luna-tutorial-active #form-overlay .history-modal { width: min(1120px, calc(100vw - 620px)); } }
 @media (min-width: 1440px) {
   body.luna-settings-aside #settings-overlay { justify-content: flex-end; padding: 24px 32px; }

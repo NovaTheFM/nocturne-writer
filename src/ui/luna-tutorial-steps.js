@@ -71,7 +71,7 @@ export function lunaTutorialSteps(tour) {
     'tools-backups': tools('backups', 'open-backups'),
     'more-backups': more('backups', 'open-backups'),
     'open-backups': action('backups', () => button('open-backups'), () => panel('.backups-modal'), 'backups'),
-    backups: info('backups', () => find('.backups-modal'), mobile ? 'more-trash' : 'tools-trash'),
+    backups: { ...info('backups', () => find('.backups-modal'), mobile ? 'more-trash' : 'tools-trash'), closeBeforeNext: true },
     'tools-trash': tools('backups', 'open-trash'),
     'more-trash': more('backups', 'open-trash'),
     'open-trash': action('backups', () => button('open-trash'), () => panel('.trash-manager'), 'trash'),

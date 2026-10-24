@@ -45,7 +45,7 @@ export class LunaTutorial {
     this.initialZen = !!this.app.state.zenActive;
     this.viewTouched = false;
     this.highlight = { target: null, phase: 'hidden', opacity: 0, startedAt: 0 };
-    this.placement = null; this.pendingForm = null; this.reservedSurface = null; this.settingsAside = false;
+    this.placement = null; this.pendingForm = null; this.reservedSurface = null; this.settingsAside = false; this.formAside = '';
     this.previousFocus = document.activeElement;
     this.locale = getLocale();
     this.mobileLayout = this.app.isMobileLayout();
@@ -236,6 +236,7 @@ export class LunaTutorial {
     outgoing?.animation?.cancel();
     await this.app.runMotion(this.dialogCopy, [{ opacity: 0 }, { opacity: 1 }], { channel: 'tutorial-copy', duration: 340 }).finished;
     await this.placementMotion?.finished;
+    while (this.active && !this.finishing && this.companion.querySelector('.is-flipping')) await frame();
     if (!this.active || this.finishing || generation !== this.generation) return;
     this.changing = false;
     (step === 'commands' && !this.app.isMobileLayout() ? this.target : this.dialog)?.focus({ preventScroll: true });
@@ -308,7 +309,21 @@ export class LunaTutorial {
     const previous = this.placement && this.companion.getBoundingClientRect();
     this.placement = { x, y };
     this.companion.style.left = `${x}px`; this.companion.style.top = `${y}px`;
-    if (previous) this.placementMotion = this.app.runMotion(this.companion, [{ transform: `translate(${previous.left - x}px, ${previous.top - y}px)` }, { transform: 'translate(0, 0)' }], { channel: 'tutorial-placement', duration: Math.min(720, 460 + Math.hypot(previous.left - x, previous.top - y) * .3), easing: 'cubic-bezier(.22, 1, .36, 1)', startFromCurrent: false });
+    if (previous) this.placementMotion = this.app.runMotion(this.companion, [{ transform: `translate(${previous.left - x}px, ${previous.top - y}px)` }, { transform: 'translate(0, 0)' }], { channel: 'tutorial-placement', duration: Math.min(720, 460 + Math.hypot(previous.left - x, previous.top - y) * .3), easing: 'cubic-bezier(.4, 0, .2, 1)', startFromCurrent: false });
+  }
+
+  fitBesideForm(surface, viewport, mobile) {
+    const box = surface?.matches('.doc-form') && this.surfaceRect(surface);
+    const space = !mobile && box ? Math.floor(Math.max(box.left - viewport.left - 48, viewport.left + viewport.width - box.right - 48)) : 0;
+    const width = space >= 360 && space < 628 ? space : 0;
+    const key = width ? String(width) : '';
+    if (this.formAside === key) return;
+    this.formAside = key;
+    this.app.animateLayoutTransition(this.companion, () => {
+      this.root.classList.toggle('luna-form-aside', !!width);
+      this.root.style.setProperty('--luna-form-coach-width', `${width}px`);
+      this.root.style.setProperty('--luna-form-mascot-width', `${Math.min(208, width - 164)}px`);
+    }, { targets: [this.dialog, this.mascot.host], duration: .5 });
   }
 
   updateTarget() {
@@ -348,6 +363,8 @@ export class LunaTutorial {
     this.root.classList.toggle('luna-reduced', this.app.shouldReduceSurfaceMotion());
     this.mascot.syncMotion();
     this.root.classList.toggle('luna-keyboard', mobile && height < innerHeight * .72);
+    const surface = this.modalSurface();
+    this.fitBesideForm(surface, { left, width }, mobile);
     const rect = this.target?.getBoundingClientRect();
     const coachHeight = Math.max(this.root.querySelector('.luna-mascot').offsetHeight, this.dialog.__surfaceSizeTransition?.targetHeight || this.dialog.offsetHeight) + (parseFloat(getComputedStyle(this.companion).paddingBottom) || 0);
     const margin = mobile ? 24 : Math.max(56, Math.min(112, width * .08));
@@ -355,7 +372,6 @@ export class LunaTutorial {
     if (document.body.style.getPropertyValue('--luna-settings-left') !== settingsLeft) document.body.style.setProperty('--luna-settings-left', settingsLeft);
     let x = left + margin;
     let y = top + height * .48 - coachHeight / 2;
-    const surface = this.modalSurface();
     if (this.reservedSurface !== surface) {
       this.reservedSurface?.classList.remove('luna-reserved-surface');
       this.reservedSurface?.style.removeProperty('--luna-surface-height');
@@ -366,8 +382,9 @@ export class LunaTutorial {
       const coachWidth = this.companion.offsetWidth, gap = 24;
       const reserveHeight = () => {
         const available = height - 2 * (coachHeight + gap + 14);
-        const stacked = available < 160;
+        const stacked = available < 160 || mobile && surface.scrollHeight > available;
         document.body.classList.toggle('luna-stack-modal', stacked);
+        document.body.style.setProperty('--luna-surface-top', `${top + coachHeight + gap + 14}px`);
         surface.classList.add('luna-reserved-surface');
         surface.style.setProperty('--luna-surface-height', `${Math.max(96, stacked ? height - coachHeight - gap - 28 : available)}px`);
         return stacked;
@@ -544,7 +561,7 @@ export class LunaTutorial {
     const description = this.description(), next = description.go;
     if (!next) return;
     this.app.blurMobileEditorFocus();
-    if (this.description(next)?.topic !== description.topic && !['open-macros', 'open-formatting'].includes(next)) this.cleanupPreview();
+    if (description.closeBeforeNext || this.description(next)?.topic !== description.topic && !['open-macros', 'open-formatting'].includes(next)) this.cleanupPreview();
     if (this.app.isMobileLayout() && ['open-macros', 'open-formatting'].includes(next)) {
       this.app.state.mobile.settingsTab = null; this.app.renderMobileShell();
     }
@@ -567,6 +584,7 @@ export class LunaTutorial {
       document.body.style.removeProperty('--luna-preview-left');
       document.body.style.removeProperty('--luna-coach-space');
       document.body.style.removeProperty('--luna-settings-left');
+      document.body.style.removeProperty('--luna-surface-top');
     };
     const overlay = document.getElementById('form-overlay');
     const settings = document.getElementById('settings-overlay');
