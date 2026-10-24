@@ -216,13 +216,13 @@ export class LunaTutorial {
     }
     if (step === 'focus' && this.app.isMobileLayout()) this.app.closeMobileToEditor();
     if (step === 'create-form') this.formCancelled = false;
-    this.root.dataset.step = step;
-    document.body.dataset.lunaStep = step;
     this.locale = getLocale();
     const description = this.description();
     this.dialog.setAttribute('aria-label', t('Луна'));
     if (description.topic && this.visitedTopics.at(-1) !== description.topic) this.visitedTopics.push(description.topic);
     this.app.animateHeightTransition(this.dialog, () => {
+      this.root.dataset.step = step;
+      document.body.dataset.lunaStep = step;
       const copy = t(this.copy());
       const letters = typeof Intl.Segmenter === 'function' ? [...new Intl.Segmenter(getLocale(), { granularity: 'grapheme' }).segment(copy)].map(item => item.segment) : Array.from(copy);
       const interval = Math.min(24, 2200 / Math.max(1, letters.length - 1));
@@ -236,8 +236,8 @@ export class LunaTutorial {
         : step === 'done' ? `${skip}<div class="luna-forward">${back}${primary('done', 'Начать писать')}</div>`
           : `${skip}<div class="luna-forward">${back}${description.go ? primary('next', 'Дальше') : ''}</div>`;
       (this.root.querySelector('.luna-forward') || this.root.querySelector('.luna-dialog-actions')).prepend(this.progress);
-    }, { duration: animate ? 440 : 0 });
-    this.updateProgress();
+      this.updateProgress();
+    }, { duration: animate ? 600 : 0, easing: 'cubic-bezier(.45, 0, .2, 1)' });
     this.updateTarget(); this.layout();
     outgoing?.animation?.cancel();
     await this.app.runMotion(this.dialogCopy, [{ opacity: 0 }, { opacity: 1 }], { channel: 'tutorial-copy', duration: 340 }).finished;

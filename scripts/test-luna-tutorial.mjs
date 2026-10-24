@@ -217,7 +217,8 @@ try {
         const sample = () => {
           const d = document.querySelector('.luna-dialog'), r = d.getBoundingClientRect();
           const resize = d.__surfaceSizeTransition;
-          window.__speechFrames.push({ time: performance.now() - started, height: r.height, top: r.top, step: window.nocturneApp.lunaTutorial.step, target: resize?.targetHeight, resizeAge: resize ? performance.now() - resize.startedAt : null, duration: resize?.duration, inline: d.style.height, transition: getComputedStyle(d).transition });
+          const footer = d.querySelector('.luna-dialog-actions').getBoundingClientRect(), style = getComputedStyle(d);
+          window.__speechFrames.push({ time: performance.now() - started, height: r.height, top: r.top, footerGap: r.bottom - footer.bottom, paddingBottom: parseFloat(style.paddingBottom), step: window.nocturneApp.lunaTutorial.step, target: resize?.targetHeight, resizeAge: resize ? performance.now() - resize.startedAt : null, duration: resize?.duration, inline: d.style.height, transition: style.transition });
           if (performance.now() - started < 1250) window.__speechSampler = requestAnimationFrame(sample);
         }; sample();
       });
@@ -227,6 +228,7 @@ try {
       const frames = await page.evaluate(() => window.__speechFrames);
       await writeFile(`${output}/speech-${fixture.width}-${fixture.locale}-${label}${fixture.reduced ? '-reduced' : ''}.json`, JSON.stringify(frames, null, 2));
       const start = frames[0].height, end = frames.at(-1).height, distance = Math.abs(end - start);
+      assert.ok(frames.every(f => Math.abs(f.footerGap - f.paddingBottom - 1) < 2), `The buttons stay inside the bubble and follow its bottom edge: ${JSON.stringify(frames.find(f => Math.abs(f.footerGap - f.paddingBottom - 1) >= 2))}`);
       if (fixture.reduced || distance < 6) return;
       const middle = frames.filter(f => Math.abs(f.height - start) > 1 && Math.abs(f.height - end) > 1);
       assert.ok(middle.length >= 5, `The bubble interpolates its height: ${JSON.stringify({ start, end, middle: middle.length })}`);
@@ -238,7 +240,7 @@ try {
     };
     await capture('next', 'next'); await step(page, 'name-links');
     await capture('next', 'next-card'); await step(page, 'name-card');
-    await capture('next', 'next-short'); await step(page, 'open-bookmarks');
+    await capture('next', 'next-short'); await step(page, fixture.mobile ? 'bookmarks-actions' : 'open-bookmarks');
     await page.evaluate(async () => { await window.nocturneApp.lunaTutorial.reviewTopic('formatting'); });
     await step(page, 'formatting'); await page.waitForTimeout(550);
     await capture('back', 'back'); await step(page, 'bookmarks');

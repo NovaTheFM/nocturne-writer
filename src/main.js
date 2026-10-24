@@ -13009,7 +13009,7 @@ class NocturneWriter {
       || (this.isMobileLayout() && this.state.settings.reduceMobileAnimations);
   }
 
-  animateHeightTransition(element, updateCallback, { width = false, from = null, duration: requestedDuration = 280 } = {}) {
+  animateHeightTransition(element, updateCallback, { width = false, from = null, duration: requestedDuration = 280, easing = 'cubic-bezier(.16, 1, .3, 1)' } = {}) {
     if (!element) { updateCallback(); return; }
     const previous = element.__surfaceSizeTransition;
     const startHeight = from?.height ?? element.offsetHeight, startWidth = from?.width ?? element.offsetWidth;
@@ -13048,8 +13048,7 @@ class NocturneWriter {
     element.offsetHeight;
     frame = requestAnimationFrame(() => {
       if (cleaned || !element.isConnected) { cleanup(); return; }
-      const curve = 'cubic-bezier(.16, 1, .3, 1)';
-      element.style.transition = `${baseTransition}, height ${duration}ms ${curve}${width ? `, width ${duration}ms ${curve}` : ''}`;
+      element.style.transition = `${baseTransition}, height ${duration}ms ${easing}${width ? `, width ${duration}ms ${easing}` : ''}`;
       element.style.height = `${targetHeight}px`;
       if (width) element.style.width = `${targetWidth}px`;
       element.addEventListener('transitionend', onEnd);

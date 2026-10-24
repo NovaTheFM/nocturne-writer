@@ -22,14 +22,16 @@ body.theme-paper .luna-overview .luna-tutorial-shade > rect { fill: rgba(33, 24,
 .luna-mascot canvas:focus-visible { outline: 2px solid var(--accent-hover); outline-offset: 4px; border-radius: 12px; }
 .luna-rig-retry { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: max-content; max-width: 160px; padding: 7px 9px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-deep); color: var(--text-main); font: inherit; font-size: 11px; cursor: pointer; }
 .luna-rig-retry[hidden] { display: none; }
-.luna-dialog { position: relative; flex: 1; min-width: 0; padding: 22px 24px 18px; border: 1px solid var(--popover-border); border-radius: 22px; background: radial-gradient(ellipse at 10% 0, rgba(var(--accent-rgb), .085), transparent 75%), var(--bg-deep); box-shadow: 0 20px 64px rgba(0, 0, 0, .26), 0 4px 16px rgba(0, 0, 0, .12), inset 0 1px 0 rgba(var(--accent-rgb), .08); pointer-events: auto; outline: none; }
+.luna-dialog { position: relative; display: flex; flex-direction: column; flex: 1; min-width: 0; padding: 22px 24px 18px; border: 1px solid var(--popover-border); border-radius: 22px; background: radial-gradient(ellipse at 10% 0, rgba(var(--accent-rgb), .085), transparent 75%), var(--bg-deep); box-shadow: 0 20px 64px rgba(0, 0, 0, .26), 0 4px 16px rgba(0, 0, 0, .12), inset 0 1px 0 rgba(var(--accent-rgb), .08); pointer-events: auto; outline: none; }
+.luna-dialog-body { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.luna-dialog-copy { flex: 1 1 auto; min-height: 0; overflow: hidden; }
 .luna-dialog:focus-visible { border-color: rgba(var(--accent-rgb), .6); }
 .luna-dialog-tail { position: absolute; top: calc(50% - 7px); right: calc(var(--luna-mascot-width) + var(--luna-companion-gap) - 7px); width: 14px; height: 14px; transform: rotate(45deg); background: var(--bg-deep); border-right: 1px solid var(--popover-border); border-top: 1px solid var(--popover-border); pointer-events: none; transition-property: none; }
 .luna-screen-reader { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .luna-letter { animation: luna-letter-in 260ms ease-out both; animation-delay: var(--luna-letter-delay); }
 @keyframes luna-letter-in { from { opacity: 0; } to { opacity: 1; } }
 .luna-dialog-copy p { color: var(--text-main); font-size: 14px; line-height: 1.8; margin: 0; text-wrap: pretty; }
-.luna-dialog-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-top: 20px; }
+.luna-dialog-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-top: 20px; }
 .luna-dialog-actions .pill-btn { min-height: 40px; padding-inline: 14px; gap: 7px; font-size: 12px; transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease; }
 .luna-dialog-actions .pill-btn:active { transform: scale(.97); }
 .luna-dialog-actions .ai-btn i { transition: transform 180ms ease; }
