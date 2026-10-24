@@ -20,6 +20,7 @@ const windows = [
   ['book', 'book', '.book-export-modal', a => a.openBookExport()],
   ['backups', 'backups', '.backups-modal', a => a.openBackups()],
   ['trash', 'trash', '.trash-manager', a => a.openTrash()],
+  ['focus-settings', 'focus-tab', '.settings-modal', a => a.openSettingsTab('focus')],
   ['settings', 'settings', '.settings-modal', a => a.openSettingsTab('visual')],
 ];
 
@@ -56,7 +57,7 @@ try {
               if (performance.now() < until) window.__dockSampler = requestAnimationFrame(sample);
             }; sample();
           }, selector);
-          await page.evaluate(`(async () => { const a=window.nocturneApp; await (${open.toString()})(a); if(a.lunaTutorial.step!==${JSON.stringify(step)}) await a.lunaTutorial.show(${JSON.stringify(step)}); })()`);
+          await page.evaluate(`(async () => { let timer; try { await Promise.race([(async () => { const a=window.nocturneApp; await (${open.toString()})(a); if(a.lunaTutorial.step!==${JSON.stringify(step)}) await a.lunaTutorial.show(${JSON.stringify(step)}); })(), new Promise((_, reject) => { timer=setTimeout(() => reject(new Error('Opening the tutorial window did not finish')), 12000); })]); } finally { clearTimeout(timer); } })()`);
           await page.waitForFunction(() => !window.nocturneApp.lunaTutorial.changing && !document.querySelector('.luna-companion').getAnimations().some(animation => animation.playState === 'running'));
           await page.locator(selector).waitFor();
           if (name !== 'notes') await page.waitForFunction(selector => document.querySelector(selector)?.dataset.lunaDock === 'settled', selector);

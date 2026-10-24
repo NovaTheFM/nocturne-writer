@@ -35,8 +35,11 @@ export class LunaWindowDock {
       // Native settings updates patch the same panel, including its class and data attributes.
       if (state.phase !== 'opening') panel.classList.add('luna-docked-window');
       if (panel.dataset.lunaDock !== state.phase) panel.dataset.lunaDock = state.phase;
-      const settingsWaiting = panel.matches('.settings-modal') && this.tutorial.canShowSettingsAside() && !this.tutorial.settingsAside;
-      if (state.phase === 'opening' && !settingsWaiting && performance.now() - state.started >= 360) this.move(panel, state);
+      const settingsWaiting = panel.matches('.settings-modal') && this.tutorial.description()?.topic === 'settings' && this.tutorial.canShowSettingsAside() && !this.tutorial.settingsAside;
+      if (state.phase === 'opening' && !settingsWaiting && performance.now() - state.started >= 360) {
+        if (panel.matches('.settings-modal')) this.tutorial.settingsAside = true;
+        this.move(panel, state);
+      }
     }
     for (const [panel, state] of this.windows) {
       if (current.has(panel)) continue;
