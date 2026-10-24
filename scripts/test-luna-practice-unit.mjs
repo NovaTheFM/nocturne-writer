@@ -50,6 +50,7 @@ test('practice story and character are created in the confirmed language', async
       setLocale(locale); await db.prepareStory();
       const [doc] = await db.getAll('docs'), world = await db.get('lore', 'world');
       assert.equal(doc.title, title); assert.equal(world.characters[0].name, name);
+      assert.ok(world.characters[0].body?.length > 30, 'The practice profile has a real description, not an empty-card fallback');
       assert.ok(doc.ast.blocks.some(block => block.html.includes(name)));
       assert.deepEqual(world.characters[0].documentIds, [doc.id]);
     }
