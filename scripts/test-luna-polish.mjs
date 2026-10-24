@@ -130,6 +130,34 @@ try {
     assert.equal(await page.locator('iframe[data-luna-practice]').count(), 0);
     assert.equal(await page.evaluate(() => window.nocturneApp.state.docs.length), 1);
   }, mobile ? { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } : {});
+  await scenario('encrypted existing profile can practice without unlocking or changing its records', async page => {
+    await greeting(page); await page.locator('[data-luna-choice="no"]').click();
+    await page.waitForFunction(() => window.nocturneApp.startupInteractionReady);
+    const before = await page.evaluate(async () => {
+      const a = window.nocturneApp, { protectRecord } = await import('/src/core/record-protection.js');
+      await a.createDoc(a.defaultFolderId(), 'Private encrypted manuscript');
+      a.nocturneEditor.get('primary').commands.setContent('<p>Keep this encrypted text exactly as it is.</p>'); await a.flushOpenDocuments();
+      const options = { enabled: true, password: 'isolated-test-password' };
+      const docs = await Promise.all((await a.db.getAll('docs')).map(record => protectRecord('docs', record, options)));
+      const lore = await Promise.all((await a.db.getAll('lore')).map(record => protectRecord('lore', record, options)));
+      const settings = await a.db.get('settings', 'app'); settings.value.e2e = true;
+      await a.db.atomicWrite({ docs, lore, settings: [settings, { id: 'interface-language', locale: 'uk', confirmed: true }] }, { raw: true, deletes: { settings: ['luna-tutorial'] } });
+      await a.databaseSync.work;
+      return { docs: await a.db.getAllRaw('docs'), lore: await a.db.getAllRaw('lore') };
+    });
+    await page.reload();
+    await page.locator('.luna-practice-host.is-ready').waitFor();
+    assert.ok(await page.evaluate(() => window.nocturneApp.state.docs.every(doc => doc.locked)));
+    const practice = page.frameLocator('iframe[data-luna-practice]');
+    await practice.locator('[data-luna-choice="yes"]').click();
+    await practice.locator('#luna-tutorial[data-step="write"]').waitFor();
+    assert.match(await practice.locator('.page-content-prosemirror').first().textContent(), /Міра/);
+    await practice.locator('.page-content-prosemirror').first().fill('A disposable practice edit');
+    await page.waitForTimeout(700);
+    await practice.locator('[data-luna-choice="skip"]').click(); await page.locator('iframe[data-luna-practice]').waitFor({ state: 'detached' });
+    assert.deepEqual(await page.evaluate(async () => ({ docs: await window.nocturneApp.db.getAllRaw('docs'), lore: await window.nocturneApp.db.getAllRaw('lore') })), before);
+    assert.equal(await page.evaluate(() => window.nocturneApp.state.sessionPassword), '');
+  });
   await scenario('replay loading failure offers a retry and can still be skipped', async page => {
     await greeting(page); await page.locator('[data-luna-choice="no"]').click();
     await page.waitForFunction(() => window.nocturneApp.startupInteractionReady);

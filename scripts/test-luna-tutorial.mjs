@@ -74,7 +74,15 @@ async function discoverFeatures(page, mobile, { stopAt, keyboardPalette = false 
   const click = async name => (await step(page, name)).click();
   const next = async name => { await step(page, name); await page.locator('[data-luna-choice="next"]').click(); };
   const shot = async name => page.screenshot({ path: `${output}/${mobile ? 'mobile' : 'desktop'}-${name}.png` });
-  await next('write'); await next('name-links'); await shot('name-links'); await next('name-card');
+  await next('write'); await next('name-links'); await shot('name-links');
+  if (await page.locator('#entity-hover-card.active').count()) {
+    const clear = await page.evaluate(() => {
+      const coach = document.querySelector('.luna-companion').getBoundingClientRect(), card = document.querySelector('#entity-hover-card').getBoundingClientRect();
+      return coach.right <= card.left - 8 || coach.left >= card.right + 8 || coach.bottom <= card.top - 8 || coach.top >= card.bottom + 8;
+    });
+    assert.equal(clear, true, 'The real character preview remains readable beside Luna');
+  }
+  await next('name-card');
   if (mobile) await click('bookmarks-actions');
   await click('open-bookmarks'); await step(page, 'bookmarks'); await shot('bookmarks');
   await page.locator('[data-luna-choice="back"]').click(); await step(page, 'write');
