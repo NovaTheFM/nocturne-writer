@@ -457,7 +457,7 @@ class NocturneWriter {
     const openedNativeFiles = await this.openPendingNativeFiles();
 
     // Check if new version first run (specifically for Electron desktop users)
-    const currentVersion = '1.2.1';
+    const currentVersion = '1.2.2';
     const showWhatsNew = this.runtime.isElectron && this.state.settings.lastSeenVersion !== currentVersion;
     if (openedNativeFiles) {
       this.state.settings.lastSeenVersion = currentVersion;
@@ -22747,7 +22747,7 @@ ${raw}`;
       format: 'nocturnedump',
       version: 1,
       appName: 'Nocturne Writer',
-      appVersion: '1.2.1',
+      appVersion: '1.2.2',
       schemaVersion: 4,
       exportedAt: new Date().toISOString(),
       encrypted: !!this.state.settings.e2e,
@@ -23215,7 +23215,48 @@ ${raw}`;
             <h2 style="text-align: center; margin: 0 0 4px; font-size: 22px; color: var(--text-main); font-weight: 700;">Что нового</h2>
             <p style="text-align: center; margin: 0 0 20px; font-size: 13px; color: var(--text-muted, #a1a1aa);">Луна хочет рассказать вам о новинках!</p>
             <div class="whats-new-body" style="max-height: 280px; overflow-y: auto; padding-right: 8px; font-size: 14px; line-height: 1.6; color: var(--text-main);">
-              <p style="margin: 0 0 16px; font-weight: 600; color: var(--accent);">Версия 1.2.1</p>
+              <p style="margin: 0 0 16px; font-weight: 600; color: var(--accent);">Версия 1.2.2</p>
+
+              <p style="margin: 0 0 4px; font-weight: 600;">Интерактивная Луна и обучение</p>
+              <ul style="margin: 0 0 16px; padding-left: 20px;">
+                <li>Интерактивный WebGL-риг маскота с физикой волос, помпона и живыми реакциями на клики и жесты.</li>
+                <li>Полноценный обучающий курс по ключевым и скрытым возможностям приложения в изолированной тестовой среде.</li>
+                <li>Плавная динамическая анимация реплик и адаптивное размещение окон рядом с Луной.</li>
+              </ul>
+
+              <p style="margin: 0 0 4px; font-weight: 600;">Многоязычность (RU / UK / EN)</p>
+              <ul style="margin: 0 0 16px; padding-left: 20px;">
+                <li>Полная поддержка русского, украинского и английского языков в интерфейсе, уведомлениях и подсказках.</li>
+                <li>Экран выбора языка при первом запуске и бесшовное переключение в настройках без потери текста и истории изменений.</li>
+              </ul>
+
+              <p style="margin: 0 0 4px; font-weight: 600;">Типографика и шрифты</p>
+              <ul style="margin: 0 0 16px; padding-left: 20px;">
+                <li>Раздельная настройка шрифтов для элементов интерфейса и текста рукописи.</li>
+                <li>Мягкое кинематографичное переключение шрифтов через блюр-переход и поддержка пользовательских файлов шрифтов.</li>
+              </ul>
+
+              <p style="margin: 0 0 4px; font-weight: 600;">Умное переименование и падежи</p>
+              <ul style="margin: 0 0 16px; padding-left: 20px;">
+                <li>Автоматическое склонение имён по всем 6 падежам во всех документах, карточках и связях при редактировании персонажа.</li>
+                <li>Возможность сохранения старого имени в качестве псевдонима (алиаса) одной кнопкой.</li>
+              </ul>
+
+              <p style="margin: 0 0 4px; font-weight: 600;">Локальный контекстный словарь</p>
+              <ul style="margin: 0 0 16px; padding-left: 20px;">
+                <li>Контекстная проверка грамматики и русской пунктуации (обращения, деепричастия, вводные слова) без внешних сервисов и ИИ.</li>
+                <li>Точное многострочное подчёркивание замечаний по реальной форме строк без артефактов на переносах.</li>
+              </ul>
+
+              <p style="margin: 0 0 4px; font-weight: 600;">Полировка интерфейса и анимаций</p>
+              <ul style="margin: 0 0 16px; padding-left: 20px;">
+                <li>Плавное открытие и затухание выпадающих списков и модальных окон.</li>
+                <li>Устранены мерцания при фильтрации карточек в словаре, макросах и автозамене.</li>
+              </ul>
+
+              <hr style="border: 0; border-top: 1px solid var(--border); margin: 20px 0;">
+
+              <p style="margin: 0 0 16px; font-weight: 600; color: var(--accent);">Версия 1.2.1 (архив)</p>
 
               <p style="margin: 0 0 4px; font-weight: 600;">Закладки и корзина</p>
               <ul style="margin: 0 0 16px; padding-left: 20px;">
